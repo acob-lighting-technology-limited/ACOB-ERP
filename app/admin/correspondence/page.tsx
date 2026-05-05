@@ -5,14 +5,6 @@ import { AdminReferenceGeneratorContent } from "../tools/reference-generator/adm
 import { getDepartmentScope, resolveAdminScope } from "@/lib/admin/rbac"
 import type { CorrespondenceRecord } from "@/types/correspondence"
 
-type EmployeeRow = {
-  id: string
-  first_name: string | null
-  last_name: string | null
-  department: string | null
-  role: string | null
-}
-
 type DepartmentCodeRow = {
   department_name: string
   department_code: string
@@ -40,21 +32,8 @@ async function getData() {
 
   const recordsQuery = dataClient.from("correspondence_records").select("*").order("created_at", { ascending: false })
 
-  let employeesQuery = dataClient
-    .from("profiles")
-    .select("id, first_name, last_name, department, role")
-    .order("last_name", { ascending: true })
-
-  if (departmentScope) {
-    employeesQuery =
-      departmentScope.length > 0
-        ? employeesQuery.in("department", departmentScope)
-        : employeesQuery.eq("id", "__none__")
-  }
-
-  const [{ data: records }, { data: employees }, { data: departmentCodes }] = await Promise.all([
+  const [{ data: records }, { data: departmentCodes }] = await Promise.all([
     recordsQuery,
-    employeesQuery.returns<EmployeeRow[]>(),
     dataClient
       .from("correspondence_department_codes")
       .select("department_name, department_code, is_active")
@@ -75,7 +54,6 @@ async function getData() {
 
   return {
     records: scopedRecords,
-    employees: employees || [],
     departmentCodes: departmentCodes || [],
   }
 }
@@ -87,11 +65,5 @@ export default async function AdminCorrespondencePage() {
     redirect(data.redirectTo || "/auth/login")
   }
 
-  return (
-    <AdminReferenceGeneratorContent
-      initialRecords={data.records}
-      employees={data.employees}
-      departmentCodes={data.departmentCodes}
-    />
-  )
+  return <AdminReferenceGeneratorContent initialRecords={data.records} departmentCodes={data.departmentCodes} />
 }

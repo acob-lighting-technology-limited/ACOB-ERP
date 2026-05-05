@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
     const onedrive = getOneDriveService()
     if (!onedrive.isEnabled()) {
-      return NextResponse.json({ error: "OneDrive integration is not configured" }, { status: 503 })
+      return NextResponse.json({ error: "SharePoint integration is not configured" }, { status: 503 })
     }
 
     const now = new Date()

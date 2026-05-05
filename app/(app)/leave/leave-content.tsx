@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
@@ -11,9 +11,13 @@ import type { LeaveApprovalAudit, LeaveBalance, LeaveRequest, LeaveType } from "
 import { LeaveTypesCard } from "@/components/leave/leave-types-card"
 import { LeaveDeleteConfirmDialog } from "@/components/leave/leave-delete-confirm-dialog"
 import { LeaveRequestFormDialog } from "@/components/leave/leave-request-form-dialog"
-import { LeaveRejectPromptDialog, LeaveEvidencePromptDialog } from "@/components/leave/leave-prompt-dialogs"
+import {
+  LeaveApprovePromptDialog,
+  LeaveRejectPromptDialog,
+  LeaveEvidencePromptDialog,
+} from "@/components/leave/leave-prompt-dialogs"
 import { fetchLeaveData, addDays } from "@/components/leave/leave-data"
-import type { LeaveCalendarData, LeaveRelieverDebug } from "@/components/leave/leave-data"
+import type { LeaveCalendarData, LeaveRelieverDebug, LeaveReviewHistoryItem } from "@/components/leave/leave-data"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
@@ -40,6 +44,7 @@ type LeaveQueryData = {
   requests: LeaveRequest[]
   balances: LeaveBalance[]
   approverQueue: ApproverQueueItem[]
+  pendingReviewHistory: LeaveReviewHistoryItem[]
   leaveTypes: LeaveType[]
   relieverOptions: { value: string; label: string }[]
   relieverDebug: LeaveRelieverDebug | null
@@ -53,6 +58,13 @@ type LeaveRoutePreview = {
     role_code: string
     label: string
   }>
+}
+
+type PersonNameRef = {
+  first_name?: string | null
+  last_name?: string | null
+  full_name?: string | null
+  company_email?: string | null
 }
 
 const EMPTY_REQUEST_FORM = {
@@ -85,10 +97,12 @@ export function LeaveContent({
   const { data: leaveData } = useQuery<LeaveQueryData>({
     queryKey: QUERY_KEYS.leaveRequests({ userId: currentUserId }),
     queryFn: () => fetchLeaveData(currentUserId),
+    refetchOnMount: "always",
     initialData: {
       requests: initialRequests,
       balances: initialBalances,
       approverQueue: [],
+      pendingReviewHistory: [],
       leaveTypes: initialLeaveTypes,
       relieverOptions: initialRelieverOptions,
       relieverDebug: initialRelieverDebug,
@@ -99,11 +113,21 @@ export function LeaveContent({
     },
   })
 
-  const { requests, balances, leaveTypes, approverQueue, relieverOptions, relieverDebug, leaveCalendar } = leaveData
+  const {
+    requests,
+    balances,
+    leaveTypes,
+    approverQueue,
+    pendingReviewHistory,
+    relieverOptions,
+    relieverDebug,
+    leaveCalendar,
+  } = leaveData
 
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [editingRequestId, setEditingRequestId] = useState<string | null>(null)
+  const [approvePrompt, setApprovePrompt] = useState<{ requestId: string } | null>(null)
   const [rejectPrompt, setRejectPrompt] = useState<{ requestId: string } | null>(null)
   const [evidencePrompt, setEvidencePrompt] = useState<{ requestId: string; documentType: string } | null>(null)
   const [deleteConfirmRequest, setDeleteConfirmRequest] = useState<LeaveRequest | null>(null)
@@ -111,15 +135,6 @@ export function LeaveContent({
   const [isOverviewOpen, setIsOverviewOpen] = useState(false)
   const [isCreateBlockedOpen, setIsCreateBlockedOpen] = useState(false)
   const [formData, setFormData] = useState(EMPTY_REQUEST_FORM)
-
-  useEffect(() => {
-    if (!open) return
-    // eslint-disable-next-line no-console
-    console.log("[leave][reliever-debug]", {
-      relieverOptionsCount: relieverOptions.length,
-      relieverDebug,
-    })
-  }, [open, relieverDebug, relieverOptions.length])
 
   const { data: leaveRoutePreview } = useQuery<LeaveRoutePreview>({
     queryKey: ["leave-flow-my-preview", formData.reliever_identifier || ""],
@@ -165,6 +180,17 @@ export function LeaveContent({
     return Object.fromEntries(entries) as Record<string, number>
   }, [balanceMap, consumedDaysByType, leaveTypes])
   const selectedAvailableDays = formData.leave_type_id ? (availableDaysByType[formData.leave_type_id] ?? 0) : 0
+  const selectedLeaveType = leaveTypeMap.get(formData.leave_type_id)
+  const normalizedLeaveCode = String(selectedLeaveType?.code || "")
+    .trim()
+    .toLowerCase()
+  const normalizedLeaveName = String(selectedLeaveType?.name || "")
+    .trim()
+    .toLowerCase()
+  const isSickLeave = normalizedLeaveCode === "sick" || normalizedLeaveName.includes("sick")
+  const requiresAttachmentOnCreate = Boolean(
+    !editingRequestId && (isSickLeave || selectedLeaveType?.required_documents?.length)
+  )
 
   const stats = useMemo(() => {
     const totalTaken = myRequests
@@ -338,6 +364,9 @@ export function LeaveContent({
     try {
       const isEditing = !!editingRequestId
       const { attachment, ...requestPayload } = formData
+      if (!isEditing && requiresAttachmentOnCreate && !attachment) {
+        throw new Error("Attachment is required for this leave type")
+      }
       const response = await fetch("/api/hr/leave/requests", {
         method: isEditing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -347,10 +376,22 @@ export function LeaveContent({
       if (!response.ok) throw new Error(payload.error || "Failed to submit request")
 
       const createdOrUpdatedId = String(payload?.data?.id || editingRequestId || "")
+      let successMessage = String(payload?.message || "")
       if (attachment && createdOrUpdatedId) {
+        const requiredDocumentsFromResponse = Array.isArray(payload?.data?.required_documents)
+          ? (payload.data.required_documents as string[])
+          : []
+        const requiredDocumentsFromSelection = Array.isArray(selectedLeaveType?.required_documents)
+          ? selectedLeaveType.required_documents
+          : []
+        const requiredDocuments = requiredDocumentsFromResponse.length
+          ? requiredDocumentsFromResponse
+          : requiredDocumentsFromSelection
+        const evidenceDocumentTypes = requiredDocuments.length ? requiredDocuments : ["supporting_document"]
+
         const uploadPayload = new FormData()
         uploadPayload.set("file", attachment)
-        uploadPayload.set("document_type", "supporting_document")
+        uploadPayload.set("document_type", evidenceDocumentTypes[0])
 
         const uploadResponse = await fetch("/api/hr/leave/evidence/upload", {
           method: "POST",
@@ -361,23 +402,27 @@ export function LeaveContent({
           throw new Error(uploadBody?.error || "Leave request saved, but attachment upload failed")
         }
 
-        const evidenceResponse = await fetch("/api/hr/leave/evidence", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            leave_request_id: createdOrUpdatedId,
-            document_type: "supporting_document",
-            file_url: String(uploadBody.data.file_url),
-            notes: "Uploaded with leave request form",
-          }),
-        })
-        const evidenceBody = await evidenceResponse.json().catch(() => ({}))
-        if (!evidenceResponse.ok) {
-          throw new Error(evidenceBody?.error || "Leave request saved, but evidence link failed")
+        for (const documentType of evidenceDocumentTypes) {
+          const evidenceResponse = await fetch("/api/hr/leave/evidence", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              leave_request_id: createdOrUpdatedId,
+              document_type: documentType,
+              file_url: String(uploadBody.data.file_url),
+              notes: "Uploaded with leave request form",
+            }),
+          })
+          const evidenceBody = await evidenceResponse.json().catch(() => ({}))
+          if (!evidenceResponse.ok) {
+            throw new Error(evidenceBody?.error || "Leave request saved, but evidence link failed")
+          }
         }
+
+        successMessage = "Leave request created successfully"
       }
 
-      toast.success(payload.message || "Request submitted")
+      toast.success(successMessage || "Request submitted")
       setOpen(false)
       setFormData(EMPTY_REQUEST_FORM)
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.leaveRequests({ userId: currentUserId }) })
@@ -430,12 +475,31 @@ export function LeaveContent({
     }
   }
 
-  async function submitEvidence(requestId: string, documentType: string, fileUrl: string) {
+  async function submitEvidence(requestId: string, documentType: string, file: File) {
     try {
+      const uploadPayload = new FormData()
+      uploadPayload.set("file", file)
+      uploadPayload.set("document_type", documentType)
+
+      const uploadResponse = await fetch("/api/hr/leave/evidence/upload", {
+        method: "POST",
+        body: uploadPayload,
+      })
+      const uploadBody = await uploadResponse.json().catch(() => ({}))
+      const uploadedUrl = String(uploadBody?.data?.file_url || "").trim()
+      if (!uploadResponse.ok || !uploadedUrl) {
+        throw new Error(uploadBody?.error || "Evidence file upload failed")
+      }
+
       const response = await fetch("/api/hr/leave/evidence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ leave_request_id: requestId, document_type: documentType, file_url: fileUrl }),
+        body: JSON.stringify({
+          leave_request_id: requestId,
+          document_type: documentType,
+          file_url: uploadedUrl,
+          notes: "Uploaded from leave evidence dialog",
+        }),
       })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || "Evidence upload failed")
@@ -443,6 +507,7 @@ export function LeaveContent({
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.leaveRequests({ userId: currentUserId }) })
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Evidence upload failed")
+      throw error
     }
   }
 
@@ -466,6 +531,17 @@ export function LeaveContent({
     if (value.includes("hcs")) return "hcs"
     if (value.includes("md")) return "md"
     return value || "unknown"
+  }
+
+  function resolvePersonName(person?: PersonNameRef | null) {
+    if (!person) return ""
+    const full = String(person.full_name || "").trim()
+    if (full) return full
+    const composed = `${person.first_name || ""} ${person.last_name || ""}`.trim()
+    if (composed) return composed
+    const email = String(person.company_email || "").trim()
+    if (email) return email.split("@")[0] || email
+    return ""
   }
 
   return (
@@ -625,13 +701,22 @@ export function LeaveContent({
                   hcs: "HCS",
                   md: "MD",
                 }
+                const currentStageKey = approvalStageKey(row.current_stage_code || row.approval_stage)
+                const hasRelieverAssignee = Boolean(row.reliever?.id)
+                const relieverHandledByLead =
+                  Boolean(row.reliever?.id) &&
+                  Boolean(row.supervisor?.id) &&
+                  row.reliever?.id === row.supervisor?.id &&
+                  Boolean(stageAuditMap.get("department_lead"))
+                const departmentLeadApproverName = resolvePersonName(stageAuditMap.get("department_lead")?.approver)
+                const advancedPastReliever = ["department_lead", "admin_hr_lead", "hcs", "md"].includes(currentStageKey)
 
                 return (
                   <div className="grid gap-3 p-2 text-sm md:grid-cols-2">
                     <div className="space-y-1">
                       <p>
                         <span className="text-muted-foreground">Reliever:</span>{" "}
-                        <span className="font-medium">{row.reliever?.full_name || "Not assigned"}</span>
+                        <span className="font-medium">{resolvePersonName(row.reliever) || "Not assigned"}</span>
                       </p>
                       <p>
                         <span className="text-muted-foreground">Current Stage:</span>{" "}
@@ -648,15 +733,37 @@ export function LeaveContent({
                         <ul className="space-y-1">
                           {stageOrder.map((stageKey) => {
                             const item = stageAuditMap.get(stageKey)
+                            const stageActorName =
+                              resolvePersonName(item?.approver) ||
+                              (stageKey === "reliever"
+                                ? resolvePersonName(row.reliever) || null
+                                : stageKey === "department_lead"
+                                  ? resolvePersonName(row.supervisor) || null
+                                  : stageKey === "admin_hr_lead"
+                                    ? resolvePersonName(row.approved_by_profile) || null
+                                    : null)
                             return (
                               <li key={stageKey} className="text-xs">
                                 <span className="font-medium">{stageName[stageKey]}:</span>{" "}
                                 {item ? (
                                   <>
                                     <span className="capitalize">{item.status}</span>
-                                    {item.approver?.full_name ? ` by ${item.approver.full_name}` : ""}
+                                    {stageActorName ? ` by ${stageActorName}` : ""}
+                                    {stageActorName ? ` (${stageName[stageKey]})` : ""}
                                     {item.approved_at ? ` at ${new Date(item.approved_at).toLocaleString()}` : ""}
                                   </>
+                                ) : stageKey === "reliever" && !hasRelieverAssignee ? (
+                                  <span className="text-muted-foreground">Not required for this request</span>
+                                ) : stageKey === "reliever" && relieverHandledByLead ? (
+                                  <span className="text-muted-foreground">
+                                    {departmentLeadApproverName
+                                      ? `Handled by ${departmentLeadApproverName} (Department Lead)`
+                                      : "Handled by Department Lead stage"}
+                                  </span>
+                                ) : stageKey === "reliever" &&
+                                  advancedPastReliever &&
+                                  currentStageKey !== "reliever" ? (
+                                  <span className="text-muted-foreground">Skipped by route rules</span>
                                 ) : (
                                   <span className="text-muted-foreground">Pending / not acted</span>
                                 )}
@@ -675,43 +782,73 @@ export function LeaveContent({
         )}
 
         {activeTab === "approvals" && (
-          <DataTable<ApproverQueueItem>
-            data={approverQueue}
-            getRowId={(r) => r.id}
-            columns={[
-              {
-                key: "requester",
-                label: "Requester",
-                accessor: (r) => r.user?.full_name || "Employee",
-              },
-              {
-                key: "period",
-                label: "Period",
-                accessor: (r) => `${r.start_date} to ${r.end_date}`,
-              },
-              {
-                key: "status",
-                label: "Status",
-                render: (r) => <Badge variant="outline">{r.status}</Badge>,
-              },
-            ]}
-            filters={approvalFilters}
-            searchPlaceholder="Search requester or leave period..."
-            searchFn={(r, q) =>
-              `${r.user?.full_name || ""} ${r.start_date} ${r.end_date} ${r.reason || ""}`.toLowerCase().includes(q)
-            }
-            rowActions={[
-              {
-                label: "Approve",
-                onClick: (r) => submitAction(r.id, "approve", ""),
-              },
-              {
-                label: "Reject",
-                variant: "destructive",
-                onClick: (r) => setRejectPrompt({ requestId: r.id }),
-              },
-            ]}
-          />
+          <div className="space-y-4">
+            <DataTable<ApproverQueueItem>
+              data={approverQueue}
+              getRowId={(r) => r.id}
+              columns={[
+                {
+                  key: "requester",
+                  label: "Requester",
+                  accessor: (r) => r.user?.full_name || "Employee",
+                },
+                {
+                  key: "period",
+                  label: "Period",
+                  accessor: (r) => `${r.start_date} to ${r.end_date}`,
+                },
+                {
+                  key: "status",
+                  label: "Status",
+                  render: (r) => <Badge variant="outline">{r.status}</Badge>,
+                },
+              ]}
+              filters={approvalFilters}
+              searchPlaceholder="Search requester or leave period..."
+              searchFn={(r, q) =>
+                `${r.user?.full_name || ""} ${r.start_date} ${r.end_date} ${r.reason || ""}`.toLowerCase().includes(q)
+              }
+              rowActions={[
+                {
+                  label: "Approve",
+                  onClick: (r) => setApprovePrompt({ requestId: r.id }),
+                },
+                {
+                  label: "Reject",
+                  variant: "destructive",
+                  onClick: (r) => setRejectPrompt({ requestId: r.id }),
+                },
+              ]}
+            />
+
+            <div className="rounded-lg border p-4">
+              <p className="text-sm font-semibold">Recent Review History</p>
+              <p className="text-muted-foreground mb-3 text-xs">
+                Your latest acceptance and rejection decisions are recorded here.
+              </p>
+              {pendingReviewHistory.length === 0 ? (
+                <p className="text-muted-foreground text-xs">No review activity yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {pendingReviewHistory.slice(0, 10).map((item) => (
+                    <li key={item.id} className="rounded-md border p-2 text-xs">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant={item.status === "rejected" ? "destructive" : "outline"} className="capitalize">
+                          {item.status || "recorded"}
+                        </Badge>
+                        <span className="font-medium">{formatName(item.stage_code || "approval_stage")}</span>
+                        <span className="text-muted-foreground">{item.request?.user?.full_name || "Employee"}</span>
+                        <span className="text-muted-foreground">
+                          {item.approved_at ? new Date(item.approved_at).toLocaleString() : ""}
+                        </span>
+                      </div>
+                      {item.comments ? <p className="mt-1 text-xs">{item.comments}</p> : null}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
         )}
       </div>
 
@@ -726,6 +863,15 @@ export function LeaveContent({
         isDeleting={isDeleting}
       />
 
+      <LeaveApprovePromptDialog
+        approvePrompt={approvePrompt}
+        onOpenChange={() => setApprovePrompt(null)}
+        onConfirm={(requestId, feedback) => {
+          submitAction(requestId, "approve", feedback)
+          setApprovePrompt(null)
+        }}
+      />
+
       <LeaveRejectPromptDialog
         rejectPrompt={rejectPrompt}
         onOpenChange={() => setRejectPrompt(null)}
@@ -738,8 +884,8 @@ export function LeaveContent({
       <LeaveEvidencePromptDialog
         evidencePrompt={evidencePrompt}
         onOpenChange={() => setEvidencePrompt(null)}
-        onConfirm={(requestId, documentType, url) => {
-          submitEvidence(requestId, documentType, url)
+        onConfirm={async (requestId, documentType, file) => {
+          await submitEvidence(requestId, documentType, file)
           setEvidencePrompt(null)
         }}
       />
@@ -753,8 +899,9 @@ export function LeaveContent({
         leaveTypes={leaveTypes}
         relieverOptions={relieverOptions}
         relieverDebug={relieverDebug}
-        selectedLeaveType={leaveTypeMap.get(formData.leave_type_id)}
+        selectedLeaveType={selectedLeaveType}
         selectedBalance={balanceMap.get(formData.leave_type_id)}
+        requiresAttachmentOnCreate={requiresAttachmentOnCreate}
         availableDays={selectedAvailableDays}
         availableDaysByType={availableDaysByType}
         approvalRouteStages={leaveRoutePreview?.stages || []}
@@ -767,7 +914,8 @@ export function LeaveContent({
           !!formData.reliever_identifier &&
           !!formData.handover_note &&
           Number(formData.days_count) > 0 &&
-          Number(formData.days_count) <= selectedAvailableDays
+          Number(formData.days_count) <= selectedAvailableDays &&
+          (!requiresAttachmentOnCreate || Boolean(formData.attachment))
         }
         submitting={submitting}
         onSubmit={handleSubmitRequest}

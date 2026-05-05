@@ -934,13 +934,13 @@ function buildEmailHtml(
     <p class="text">Dear All,</p>
 ${bodyHtml}
   </div>
-  <div class="footer" style="background-color:#000;">
+  <div class="footer" style="background:#000 !important;background-color:#000 !important;background-image:linear-gradient(#000,#000) !important;color:#d1d5db;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;">
     <span style="color:#f3f4f6;">Prepared by ${safePreparedBy}</span><br>
     ${safeDesignation ? `${safeDesignation}<br>` : ""}${safeDepartment}<br>
-    <strong>ACOB Lighting Technology Limited</strong><br>
-    <span class="footer-system">Reports Management System</span>
+    <strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>
+    <span style="color:#16a34a;font-weight:600;">Reports Management System</span>
     <br><br>
-    <i class="footer-note">This is an automated system notification. Please do not reply directly to this email.</i>
+    <i style="color:#9ca3af;">This is an automated system notification. Please do not reply directly to this email.</i>
   </div>
   </div>
 </body>

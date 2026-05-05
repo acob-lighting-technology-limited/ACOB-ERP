@@ -5,7 +5,6 @@ import { logger } from "@/lib/logger"
 
 const log = logger("auth-confirm")
 
-
 /**
  * Handles confirmation links from Supabase emails (invite, recovery, email confirmation).
  * Exchanges token_hash for a session, then redirects to the appropriate page.
@@ -22,8 +21,10 @@ export async function GET(request: Request) {
   const rawNext = searchParams.get("next") || "/profile"
 
   // Validate type parameter
-  const ALLOWED_TYPES = new Set(["invite", "recovery", "email", "signup"])
-  const type = ALLOWED_TYPES.has(rawType || "") ? (rawType as "invite" | "recovery" | "email" | "signup") : "signup"
+  const ALLOWED_TYPES = new Set(["invite", "recovery", "email", "signup", "magiclink"])
+  const type = ALLOWED_TYPES.has(rawType || "")
+    ? (rawType as "invite" | "recovery" | "email" | "signup" | "magiclink")
+    : "signup"
 
   // Validate and sanitize 'next' to prevent open redirects
   let safeNext = "/profile"

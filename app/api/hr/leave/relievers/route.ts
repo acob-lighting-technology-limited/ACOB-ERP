@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
+import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 
 const log = logger("hr-leave-relievers")
 
@@ -227,7 +228,10 @@ export async function GET() {
       )
       const sameDepartmentName =
         requesterDepartmentName.length > 0 && normalize(row.department) === requesterDepartmentName
-      return sameDepartmentId || sameDepartmentName
+      const assignableStatus = isAssignableEmploymentStatus(row.employment_status, {
+        allowLegacyNullStatus: false,
+      })
+      return (sameDepartmentId || sameDepartmentName) && assignableStatus
     })
 
     log.info(

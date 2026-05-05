@@ -128,6 +128,23 @@ export default async function AdminSettingsPage() {
           </Card>
         )}
 
+        {(scope.role === "super_admin" || scope.role === "developer") && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Governance Control Plane
+              </CardTitle>
+              <CardDescription>Manage approval workflows and protected route access paths.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Link href="/admin/settings/governance" className={cn(buttonVariants({ variant: "default" }), "w-full")}>
+                Open Governance
+              </Link>
+            </CardContent>
+          </Card>
+        )}
+
         {scope.role === "developer" && (
           <Card>
             <CardHeader>

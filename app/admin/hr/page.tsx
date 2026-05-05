@@ -129,6 +129,7 @@ async function fetchHrDashboardStats(scope: ClientAdminScope): Promise<Dashboard
 
 export default function HRAdminDashboard() {
   const scope = useAdminScope()
+  const canAccessHrResources = scope.isAdminLike && scope.scopeMode !== "lead"
 
   const {
     data: stats = {
@@ -262,20 +263,22 @@ export default function HRAdminDashboard() {
           </Card>
 
           {/* Resource Booking */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Resource Booking
-              </CardTitle>
-              <CardDescription>Manage shared resources and review booking applications</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href="/admin/hr/resources">
-                <Button className="w-full">Open Resource Booking Admin</Button>
-              </Link>
-            </CardContent>
-          </Card>
+          {canAccessHrResources && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5" />
+                  Resource Booking
+                </CardTitle>
+                <CardDescription>Manage shared resources and review booking applications</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Link href="/admin/hr/resources">
+                  <Button className="w-full">Open Resource Booking Admin</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Attendance Reports */}
           <Card>
@@ -287,7 +290,7 @@ export default function HRAdminDashboard() {
               <CardDescription>View and export attendance data</CardDescription>
             </CardHeader>
             <CardContent>
-              <Link href="/admin/hr/attendance/reports">
+              <Link href="/admin/hr/attendance">
                 <Button className="w-full">View Reports</Button>
               </Link>
             </CardContent>

@@ -25,6 +25,7 @@ import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { downloadWeeklyReportPdf } from "@/lib/reports/export-download"
 import { Badge } from "@/components/ui/badge"
 import { QUERY_KEYS } from "@/lib/query-keys"
+import { getDepartmentAliases, normalizeDepartmentName } from "@/shared/departments"
 import { PptxModeDialog } from "./_components/pptx-mode-dialog"
 
 interface UserProfile {
@@ -92,7 +93,7 @@ async function fetchWeeklyReports(
   let query = supabase
     .from("weekly_reports")
     .select(
-      "id, department, week_number, year, work_done, tasks_new_week, challenges, status, user_id, created_at, profiles(first_name, last_name)"
+      "id, department, week_number, year, work_done, tasks_new_week, challenges, status, user_id, created_at, updated_at, profiles(first_name, last_name)"
     )
     .eq("status", "submitted")
     .eq("week_number", week)
@@ -108,6 +109,7 @@ async function fetchWeeklyReports(
 
   const reports = sortReportsByDepartment((reportsData || []) as WeeklyReport[])
   const departments = Array.from(new Set(reports.map((report) => report.department))).filter(Boolean)
+  const departmentsForTasks = Array.from(new Set(departments.flatMap((department) => getDepartmentAliases(department))))
 
   if (departments.length === 0) {
     return { reports, trackingData: [] }
@@ -119,7 +121,7 @@ async function fetchWeeklyReports(
     .eq("category", "weekly_action")
     .eq("week_number", week)
     .eq("year", year)
-    .in("department", departments)
+    .in("department", departmentsForTasks)
 
   if (tasksError) {
     return { reports, trackingData: [] }
@@ -132,7 +134,10 @@ async function fetchWeeklyReports(
 }
 
 function getActionTrackerStatus(department: string, trackingData: TrackerStatus[]) {
-  const deptActions = trackingData.filter((action) => action.department === department)
+  const normalizedDepartment = normalizeDepartmentName(department)
+  const deptActions = trackingData.filter(
+    (action) => normalizeDepartmentName(action.department) === normalizedDepartment
+  )
   if (deptActions.length === 0) {
     return { label: "Pending", color: "bg-slate-100 text-slate-600 dark:bg-slate-900/40 dark:text-slate-400" }
   }
@@ -299,8 +304,21 @@ export default function WeeklyReportsPortal() {
         label: "Submission Date",
         sortable: true,
         accessor: (report) => report.created_at,
-        render: (report) =>
-          new Date(report.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+        render: (report) => {
+          const created = new Date(report.created_at).toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
+          const updatedAt = (report as WeeklyReport & { updated_at?: string | null }).updated_at
+          const wasEdited = Boolean(updatedAt && new Date(updatedAt).getTime() > new Date(report.created_at).getTime())
+          return (
+            <div className="flex flex-col">
+              <span>{created}</span>
+              {wasEdited ? <span className="text-muted-foreground text-[11px]">(edited)</span> : null}
+            </div>
+          )
+        },
       },
       {
         key: "tracker_status",

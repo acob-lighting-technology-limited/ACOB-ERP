@@ -66,13 +66,31 @@ async function fetchDepartmentsData(): Promise<DepartmentsData> {
   } = await supabase.auth.getUser()
 
   let canManageDepartments = false
+  let scopeMode: "global" | "lead" = "global"
   if (user) {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+    const [{ data: profile }, scopeResponse] = await Promise.all([
+      supabase.from("profiles").select("role").eq("id", user.id).single(),
+      fetch("/api/admin/scope-mode", { cache: "no-store" }).catch(() => null),
+    ])
     canManageDepartments = ["developer", "super_admin", "admin"].includes(profile?.role || "")
+    if (scopeResponse?.ok) {
+      const scopePayload = (await scopeResponse.json().catch(() => null)) as { mode?: "global" | "lead" } | null
+      scopeMode = scopePayload?.mode === "lead" ? "lead" : "global"
+      if (scopeMode === "lead") {
+        canManageDepartments = false
+      }
+    }
   }
 
-  const { data: departments, error } = await supabase.from("departments").select("*").order("name")
-  if (error) throw new Error(error.message)
+  const departmentResponse = await fetch("/api/departments", { cache: "no-store" })
+  const departmentPayload = (await departmentResponse.json().catch(() => null)) as {
+    data?: Department[]
+    error?: string
+  } | null
+  if (!departmentResponse.ok) {
+    throw new Error(departmentPayload?.error || "Failed to load departments")
+  }
+  const departments = departmentPayload?.data || []
 
   const { data: profiles } = await supabase
     .from("profiles")
@@ -87,14 +105,19 @@ async function fetchDepartmentsData(): Promise<DepartmentsData> {
     employeesByDepartment[departmentName].push(profile)
   }
 
-  const departmentsWithCounts = (departments || []).map((department) => ({
+  const scopedDepartmentNames = new Set(departments.map((department) => department.name))
+  const filteredEmployeesByDepartment = Object.fromEntries(
+    Object.entries(employeesByDepartment).filter(([departmentName]) => scopedDepartmentNames.has(departmentName))
+  )
+
+  const departmentsWithCounts = departments.map((department) => ({
     ...department,
-    employee_count: employeesByDepartment[department.name]?.length || 0,
+    employee_count: filteredEmployeesByDepartment[department.name]?.length || 0,
   }))
 
   return {
     departments: departmentsWithCounts,
-    departmentEmployees: employeesByDepartment,
+    departmentEmployees: filteredEmployeesByDepartment,
     canManageDepartments,
   }
 }

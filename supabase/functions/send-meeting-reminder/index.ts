@@ -217,17 +217,7 @@ function normalizeMeetingAgenda(agendaInput: string[] | string | undefined): str
           .filter(Boolean)
       : []
 
-  if (parsedAgenda.length > 0) return parsedAgenda
-
-  return [
-    "Opening Prayer",
-    "Knowledge Sharing Session (30 minutes)",
-    "Departmental Updates",
-    "Progress on Ongoing Projects",
-    "Upcoming Events and Deadlines",
-    "Any Other Business",
-    "Adjournment",
-  ]
+  return parsedAgenda
 }
 
 function buildMeetingReminderHtml(

@@ -17,11 +17,17 @@ export interface ApprovalPreviewPendingUser {
   personal_email: string
   phone_number?: string | null
   office_location?: string | null
+  residential_address?: string | null
 }
 
 interface ApprovalEmailPreviewParams {
   supabase: SupabaseClient<Database>
   pendingUser: ApprovalPreviewPendingUser
+  preparedBy?: {
+    name?: string | null
+    designation?: string | null
+    department?: string | null
+  }
 }
 
 interface ApprovalPreviewEmail {
@@ -49,11 +55,13 @@ function normalizeEmails(emails: string[]) {
 export async function buildApprovalEmailPreview({
   supabase,
   pendingUser,
+  preparedBy,
 }: ApprovalEmailPreviewParams): Promise<ApprovalEmailPreview> {
   const normalizedPendingUser = {
     ...pendingUser,
     phone_number: pendingUser.phone_number || undefined,
     office_location: pendingUser.office_location || undefined,
+    residential_address: pendingUser.residential_address || undefined,
   }
   const tempPassword = crypto.randomBytes(12).toString("base64url").slice(0, 16)
   const portalUrl = ORG.MAIL_PORTAL_URL
@@ -65,6 +73,7 @@ export async function buildApprovalEmailPreview({
     pendingUser: normalizedPendingUser,
     tempPassword,
     portalUrl,
+    preparedBy,
   })
 
   let internalRecipients: string[] = []
@@ -72,7 +81,7 @@ export async function buildApprovalEmailPreview({
     "Onboarding",
     `New Employee Onboarded - ${pendingUser.first_name.replace(/[\r\n]/g, "")} ${pendingUser.last_name.replace(/[\r\n]/g, "")}`
   )
-  const internalHtml = renderInternalNotificationEmail({ pendingUser: normalizedPendingUser })
+  const internalHtml = renderInternalNotificationEmail({ pendingUser: normalizedPendingUser, preparedBy })
 
   if (onboardingMailEnabled) {
     const leadRecipients = await resolveActiveLeadRecipients(supabase)

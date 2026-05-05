@@ -72,15 +72,11 @@ interface ApprovalEmailWarning {
   recipients: string[]
 }
 
-async function fetchPendingApplications(supabase: ReturnType<typeof createClient>): Promise<PendingUser[]> {
-  const { data, error } = await supabase
-    .from("pending_users")
-    .select("*")
-    .eq("status", "pending")
-    .order("created_at", { ascending: false })
-
-  if (error) throw new Error(error.message)
-  return data || []
+async function fetchPendingApplications(): Promise<PendingUser[]> {
+  const response = await fetch("/api/admin/pending-users", { cache: "no-store" })
+  const payload = (await response.json().catch(() => null)) as { data?: PendingUser[]; error?: string } | null
+  if (!response.ok) throw new Error(payload?.error || "Failed to load applications")
+  return payload?.data || []
 }
 
 export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicationsModalProps) {
@@ -96,7 +92,7 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
 
   const { data: pendingUsers = [], isLoading } = useQuery({
     queryKey: QUERY_KEYS.pendingApplications(),
-    queryFn: () => fetchPendingApplications(supabase),
+    queryFn: fetchPendingApplications,
     enabled: isOpen,
   })
 
@@ -226,9 +222,13 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
 
     setIsProcessing(true)
     try {
-      const { error } = await supabase.from("pending_users").delete().eq("id", selectedUser.id)
-
-      if (error) throw error
+      const response = await fetch("/api/admin/reject-user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pendingUserId: selectedUser.id }),
+      })
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      if (!response.ok) throw new Error(payload?.error || "Failed to reject application")
 
       toast.success("Application rejected")
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pendingApplications() })

@@ -49,6 +49,7 @@ const DEPARTMENT_NAMES = {
   md: DEPT_EXECUTIVE_MANAGEMENT,
   hcs: DEPT_CORPORATE_SERVICES,
 } as const
+const OPTIONAL_APPROVER_ROLES = new Set<string>(["department_lead", "admin_hr_lead"])
 
 function hasLeadForDepartment(profile: LeaveLeadProfile | null | undefined, departmentName: string) {
   if (!profile) return false
@@ -227,7 +228,10 @@ async function resolveRoleApprover(
   }
 
   if (roleCode === "admin_hr_lead") {
-    return resolveProfileByDepartmentLead(supabase, DEPARTMENT_NAMES.adminHr)
+    const adminHrLead = await resolveProfileByDepartmentLead(supabase, DEPARTMENT_NAMES.adminHr)
+    if (adminHrLead?.id) return adminHrLead
+    // Fallback to explicit role assignment when department lead mapping is missing.
+    return resolveFixedRoleAssignee(supabase, "admin_hr_lead")
   }
 
   if (roleCode === "md") {
@@ -306,20 +310,59 @@ export async function buildResolvedRouteSnapshot(params: {
   }
 
   const resolved: ResolvedRouteStage[] = []
+  let adminHrLeadApproverId: string | null | undefined
 
   for (const row of routeRows) {
-    const approver = await resolveRoleApprover(supabase, row.approver_role_code, {
-      requester,
-      relieverId,
-    })
+    let approver: { id: string } | null = null
+    try {
+      approver = await resolveRoleApprover(supabase, row.approver_role_code, {
+        requester,
+        relieverId,
+      })
+    } catch (error) {
+      // Optional approver lookup failures must never block workflow.
+      if (OPTIONAL_APPROVER_ROLES.has(row.approver_role_code)) {
+        continue
+      }
+      throw error
+    }
 
     if (!approver?.id) {
-      // Explicit business rule: if no department lead is configured, skip that stage
-      // and continue with the next configured approver (e.g. Admin & HR lead).
-      if (row.approver_role_code === "department_lead") {
+      // Missing optional approvers should not block request creation/preview.
+      if (OPTIONAL_APPROVER_ROLES.has(row.approver_role_code)) {
         continue
       }
       throw new Error(`LEAVE_APPROVER_NOT_CONFIGURED:${row.approver_role_code}`)
+    }
+
+    if (row.approver_role_code === "admin_hr_lead") {
+      adminHrLeadApproverId = approver.id
+    } else if (typeof adminHrLeadApproverId === "undefined") {
+      const adminHrLeadApprover = await resolveRoleApprover(supabase, "admin_hr_lead", {
+        requester,
+        relieverId,
+      })
+      adminHrLeadApproverId = adminHrLeadApprover?.id || null
+    }
+
+    // Business rule:
+    // - If reliever is Admin & HR Lead, skip reliever and department lead stages.
+    if (
+      adminHrLeadApproverId &&
+      relieverId === adminHrLeadApproverId &&
+      (row.approver_role_code === "reliever" || row.approver_role_code === "department_lead")
+    ) {
+      continue
+    }
+
+    // Business rule:
+    // - If department lead resolves to Admin & HR Lead, bypass department lead stage.
+    if (
+      row.approver_role_code === "department_lead" &&
+      adminHrLeadApproverId &&
+      approver.id === adminHrLeadApproverId
+    ) {
+      continue
     }
 
     if (approver.id === requesterId) {
@@ -328,7 +371,18 @@ export async function buildResolvedRouteSnapshot(params: {
 
     const prev = resolved[resolved.length - 1]
     if (prev && prev.approver_user_id === approver.id) {
-      continue
+      // Same person should not approve twice in sequence when reliever == department lead.
+      // Promote the stage to department_lead so requester gets a single actionable approval step.
+      if (prev.approver_role_code === "reliever" && row.approver_role_code === "department_lead") {
+        prev.approver_role_code = "department_lead"
+        prev.stage_code = stageCodeForRole("department_lead")
+        continue
+      }
+
+      // Collapse exact duplicates (same user + same role).
+      if (prev.approver_role_code === row.approver_role_code) {
+        continue
+      }
     }
 
     resolved.push({

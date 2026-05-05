@@ -1,18 +1,27 @@
 import { escapeHtml } from "./utils"
-import { EMAIL_HEADER_LOGO_SRC } from "./email-logo"
 import { type PendingUser } from "./welcome"
 
 interface InternalNotificationEmailProps {
   pendingUser: PendingUser
+  preparedBy?: {
+    name?: string | null
+    designation?: string | null
+    department?: string | null
+  }
 }
 
-export function renderInternalNotificationEmail({ pendingUser }: InternalNotificationEmailProps) {
+export function renderInternalNotificationEmail({ pendingUser, preparedBy }: InternalNotificationEmailProps) {
   const firstName = escapeHtml(pendingUser.first_name)
   const lastName = escapeHtml(pendingUser.last_name)
   const dept = escapeHtml(pendingUser.department)
   const role = escapeHtml(pendingUser.designation)
   const email = escapeHtml(pendingUser.company_email)
+  const officeLocation = pendingUser.office_location ? escapeHtml(pendingUser.office_location) : "N/A"
   const phoneNumber = pendingUser.phone_number ? escapeHtml(pendingUser.phone_number) : "N/A"
+  const address = pendingUser.residential_address ? escapeHtml(pendingUser.residential_address) : "N/A"
+  const preparedByName = escapeHtml((preparedBy?.name || "Admin & HR Lead").trim())
+  const preparedByDesignation = escapeHtml((preparedBy?.designation || "").trim())
+  const preparedByDepartment = escapeHtml((preparedBy?.department || "Admin & HR Department").trim())
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -21,74 +30,68 @@ export function renderInternalNotificationEmail({ pendingUser }: InternalNotific
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>New Employee Onboarding Notification</title>
     <style>
-        body { margin: 0; padding: 0; background: #f3f4f6; font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; }
-        .email-shell { max-width: 600px; margin: 0 auto; overflow: hidden; }
-        .outer-header { background: #0f2d1f; padding: 20px 0; text-align: center; border-bottom: 3px solid #16a34a; }
-        .wrapper { max-width: 600px; margin: 0 auto; background: #fff; padding: 32px 28px; }
-        .title { font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 20px; }
-        .text { font-size: 14px; color: #4b5563; line-height: 1.6; margin: 0 0 18px 0; }
-        .card { margin-top: 22px; border: 1px solid #e5e7eb; overflow: hidden; background: #fbfbfb; border-radius: 6px; }
-        .card-header { padding: 12px 18px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid #e5e7eb; background: #f8fafc; color: #64748b; }
-        table { width: 100%; border-collapse: collapse; }
-        td { padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb; }
-        tr:last-child td { border-bottom: none; }
-        .label { width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; }
-        .value { color: #0f172a; font-weight: 600; }
-        .cta { text-align: center; margin-top: 32px; }
-        .button { display: inline-block; background: #16a34a; color: #fff; text-decoration: none; padding: 12px 24px; border-radius: 6px; font-weight: 600; font-size: 13px; }
-        .footer { background: #0f2d1f; padding: 20px; text-align: center; font-size: 11px; color: #9ca3af; border-top: 3px solid #16a34a; }
-        .footer strong { color: #fff; }
-        .footer-system { color: #16a34a; font-weight: 600; }
-        .footer-note { color: #9ca3af; font-style: italic; }
+        body { margin: 0; padding: 0; background: #fff; font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; }
     </style>
 </head>
 <body>
-    <div class="email-shell">
-    <div class="outer-header" style="background-color:#0f2d1f;">
-        <img src="${EMAIL_HEADER_LOGO_SRC}" alt="ACOB Lighting" height="58">
-    </div>
-    <div class="wrapper">
-        <div class="title">New Employee Onboarded</div>
-        <p class="text">Dear Management,</p>
-        <p class="text">This is an automated notification that a new employee has been successfully approved and added to the system for your awareness.</p>
+    <div style="max-width: 600px; margin: 0 auto; overflow: hidden;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">
+        <tr><td align="center" style="padding:20px 0;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;">
+            <img src="https://erp.acoblighting.com/images/acob-logo-dark.png" alt="ACOB Lighting" height="65">
+        </td></tr>
+    </table>
+    <div style="max-width: 600px; margin: 0 auto; background: #fff; padding: 32px 28px;">
+        <div style="font-size: 20px; font-weight: 700; color: #111827; margin-bottom: 20px;">New Employee Onboarded</div>
+        <p style="font-size: 14px; color: #4b5563; line-height: 1.6; margin: 0 0 18px 0;">Dear Management,</p>
+        <p style="font-size: 14px; color: #4b5563; line-height: 1.6; margin: 0 0 18px 0;">This is an automated notification that a new employee has been successfully approved and added to the system for your awareness.</p>
         
-        <div class="card">
-            <div class="card-header">Onboarding Details</div>
-            <table>
+        <div style="margin-top: 22px; border: 1px solid #e5e7eb; overflow: hidden; background: #fbfbfb; border-radius: 6px;">
+            <div style="padding: 12px 18px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; border-bottom: 1px solid #e5e7eb; background: #f8fafc; color: #64748b;">Onboarding Details</div>
+            <table style="width: 100%; border-collapse: collapse;">
                 <tr>
-                    <td class="label">Employee Name</td>
-                    <td class="value">${firstName} ${lastName}</td>
+                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">Employee Name</td>
+                    <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">${firstName} ${lastName}</td>
                 </tr>
                 <tr>
-                    <td class="label">Department</td>
-                    <td class="value">${dept}</td>
+                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">Department</td>
+                    <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">${dept}</td>
                 </tr>
                 <tr>
-                    <td class="label">Official Email</td>
-                    <td class="value">${email}</td>
+                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">Office Location</td>
+                    <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">${officeLocation}</td>
                 </tr>
                 <tr>
-                    <td class="label">Designation</td>
-                    <td class="value">${role}</td>
+                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">Official Email</td>
+                    <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">${email}</td>
                 </tr>
                 <tr>
-                    <td class="label">Phone Number</td>
-                    <td class="value">${phoneNumber}</td>
+                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">Designation</td>
+                    <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">${role}</td>
+                </tr>
+                <tr>
+                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">Phone Number</td>
+                    <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">${phoneNumber}</td>
+                </tr>
+                <tr>
+                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px;">Address</td>
+                    <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px;">${address}</td>
                 </tr>
             </table>
         </div>
 
 
     </div>
-    <div class="footer" style="background-color:#0f2d1f;">
-        <span style="color:#d1d5db;">Prepared by Admin &amp; HR</span><br>
-        Administrative Team<br>
-        Admin &amp; HR Department<br>
-        <strong>ACOB Lighting Technology Limited</strong><br>
-        <span class="footer-system">Employee Management System</span>
-        <br><br>
-        <i class="footer-note">This is an automated system notification. Please do not reply directly to this email.</i>
-    </div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">
+        <tr><td align="center" style="padding:20px;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;font-size:11px;color:#d1d5db;">
+            <span style="color:#f3f4f6;">Prepared by ${preparedByName}</span><br>
+            ${preparedByDesignation ? `<span style="color:#d1d5db;">${preparedByDesignation}</span><br>` : ""}
+            <span style="color:#d1d5db;">${preparedByDepartment}</span><br>
+            <strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>
+            <span style="color:#16a34a; font-weight:600;">Employee Management System</span>
+            <br><br>
+            <i style="color:#9ca3af; font-style:italic;">This is an automated system notification. Please do not reply directly to this email.</i>
+        </td></tr>
+    </table>
     </div>
 </body>
 </html>

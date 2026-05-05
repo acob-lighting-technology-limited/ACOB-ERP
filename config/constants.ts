@@ -13,7 +13,7 @@
 // ---------------------------------------------------------------------------
 
 /** Public URL of the employee web-mail / portal login page. */
-export const PORTAL_URL = "https://acoblighting.com/mail"
+export const PORTAL_URL = "https://www.acoblighting.com/mail"
 
 /**
  * Organisation-wide constants grouped by domain.
@@ -22,7 +22,7 @@ export const PORTAL_URL = "https://acoblighting.com/mail"
  */
 export const ORG = {
   /** Public-facing mail portal URL */
-  MAIL_PORTAL_URL: "https://acoblighting.com/mail",
+  MAIL_PORTAL_URL: "https://www.acoblighting.com/mail",
 
   /** Department names used in routing and escalation logic */
   DEPARTMENTS: {

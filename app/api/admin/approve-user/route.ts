@@ -12,6 +12,7 @@ import {
 import { isSystemNotificationChannelEnabled } from "@/lib/notifications/delivery-policy"
 import { syncEmploymentStatusToAuth } from "@/lib/supabase/admin"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { normalizeDepartmentName } from "@/shared/departments"
 
 const log = logger("approve-user")
 
@@ -37,8 +38,24 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const { data: callerProfile } = await supabase.from("profiles").select("role").eq("id", caller.id).single()
-  if (!callerProfile || !["developer", "super_admin", "admin"].includes(callerProfile.role)) {
+  const { data: callerProfile } = await supabase
+    .from("profiles")
+    .select("role, department, designation, full_name, first_name, last_name, is_department_lead, lead_departments")
+    .eq("id", caller.id)
+    .single<{
+      role?: string | null
+      department?: string | null
+      designation?: string | null
+      full_name?: string | null
+      first_name?: string | null
+      last_name?: string | null
+      is_department_lead?: boolean | null
+      lead_departments?: string[] | null
+    }>()
+  const callerRole = String(callerProfile?.role || "").toLowerCase()
+  const callerIsAdminLike = ["developer", "super_admin", "admin"].includes(callerRole)
+  const callerIsLead = callerProfile?.is_department_lead === true
+  if (!callerProfile || (!callerIsAdminLike && !callerIsLead)) {
     return NextResponse.json({ error: "Forbidden: Admin access required" }, { status: 403 })
   }
 
@@ -81,6 +98,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Pending user not found" }, { status: 404 })
     }
 
+    if (!callerIsAdminLike) {
+      const managedDepartments = Array.from(
+        new Set([callerProfile?.department, ...(callerProfile?.lead_departments || [])].filter(Boolean) as string[])
+      ).map((departmentName) => normalizeDepartmentName(departmentName))
+      const pendingDepartment = normalizeDepartmentName(String(pendingUser.department || ""))
+      if (managedDepartments.length === 0 || !managedDepartments.includes(pendingDepartment)) {
+        return NextResponse.json({ error: "Forbidden: Department scope mismatch" }, { status: 403 })
+      }
+    }
+
     // 1b. Validate Required Fields
     const requiredFields = ["company_email", "personal_email", "first_name", "last_name", "department", "designation"]
     const missingFields = requiredFields.filter((field) => !pendingUser[field])
@@ -114,6 +141,15 @@ export async function POST(req: Request) {
     const emailPreview = await buildApprovalEmailPreview({
       supabase: supabaseAdmin,
       pendingUser,
+      preparedBy: {
+        name:
+          callerProfile?.full_name ||
+          [callerProfile?.first_name, callerProfile?.last_name].filter(Boolean).join(" ").trim() ||
+          caller.email ||
+          "Admin & HR Lead",
+        designation: callerProfile?.designation || null,
+        department: callerProfile?.department || "Admin & HR Department",
+      },
     })
 
     // 3. Create or Update Auth User

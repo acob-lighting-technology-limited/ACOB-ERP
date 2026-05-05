@@ -8,7 +8,7 @@
  */
 
 import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from "pdf-lib"
-import { compareDepartments, normalizeDepartmentName } from "@/shared/departments"
+import { compareDepartments } from "@/shared/departments"
 
 // ─── Colour palette (mirrors edge function) ────────────────────────────────
 const GREEN = rgb(0.102, 0.478, 0.29)
@@ -415,9 +415,7 @@ export async function buildWeeklyReportPDF(
   const bold = await doc.embedFont(StandardFonts.HelveticaBold)
   const regular = await doc.embedFont(StandardFonts.Helvetica)
 
-  const sorted = [...reports]
-    .map((report) => ({ ...report, department: normalizeDepartmentName(report.department) }))
-    .sort((a, b) => compareDepartments(a.department, b.department))
+  const sorted = [...reports].sort((a, b) => compareDepartments(a.department, b.department))
 
   await addCoverPage(
     doc,

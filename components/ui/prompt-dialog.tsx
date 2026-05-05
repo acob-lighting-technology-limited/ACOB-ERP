@@ -25,9 +25,10 @@ interface PromptDialogProps {
   inputType?: "text" | "textarea" | "url"
   required?: boolean
   confirmLabel?: string
+  confirmLoadingLabel?: string
   cancelLabel?: string
   confirmVariant?: "default" | "destructive"
-  onConfirm: (value: string) => void
+  onConfirm: (value: string) => void | Promise<void>
   onCancel?: () => void
 }
 
@@ -45,12 +46,14 @@ export function PromptDialog({
   inputType = "text",
   required = true,
   confirmLabel = "Confirm",
+  confirmLoadingLabel = "Submitting...",
   cancelLabel = "Cancel",
   confirmVariant = "default",
   onConfirm,
   onCancel,
 }: PromptDialogProps) {
   const [value, setValue] = useState("")
+  const [submitting, setSubmitting] = useState(false)
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
 
   // Reset value when dialog opens
@@ -63,13 +66,19 @@ export function PromptDialog({
     }
   }, [open])
 
-  function handleConfirm() {
+  async function handleConfirm() {
     if (required && !value.trim()) return
-    onConfirm(value.trim())
-    onOpenChange(false)
+    setSubmitting(true)
+    try {
+      await Promise.resolve(onConfirm(value.trim()))
+      onOpenChange(false)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   function handleCancel() {
+    if (submitting) return
     setValue("")
     onCancel?.()
     onOpenChange(false)
@@ -86,7 +95,13 @@ export function PromptDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (submitting) return
+        onOpenChange(nextOpen)
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
@@ -105,6 +120,7 @@ export function PromptDialog({
               placeholder={placeholder}
               rows={4}
               className="resize-none"
+              disabled={submitting}
             />
           ) : (
             <Input
@@ -115,20 +131,17 @@ export function PromptDialog({
               onChange={(e) => setValue(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder={placeholder}
+              disabled={submitting}
             />
           )}
         </div>
 
         <DialogFooter className="gap-2 sm:gap-0">
-          <Button variant="outline" onClick={handleCancel}>
+          <Button variant="outline" onClick={handleCancel} disabled={submitting}>
             {cancelLabel}
           </Button>
-          <Button
-            variant={confirmVariant}
-            onClick={handleConfirm}
-            disabled={required && !value.trim()}
-          >
-            {confirmLabel}
+          <Button variant={confirmVariant} onClick={handleConfirm} disabled={submitting || (required && !value.trim())}>
+            {submitting ? confirmLoadingLabel : confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { buildResolvedRouteSnapshot, classifyRequesterKind } from "@/lib/hr/leave-routing"
 import { logger } from "@/lib/logger"
+import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 
 const log = logger("hr-leave-flow-my-preview")
 const PLACEHOLDER_RELIEVER_ID = "00000000-0000-4000-8000-000000000000"
@@ -26,6 +27,7 @@ function roleLabel(roleCode: string) {
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const dataClient = getServiceRoleClientOrFallback(supabase)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -47,7 +49,7 @@ export async function GET(request: NextRequest) {
 
     const requesterKind = classifyRequesterKind(requester)
     const snapshot = await buildResolvedRouteSnapshot({
-      supabase,
+      supabase: dataClient,
       requester,
       requesterId: requester.id,
       requesterKind,

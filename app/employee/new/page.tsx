@@ -1,12 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { useQuery } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { createClient } from "@/lib/supabase/client"
 import { Loader2, CheckCircle2, User, MapPin, Mail, Phone, Briefcase } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -47,9 +46,9 @@ async function fetchOnboardingOptions(): Promise<{ departments: string[]; office
 }
 
 export default function EmployeeOnboardingForm() {
+  const DRAFT_KEY = "employee_onboarding_draft_v1"
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
-  const supabase = createClient()
 
   const { data: onboardingOptions } = useQuery({
     queryKey: QUERY_KEYS.employeeOnboardingDepartments(),
@@ -64,6 +63,7 @@ export default function EmployeeOnboardingForm() {
     handleSubmit,
     watch,
     setValue,
+    reset,
     formState: { errors },
   } = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -80,6 +80,40 @@ export default function EmployeeOnboardingForm() {
   const lastName = watch("last_name")
   const selectedDepartment = watch("department")
   const selectedOfficeLocation = watch("office_location")
+  const watchedValues = watch()
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const rawDraft = window.localStorage.getItem(DRAFT_KEY)
+    if (!rawDraft) return
+    try {
+      const parsed = JSON.parse(rawDraft) as Partial<FormValues>
+      reset({
+        first_name: parsed.first_name || "",
+        last_name: parsed.last_name || "",
+        other_names: parsed.other_names || "",
+        department: parsed.department || "",
+        other_department: parsed.other_department || "",
+        designation: parsed.designation || "",
+        personal_email: parsed.personal_email || "",
+        phone_number: parsed.phone_number || "",
+        additional_phone_number: parsed.additional_phone_number || "",
+        residential_address: parsed.residential_address || "",
+        office_location: parsed.office_location || "",
+        honeypot: "",
+      })
+    } catch {
+      window.localStorage.removeItem(DRAFT_KEY)
+    }
+  }, [reset])
+
+  useEffect(() => {
+    if (typeof window === "undefined" || isSuccess) return
+    const timeoutId = window.setTimeout(() => {
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify(watchedValues))
+    }, 300)
+    return () => window.clearTimeout(timeoutId)
+  }, [watchedValues, isSuccess])
 
   const sanitize = (s: string) =>
     s
@@ -119,14 +153,20 @@ export default function EmployeeOnboardingForm() {
         updated_at: new Date().toISOString(),
       }
 
-      const { error } = await supabase.from("pending_users").insert([record])
-
-      if (error) {
-        log.error("Supabase Insert Error:", error)
-        throw error
+      const response = await fetch("/api/public/onboarding-submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...record, honeypot: data.honeypot || "" }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as { error?: string }
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to submit application")
       }
 
       setIsSuccess(true)
+      if (typeof window !== "undefined") {
+        window.localStorage.removeItem(DRAFT_KEY)
+      }
       toast.success("Application Submitted", {
         description: "Your details have been sent to HR for review.",
       })

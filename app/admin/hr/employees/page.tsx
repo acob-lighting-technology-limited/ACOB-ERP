@@ -29,6 +29,7 @@ async function getAdminEmployeeData() {
   }
   const userProfile: UserProfile = {
     role: scope.role as UserRole,
+    is_department_lead: scope.isDepartmentLead,
     managed_departments: scope.managedDepartments,
   }
 

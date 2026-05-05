@@ -77,7 +77,7 @@ interface AdminTasksContentProps {
   initialTasks: Task[]
   initialemployee: employee[]
   initialDepartments: string[]
-  initialGoals: GoalFilterOption[]
+  initialGoals?: GoalFilterOption[]
   userProfile: UserProfile
   initialGoalId?: string
 }
@@ -115,7 +115,7 @@ export function AdminTasksContent({
   initialTasks,
   initialemployee,
   initialDepartments,
-  initialGoals,
+  initialGoals = [],
   userProfile,
   initialGoalId = "",
 }: AdminTasksContentProps) {
@@ -131,6 +131,8 @@ export function AdminTasksContent({
   const scopedAssignableEmployees = filterAssignableTaskUsers(assignerProfile, activeEmployees)
   const assignableEmployees = scopedAssignableEmployees.length > 0 ? scopedAssignableEmployees : activeEmployees
   const [departments] = useState<string[]>(initialDepartments)
+  const goals = useMemo(() => (Array.isArray(initialGoals) ? initialGoals : []), [initialGoals])
+  const departmentOptions = useMemo(() => (Array.isArray(departments) ? departments : []), [departments])
   const scopedAssignableDepartments = filterAssignableTaskDepartments(assignerProfile, departments)
   const assignableDepartments = scopedAssignableDepartments.length > 0 ? scopedAssignableDepartments : departments
   const [isLoading, setIsLoading] = useState(false)
@@ -424,7 +426,7 @@ export function AdminTasksContent({
         label: "Goal",
         resizable: true,
         initialWidth: 220,
-        accessor: (r) => r.goal_title || initialGoals.find((goal) => goal.id === r.goal_id)?.title || "",
+        accessor: (r) => r.goal_title || goals.find((goal) => goal.id === r.goal_id)?.title || "",
         render: (r) => <span className="line-clamp-1">{r.goal_title || "—"}</span>,
       },
       {
@@ -440,7 +442,7 @@ export function AdminTasksContent({
         ),
       },
     ],
-    [initialGoals, workflowOwnerLabel]
+    [goals, workflowOwnerLabel]
   )
 
   const filters: DataTableFilter<Task>[] = useMemo(
@@ -458,12 +460,12 @@ export function AdminTasksContent({
       {
         key: "department",
         label: "Department",
-        options: departments.map((d) => ({ value: d, label: d })),
+        options: departmentOptions.map((d) => ({ value: d, label: d })),
       },
       {
         key: "goal_id",
         label: "Goal",
-        options: initialGoals.map((g) => ({ value: g.id, label: g.title })),
+        options: goals.map((g) => ({ value: g.id, label: g.title })),
         mode: "custom",
         filterFn: (row, vals) => {
           if (vals.length === 0) return true
@@ -471,7 +473,7 @@ export function AdminTasksContent({
         },
       },
     ],
-    [departments, initialGoals]
+    [departmentOptions, goals]
   )
 
   return (
@@ -573,9 +575,7 @@ export function AdminTasksContent({
                   </h4>
                   <div className="space-y-1.5 text-sm">
                     {r.goal_id ? (
-                      <p className="line-clamp-2">
-                        {initialGoals.find((g) => g.id === r.goal_id)?.title || "Goal Linked"}
-                      </p>
+                      <p className="line-clamp-2">{goals.find((g) => g.id === r.goal_id)?.title || "Goal Linked"}</p>
                     ) : (
                       <p className="text-muted-foreground italic">No linked goal</p>
                     )}

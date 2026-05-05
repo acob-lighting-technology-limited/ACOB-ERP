@@ -87,6 +87,14 @@ type LeaveRequestApprovalRow = {
   lead_reconfirm_required?: boolean | null
 }
 
+type ProfileLookupRow = {
+  id: string
+  role?: string | null
+  full_name?: string | null
+  company_email?: string | null
+  additional_email?: string | null
+}
+
 function normalizeAction(body: { action?: string; status?: string }) {
   if (body.action === "approve" || body.status === "approved") return "approved"
   if (body.action === "reject" || body.status === "rejected") return "rejected"
@@ -153,11 +161,39 @@ export async function PATCH(request: NextRequest) {
 
     const requestScope = await getRequestScope()
 
-    const { data: actorProfile } = await supabase
+    let actorProfileId = user.id
+    let actorProfile: ProfileLookupRow | null = null
+    const { data: actorById } = await supabase
       .from("profiles")
-      .select("id, role, full_name, company_email")
+      .select("id, role, full_name, company_email, additional_email")
       .eq("id", user.id)
-      .single()
+      .maybeSingle<ProfileLookupRow>()
+
+    if (actorById?.id) {
+      actorProfileId = actorById.id
+      actorProfile = actorById
+    } else if (user.email) {
+      const { data: actorByCompanyEmail } = await supabase
+        .from("profiles")
+        .select("id, role, full_name, company_email, additional_email")
+        .eq("company_email", user.email)
+        .maybeSingle<ProfileLookupRow>()
+
+      if (actorByCompanyEmail?.id) {
+        actorProfileId = actorByCompanyEmail.id
+        actorProfile = actorByCompanyEmail
+      } else {
+        const { data: actorByAdditionalEmail } = await supabase
+          .from("profiles")
+          .select("id, role, full_name, company_email, additional_email")
+          .eq("additional_email", user.email)
+          .maybeSingle<ProfileLookupRow>()
+        if (actorByAdditionalEmail?.id) {
+          actorProfileId = actorByAdditionalEmail.id
+          actorProfile = actorByAdditionalEmail
+        }
+      }
+    }
     const canOverrideEvidence = requestScope?.isAdminLike === true && requestScope.scopeMode !== "lead"
     const actorName = actorProfile?.full_name || actorProfile?.company_email || "An approver"
 
@@ -194,7 +230,7 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "LEAVE_APPROVER_NOT_CONFIGURED:current_stage" }, { status: 400 })
     }
 
-    if (expectedApproverId !== user.id) {
+    if (expectedApproverId !== actorProfileId) {
       return NextResponse.json({ error: "LEAVE_STAGE_NOT_ASSIGNED_TO_ACTOR" }, { status: 403 })
     }
 
@@ -231,7 +267,7 @@ export async function PATCH(request: NextRequest) {
       const { error: rejectionAuditError } = await supabaseAdmin.from("leave_approvals").upsert(
         {
           leave_request_id,
-          approver_id: user.id,
+          approver_id: actorProfileId,
           approval_level: currentStageOrder,
           status: action,
           comments: comments || null,
@@ -254,7 +290,7 @@ export async function PATCH(request: NextRequest) {
         userIds: [typedLeaveRequest.user_id],
         title: "Leave request rejected",
         message: `Your leave request was rejected at ${stageCode.replaceAll("_", " ")}. Reason: ${comments}`,
-        actorId: user.id,
+        actorId: actorProfileId,
         linkUrl: "/leave",
         entityId: leave_request_id,
         emailEvent: "rejected",
@@ -266,7 +302,7 @@ export async function PATCH(request: NextRequest) {
           userIds: [typedLeaveRequest.reliever_id],
           title: "Reliever commitment released",
           message: "This leave request was rejected, so your reliever commitment for it is no longer active.",
-          actorId: user.id,
+          actorId: actorProfileId,
           linkUrl: "/leave",
           entityId: leave_request_id,
           emailEvent: "approval_required",
@@ -280,7 +316,7 @@ export async function PATCH(request: NextRequest) {
           entityType: "leave_request",
           entityId: leave_request_id,
           newValues: { status: "rejected", stage: stageCode, reason: comments },
-          context: { actorId: user.id, source: "api", route: "/api/hr/leave/approve" },
+          context: { actorId: actorProfileId, source: "api", route: "/api/hr/leave/approve" },
         },
         { failOpen: true }
       )
@@ -292,7 +328,7 @@ export async function PATCH(request: NextRequest) {
     const { error: approvalAuditError } = await supabaseAdmin.from("leave_approvals").upsert(
       {
         leave_request_id,
-        approver_id: user.id,
+        approver_id: actorProfileId,
         approval_level: currentStageOrder,
         status: action,
         comments: comments || null,
@@ -345,7 +381,7 @@ export async function PATCH(request: NextRequest) {
           status: "approved",
           approval_stage: "completed",
           current_stage_code: "completed",
-          approved_by: user.id,
+          approved_by: actorProfileId,
           approved_at: now,
           hr_decision_at: now,
           hr_comment: comments || null,
@@ -375,7 +411,7 @@ export async function PATCH(request: NextRequest) {
         userIds: [typedLeaveRequest.user_id],
         title: "Leave approved - proceed on leave",
         message: `${actorName} completed final approval. Start: ${typedLeaveRequest.start_date}, Resume: ${typedLeaveRequest.resume_date}.`,
-        actorId: user.id,
+        actorId: actorProfileId,
         linkUrl: "/leave",
         entityId: leave_request_id,
         emailEvent: "approved",
@@ -386,7 +422,7 @@ export async function PATCH(request: NextRequest) {
           userIds: [typedLeaveRequest.reliever_id],
           title: "Reliever commitment is now active",
           message: `This leave is fully approved (${typedLeaveRequest.start_date} to ${typedLeaveRequest.end_date}). You cannot request overlapping leave during this period.`,
-          actorId: user.id,
+          actorId: actorProfileId,
           linkUrl: "/leave",
           entityId: leave_request_id,
           emailEvent: "approval_required",
@@ -400,7 +436,7 @@ export async function PATCH(request: NextRequest) {
           entityType: "leave_request",
           entityId: leave_request_id,
           newValues: { status: "approved", final: true, stage: stageCode },
-          context: { actorId: user.id, source: "api", route: "/api/hr/leave/approve" },
+          context: { actorId: actorProfileId, source: "api", route: "/api/hr/leave/approve" },
         },
         { failOpen: true }
       )
@@ -448,7 +484,7 @@ export async function PATCH(request: NextRequest) {
       userIds: [leaveRequest.user_id],
       title: `${humanStage(stageCode)} approved your leave request`,
       message: `${actorName} approved at ${humanStage(stageCode)} stage. Next: ${humanStage(nextStage.stage_code)}.`,
-      actorId: user.id,
+      actorId: actorProfileId,
       linkUrl: "/leave",
       entityId: leave_request_id,
       emailEvent: "approval_required",
@@ -458,7 +494,7 @@ export async function PATCH(request: NextRequest) {
       userIds: [nextStage.approver_user_id],
       title: "Leave request awaiting your approval",
       message: `A leave request is now waiting at ${nextStage.stage_code.replaceAll("_", " ")}.`,
-      actorId: user.id,
+      actorId: actorProfileId,
       linkUrl: "/leave",
       entityId: leave_request_id,
       emailEvent: "approval_required",
@@ -471,7 +507,7 @@ export async function PATCH(request: NextRequest) {
         entityType: "leave_request",
         entityId: leave_request_id,
         newValues: { stage: stageCode, next_stage: nextStage?.stage_code },
-        context: { actorId: user.id, source: "api", route: "/api/hr/leave/approve" },
+        context: { actorId: actorProfileId, source: "api", route: "/api/hr/leave/approve" },
       },
       { failOpen: true }
     )

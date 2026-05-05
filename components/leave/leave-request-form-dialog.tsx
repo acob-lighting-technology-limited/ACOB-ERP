@@ -48,6 +48,7 @@ interface LeaveRequestFormDialogProps {
   relieverDebug: LeaveRelieverDebug | null
   selectedLeaveType: LeaveType | undefined
   selectedBalance: LeaveBalance | undefined
+  requiresAttachmentOnCreate: boolean
   availableDays: number
   availableDaysByType: Record<string, number>
   approvalRouteStages: Array<{
@@ -90,6 +91,7 @@ export function LeaveRequestFormDialog({
   relieverDebug,
   selectedLeaveType,
   selectedBalance: _selectedBalance,
+  requiresAttachmentOnCreate,
   availableDays,
   availableDaysByType,
   approvalRouteStages,
@@ -407,13 +409,18 @@ export function LeaveRequestFormDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Attachment (Optional)</Label>
+            <Label>Attachment {requiresAttachmentOnCreate ? "(Required)" : "(Optional)"}</Label>
             <Input
               type="file"
               accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+              required={requiresAttachmentOnCreate}
               onChange={(event) => setFormData((prev) => ({ ...prev, attachment: event.target.files?.[0] || null }))}
             />
-            <p className="text-muted-foreground text-xs">Upload a supporting file to the leave SharePoint library.</p>
+            <p className="text-muted-foreground text-xs">
+              {requiresAttachmentOnCreate
+                ? "This leave type requires evidence. Upload is compulsory before submit."
+                : "Upload a supporting file to the leave SharePoint library."}
+            </p>
           </div>
 
           <div className="flex justify-end gap-2">

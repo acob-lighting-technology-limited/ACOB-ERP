@@ -50,6 +50,9 @@ async function getAuditLogsData(): Promise<AuditLogsData> {
   if (!scope) {
     return { kind: "redirect", redirect: "/profile" }
   }
+  if (!["developer", "super_admin"].includes(String(scope.role || "").toLowerCase())) {
+    return { kind: "redirect", redirect: "/admin" }
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const dataClient = getServiceRoleClientOrFallback(supabase as any)

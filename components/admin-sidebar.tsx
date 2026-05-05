@@ -172,7 +172,7 @@ const adminNavigation = [
     name: "Audit Logs",
     href: "/admin/audit-logs",
     icon: ScrollText,
-    roles: ["developer", "super_admin", "admin"],
+    roles: ["developer", "super_admin"],
   },
   {
     section: "compliance",
@@ -314,7 +314,10 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global" }: Admin
 
   const canAccessRoute = (requiredRoles: string[], href: string) => {
     if (!profile?.role || !accessContext) return false
-    if (!requiredRoles.includes(profile.role)) return false
+    // Legacy role arrays are no longer authoritative under RBAC V2.
+    // Use centralized policy evaluation so department leads with base role "employee"
+    // still see allowed admin routes.
+    void requiredRoles
     return canAccessRouteV2(accessContext, resolveAdminRouteKeyV2(href))
   }
 

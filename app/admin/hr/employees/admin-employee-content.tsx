@@ -187,6 +187,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
   const [showMoreOptions, setShowMoreOptions] = useState(false)
 
   const canManageUsers = ["developer", "super_admin", "admin"].includes(userProfile?.role || "")
+  const canReviewApplications = canManageUsers || Boolean(userProfile?.is_department_lead)
 
   const {
     data: employees = [],
@@ -587,7 +588,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       backLink={{ href: "/admin/hr", label: "Back to HR" }}
       actions={
         <div className="flex items-center gap-2">
-          {canManageUsers && <PendingApplicationsModal onEmployeeCreated={loadData} />}
+          {canReviewApplications && <PendingApplicationsModal onEmployeeCreated={loadData} />}
           {canManageUsers && (
             <Button onClick={() => setIsCreateUserDialogOpen(true)} variant="default" size="sm" className="h-8 gap-2">
               <Plus className="h-4 w-4" />

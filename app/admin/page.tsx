@@ -77,6 +77,8 @@ export default async function AdminDashboardPage() {
   const scopedUserIds = profileIdsInScope ? profileIdsInScope.map((profileRow) => profileRow.id) : []
 
   const { data: profile } = await dataClient.from("profiles").select("*").eq("id", user?.id).single()
+  const canSeeAuditActivity =
+    ["developer", "super_admin"].includes(String(profile?.role || "").toLowerCase()) && scope?.scopeMode !== "lead"
 
   // Fetch stats
   const profilesQ = dataClient.from("profiles").select("*", { count: "exact", head: true })
@@ -119,29 +121,30 @@ export default async function AdminDashboardPage() {
   if (docStats.error) log.error("user_documentation count failed", docStats.error)
   if (feedbackStats.error) log.error("feedback count failed", feedbackStats.error)
 
-  // Recent activity
-  let auditQuery = dataClient
-    .from("audit_logs")
-    .select(
-      "id, user_id, created_at, action, operation, entity_type, table_name, entity_id, department, metadata, changed_fields, new_values, old_values"
-    )
-    .order("created_at", { ascending: false })
-    .limit(20)
-  if (departmentScope) {
-    auditQuery =
-      queryDepartmentScope && queryDepartmentScope.length > 0
-        ? auditQuery.in("department", queryDepartmentScope)
-        : auditQuery.eq("id", "__none__")
+  let filteredRawActivity: ActivityLogRow[] = []
+  if (canSeeAuditActivity) {
+    let auditQuery = dataClient
+      .from("audit_logs")
+      .select(
+        "id, user_id, created_at, action, operation, entity_type, table_name, entity_id, department, metadata, changed_fields, new_values, old_values"
+      )
+      .order("created_at", { ascending: false })
+      .limit(20)
+    if (departmentScope) {
+      auditQuery =
+        queryDepartmentScope && queryDepartmentScope.length > 0
+          ? auditQuery.in("department", queryDepartmentScope)
+          : auditQuery.eq("id", "__none__")
+    }
+    const { data: rawActivity, error: auditError } = await auditQuery.returns<ActivityLogRow[]>()
+    if (auditError) log.error("Recent activity query failed", auditError)
+    filteredRawActivity = (rawActivity || [])
+      .filter(
+        (item) =>
+          !["sync", "migrate", "update_schema", "migration"].includes(normalizeToken(item.action || item.operation))
+      )
+      .slice(0, 6)
   }
-  const { data: rawActivity, error: auditError } = await auditQuery.returns<ActivityLogRow[]>()
-  if (auditError) log.error("Recent activity query failed", auditError)
-
-  const filteredRawActivity = (rawActivity || [])
-    .filter(
-      (item) =>
-        !["sync", "migrate", "update_schema", "migration"].includes(normalizeToken(item.action || item.operation))
-    )
-    .slice(0, 6)
 
   const actorIds = Array.from(new Set(filteredRawActivity.map((item) => item.user_id).filter(Boolean)))
   let actorMap = new Map<string, { first_name?: string; last_name?: string; company_email?: string }>()
@@ -164,6 +167,9 @@ export default async function AdminDashboardPage() {
   }
 
   const recentActivity = buildRecentActivity(filteredRawActivity, actorMap)
+  const accessContext = scope ? buildAccessContextV2(scope) : null
+  const canAccessAction = (_requiredRoles: string[], href: string) =>
+    Boolean(accessContext && canAccessRouteV2(accessContext, resolveAdminRouteKeyV2(href)))
 
   // Notifications
   const notifications: NotificationItem[] = []
@@ -255,34 +261,65 @@ export default async function AdminDashboardPage() {
     })
   }
 
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-  let todayAuditQ = supabase
-    .from("audit_logs")
-    .select("*", { count: "exact", head: true })
-    .gte("created_at", todayStart.toISOString())
-  if (departmentScope) {
-    todayAuditQ =
-      queryDepartmentScope && queryDepartmentScope.length > 0
-        ? todayAuditQ.in("department", queryDepartmentScope)
-        : todayAuditQ.eq("id", "__none__")
-  }
-  const { count: todayAuditCount } = await todayAuditQ
-  if (todayAuditCount && todayAuditCount > 50) {
-    notifications.push({
-      id: "high-activity",
-      type: "info",
-      title: "High System Activity",
-      message: `There have been ${todayAuditCount} system activities today. Review audit logs for details.`,
-      timestamp: "Today",
-      link: "/admin/audit-logs",
-      linkText: "View Audit Logs",
-    })
+  if (user?.id && canAccessAction(["developer", "super_admin", "admin"], "/admin/hr/leave/approve")) {
+    const [approverQueueResult, relieverQueueResult] = await Promise.all([
+      dataClient
+        .from("leave_requests")
+        .select("id")
+        .eq("current_approver_user_id", user.id)
+        .in("status", ["pending", "pending_evidence"]),
+      dataClient
+        .from("leave_requests")
+        .select("id")
+        .eq("reliever_id", user.id)
+        .in("current_stage_code", ["pending_reliever", "reliever_pending"])
+        .in("status", ["pending", "pending_evidence"]),
+    ])
+
+    const pendingLeaveIds = new Set<string>([
+      ...((approverQueueResult.data || []) as { id: string }[]).map((row) => row.id),
+      ...((relieverQueueResult.data || []) as { id: string }[]).map((row) => row.id),
+    ])
+
+    if (pendingLeaveIds.size > 0) {
+      notifications.push({
+        id: "pending-leave-approvals",
+        type: "warning",
+        title: "Pending Leave Approvals",
+        message: `${pendingLeaveIds.size} leave request${pendingLeaveIds.size > 1 ? "s" : ""} awaiting your review.`,
+        timestamp: "Recent",
+        link: "/admin/hr/leave/approve",
+        linkText: "Review Leave",
+      })
+    }
   }
 
-  const accessContext = scope ? buildAccessContextV2(scope) : null
-  const canAccessAction = (_requiredRoles: string[], href: string) =>
-    Boolean(accessContext && canAccessRouteV2(accessContext, resolveAdminRouteKeyV2(href)))
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  if (canSeeAuditActivity) {
+    let todayAuditQ = supabase
+      .from("audit_logs")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", todayStart.toISOString())
+    if (departmentScope) {
+      todayAuditQ =
+        queryDepartmentScope && queryDepartmentScope.length > 0
+          ? todayAuditQ.in("department", queryDepartmentScope)
+          : todayAuditQ.eq("id", "__none__")
+    }
+    const { count: todayAuditCount } = await todayAuditQ
+    if (todayAuditCount && todayAuditCount > 50) {
+      notifications.push({
+        id: "high-activity",
+        type: "info",
+        title: "High System Activity",
+        message: `There have been ${todayAuditCount} system activities today. Review audit logs for details.`,
+        timestamp: "Today",
+        link: "/admin/audit-logs",
+        linkText: "View Audit Logs",
+      })
+    }
+  }
 
   const filteredPrimaryModules = primaryModules.filter((a) => canAccessAction(a.roles, a.href))
   const filteredSecondaryModules = secondaryModules.filter((a) => canAccessAction(a.roles, a.href))
@@ -377,9 +414,11 @@ export default async function AdminDashboardPage() {
         <SecondaryModuleGrid modules={filteredSecondaryModules} />
       </Section>
 
-      <Section title="Recent Activity" description="Latest cross-module changes recorded in the system.">
-        <RecentActivityFeed activity={recentActivity} />
-      </Section>
+      {canSeeAuditActivity && (
+        <Section title="Recent Activity" description="Latest cross-module changes recorded in the system.">
+          <RecentActivityFeed activity={recentActivity} />
+        </Section>
+      )}
     </PageWrapper>
   )
 }

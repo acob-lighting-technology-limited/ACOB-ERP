@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { PageHeader, PageWrapper } from "@/components/layout"
-import { Code2, ScrollText, ShieldEllipsis, ShieldAlert, FlaskConical, Bug } from "lucide-react"
+import { Code2, ScrollText, ShieldEllipsis, ShieldAlert, FlaskConical, Bug, UserRoundCog } from "lucide-react"
 
 const sections = [
   {
@@ -35,6 +35,12 @@ const sections = [
     description: "End-to-end flow tests for Leave, Help Desk, and Tasks — no account switching required.",
     href: "/admin/dev/tests",
     icon: FlaskConical,
+  },
+  {
+    title: "Session Impersonation",
+    description: "Switch into any account for end-to-end flow validation without shared passwords.",
+    href: "/admin/dev/impersonation",
+    icon: UserRoundCog,
   },
 ]
 

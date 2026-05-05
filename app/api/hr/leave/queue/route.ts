@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger"
 import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
 import { applyDataScopeV2 } from "@/lib/admin/policy-v2"
+import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 
 const log = logger("hr-leave-queue")
 export const dynamic = "force-dynamic"
@@ -42,7 +43,9 @@ type LeaveApprovalRow = {
 type LeaveQueueRequestRow = {
   id: string
   created_at: string
+  status?: string | null
   leave_type_id: string
+  reliever_id?: string | null
   approval_stage?: string | null
   current_stage_code?: string | null
   current_approver_user_id?: string | null
@@ -61,15 +64,52 @@ type SlaPolicyRow = {
   reminder_hours_before: number
 }
 
+type ProfileLookupRow = {
+  id: string
+  company_email?: string | null
+  additional_email?: string | null
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const dataClient = getServiceRoleClientOrFallback(supabase)
 
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    let actorProfileId = user.id
+    const { data: actorById } = await dataClient
+      .from("profiles")
+      .select("id, company_email, additional_email")
+      .eq("id", user.id)
+      .maybeSingle<ProfileLookupRow>()
+
+    if (actorById?.id) {
+      actorProfileId = actorById.id
+    } else if (user.email) {
+      const { data: actorByCompanyEmail } = await dataClient
+        .from("profiles")
+        .select("id, company_email, additional_email")
+        .eq("company_email", user.email)
+        .maybeSingle<ProfileLookupRow>()
+
+      if (actorByCompanyEmail?.id) {
+        actorProfileId = actorByCompanyEmail.id
+      } else {
+        const { data: actorByAdditionalEmail } = await dataClient
+          .from("profiles")
+          .select("id, company_email, additional_email")
+          .eq("additional_email", user.email)
+          .maybeSingle<ProfileLookupRow>()
+        if (actorByAdditionalEmail?.id) {
+          actorProfileId = actorByAdditionalEmail.id
+        }
+      }
+    }
 
     const { searchParams } = new URL(request.url)
     const all = searchParams.get("all") === "true"
@@ -96,7 +136,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    let query = supabase
+    const query = dataClient
       .from("leave_requests")
       .select(
         `
@@ -110,10 +150,6 @@ export async function GET(request: NextRequest) {
       .in("status", ["pending", "pending_evidence"])
       .order("created_at", { ascending: true })
 
-    if (!all) {
-      query = query.eq("current_approver_user_id", user.id)
-    }
-
     const { data: requests, error } = await query
 
     if (error) {
@@ -121,7 +157,19 @@ export async function GET(request: NextRequest) {
     }
 
     // Apply department scope filter for leads viewing the global queue
-    let typedRequests = (requests || []) as LeaveQueueRequestRow[]
+    const fetchedRequests = (requests || []) as LeaveQueueRequestRow[]
+    let typedRequests = fetchedRequests
+
+    if (!all) {
+      typedRequests = typedRequests.filter((row) => {
+        const stage = String(row.current_stage_code || row.approval_stage || "").toLowerCase()
+        const isRelieverStage = stage === "pending_reliever" || stage === "reliever_pending"
+        const matchedByApprover = row.current_approver_user_id === actorProfileId
+        const matchedByReliever = row.reliever_id === actorProfileId && isRelieverStage
+        const matched = matchedByApprover || matchedByReliever
+        return matched
+      })
+    }
     if (all && scopedMode === "none") {
       typedRequests = []
     } else if (all && scopedMode === "dept" && scopedDepts) {
@@ -251,7 +299,7 @@ export async function GET(request: NextRequest) {
       .select(
         "id, leave_request_id, approver_id, approval_level, status, comments, approved_at, stage_code, stage_order, reliever_revision, superseded"
       )
-      .eq("approver_id", user.id)
+      .eq("approver_id", actorProfileId)
       .order("approved_at", { ascending: false })
       .limit(20)
 

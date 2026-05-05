@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { evaluateLeaveEligibility, getLeavePolicy } from "@/lib/hr/leave-workflow"
+import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { LeaveContent } from "./leave-content"
 
 export interface LeaveApprovalAudit {
@@ -16,6 +17,8 @@ export interface LeaveApprovalAudit {
   superseded?: boolean | null
   approver?: {
     id?: string
+    first_name?: string | null
+    last_name?: string | null
     full_name?: string | null
     company_email?: string | null
   } | null
@@ -50,26 +53,36 @@ export interface LeaveRequest {
   }
   user?: {
     id?: string
+    first_name?: string | null
+    last_name?: string | null
     full_name?: string | null
     company_email?: string | null
   } | null
   reliever?: {
     id?: string
+    first_name?: string | null
+    last_name?: string | null
     full_name?: string | null
     company_email?: string | null
   } | null
   supervisor?: {
     id?: string
+    first_name?: string | null
+    last_name?: string | null
     full_name?: string | null
     company_email?: string | null
   } | null
   approved_by_profile?: {
     id?: string
+    first_name?: string | null
+    last_name?: string | null
     full_name?: string | null
     company_email?: string | null
   } | null
   current_approver?: {
     id?: string
+    first_name?: string | null
+    last_name?: string | null
     full_name?: string | null
     company_email?: string | null
     role?: string | null
@@ -200,6 +213,7 @@ async function getLeaveData() {
       last_name?: string | null
       department?: string | null
       department_id?: string | null
+      employment_status?: string | null
     }
   >()
   let totalProfilesScanned = 0
@@ -207,7 +221,7 @@ async function getLeaveData() {
   if (requesterProfile.department_id) {
     const { data: deptIdRows } = await supabase
       .from("profiles")
-      .select("id, full_name, first_name, last_name, department, department_id")
+      .select("id, full_name, first_name, last_name, department, department_id, employment_status")
       .eq("department_id", requesterProfile.department_id)
       .neq("id", requesterProfile.id)
       .order("first_name", { ascending: true })
@@ -220,7 +234,7 @@ async function getLeaveData() {
   if (requesterProfile.department) {
     const { data: deptNameRows } = await supabase
       .from("profiles")
-      .select("id, full_name, first_name, last_name, department, department_id")
+      .select("id, full_name, first_name, last_name, department, department_id, employment_status")
       .eq("department", requesterProfile.department)
       .neq("id", requesterProfile.id)
       .order("first_name", { ascending: true })
@@ -240,7 +254,10 @@ async function getLeaveData() {
       String(row.department || "")
         .trim()
         .toLowerCase() === normalizedRequesterDept
-    return sameDeptId || sameDeptName
+    const assignableStatus = isAssignableEmploymentStatus(row.employment_status, {
+      allowLegacyNullStatus: false,
+    })
+    return (sameDeptId || sameDeptName) && assignableStatus
   })
 
   const relieverOptions: RelieverOption[] = relieverRows

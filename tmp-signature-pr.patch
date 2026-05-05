@@ -1,0 +1,410 @@
+diff --git a/components/signature-creator.tsx b/components/signature-creator.tsx
+index 0fe7fb8..d54ddcd 100644
+--- a/components/signature-creator.tsx
++++ b/components/signature-creator.tsx
+@@ -26,7 +26,9 @@ interface SignatureCreatorProps {
+     last_name?: string | null
+     designation?: string | null
+     phone_number?: string | null
++    additional_phone?: string | null
+     company_email?: string | null
++    additional_email?: string | null
+   } | null
+   authEmail?: string | null
+   variant?: "default" | "anniversary" | "anniversary-hosted" | "selectable"
+@@ -39,9 +41,13 @@ interface FormData {
+   lastName: string
+   companyRole: string
+   phoneNumber: string
++  alternativePhoneNumber: string
+   companyEmail: string
++  alternativeEmail: string
+ }
+ 
++type ContactOrder = "main-first" | "alternative-first"
++
+ const ANNIVERSARY_FONT_OPTIONS = [
+   {
+     id: "trebuchet",
+@@ -56,12 +62,9 @@ const ANNIVERSARY_TEMPLATE_OPTIONS = [{ id: "minimal", label: "Template 7" }] as
+  *  Falls back to a relative root so signatures still render in dev/preview. */
+ const HOSTED_IMAGES_BASE = (process.env.NEXT_PUBLIC_SITE_URL ?? "").replace(/\/$/, "")
+ 
+-const isAllowedCompanyEmailDomain = (email: string) =>
+-  email.endsWith("@org.acoblighting.com") || email.endsWith("@acoblighting.com")
+-
+ const normalizePreferredCompanyEmail = (email?: string | null) => {
+   const normalizedEmail = email?.trim().toLowerCase() || ""
+-  return normalizedEmail && isAllowedCompanyEmailDomain(normalizedEmail) ? normalizedEmail : ""
++  return normalizedEmail
+ }
+ 
+ const buildCompanyEmailFallback = (firstName: string, lastName: string) => {
+@@ -92,11 +95,15 @@ export function SignatureCreator({
+     lastName: profile?.last_name || "",
+     companyRole: profile?.designation || "",
+     phoneNumber: profile?.phone_number || "",
++    alternativePhoneNumber: profile?.additional_phone || "",
+     companyEmail: preferredCompanyEmail,
++    alternativeEmail: profile?.additional_email || "",
+   })
+ 
+   const [emailError, setEmailError] = useState("")
+   const [phoneError, setPhoneError] = useState("")
++  const [alternativeEmailError, setAlternativeEmailError] = useState("")
++  const [alternativePhoneError, setAlternativePhoneError] = useState("")
+   const [selectedAnniversaryFont] = useState<(typeof ANNIVERSARY_FONT_OPTIONS)[number]["value"]>(
+     ANNIVERSARY_FONT_OPTIONS[0].value
+   )
+@@ -105,6 +112,8 @@ export function SignatureCreator({
+   const [selectedSignatureMode, setSelectedSignatureMode] = useState<"default" | "anniversary" | "anniversary-hosted">(
+     defaultSelectableMode
+   )
++  const [phoneContactOrder, setPhoneContactOrder] = useState<ContactOrder>("main-first")
++  const [emailContactOrder, setEmailContactOrder] = useState<ContactOrder>("main-first")
+ 
+   useEffect(() => {
+     if (!formData.companyEmail.trim()) {
+@@ -132,8 +141,12 @@ export function SignatureCreator({
+ 
+   const validateEmail = (email: string) => {
+     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+-    const isValidFormat = emailRegex.test(email)
+-    return isValidFormat && isAllowedCompanyEmailDomain(email)
++    return emailRegex.test(email)
++  }
++
++  const validateAlternativeEmail = (email: string) => {
++    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
++    return emailRegex.test(email)
+   }
+ 
+   const validatePhone = (phone: string) => {
+@@ -156,7 +169,46 @@ export function SignatureCreator({
+       .join(" ")
+   }
+ 
+-  const generateDefaultSignature = (fullName: string, formattedPhone: string) => {
++  const buildPhoneContactHtml = (formattedPhone: string, formattedAlternativePhone: string) => {
++    const primaryPhoneHref = formData.phoneNumber.replace(/\s+/g, "")
++    const alternativePhoneHref = formData.alternativePhoneNumber.replace(/\s+/g, "")
++    const primaryPhoneSection = `<a href="tel:${primaryPhoneHref}" style="color: #1f2937; text-decoration: none; vertical-align: middle;">${formattedPhone}</a>`
++    const alternativePhoneSection = formattedAlternativePhone
++      ? `<a href="tel:${alternativePhoneHref}" style="color: #1f2937; text-decoration: none; vertical-align: middle;">${formattedAlternativePhone}</a>`
++      : ""
++
++    if (!alternativePhoneSection) {
++      return primaryPhoneSection
++    }
++
++    if (phoneContactOrder === "alternative-first") {
++      return `${alternativePhoneSection}<span style="color: #6b7280;"> | </span>${primaryPhoneSection}`
++    }
++
++    return `${primaryPhoneSection}<span style="color: #6b7280;"> | </span>${alternativePhoneSection}`
++  }
++
++  const buildEmailContactHtml = () => {
++    const primaryEmailSection = `<a href="mailto:${formData.companyEmail}" style="color: #1f2937; text-decoration: none; vertical-align: middle;">${formData.companyEmail}</a>`
++    const alternativeEmailSection = formData.alternativeEmail
++      ? `<a href="mailto:${formData.alternativeEmail}" style="color: #1f2937; text-decoration: none; vertical-align: middle;">${formData.alternativeEmail}</a>`
++      : ""
++
++    if (!alternativeEmailSection) {
++      return primaryEmailSection
++    }
++
++    if (emailContactOrder === "alternative-first") {
++      return `${alternativeEmailSection}<span style="color: #6b7280;"> | </span>${primaryEmailSection}`
++    }
++
++    return `${primaryEmailSection}<span style="color: #6b7280;"> | </span>${alternativeEmailSection}`
++  }
++
++  const generateDefaultSignature = (fullName: string, formattedPhone: string, formattedAlternativePhone: string) => {
++    const phoneContactHtml = buildPhoneContactHtml(formattedPhone, formattedAlternativePhone)
++    const emailContactHtml = buildEmailContactHtml()
++
+     return `<div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 1000px; margin: 0; padding: 12px 0; line-height: 1.5;">
+   <!-- Thin green line -->
+   <div style="color: #000000;">&mdash;&mdash;</div>
+@@ -172,15 +224,10 @@ export function SignatureCreator({
+     <!-- Contact details -->
+     <div style="font-size: 14px; color: #374151; line-height: 1.3;">
+       <div style="margin: 0 0 1px 0;">
+-        <img src="${PHONE_ICON}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Phone" /><a href="tel:${formData.phoneNumber.replace(
+-          /\s+/g,
+-          ""
+-        )}" style="color: #1f2937; text-decoration: none; vertical-align: middle;">${formattedPhone}</a>
++        <img src="${PHONE_ICON}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Phone" />${phoneContactHtml}
+       </div>
+       <div style="margin: 0 0 1px 0;">
+-        <img src="${MAIL_ICON}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Email" /><a href="mailto:${
+-          formData.companyEmail
+-        }" style="color: #1f2937; text-decoration: none; vertical-align: middle;">${formData.companyEmail}</a>
++        <img src="${MAIL_ICON}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Email" />${emailContactHtml}
+       </div>
+       <div>
+         <img src="${WEB_ICON}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Website" /><a href="https://www.acoblighting.com" style="color: #1f2937; text-decoration: none; vertical-align: middle;">www.acoblighting.com</a>
+@@ -210,18 +257,16 @@ export function SignatureCreator({
+ </div>`
+   }
+ 
+-  const generateAnniversarySignature = (fullName: string, formattedPhone: string) => {
++  const generateAnniversarySignature = (fullName: string, formattedPhone: string, formattedAlternativePhone: string) => {
++    const phoneContactHtml = buildPhoneContactHtml(formattedPhone, formattedAlternativePhone)
++    const emailContactHtml = buildEmailContactHtml()
++
+     const contactBlock = `<div style="font-size: 14px; color: #374151; line-height: 1.35;">
+   <div style="margin: 0 0 1px 0;">
+-    <img src="${PHONE_ICON}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Phone" /><a href="tel:${formData.phoneNumber.replace(
+-      /\s+/g,
+-      ""
+-    )}" style="color: #1f2937; text-decoration: none; vertical-align: middle;">${formattedPhone}</a>
++    <img src="${PHONE_ICON}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Phone" />${phoneContactHtml}
+   </div>
+   <div style="margin: 0 0 1px 0;">
+-    <img src="${MAIL_ICON}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Email" /><a href="mailto:${
+-      formData.companyEmail
+-    }" style="color: #1f2937; text-decoration: none; vertical-align: middle;">${formData.companyEmail}</a>
++    <img src="${MAIL_ICON}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Email" />${emailContactHtml}
+   </div>
+   <div>
+     <img src="${WEB_ICON}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Website" /><a href="https://www.acoblighting.com" style="color: #1f2937; text-decoration: none; vertical-align: middle;">www.acoblighting.com</a>
+@@ -240,10 +285,10 @@ export function SignatureCreator({
+ 
+     const contactTextBlock = `<div style="font-size: 14px; color: #374151; line-height: 1.45;">
+   <div style="margin: 0 0 2px 0;">
+-    <a href="tel:${formData.phoneNumber.replace(/\s+/g, "")}" style="color: #1f2937; text-decoration: none;">${formattedPhone}</a>
++    ${phoneContactHtml}
+   </div>
+   <div style="margin: 0 0 2px 0;">
+-    <a href="mailto:${formData.companyEmail}" style="color: #1f2937; text-decoration: none;">${formData.companyEmail}</a>
++    ${emailContactHtml}
+   </div>
+   <div>
+     <a href="https://www.acoblighting.com" style="color: #1f2937; text-decoration: none;">www.acoblighting.com</a>
+@@ -489,8 +534,10 @@ export function SignatureCreator({
+ 
+   /** Generates the anniversary signature using publicly hosted image URLs instead of
+    *  base64 data-URIs. The layout is identical to generateAnniversarySignature. */
+-  const generateAnniversaryHostedSignature = (fullName: string, formattedPhone: string) => {
++  const generateAnniversaryHostedSignature = (fullName: string, formattedPhone: string, formattedAlternativePhone: string) => {
+     const base = HOSTED_IMAGES_BASE
++    const phoneContactHtml = buildPhoneContactHtml(formattedPhone, formattedAlternativePhone)
++    const emailContactHtml = buildEmailContactHtml()
+ 
+     // Hosted icon URLs
+     const PHONE_ICON_URL = `${base}/images/signature/phone-email.png`
+@@ -504,15 +551,10 @@ export function SignatureCreator({
+ 
+     const contactBlock = `<div style="font-size: 14px; color: #374151; line-height: 1.35;">
+   <div style="margin: 0 0 1px 0;">
+-    <img src="${PHONE_ICON_URL}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Phone" /><a href="tel:${formData.phoneNumber.replace(
+-      /\s+/g,
+-      ""
+-    )}" style="color: #1f2937; text-decoration: none; vertical-align: middle;">${formattedPhone}</a>
++    <img src="${PHONE_ICON_URL}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Phone" />${phoneContactHtml}
+   </div>
+   <div style="margin: 0 0 1px 0;">
+-    <img src="${MAIL_ICON_URL}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Email" /><a href="mailto:${
+-      formData.companyEmail
+-    }" style="color: #1f2937; text-decoration: none; vertical-align: middle;">${formData.companyEmail}</a>
++    <img src="${MAIL_ICON_URL}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Email" />${emailContactHtml}
+   </div>
+   <div>
+     <img src="${WEB_ICON_URL}" width="18" height="18" style="vertical-align: middle; opacity: 0.8; margin-right: 6px; display: inline-block;" alt="Website" /><a href="https://www.acoblighting.com" style="color: #1f2937; text-decoration: none; vertical-align: middle;">www.acoblighting.com</a>
+@@ -576,18 +618,21 @@ export function SignatureCreator({
+       formattedMiddleName ? " " + formattedMiddleName : ""
+     } ${formattedLastName}`.trim()
+     const formattedPhone = formatPhoneNumber(formData.phoneNumber)
++    const formattedAlternativePhone = formData.alternativePhoneNumber
++      ? formatPhoneNumber(formData.alternativePhoneNumber)
++      : ""
+ 
+     const activeVariant = variant === "selectable" ? selectedSignatureMode : variant
+ 
+     if (activeVariant === "anniversary") {
+-      return generateAnniversarySignature(fullName, formattedPhone)
++      return generateAnniversarySignature(fullName, formattedPhone, formattedAlternativePhone)
+     }
+ 
+     if (activeVariant === "anniversary-hosted") {
+-      return generateAnniversaryHostedSignature(fullName, formattedPhone)
++      return generateAnniversaryHostedSignature(fullName, formattedPhone, formattedAlternativePhone)
+     }
+ 
+-    return generateDefaultSignature(fullName, formattedPhone)
++    return generateDefaultSignature(fullName, formattedPhone, formattedAlternativePhone)
+   }
+ 
+   const copyToClipboard = async () => {
+@@ -628,13 +673,36 @@ export function SignatureCreator({
+       setFormData((prev) => ({ ...prev, [field]: value }))
+ 
+       if (value && !validateEmail(value)) {
+-        setEmailError("Email must end with @org.acoblighting.com or @acoblighting.com")
++        setEmailError("Enter a valid email")
+       } else {
+         setEmailError("")
+       }
+       return
+     }
+ 
++    if (field === "alternativePhoneNumber") {
++      const numbersOnly = value.replace(/\D/g, "")
++      setFormData((prev) => ({ ...prev, [field]: numbersOnly }))
++
++      if (numbersOnly && !validatePhone(numbersOnly)) {
++        setAlternativePhoneError("Alternative phone number must be at least 11 digits")
++      } else {
++        setAlternativePhoneError("")
++      }
++      return
++    }
++
++    if (field === "alternativeEmail") {
++      setFormData((prev) => ({ ...prev, [field]: value }))
++
++      if (value && !validateAlternativeEmail(value)) {
++        setAlternativeEmailError("Enter a valid alternative email")
++      } else {
++        setAlternativeEmailError("")
++      }
++      return
++    }
++
+     setFormData((prev) => ({ ...prev, [field]: value }))
+   }
+ 
+@@ -646,8 +714,12 @@ export function SignatureCreator({
+     validatePhone(formData.phoneNumber) &&
+     formData.companyEmail &&
+     validateEmail(formData.companyEmail) &&
++    (!formData.alternativePhoneNumber || validatePhone(formData.alternativePhoneNumber)) &&
++    (!formData.alternativeEmail || validateAlternativeEmail(formData.alternativeEmail)) &&
+     !emailError &&
+-    !phoneError
++    !phoneError &&
++    !alternativePhoneError &&
++    !alternativeEmailError
+ 
+   const activeVariant = variant === "selectable" ? selectedSignatureMode : variant
+ 
+@@ -745,53 +817,74 @@ export function SignatureCreator({
+             />
+           </div>
+ 
+-          <div className="space-y-2">
+-            <Label htmlFor="phoneNumber">Phone Number *</Label>
+-            <Input
+-              id="phoneNumber"
+-              value={formData.phoneNumber}
+-              onChange={(e) => handleInputChange("phoneNumber", e.target.value)}
+-              placeholder="07012345678"
+-            />
+-            {phoneError && <p className="text-destructive text-sm">{phoneError}</p>}
++          <div className="grid gap-4 sm:grid-cols-2">
++            <div className="space-y-2">
++              <Label htmlFor="phoneNumber">Phone Number *</Label>
++              <Input
++                id="phoneNumber"
++                value={formData.phoneNumber}
++                onChange={(e) => handleInputChange("phoneNumber", e.target.value)}
++                placeholder="07012345678"
++              />
++              {phoneError && <p className="text-destructive text-sm">{phoneError}</p>}
++            </div>
++            <div className="space-y-2">
++              <Label htmlFor="alternativePhoneNumber">Alternative Phone Number</Label>
++              <Input
++                id="alternativePhoneNumber"
++                value={formData.alternativePhoneNumber}
++                onChange={(e) => handleInputChange("alternativePhoneNumber", e.target.value)}
++                placeholder="08098765432"
++              />
++              {alternativePhoneError && <p className="text-destructive text-sm">{alternativePhoneError}</p>}
++            </div>
+           </div>
+ 
+-          <div className="space-y-2">
+-            <Label htmlFor="companyEmail">Company Email *</Label>
+-            <Input
+-              id="companyEmail"
+-              type="email"
+-              value={formData.companyEmail}
+-              onChange={(e) => handleInputChange("companyEmail", e.target.value)}
+-              placeholder="a.john@org.acoblighting.com"
+-            />
+-            {emailError && <p className="text-destructive text-sm">{emailError}</p>}
++          <div className="grid gap-4 sm:grid-cols-2">
++            <div className="space-y-2">
++              <Label htmlFor="companyEmail">Company Email *</Label>
++              <Input
++                id="companyEmail"
++                type="email"
++                value={formData.companyEmail}
++                onChange={(e) => handleInputChange("companyEmail", e.target.value)}
++                placeholder="a.john@org.acoblighting.com"
++              />
++              {emailError && <p className="text-destructive text-sm">{emailError}</p>}
++            </div>
++            <div className="space-y-2">
++              <Label htmlFor="alternativeEmail">Alternative Email</Label>
++              <Input
++                id="alternativeEmail"
++                type="email"
++                value={formData.alternativeEmail}
++                onChange={(e) => handleInputChange("alternativeEmail", e.target.value)}
++                placeholder="info@example.com"
++              />
++              {alternativeEmailError && <p className="text-destructive text-sm">{alternativeEmailError}</p>}
++            </div>
+           </div>
+ 
+-          {activeVariant === "anniversary" && (
+-            <div className="space-y-4">
+-              <div className="space-y-2">
+-                <Label>Anniversary Template</Label>
+-                <Tabs
+-                  value={selectedAnniversaryTemplate}
+-                  onValueChange={(value) =>
+-                    setSelectedAnniversaryTemplate(value as (typeof ANNIVERSARY_TEMPLATE_OPTIONS)[number]["id"])
+-                  }
+-                >
+-                  <TabsList className="h-auto w-full flex-wrap justify-start">
+-                    {ANNIVERSARY_TEMPLATE_OPTIONS.map((template) => (
+-                      <TabsTrigger key={template.id} value={template.id} className="min-w-[96px]">
+-                        {template.label}
+-                      </TabsTrigger>
+-                    ))}
+-                  </TabsList>
+-                </Tabs>
+-                <p className="text-muted-foreground text-xs">
+-                  Template 7 with Trebuchet is the default starting point for the anniversary option.
+-                </p>
+-              </div>
++          <div className="grid gap-4 sm:grid-cols-2">
++            <div className="space-y-2">
++              <Label>Phone Order</Label>
++              <Tabs value={phoneContactOrder} onValueChange={(value) => setPhoneContactOrder(value as ContactOrder)}>
++                <TabsList className="h-auto w-full justify-start">
++                  <TabsTrigger value="main-first">Main First</TabsTrigger>
++                  <TabsTrigger value="alternative-first">Alternative First</TabsTrigger>
++                </TabsList>
++              </Tabs>
+             </div>
+-          )}
++            <div className="space-y-2">
++              <Label>Email Order</Label>
++              <Tabs value={emailContactOrder} onValueChange={(value) => setEmailContactOrder(value as ContactOrder)}>
++                <TabsList className="h-auto w-full justify-start">
++                  <TabsTrigger value="main-first">Main First</TabsTrigger>
++                  <TabsTrigger value="alternative-first">Alternative First</TabsTrigger>
++                </TabsList>
++              </Tabs>
++            </div>
++          </div>
+ 
+           {activeVariant === "anniversary-hosted" && (
+             <div className="rounded-md border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/20">

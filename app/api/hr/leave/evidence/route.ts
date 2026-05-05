@@ -48,7 +48,9 @@ export async function PATCH(request: NextRequest) {
         file_url,
         uploaded_by: user.id,
         notes: notes || null,
-        status: "pending",
+        status: "verified",
+        verified_by: user.id,
+        verified_at: new Date().toISOString(),
       })
       .select()
       .single()

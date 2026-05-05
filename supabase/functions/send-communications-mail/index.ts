@@ -138,8 +138,8 @@ async function createInAppBroadcastNotifications(params: {
 
   const notificationRows = Array.from(userIds).map((userId) => ({
     user_id: userId,
-    type: "system",
-    category: "system",
+    type: "announcement",
+    category: "communications",
     priority: "normal",
     title: "New ERP Email Broadcast",
     message: subject,
@@ -185,6 +185,8 @@ function buildAdminBroadcastHtml(
     "<style>" +
     'body { margin: 0; padding: 0; background: #fff; font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif; }' +
     ".email-shell { max-width: 600px; margin: 0 auto; overflow: hidden; }" +
+    ".outer-header { background:#000 !important; background-color:#000 !important; background-image:linear-gradient(#000,#000) !important; border-top:3px solid #16a34a; border-bottom:3px solid #16a34a; }" +
+    ".outer-footer { background:#000 !important; background-color:#000 !important; background-image:linear-gradient(#000,#000) !important; border-top:3px solid #16a34a; border-bottom:3px solid #16a34a; }" +
     ".wrapper { max-width: 600px; margin: 0 auto; background: #fff; padding: 32px 28px; }" +
     ".title { font-size: 22px; font-weight: 700; color: #111827; margin-bottom: 14px; }" +
     ".body-content { font-size: 15px; color: #374151; line-height: 1.7; }" +
@@ -195,8 +197,8 @@ function buildAdminBroadcastHtml(
     "</head>" +
     "<body>" +
     '<div class="email-shell">' +
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">' +
-    '<tr><td align="center" style="padding:20px 0;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" class="outer-header" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">' +
+    '<tr><td align="center" bgcolor="#000000" style="padding:20px 0;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;">' +
     '<img src="https://erp.acoblighting.com/images/acob-logo-dark.png" height="65" alt="ACOB Lighting">' +
     "</td></tr></table>" +
     '<div class="wrapper">' +
@@ -207,15 +209,17 @@ function buildAdminBroadcastHtml(
     bodyHtml +
     "</div>" +
     "</div>" +
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">' +
-    '<tr><td align="center" style="padding:20px;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;font-size:11px;color:#d1d5db;">' +
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" class="outer-footer" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">' +
+    '<tr><td align="center" bgcolor="#000000" style="padding:20px;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;font-size:11px;color:#d1d5db;">' +
     '<span style="color:#f3f4f6;">Prepared by ' +
     safePreparedBy +
     "</span><br>" +
-    (safeDesignation ? safeDesignation + "<br>" : "") +
+    (safeDesignation ? '<span style="color:#d1d5db;">' + safeDesignation + "</span><br>" : "") +
+    '<span style="color:#d1d5db;">' +
     safeDepartment +
-    "<br>" +
-    '<strong style="color:#fff;">ACOB Lighting Technology Limited</strong>' +
+    "</span><br>" +
+    '<strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>' +
+    '<span style="color:#16a34a;font-weight:600;">Communications Management System</span>' +
     "<br><br>" +
     '<i style="color:#9ca3af;">This is an automated system notification. Please do not reply directly to this email.</i>' +
     "</td></tr></table>" +

@@ -71,7 +71,9 @@ export async function GET(request: NextRequest) {
       per_page: paginationParsed.data.limit,
     })
     const { from, to } = getPaginationRange(pagination)
-    const direction = searchParams.get("direction")
+    const directionParam = searchParams.get("direction")
+    const direction =
+      directionParam === "internal" ? "outgoing" : directionParam === "external" ? "incoming" : directionParam
     const status = paginationParsed.data.status || searchParams.get("status")
     const department = searchParams.get("department")
     const dateFrom = searchParams.get("date_from")

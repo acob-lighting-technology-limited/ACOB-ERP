@@ -94,7 +94,8 @@ export async function PATCH(request: Request) {
 
     log.info({ body }, "Weekly report save request received")
 
-    const department = normalizeDepartmentName(parsed.data.department)
+    const department = parsed.data.department.trim()
+    const normalizedDepartment = normalizeDepartmentName(department)
     const weekNumber = parsed.data.week_number
     const yearNumber = parsed.data.year
     const workDone = parsed.data.work_done
@@ -103,11 +104,12 @@ export async function PATCH(request: Request) {
     const status = parsed.data.status || "submitted"
     const reportId = String(parsed.data.id || "").trim()
 
-    const canWriteDepartment = canMutateV2(contextResult.context, "reports.weekly", department)
+    const canWriteDepartment = canMutateV2(contextResult.context, "reports.weekly", normalizedDepartment)
     if (!canWriteDepartment) {
       log.warn(
         {
           department,
+          normalizedDepartment,
           managedDepartments: contextResult.context.managedDepartments,
           userId: user.id,
           role: contextResult.context.baseRole,
@@ -118,7 +120,11 @@ export async function PATCH(request: Request) {
       return NextResponse.json({ error: "You cannot manage reports for this department" }, { status: 403 })
     }
 
-    const { data: deptRow } = await dataClient.from("departments").select("id").eq("name", department).single()
+    const { data: deptRow } = await dataClient
+      .from("departments")
+      .select("id")
+      .eq("name", normalizedDepartment)
+      .single()
 
     const weeklyReportQuery = dataClient
       .from("weekly_reports")
@@ -151,7 +157,10 @@ export async function PATCH(request: Request) {
     }
 
     if (existingByKeyError) {
-      log.error({ err: existingByKeyError, department, weekNumber, yearNumber }, "Failed to look up existing report")
+      log.error(
+        { err: existingByKeyError, department, normalizedDepartment, weekNumber, yearNumber },
+        "Failed to look up existing report"
+      )
       return NextResponse.json({ error: existingByKeyError.message }, { status: 500 })
     }
 
@@ -168,6 +177,7 @@ export async function PATCH(request: Request) {
         userId: user.id,
         role: contextResult.context.baseRole,
         department,
+        normalizedDepartment,
         weekNumber,
         yearNumber,
         reportId,
@@ -186,6 +196,7 @@ export async function PATCH(request: Request) {
           conflictingId: conflictingReport.id,
           userId: user.id,
           department,
+          normalizedDepartment,
           weekNumber,
           yearNumber,
         },
@@ -201,7 +212,7 @@ export async function PATCH(request: Request) {
 
     if (!isWeekMutable && targetExisting?.id) {
       log.warn(
-        { department, weekNumber, yearNumber, existingId: targetExisting.id },
+        { department, normalizedDepartment, weekNumber, yearNumber, existingId: targetExisting.id },
         "Weekly report save blocked because locked week already has report"
       )
       return NextResponse.json(
@@ -219,7 +230,14 @@ export async function PATCH(request: Request) {
 
     if (!isGlobalReportsEditor && targetExisting?.user_id && targetExisting.user_id !== user.id) {
       log.warn(
-        { userId: user.id, existingUserId: targetExisting.user_id, department, weekNumber, yearNumber },
+        {
+          userId: user.id,
+          existingUserId: targetExisting.user_id,
+          department,
+          normalizedDepartment,
+          weekNumber,
+          yearNumber,
+        },
         "Weekly report save blocked because user does not own existing report"
       )
       return NextResponse.json({ error: "You can only edit reports you created" }, { status: 403 })

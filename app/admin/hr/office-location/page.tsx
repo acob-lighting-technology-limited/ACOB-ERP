@@ -28,6 +28,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { logger } from "@/lib/logger"
+import { normalizeDepartmentName } from "@/shared/departments"
 
 const log = logger("hr-office-locations")
 
@@ -76,9 +77,25 @@ async function fetchOfficeLocationsData(): Promise<OfficeLocationsData> {
   } = await supabase.auth.getUser()
 
   let canManageLocations = false
+  let managedDepartments: string[] = []
+  let scopeMode: "global" | "lead" = "global"
   if (user) {
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
+    const [{ data: profile }, scopeResponse] = await Promise.all([
+      supabase.from("profiles").select("role").eq("id", user.id).single(),
+      fetch("/api/admin/scope-mode", { cache: "no-store" }).catch(() => null),
+    ])
     canManageLocations = ["developer", "super_admin", "admin"].includes(profile?.role || "")
+    if (scopeResponse?.ok) {
+      const scopePayload = (await scopeResponse.json().catch(() => null)) as {
+        mode?: "global" | "lead"
+        managedDepartments?: string[]
+      } | null
+      scopeMode = scopePayload?.mode === "lead" ? "lead" : "global"
+      managedDepartments = Array.isArray(scopePayload?.managedDepartments) ? scopePayload!.managedDepartments : []
+      if (scopeMode === "lead") {
+        canManageLocations = false
+      }
+    }
   }
 
   const [{ data: locations, error }, { data: departments }] = await Promise.all([
@@ -102,16 +119,30 @@ async function fetchOfficeLocationsData(): Promise<OfficeLocationsData> {
     byLocation[locationName].push(profile)
   }
 
-  const locationsWithCounts = (locations || []).map((location) => ({
-    ...location,
-    employee_count: byLocation[location.name]?.length || 0,
-  }))
+  const scopedDepartmentSet = new Set(
+    managedDepartments.map((departmentName) => normalizeDepartmentName(departmentName)).filter(Boolean)
+  )
+  const shouldScopeToDepartments = scopeMode === "lead" && scopedDepartmentSet.size > 0
+
+  const locationsWithCounts = (locations || [])
+    .filter((location) => {
+      if (!shouldScopeToDepartments) return true
+      return scopedDepartmentSet.has(normalizeDepartmentName(String(location.department || "")))
+    })
+    .map((location) => ({
+      ...location,
+      employee_count: byLocation[location.name]?.length || 0,
+    }))
+
+  const scopedDepartments = shouldScopeToDepartments
+    ? (departments || []).filter((department) => scopedDepartmentSet.has(normalizeDepartmentName(department.name)))
+    : departments || []
 
   return {
     locations: locationsWithCounts,
     locationEmployees: byLocation,
     canManageLocations,
-    departments: (departments || []).map((department) => department.name),
+    departments: scopedDepartments.map((department) => department.name),
   }
 }
 

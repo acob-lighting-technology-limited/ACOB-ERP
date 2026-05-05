@@ -418,11 +418,11 @@ export async function GET(request: NextRequest) {
 
     if (requestIds.length > 0) {
       const [{ data: evidenceData }, { data: approvalsData }] = await Promise.all([
-        supabase
+        dataClient
           .from("leave_evidence")
           .select("id, leave_request_id, document_type, file_url, status, verified_by, verified_at, notes, created_at")
           .in("leave_request_id", requestIds),
-        supabase
+        dataClient
           .from("leave_approvals")
           .select(
             "id, leave_request_id, approver_id, approval_level, status, comments, approved_at, stage_code, stage_order, superseded, reliever_revision"
@@ -460,7 +460,7 @@ export async function GET(request: NextRequest) {
     const leaveTypeIds = Array.from(leaveTypeIdSet)
 
     if (profileIds.length > 0) {
-      const { data } = await supabase
+      const { data } = await dataClient
         .from("profiles")
         .select("id, first_name, last_name, full_name, company_email, department_id, department")
         .in("id", profileIds)
@@ -468,7 +468,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (leaveTypeIds.length > 0) {
-      const { data } = await supabase
+      const { data } = await dataClient
         .from("leave_types")
         .select("id, name, code, description, max_days, requires_approval")
         .in("id", leaveTypeIds)
@@ -742,7 +742,7 @@ export async function POST(request: NextRequest) {
       emergencyOverride: emergency_override,
     })
 
-    const reliever = await resolveProfileByIdentifier(supabase, reliever_identifier, "Reliever")
+    const reliever = await resolveProfileByIdentifier(validationClient, reliever_identifier, "Reliever")
 
     if (reliever.id === user.id) {
       return NextResponse.json({ error: "You cannot assign yourself as reliever" }, { status: 400 })
@@ -847,7 +847,7 @@ export async function POST(request: NextRequest) {
 
     const requesterRouteKind = classifyRequesterKind(requester)
     const routeSnapshot = await buildResolvedRouteSnapshot({
-      supabase,
+      supabase: validationClient,
       requester,
       requesterId: user.id,
       requesterKind: requesterRouteKind,
@@ -996,7 +996,7 @@ export async function PATCH(request: NextRequest) {
         existingRequest.approval_stage === stageCodeForRole("department_lead")) &&
       existingRequest.current_approver_user_id === user.id
     ) {
-      const newReliever = await resolveProfileByIdentifier(supabase, reliever_identifier, "Reliever")
+      const newReliever = await resolveProfileByIdentifier(validationClient, reliever_identifier, "Reliever")
       const requesterDepartmentId = await getUserDepartmentId(supabase, existingRequest.user_id)
 
       if (!newReliever?.id || newReliever.id === existingRequest.user_id) {
@@ -1141,7 +1141,7 @@ export async function PATCH(request: NextRequest) {
     let relieverId = existingRequest.reliever_id
     let relieverDepartmentId: string | null | undefined = existingRequest.reliever_id ? undefined : null
     if (reliever_identifier) {
-      const reliever = await resolveProfileByIdentifier(supabase, reliever_identifier, "Reliever")
+      const reliever = await resolveProfileByIdentifier(validationClient, reliever_identifier, "Reliever")
       relieverId = reliever.id
       relieverDepartmentId = reliever.department_id
     }
@@ -1222,7 +1222,7 @@ export async function PATCH(request: NextRequest) {
 
     const requesterRouteKind = classifyRequesterKind(requester)
     const routeSnapshot = await buildResolvedRouteSnapshot({
-      supabase,
+      supabase: validationClient,
       requester,
       requesterId: user.id,
       requesterKind: requesterRouteKind,

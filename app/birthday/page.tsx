@@ -48,18 +48,13 @@ export default async function BirthdayPage() {
   }
 
   await Promise.all([
-    supabase
-      .from("profiles")
-      .select("first_name, last_name, full_name")
-      .eq("first_name", "Tansi")
-      .eq("last_name", "Orhorhomuke")
-      .maybeSingle(),
+    supabase.from("profiles").select("first_name, last_name, full_name").eq("first_name", "Bawa").maybeSingle(),
   ])
 
   const celebrants: Celebrant[] = [
     {
-      displayName: "Mr. Tansi Orhorhomuke",
-      imageSrc: "/images/birthday/tansi-orhorhomuke.jpeg",
+      displayName: "Mr. Bawa",
+      imageSrc: "/images/birthday/bawa-2.jpg",
     },
   ]
   const celebrantCount = celebrants.length
@@ -87,8 +82,8 @@ export default async function BirthdayPage() {
           </div>
 
           <div className="birthday-copy-stack">
-            <p className="birthday-overline">Celebrating last week&apos;s birthdays this week</p>
-            <h1 className="birthday-title">Mr. Tansi Orhorhomuke</h1>
+            <p className="birthday-overline">Celebrating this week&apos;s birthdays</p>
+            <h1 className="birthday-title">Mr. Bawa</h1>
             <p className="birthday-subtitle">
               ACOB Family celebrates you today and appreciates your contributions to the growth of the organisation.
             </p>

@@ -11,7 +11,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PromptDialog } from "@/components/ui/prompt-dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   CheckCircle,
@@ -27,20 +26,12 @@ import {
 } from "lucide-react"
 import type { CorrespondenceRecord } from "@/types/correspondence"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
-import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
+import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { formatName } from "@/lib/utils"
 import { logger } from "@/lib/logger"
 
 const log = logger("reference-generator")
-
-interface EmployeeOption {
-  id: string
-  first_name: string | null
-  last_name: string | null
-  department: string | null
-  role: string | null
-}
 
 interface DepartmentCodeOption {
   department_name: string
@@ -50,7 +41,6 @@ interface DepartmentCodeOption {
 
 interface AdminReferenceGeneratorContentProps {
   initialRecords: CorrespondenceRecord[]
-  employees: EmployeeOption[]
   departmentCodes: DepartmentCodeOption[]
 }
 
@@ -67,13 +57,12 @@ type DepartmentCodeFormValues = z.infer<typeof DepartmentCodeFormSchema>
 
 export function AdminReferenceGeneratorContent({
   initialRecords,
-  employees,
   departmentCodes,
 }: AdminReferenceGeneratorContentProps) {
   const [records, setRecords] = useState<CorrespondenceRecord[]>(initialRecords)
   const [loadingRecordId, setLoadingRecordId] = useState<string | null>(null)
-  const [assignments, setAssignments] = useState<Record<string, string>>({})
   const [statusFilter, setStatusFilter] = useState<string>("all")
+  const [activeTab, setActiveTab] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(initialRecords.length)
@@ -125,44 +114,6 @@ export function AdminReferenceGeneratorContent({
 
     void loadRecords()
   }, [page, searchQuery, statusFilter])
-
-  async function assignOfficer(recordId: string) {
-    const responsibleOfficerId = assignments[recordId]
-    if (!responsibleOfficerId) {
-      toast.error("Select an officer first")
-      return
-    }
-
-    setLoadingRecordId(recordId)
-    try {
-      const res = await fetch(`/api/correspondence/records/${recordId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          responsible_officer_id: responsibleOfficerId,
-          status: "assigned_action_pending",
-        }),
-      })
-
-      const body = await res.json()
-      if (!res.ok) {
-        throw new Error(body.error || "Failed to assign officer")
-      }
-
-      toast.success("Responsible officer assigned")
-      setRecords((current) =>
-        current.map((record) =>
-          record.id === recordId
-            ? { ...record, responsible_officer_id: responsibleOfficerId, status: "assigned_action_pending" }
-            : record
-        )
-      )
-    } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "Failed to assign officer"))
-    } finally {
-      setLoadingRecordId(null)
-    }
-  }
 
   async function decide(recordId: string, decision: "approved" | "rejected" | "returned_for_correction") {
     setDecisionPrompt({ recordId, decision })
@@ -268,7 +219,7 @@ export function AdminReferenceGeneratorContent({
       accessor: (r) => r.direction,
       render: (r) => (
         <Badge variant="outline" className="capitalize">
-          {r.direction}
+          {r.direction === "incoming" ? "External" : "Internal"}
         </Badge>
       ),
     },
@@ -288,44 +239,6 @@ export function AdminReferenceGeneratorContent({
       label: "Status",
       accessor: (r) => r.status,
       render: (r) => <Badge className="capitalize">{statusLabel(r.status)}</Badge>,
-    },
-    {
-      key: "assignment",
-      label: "Assignment",
-      render: (r) => (
-        <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-          <Select
-            value={assignments[r.id] || r.responsible_officer_id || ""}
-            onValueChange={(value) => setAssignments((prev) => ({ ...prev, [r.id]: value }))}
-          >
-            <SelectTrigger className="h-8 w-[180px] text-xs">
-              <SelectValue placeholder="Assign officer" />
-            </SelectTrigger>
-            <SelectContent>
-              {employees
-                .filter((employee) => {
-                  const dept = r.department_name || r.assigned_department_name
-                  if (!dept) return true
-                  return !employee.department || employee.department === dept
-                })
-                .map((employee) => (
-                  <SelectItem key={employee.id} value={employee.id} className="text-xs">
-                    {`${employee.first_name || ""} ${employee.last_name || ""}`}
-                  </SelectItem>
-                ))}
-            </SelectContent>
-          </Select>
-          <Button
-            size="sm"
-            variant="outline"
-            className="h-8 px-2 text-[10px]"
-            onClick={() => assignOfficer(r.id)}
-            disabled={loadingRecordId === r.id}
-          >
-            Assign
-          </Button>
-        </div>
-      ),
     },
     {
       key: "actions",
@@ -390,6 +303,13 @@ export function AdminReferenceGeneratorContent({
     },
   ]
 
+  const tabs: DataTableTab[] = [
+    { key: "all", label: "All" },
+    { key: "under_review", label: "Under Review" },
+    { key: "approved", label: "Approved" },
+    { key: "finalized", label: "Finalized" },
+  ]
+
   const filters: DataTableFilter<CorrespondenceRecord>[] = [
     {
       key: "status",
@@ -410,9 +330,23 @@ export function AdminReferenceGeneratorContent({
       key: "direction",
       label: "Direction",
       options: [
-        { value: "incoming", label: "Incoming" },
-        { value: "outgoing", label: "Outgoing" },
+        { value: "outgoing", label: "Internal" },
+        { value: "incoming", label: "External" },
       ],
+    },
+    {
+      key: "year",
+      label: "Year",
+      options: Array.from(
+        new Set(
+          records
+            .map((record) => new Date(record.created_at || "").getFullYear())
+            .filter((year) => Number.isFinite(year))
+            .map((year) => ({ value: String(year), label: String(year) }))
+        )
+      ),
+      mode: "custom",
+      filterFn: (row, selected) => selected.includes(String(new Date(row.created_at || "").getFullYear())),
     },
   ]
 
@@ -422,6 +356,15 @@ export function AdminReferenceGeneratorContent({
       description="Manage correspondence references and tracking."
       icon={ListFilter}
       backLink={{ href: "/admin", label: "Back to Admin" }}
+      tabs={tabs}
+      activeTab={activeTab}
+      onTabChange={(tab) => {
+        setActiveTab(tab)
+        if (tab === "all") setStatusFilter("all")
+        if (tab === "under_review") setStatusFilter("under_review")
+        if (tab === "approved") setStatusFilter("approved")
+        if (tab === "finalized") setStatusFilter("sent")
+      }}
       stats={
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <StatCard

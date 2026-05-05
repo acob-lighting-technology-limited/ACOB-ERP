@@ -20,7 +20,6 @@ import { logger } from "@/lib/logger"
 
 const log = logger("auth-login")
 
-
 export default function LoginPage() {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -52,6 +51,83 @@ export default function LoginPage() {
       otpRefs.current[0]?.focus()
     }
   }, [step])
+
+  // Force canonical host for auth landing flows while preserving hash tokens.
+  useEffect(() => {
+    const currentHost = window.location.hostname.toLowerCase()
+    if (currentHost !== "acob-erp.vercel.app") return
+    const target = `https://erp.acoblighting.com${window.location.pathname}${window.location.search}${window.location.hash}`
+    window.location.replace(target)
+  }, [])
+
+  // Handle hash-based auth handoff (e.g. developer impersonation magic links)
+  // after middleware redirects unauthenticated requests back to /auth/login.
+  useEffect(() => {
+    const hash = window.location.hash || ""
+    if (!hash.includes("access_token=") || !hash.includes("refresh_token=")) return
+
+    const params = new URLSearchParams(hash.startsWith("#") ? hash.slice(1) : hash)
+    const accessToken = params.get("access_token")
+    const refreshToken = params.get("refresh_token")
+    const hashError = params.get("error_description") || params.get("error")
+
+    if (hashError) {
+      const message = decodeURIComponent(hashError)
+      setError(message)
+      toast.error(message)
+      return
+    }
+
+    if (!accessToken || !refreshToken) return
+
+    let cancelled = false
+    const run = async () => {
+      const supabase = createClient()
+      setIsLoading(true)
+      setError(null)
+
+      const trySetSession = async () => {
+        const result = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+        if (!result.error) return result
+        await new Promise((resolve) => setTimeout(resolve, 150))
+        return supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken,
+        })
+      }
+
+      try {
+        const { error } = await trySetSession()
+        if (error) throw error
+
+        await fetch("/api/dev/login-log", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ authMethod: "otp" }),
+          keepalive: true,
+        }).catch((err) => log.warn("dev login log failed (hash handoff)", err))
+
+        const nextPath = getSafeNextPath(searchParams.get("next"))
+        // Remove sensitive fragment and force navigation after session handoff.
+        window.history.replaceState(null, "", window.location.pathname + window.location.search)
+        window.location.assign(nextPath)
+      } catch (sessionError: unknown) {
+        const message = sessionError instanceof Error ? sessionError.message : "Failed to complete sign-in"
+        setError(`${message}. Click the copied link again to retry.`)
+        toast.error("Magic link sign-in failed. Please retry with a fresh link.")
+      } finally {
+        if (!cancelled) setIsLoading(false)
+      }
+    }
+
+    void run()
+    return () => {
+      cancelled = true
+    }
+  }, [searchParams])
 
   const handleOtpChange = (index: number, value: string) => {
     // Only allow digits

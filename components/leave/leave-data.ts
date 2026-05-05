@@ -24,10 +24,21 @@ export type LeaveRelieverDebug = {
 /** Loose shape covering all leave API JSON responses */
 type LeaveApiPayload = {
   data?: unknown
+  history?: unknown
   error?: string
   balances?: unknown
   reliever_options?: unknown
   reliever_debug?: unknown
+}
+
+export type LeaveReviewHistoryItem = {
+  id: string
+  leave_request_id: string
+  status?: string | null
+  comments?: string | null
+  approved_at?: string | null
+  stage_code?: string | null
+  request?: LeaveRequest | null
 }
 
 export async function fetchLeaveData(currentUserId: string) {
@@ -76,6 +87,9 @@ export async function fetchLeaveData(currentUserId: string) {
     requests: ownedRequests as LeaveRequest[],
     balances: (Array.isArray(requestPayload.balances) ? requestPayload.balances : []) as LeaveBalance[],
     approverQueue: (queueRes?.ok && Array.isArray(queuePayload.data) ? queuePayload.data : []) as LeaveRequest[],
+    pendingReviewHistory: (queueRes?.ok && Array.isArray(queuePayload.history)
+      ? queuePayload.history
+      : []) as LeaveReviewHistoryItem[],
     leaveTypes: (typesRes?.ok && Array.isArray(typesPayload.data) ? typesPayload.data : []) as LeaveType[],
     relieverOptions: (relieversRes?.ok && Array.isArray(relieversPayload.data)
       ? relieversPayload.data

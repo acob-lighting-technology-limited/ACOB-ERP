@@ -130,6 +130,14 @@ export function WeekSetupCard() {
     queryKey: QUERY_KEYS.adminWeeklyReportLockState(weekNumber, yearNumber),
     queryFn: () => fetchWeeklyReportLockState(supabase, weekNumber, yearNumber),
   })
+  const computedDeadlineLabel = useMemo(() => {
+    if (!lockState?.meetingDate) return null
+    const [year, month, day] = lockState.meetingDate.split("-").map(Number)
+    if (!year || !month || !day) return null
+    const base = new Date(year, month - 1, day, 0, 0, 0, 0)
+    base.setHours(base.getHours() + (lockState.graceHours || 0))
+    return base.toLocaleString("en-GB")
+  }, [lockState])
 
   const { data: weekSetupData } = useQuery({
     queryKey: ["general-meeting-week-setup", weekNumber, yearNumber],
@@ -218,15 +226,6 @@ export function WeekSetupCard() {
       toast.error("KSS host department is required for employee presenter")
       return
     }
-    if (kssPresenterType === "employee" && resolvedPresenterId === "none") {
-      toast.error("KSS presenter is required")
-      return
-    }
-    if (kssPresenterType === "visitor" && !resolvedPresenterName) {
-      toast.error("Visitor presenter name is required")
-      return
-    }
-
     setSavingMeetingWindow(true)
     try {
       const [meetingDateResponse, kssResult] = await Promise.all([
@@ -388,7 +387,7 @@ export function WeekSetupCard() {
           <div className="bg-muted/40 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs">
             <span className="font-medium">{`Meeting date: ${lockState.meetingDate}`}</span>
             <span className="text-muted-foreground">{`Grace window: ${lockState.graceHours}h`}</span>
-            <span className="text-muted-foreground">{`Deadline: ${new Date(lockState.lockDeadline).toLocaleString("en-GB")}`}</span>
+            <span className="text-muted-foreground">{`Deadline: ${computedDeadlineLabel || new Date(lockState.lockDeadline).toLocaleString("en-GB")}`}</span>
             {lockState.hasOverrideRole && (
               <span className="text-emerald-700 dark:text-emerald-300">
                 Your developer/super-admin role can still create, update, and delete after the grace period.
@@ -419,7 +418,7 @@ export function WeekSetupCard() {
 
         {showWeekSetup && (
           <div className="space-y-4">
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6 xl:items-end">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7 xl:items-end">
               <div className="w-full max-w-[160px]">
                 <Label className="mb-1.5 block text-xs font-semibold">Week</Label>
                 <Select value={String(weekNumber)} onValueChange={(value) => setWeekNumber(Number(value))}>
@@ -468,7 +467,27 @@ export function WeekSetupCard() {
                   disabled={isWeekSetupLocked}
                 />
               </div>
-              <div className="w-full min-w-[220px]">
+              <div className="w-full max-w-[180px]">
+                <Label className="mb-1.5 block text-xs font-semibold">Presenter Type</Label>
+                <Select
+                  value={kssPresenterType}
+                  onValueChange={(value) => {
+                    setKssPresenterType(value as KssPresenterType)
+                    setKssPresenterIdInput("none")
+                    setKssPresenterNameInput("")
+                  }}
+                  disabled={isWeekSetupLocked}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="employee">Employee</SelectItem>
+                    <SelectItem value="visitor">Visitor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="w-full min-w-[240px]">
                 <Label className="mb-1.5 block text-xs font-semibold">KSS Department</Label>
                 <Select
                   value={kssDepartmentInput}
@@ -504,29 +523,9 @@ export function WeekSetupCard() {
               </div>
             </div>
 
-            <div className="grid gap-3 md:grid-cols-[minmax(180px,220px)_minmax(220px,320px)_1fr] md:items-end">
+            <div className="grid gap-3 md:grid-cols-[minmax(220px,320px)_1fr] md:items-end">
               <div className="w-full">
-                <Label className="mb-1.5 block text-xs font-semibold">Presenter Type</Label>
-                <Select
-                  value={kssPresenterType}
-                  onValueChange={(value: KssPresenterType) => {
-                    setKssPresenterType(value)
-                    setKssPresenterIdInput("none")
-                    setKssPresenterNameInput("")
-                  }}
-                  disabled={isWeekSetupLocked}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="employee">Employee</SelectItem>
-                    <SelectItem value="visitor">Visitor</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="w-full">
-                <Label className="mb-1.5 block text-xs font-semibold">KSS Presenter</Label>
+                <Label className="mb-1.5 block text-xs font-semibold">KSS Presenter (Optional)</Label>
                 {kssPresenterType === "employee" ? (
                   <Select
                     value={kssPresenterIdInput}

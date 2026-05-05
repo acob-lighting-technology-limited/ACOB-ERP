@@ -18,6 +18,7 @@ export type DataScopeV2 = "none" | "all" | string[]
 
 export type AdminRouteKeyV2 =
   | "admin.dashboard"
+  | "auditlogs.main"
   | "assets.main"
   | "assets.issues"
   | "communications.main"
@@ -31,6 +32,7 @@ export type AdminRouteKeyV2 =
   | "helpdesk.main"
   | "hr.main"
   | "hr.fleet"
+  | "hr.resources"
   | "hr.pms.cbt.manage"
   | "inventory.main"
   | "jobdescriptions.main"
@@ -92,6 +94,7 @@ export function buildAccessContextV2(scope: AccessScopeInputV2): AccessContextV2
 export function resolveAdminRouteKeyV2(pathname: string): AdminRouteKeyV2 {
   if (!pathname.startsWith("/admin")) return "unknown"
   if (pathname === "/admin") return "admin.dashboard"
+  if (pathname.startsWith("/admin/audit-logs")) return "auditlogs.main"
   if (pathname.startsWith("/admin/dev")) return "dev.main"
   if (pathname.startsWith("/admin/settings")) return "settings.main"
   if (pathname.startsWith("/admin/communications/meetings")) return "communications.meetings"
@@ -107,6 +110,7 @@ export function resolveAdminRouteKeyV2(pathname: string): AdminRouteKeyV2 {
   if (pathname.startsWith("/admin/hr/pms/cbt/question")) return "hr.pms.cbt.manage"
   if (/^\/admin\/hr\/pms\/cbt\/[^/]+$/.test(pathname)) return "hr.pms.cbt.manage"
   if (pathname.startsWith("/admin/hr/fleet")) return "hr.fleet"
+  if (pathname.startsWith("/admin/hr/resources")) return "hr.resources"
   if (pathname.startsWith("/admin/hr")) return "hr.main"
   if (pathname.startsWith("/admin/inventory")) return "inventory.main"
   if (pathname.startsWith("/admin/job-descriptions")) return "jobdescriptions.main"
@@ -125,11 +129,15 @@ export function getRoutePolicyV2(route: AdminRouteKeyV2): RoutePolicyV2 {
   switch (route) {
     case "dev.main":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: null }
+    case "auditlogs.main":
+      return { visibility: "none", mutations: "none", adminOnly: true, domain: null }
     case "settings.main":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: null }
     case "communications.meetings":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: "communications" }
     case "hr.fleet":
+      return { visibility: "none", mutations: "none", adminOnly: true, domain: "hr" }
+    case "hr.resources":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: "hr" }
     case "hr.pms.cbt.manage":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: "hr" }
@@ -192,6 +200,9 @@ export function canAccessRouteV2(context: AccessContextV2, route: AdminRouteKeyV
   const isGlobalAdminContext = context.actingContext === "global_admin" && context.isAdminLike
 
   if (isGlobalAdminContext) {
+    if (route === "auditlogs.main") {
+      return context.baseRole === "developer" || context.baseRole === "super_admin"
+    }
     if (policy.adminOnly) return adminHasDomain(context, policy.domain)
     return adminHasDomain(context, policy.domain)
   }
