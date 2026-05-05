@@ -52,7 +52,7 @@ async function fetchAdminWeeklyReports(
   const query = supabase
     .from("weekly_reports")
     .select(
-      "id, department, week_number, year, work_done, tasks_new_week, challenges, status, user_id, created_at, profiles(first_name, last_name)"
+      "id, department, week_number, year, work_done, tasks_new_week, challenges, status, user_id, created_at, updated_at, profiles(first_name, last_name)"
     )
     .eq("status", "submitted")
     .eq("week_number", weekFilter)
@@ -314,8 +314,21 @@ export function WeeklyReportsContent({
         label: "Submission Date",
         sortable: true,
         accessor: (report) => report.created_at,
-        render: (report) =>
-          new Date(report.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" }),
+        render: (report) => {
+          const created = new Date(report.created_at).toLocaleDateString("en-GB", {
+            day: "2-digit",
+            month: "short",
+            year: "numeric",
+          })
+          const updatedAt = (report as WeeklyReport & { updated_at?: string | null }).updated_at
+          const wasEdited = Boolean(updatedAt && new Date(updatedAt).getTime() > new Date(report.created_at).getTime())
+          return (
+            <div className="flex flex-col">
+              <span>{created}</span>
+              {wasEdited ? <span className="text-muted-foreground text-[11px]">(edited)</span> : null}
+            </div>
+          )
+        },
       },
       {
         key: "tracker_status",

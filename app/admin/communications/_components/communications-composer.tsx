@@ -569,6 +569,16 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
       toast.error("Prepared by is required")
       return
     }
+    if (reminderType === "meeting") {
+      const agendaItems = agendaText
+        .split("\n")
+        .map((line) => line.replace(/^\d+\.\s*/, "").trim())
+        .filter(Boolean)
+      if (agendaItems.length === 0) {
+        toast.error("Agenda is required before sending")
+        return
+      }
+    }
 
     if (reminderType === "admin_broadcast" && broadcastAttachments.length > 0 && sendTiming !== "now") {
       toast.error("Attachments are currently supported only for Send Now broadcasts")

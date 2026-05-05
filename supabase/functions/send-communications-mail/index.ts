@@ -138,8 +138,8 @@ async function createInAppBroadcastNotifications(params: {
 
   const notificationRows = Array.from(userIds).map((userId) => ({
     user_id: userId,
-    type: "system",
-    category: "system",
+    type: "announcement",
+    category: "communications",
     priority: "normal",
     title: "New ERP Email Broadcast",
     message: subject,

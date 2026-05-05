@@ -227,6 +227,7 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
       feedback: notifications.filter((n) => n.category === "feedback").length,
       mentions: notifications.filter((n) => n.category === "mentions").length,
       meetings: notifications.filter((n) => n.category === "meetings").length,
+      communications: notifications.filter((n) => n.category === "communications").length,
       reports: notifications.filter((n) => n.category === "reports").length,
     }
   }, [notifications])
@@ -238,6 +239,7 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
       { key: "critical", label: "Critical", icon: AlertTriangle },
       { key: "tasks", label: "Tasks", icon: User },
       { key: "meetings", label: "Meetings", icon: Calendar },
+      { key: "communications", label: "Communications", icon: Mail },
       { key: "reports", label: "Reports", icon: FileBarChart },
       { key: "assets", label: "Assets", icon: Package },
       { key: "feedback", label: "Feedback", icon: Mail },

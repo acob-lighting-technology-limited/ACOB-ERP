@@ -147,13 +147,24 @@ export function WeeklyReportDialog({ isOpen, onClose, onSuccess, initialData }: 
     }
     setSaving(true)
     try {
-      const { data: savedReport, error: reportError } = await supabase
-        .from("weekly_reports")
-        .upsert(formData, { onConflict: "department,week_number,year" })
-        .select("id")
-        .single()
-      if (reportError) throw reportError
-      void savedReport
+      const response = await fetch("/api/reports/weekly-reports", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: id || undefined,
+          department: formData.department,
+          week_number: formData.week_number,
+          year: formData.year,
+          work_done: formData.work_done,
+          tasks_new_week: formData.tasks_new_week,
+          challenges: formData.challenges,
+          status: formData.status,
+        }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as { error?: string }
+      if (!response.ok) {
+        throw new Error(payload.error || `Failed to submit report (${response.status})`)
+      }
       toast.success("Success")
       onSuccess()
       onClose()
