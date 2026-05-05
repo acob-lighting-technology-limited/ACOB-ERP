@@ -40,11 +40,15 @@ export async function POST(req: Request) {
 
   const { data: callerProfile } = await supabase
     .from("profiles")
-    .select("role, department, is_department_lead, lead_departments")
+    .select("role, department, designation, full_name, first_name, last_name, is_department_lead, lead_departments")
     .eq("id", caller.id)
     .single<{
       role?: string | null
       department?: string | null
+      designation?: string | null
+      full_name?: string | null
+      first_name?: string | null
+      last_name?: string | null
       is_department_lead?: boolean | null
       lead_departments?: string[] | null
     }>()
@@ -137,6 +141,15 @@ export async function POST(req: Request) {
     const emailPreview = await buildApprovalEmailPreview({
       supabase: supabaseAdmin,
       pendingUser,
+      preparedBy: {
+        name:
+          callerProfile?.full_name ||
+          [callerProfile?.first_name, callerProfile?.last_name].filter(Boolean).join(" ").trim() ||
+          caller.email ||
+          "Admin & HR Lead",
+        designation: callerProfile?.designation || null,
+        department: callerProfile?.department || "Admin & HR Department",
+      },
     })
 
     // 3. Create or Update Auth User
