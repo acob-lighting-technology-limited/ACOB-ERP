@@ -76,7 +76,7 @@ export function GovernanceConsole({ role }: { role: UserRole }) {
     },
   })
 
-  const workflows = workflowsQuery.data || []
+  const workflows = useMemo(() => workflowsQuery.data || [], [workflowsQuery.data])
 
   const stagesQuery = useQuery({
     queryKey: ["governance", "stages", selectedWorkflowId],
@@ -91,7 +91,7 @@ export function GovernanceConsole({ role }: { role: UserRole }) {
     },
   })
 
-  const stages = stagesQuery.data || []
+  const stages = useMemo(() => stagesQuery.data || [], [stagesQuery.data])
 
   const lookupsQuery = useQuery({
     queryKey: ["governance", "lookups"],
@@ -119,7 +119,7 @@ export function GovernanceConsole({ role }: { role: UserRole }) {
     },
   })
 
-  const accessPaths = pathsQuery.data?.paths || []
+  const accessPaths = useMemo(() => pathsQuery.data?.paths || [], [pathsQuery.data?.paths])
   const roleRules = pathsQuery.data?.rules || []
 
   const stats = useMemo(() => {
