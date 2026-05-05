@@ -283,8 +283,18 @@ export async function POST(req: Request) {
       log.error({ err: String(emailError) }, "Failed to send stakeholder notification emails")
     }
 
-    // Sync employment_status into JWT metadata so middleware doesn't need a DB query
-    await syncEmploymentStatusToAuth(authUserId!, "active")
+    // Sync employment_status into JWT metadata so middleware doesn't need a DB query.
+    // This should not fail the approval if metadata sync hits a transient auth error.
+    try {
+      await syncEmploymentStatusToAuth(authUserId!, "active")
+    } catch (syncError) {
+      log.error({ err: String(syncError), authUserId }, "Employment status auth sync failed after approval")
+      emailWarnings.push({
+        audience: "management",
+        reason: "Employment status sync warning (approval completed)",
+        recipients: [],
+      })
+    }
 
     // Audit: new employee onboarding is a critical action
     const supabaseForAudit = await createServerClient()
@@ -310,9 +320,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, employeeId, emailWarnings })
   } catch (error: unknown) {
     log.error({ err: String(error) }, "Approval process failed")
-    // Redact internal error details from the client
+    // Redact internal error details from the client while still surfacing known actionable failures.
+    const knownPrefixes = [
+      "Auth creation failed:",
+      "Auth update failed:",
+      "Profile creation failed:",
+      "Failed to generate employee number:",
+    ]
+    const safeKnownError =
+      error instanceof Error ? knownPrefixes.find((prefix) => error.message.startsWith(prefix)) : null
     const message =
-      error instanceof Error && error.message.includes("Auth creation failed")
+      error instanceof Error && safeKnownError
         ? error.message
         : "An unexpected error occurred during the approval process. Please check system logs."
     return NextResponse.json({ error: message }, { status: 500 })

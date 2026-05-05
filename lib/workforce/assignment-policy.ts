@@ -75,9 +75,9 @@ export function applyAssignableStatusFilter<TQuery extends AssignableStatusQuery
   options: AssignablePolicyOptions = {}
 ) {
   if (options.allowLegacyNullStatus === false) {
-    return query.ilike("employment_status", "active")
+    return query.eq("employment_status", "active")
   }
-  return query.or("employment_status.ilike.active,employment_status.is.null")
+  return query.or("employment_status.eq.active,employment_status.is.null")
 }
 
 export async function buildAssignableProfilesQuery(
