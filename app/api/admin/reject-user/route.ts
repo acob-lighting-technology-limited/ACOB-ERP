@@ -74,9 +74,12 @@ export async function POST(req: Request) {
     }
   }
 
-  const { error: deleteError } = await supabaseAdmin.from("pending_users").delete().eq("id", parsed.data.pendingUserId)
-  if (deleteError) {
-    return NextResponse.json({ error: deleteError.message }, { status: 500 })
+  const { error: rejectError } = await supabaseAdmin
+    .from("pending_users")
+    .update({ status: "rejected", updated_at: new Date().toISOString() })
+    .eq("id", parsed.data.pendingUserId)
+  if (rejectError) {
+    return NextResponse.json({ error: rejectError.message }, { status: 500 })
   }
 
   return NextResponse.json({ success: true })

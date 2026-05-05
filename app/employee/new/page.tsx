@@ -6,7 +6,6 @@ import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { useQuery } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { createClient } from "@/lib/supabase/client"
 import { Loader2, CheckCircle2, User, MapPin, Mail, Phone, Briefcase } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
@@ -50,7 +49,6 @@ export default function EmployeeOnboardingForm() {
   const DRAFT_KEY = "employee_onboarding_draft_v1"
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isSuccess, setIsSuccess] = useState(false)
-  const supabase = createClient()
 
   const { data: onboardingOptions } = useQuery({
     queryKey: QUERY_KEYS.employeeOnboardingDepartments(),
@@ -155,11 +153,14 @@ export default function EmployeeOnboardingForm() {
         updated_at: new Date().toISOString(),
       }
 
-      const { error } = await supabase.from("pending_users").insert([record])
-
-      if (error) {
-        log.error("Supabase Insert Error:", error)
-        throw error
+      const response = await fetch("/api/public/onboarding-submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...record, honeypot: data.honeypot || "" }),
+      })
+      const payload = (await response.json().catch(() => ({}))) as { error?: string }
+      if (!response.ok) {
+        throw new Error(payload.error || "Failed to submit application")
       }
 
       setIsSuccess(true)
