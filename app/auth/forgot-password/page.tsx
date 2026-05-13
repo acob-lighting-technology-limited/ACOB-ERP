@@ -13,6 +13,7 @@ import { toast } from "sonner"
 import { ArrowLeft, Mail } from "lucide-react"
 import Image from "next/image"
 import { useTheme } from "next-themes"
+import { getSeasonalLogoPaths } from "@/lib/seasonal-branding"
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("")
@@ -23,10 +24,8 @@ export default function ForgotPasswordPage() {
 
   // Default to light logo for SSR to prevent hydration mismatch
   const logoSrc = !mounted
-    ? "/images/acob-logo-light.webp"
-    : resolvedTheme === "dark"
-      ? "/images/acob-logo-dark.webp"
-      : "/images/acob-logo-light.webp"
+    ? getSeasonalLogoPaths("light").navbar
+    : getSeasonalLogoPaths(resolvedTheme === "dark" ? "dark" : "light").navbar
 
   useEffect(() => {
     setMounted(true)
@@ -62,7 +61,7 @@ export default function ForgotPasswordPage() {
           {/* Header Section */}
           <div className="space-y-4 text-center">
             <div className="mx-auto flex h-20 items-center justify-center">
-              <Image src={logoSrc} alt="ACOB Lighting" width={200} height={60} priority className="h-12 w-auto" />
+              <Image src={logoSrc} alt="ACOB Lighting" width={240} height={62} priority className="h-14 w-auto" />
             </div>
             <h1 className="text-4xl font-bold tracking-tight">Forgot Password</h1>
             <p className="text-muted-foreground text-lg">Enter your email to receive a password reset link</p>
@@ -117,6 +116,7 @@ export default function ForgotPasswordPage() {
                         onChange={(e) => setEmail(e.target.value)}
                         className="h-11 text-base"
                         autoFocus
+                        autoComplete="email"
                       />
                       <p className="text-muted-foreground text-xs">
                         Enter the email address associated with your account

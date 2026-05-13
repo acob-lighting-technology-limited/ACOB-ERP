@@ -6,9 +6,23 @@ import { toast } from "sonner"
 import { ProfileHero } from "@/components/profile/profile-hero"
 import { ProfileEditDialog } from "@/components/profile/profile-edit-dialog"
 import { ContactInfoCard } from "@/components/profile/contact-info-card"
-import { QuickActionsCard } from "@/components/profile/quick-actions-card"
 import { ActivityTabs } from "@/components/profile/activity-tabs"
-import type { UserProfile, Task, Asset, Documentation, Feedback } from "./page"
+import {
+  PersonalRecentActivityFeed,
+  type PersonalRecentActivityItem,
+} from "@/components/profile/personal-recent-activity-feed"
+import type {
+  UserProfile,
+  Task,
+  Asset,
+  Documentation,
+  Feedback,
+  CorrespondenceItem,
+  HelpDeskItem,
+  PaymentItem,
+  LeaveItem,
+  AttendanceItem,
+} from "./page"
 
 interface ProfileContentProps {
   profile: UserProfile | null
@@ -16,10 +30,29 @@ interface ProfileContentProps {
   assets: Asset[]
   documentation: Documentation[]
   feedback: Feedback[]
+  correspondence: CorrespondenceItem[]
+  helpDesk: HelpDeskItem[]
+  payments: PaymentItem[]
+  leave: LeaveItem[]
+  attendance: AttendanceItem[]
+  recentActivity: PersonalRecentActivityItem[]
   initialError?: string | null
 }
 
-export function ProfileContent({ profile, tasks, assets, documentation, feedback, initialError }: ProfileContentProps) {
+export function ProfileContent({
+  profile,
+  tasks,
+  assets,
+  documentation,
+  feedback,
+  correspondence,
+  helpDesk,
+  payments,
+  leave,
+  attendance,
+  recentActivity,
+  initialError,
+}: ProfileContentProps) {
   const [isEditOpen, setIsEditOpen] = useState(false)
 
   useEffect(() => {
@@ -44,8 +77,18 @@ export function ProfileContent({ profile, tasks, assets, documentation, feedback
     <div className="container mx-auto max-w-full space-y-6 p-4 md:p-6 lg:p-8">
       <ProfileHero profile={profile} onEdit={() => setIsEditOpen(true)} />
       <ContactInfoCard profile={profile} />
-      <QuickActionsCard />
-      <ActivityTabs tasks={tasks} assets={assets} documentation={documentation} feedback={feedback} />
+      <ActivityTabs
+        tasks={tasks}
+        assets={assets}
+        documentation={documentation}
+        feedback={feedback}
+        correspondence={correspondence}
+        helpDesk={helpDesk}
+        payments={payments}
+        leave={leave}
+        attendance={attendance}
+      />
+      <PersonalRecentActivityFeed activity={recentActivity} />
       <ProfileEditDialog open={isEditOpen} onOpenChange={setIsEditOpen} profile={profile} />
     </div>
   )

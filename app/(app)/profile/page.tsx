@@ -2,6 +2,8 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { ProfileContent } from "./profile-content"
+import { buildRecentActivity, normalizeToken } from "@/components/admin/dashboard-helpers"
+import type { PersonalRecentActivityItem } from "@/components/profile/personal-recent-activity-feed"
 
 export interface UserProfile {
   id: string
@@ -66,6 +68,53 @@ export interface Feedback {
   created_at: string
 }
 
+export interface CorrespondenceItem {
+  id: string
+  reference_number: string
+  subject: string
+  status: string
+  created_at: string
+}
+
+export interface HelpDeskItem {
+  id: string
+  ticket_number: string
+  title: string
+  status: string
+  priority: string
+  created_at: string
+}
+
+export interface PaymentItem {
+  id: string
+  title: string
+  payment_type: string
+  status: string
+  amount: number | null
+  currency: string
+  payment_date: string | null
+  created_at: string
+}
+
+export interface LeaveItem {
+  id: string
+  leave_type: string
+  status: string
+  start_date: string
+  end_date: string
+  days_requested: number
+  created_at: string
+}
+
+export interface AttendanceItem {
+  id: string
+  date: string
+  status: string
+  clock_in: string | null
+  clock_out: string | null
+  created_at: string
+}
+
 type ProfileRow = UserProfile & {
   department_id?: string | null
 }
@@ -86,6 +135,21 @@ type AssetRow = Asset & {
 type AssetAssignmentRow = {
   assigned_at: string
   asset: AssetRow | null
+}
+
+type ActivityLogRow = {
+  id: string
+  user_id: string | null
+  created_at: string
+  action?: string | null
+  operation?: string | null
+  entity_type?: string | null
+  table_name?: string | null
+  entity_id?: string | null
+  metadata?: Record<string, unknown> | null
+  changed_fields?: unknown
+  new_values?: Record<string, unknown> | null
+  old_values?: Record<string, unknown> | null
 }
 
 const isDefined = <T,>(value: T | null | undefined): value is T => value != null
@@ -115,7 +179,19 @@ async function getProfileData() {
     .single<ProfileRow>()
 
   if (profileError || !profileData) {
-    return { profile: null, tasks: [], assets: [], documentation: [], feedback: [] }
+    return {
+      profile: null,
+      tasks: [],
+      assets: [],
+      documentation: [],
+      feedback: [],
+      correspondence: [],
+      helpDesk: [],
+      payments: [],
+      leave: [],
+      attendance: [],
+      recentActivity: [],
+    }
   }
 
   let resolvedDepartment = profileData.department || null
@@ -262,7 +338,86 @@ async function getProfileData() {
     .order("created_at", { ascending: false })
   if (feedbackError) loadErrors.push("feedback")
 
+  const { data: correspondenceData, error: correspondenceError } = await dataClient
+    .from("correspondence_records")
+    .select("id, reference_number, subject, status, created_at")
+    .or(`originator_id.eq.${userId},responsible_officer_id.eq.${userId}`)
+    .order("created_at", { ascending: false })
+    .limit(20)
+    .returns<CorrespondenceItem[]>()
+  if (correspondenceError) loadErrors.push("correspondence")
+
+  const { data: helpDeskData, error: helpDeskError } = await dataClient
+    .from("help_desk_tickets")
+    .select("id, ticket_number, title, status, priority, created_at")
+    .or(`requester_id.eq.${userId},assigned_to.eq.${userId}`)
+    .order("created_at", { ascending: false })
+    .limit(20)
+    .returns<HelpDeskItem[]>()
+  if (helpDeskError) loadErrors.push("help desk")
+
+  let paymentsQuery = dataClient
+    .from("department_payments")
+    .select("id, title, payment_type, status, amount, currency, payment_date, created_at")
+    .order("created_at", { ascending: false })
+    .limit(20)
+  if (profileData.department_id) {
+    paymentsQuery = paymentsQuery.or(`created_by.eq.${userId},department_id.eq.${profileData.department_id}`)
+  } else {
+    paymentsQuery = paymentsQuery.eq("created_by", userId)
+  }
+  const { data: paymentsData, error: paymentsError } = await paymentsQuery.returns<PaymentItem[]>()
+  if (paymentsError) loadErrors.push("payments")
+
+  const { data: leaveData, error: leaveError } = await dataClient
+    .from("leave_requests")
+    .select("id, leave_type, status, start_date, end_date, days_requested, created_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(20)
+    .returns<LeaveItem[]>()
+  if (leaveError) loadErrors.push("leave")
+
+  const { data: attendanceData, error: attendanceError } = await dataClient
+    .from("attendance_records")
+    .select("id, date, status, clock_in, clock_out, created_at")
+    .eq("user_id", userId)
+    .order("date", { ascending: false })
+    .limit(20)
+    .returns<AttendanceItem[]>()
+  if (attendanceError) loadErrors.push("attendance")
+
   const loadError = loadErrors.length > 0 ? "Some profile sections failed to load. Please refresh." : null
+
+  const { data: rawActivity } = await dataClient
+    .from("audit_logs")
+    .select(
+      "id, user_id, created_at, action, operation, entity_type, table_name, entity_id, metadata, changed_fields, new_values, old_values"
+    )
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(12)
+    .returns<ActivityLogRow[]>()
+
+  const filteredRawActivity = (rawActivity || [])
+    .filter(
+      (item) =>
+        !["sync", "migrate", "update_schema", "migration"].includes(normalizeToken(item.action || item.operation))
+    )
+    .slice(0, 8)
+
+  const actorMap = new Map<string, { first_name?: string; last_name?: string; company_email?: string }>([
+    [
+      userId,
+      {
+        first_name: profileData.first_name || undefined,
+        last_name: profileData.last_name || undefined,
+        company_email: profileData.company_email || undefined,
+      },
+    ],
+  ])
+
+  const recentActivity = buildRecentActivity(filteredRawActivity, actorMap) as PersonalRecentActivityItem[]
 
   return {
     profile: profileData,
@@ -270,6 +425,12 @@ async function getProfileData() {
     assets: allAssets,
     documentation: (docsData || []) as Documentation[],
     feedback: (feedbackData || []) as Feedback[],
+    correspondence: correspondenceData || [],
+    helpDesk: helpDeskData || [],
+    payments: paymentsData || [],
+    leave: leaveData || [],
+    attendance: attendanceData || [],
+    recentActivity,
     loadError,
   }
 }
@@ -291,6 +452,12 @@ export default async function ProfilePage() {
       assets={profileData.assets}
       documentation={profileData.documentation}
       feedback={profileData.feedback}
+      correspondence={profileData.correspondence}
+      helpDesk={profileData.helpDesk}
+      payments={profileData.payments}
+      leave={profileData.leave}
+      attendance={profileData.attendance}
+      recentActivity={profileData.recentActivity}
       initialError={profileData.loadError}
     />
   )

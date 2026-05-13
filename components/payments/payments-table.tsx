@@ -138,7 +138,11 @@ export function PaymentsTable({
   const [receiptUploading, setReceiptUploading] = useState(false)
   const [exportDialogOpen, setExportDialogOpen] = useState(false)
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false)
+  const [exportTypeOptionsOpen, setExportTypeOptionsOpen] = useState(false)
   const [exportType, setExportType] = useState<"excel" | "pdf" | null>(null)
+  const [exportPaymentType, setExportPaymentType] = useState<"all" | "recurring" | "one-time">("all")
+  const [processedTableRows, setProcessedTableRows] = useState<ProcessedPayment[] | null>(null)
+  const [processedTableRowsSignature, setProcessedTableRowsSignature] = useState("")
   const [selectedColumns, setSelectedColumns] = useState<Record<string, boolean>>({
     "#": true,
     Title: true,
@@ -630,7 +634,26 @@ export function PaymentsTable({
     }
   }
 
-  const { handleExportConfirm } = usePaymentExport(processedPayments, selectedColumns, () => setExportDialogOpen(false))
+  const exportBaseRows = processedTableRows ?? processedPayments
+
+  const handleProcessedDataChange = useCallback((rows: ProcessedPayment[]) => {
+    const nextSignature = rows.map((row) => row.id).join("|")
+    setProcessedTableRowsSignature((prevSignature) => {
+      if (prevSignature === nextSignature) return prevSignature
+      setProcessedTableRows(rows)
+      return nextSignature
+    })
+  }, [])
+
+  const exportPayments = useMemo(
+    () =>
+      exportPaymentType === "all"
+        ? exportBaseRows
+        : exportBaseRows.filter((payment) => payment.payment_type === exportPaymentType),
+    [exportBaseRows, exportPaymentType]
+  )
+
+  const { handleExportConfirm } = usePaymentExport(exportPayments, selectedColumns, () => setExportDialogOpen(false))
 
   const downloadFile = async (url: string, filename: string) => {
     try {
@@ -792,6 +815,7 @@ export function PaymentsTable({
         data={processedPayments}
         columns={columns}
         filters={filters}
+        onProcessedDataChange={handleProcessedDataChange}
         getRowId={(row) => row.id}
         searchPlaceholder="Search title, issuer, department, or reference..."
         searchFn={(row, query) =>
@@ -1011,6 +1035,21 @@ export function PaymentsTable({
         ]}
         onSelect={(id) => {
           setExportType(id === "excel" ? "excel" : "pdf")
+          setExportTypeOptionsOpen(true)
+        }}
+      />
+
+      <ExportOptionsDialog
+        open={exportTypeOptionsOpen}
+        onOpenChange={setExportTypeOptionsOpen}
+        title="Export Payment Type"
+        options={[
+          { id: "all", label: "All" },
+          { id: "one-time", label: "One-time" },
+          { id: "recurring", label: "Recurring" },
+        ]}
+        onSelect={(id) => {
+          setExportPaymentType(id === "one-time" || id === "recurring" ? id : "all")
           setExportDialogOpen(true)
         }}
       />

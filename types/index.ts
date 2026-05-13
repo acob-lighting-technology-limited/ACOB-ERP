@@ -97,22 +97,3 @@ export type { DocumentType } from "./payments"
 
 // Help Desk types
 export type { HelpDeskPriority, HelpDeskStatus, HelpDeskTicket } from "./help-desk"
-// Governance types
-export type {
-  ModuleCode,
-  ApproverResolutionMode,
-  AccessRuleEffect,
-  AccessPathKind,
-  ApprovalWorkflow,
-  ApprovalWorkflowStage,
-  ApprovalChainPreviewStep,
-  ApprovalChainPreviewResponse,
-  AccessPath,
-  AccessPathRoleRule,
-  AccessDecisionTrace,
-  ApproverTargetType,
-  ApproverTargetConfig,
-  RelieverScopePreset,
-  BypassRoleRule,
-  GovernanceDepartment,
-} from "./governance"

@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import { Lock, CheckCircle, Eye, EyeOff } from "lucide-react"
+import { FormPageSkeleton } from "@/components/skeletons"
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("")
@@ -20,6 +21,7 @@ export default function ResetPasswordPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [isChecking, setIsChecking] = useState(true)
   const router = useRouter()
 
   // Check if user has a valid session from the reset link
@@ -33,11 +35,17 @@ export default function ResetPasswordPage() {
       if (!session) {
         toast.error("Invalid or expired reset link. Please request a new one.")
         router.push("/auth/forgot-password")
+        return
       }
+      setIsChecking(false)
     }
 
     checkSession()
   }, [router])
+
+  if (isChecking) {
+    return <FormPageSkeleton sections={2} fieldsPerSection={3} showSidebar={false} />
+  }
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -142,11 +150,13 @@ export default function ResetPasswordPage() {
                           className="h-11 pr-10 text-base"
                           autoFocus
                           minLength={6}
+                          autoComplete="new-password"
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
                           className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
                         >
                           {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                         </button>
@@ -168,11 +178,13 @@ export default function ResetPasswordPage() {
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           className="h-11 pr-10 text-base"
                           minLength={6}
+                          autoComplete="new-password"
                         />
                         <button
                           type="button"
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                           className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
+                          aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
                         >
                           {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                         </button>

@@ -8,6 +8,7 @@
 
 # testing
 /coverage
+/test-results
 
 # next.js
 /.next/
@@ -19,6 +20,16 @@
 # misc
 .DS_Store
 *.pem
+
+# local caches
+.npm-cache/
+
+# project documents/images at repository root only
+/*.docx
+/*.xlsx
+/*.jpg
+/*.jpeg
+/*.png
 
 # claude
 .claude

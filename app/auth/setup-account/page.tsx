@@ -13,9 +13,11 @@ import { useState, useEffect, useRef, useCallback, Suspense } from "react"
 import { ArrowLeft, UserPlus, CheckCircle2, Lock, Eye, EyeOff, CheckCircle, KeyRound } from "lucide-react"
 import Image from "next/image"
 import { useTheme } from "next-themes"
+import { getSeasonalLogoPaths } from "@/lib/seasonal-branding"
 import { formValidation } from "@/lib/validation"
 import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
+import { FormPageSkeleton } from "@/components/skeletons"
 
 import { logger } from "@/lib/logger"
 
@@ -44,10 +46,8 @@ function SetupAccountContent() {
 
   // Default to light logo for SSR to prevent hydration mismatch
   const logoSrc = !mounted
-    ? "/images/acob-logo-light.webp"
-    : resolvedTheme === "dark"
-      ? "/images/acob-logo-dark.webp"
-      : "/images/acob-logo-light.webp"
+    ? getSeasonalLogoPaths("light").navbar
+    : getSeasonalLogoPaths(resolvedTheme === "dark" ? "dark" : "light").navbar
 
   useEffect(() => {
     setMounted(true)
@@ -232,53 +232,50 @@ function SetupAccountContent() {
 
   return (
     <div className="from-background via-background to-muted/20 flex min-h-screen w-full items-center justify-center bg-gradient-to-br p-4 md:p-6">
-      <div className="w-full max-w-lg">
-        <div className="flex flex-col gap-8">
-          {/* Header Section */}
-          <div className="space-y-4 text-center">
-            <div className="mx-auto flex h-20 items-center justify-center">
-              <Image src={logoSrc} alt="ACOB Lighting" width={200} height={60} priority className="h-12 w-auto" />
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight">Set Up Your Account</h1>
-            <p className="text-muted-foreground text-lg">Get started with ACOB ERP in just a few steps</p>
-          </div>
-
+      <div className="w-full max-w-6xl">
+        <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_420px] xl:gap-8">
           <Card className="border-2 shadow-xl">
-            <CardHeader className="space-y-3 pb-6">
-              <CardTitle className="flex items-center gap-2 text-2xl font-semibold">
-                {isSuccess ? (
-                  <>
-                    <CheckCircle className="h-6 w-6 text-green-600" />
-                    Activation Complete
-                  </>
-                ) : token || isRecoveryMode ? (
-                  <>
-                    <Lock className="text-primary h-6 w-6" />
-                    {isRecoveryMode ? "Reset Your Password" : "Create Your Password"}
-                  </>
-                ) : emailSent ? (
-                  <>
-                    <CheckCircle2 className="h-6 w-6 text-green-600" />
-                    Check Your Email
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="text-primary h-6 w-6" />
-                    Activate Your Account
-                  </>
-                )}
-              </CardTitle>
-              <CardDescription className="text-base">
-                {isSuccess
-                  ? "Your account is now active"
-                  : token || isRecoveryMode
-                    ? isRecoveryMode
-                      ? "Enter a new password for your account"
-                      : "Set a secure password to activate your company account"
-                    : emailSent
-                      ? "We've sent you a link to set up your password"
-                      : "Enter your company email and we'll send you a link to create your password"}
-              </CardDescription>
+            <CardHeader className="space-y-4 pb-6">
+              <div className="mb-2 flex justify-center lg:hidden">
+                <Image src={logoSrc} alt="ACOB Lighting" width={220} height={56} priority className="h-14 w-auto" />
+              </div>
+              <div className="space-y-2">
+                <h1 className="text-3xl font-bold tracking-tight lg:text-4xl">Set Up Your Account</h1>
+                <p className="text-muted-foreground text-sm lg:text-base">
+                  Create secure access to your ACOB workspace.
+                </p>
+              </div>
+              {(isSuccess || token || isRecoveryMode || emailSent) && (
+                <>
+                  <CardTitle className="flex items-center gap-2 text-xl font-semibold lg:text-2xl">
+                    {isSuccess ? (
+                      <>
+                        <CheckCircle className="h-6 w-6 text-green-600" />
+                        Activation Complete
+                      </>
+                    ) : token || isRecoveryMode ? (
+                      <>
+                        <Lock className="text-primary h-6 w-6" />
+                        {isRecoveryMode ? "Reset Your Password" : "Create Your Password"}
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="h-6 w-6 text-green-600" />
+                        Check Your Email
+                      </>
+                    )}
+                  </CardTitle>
+                  <CardDescription className="text-sm lg:text-base">
+                    {isSuccess
+                      ? "Your account is now active"
+                      : token || isRecoveryMode
+                        ? isRecoveryMode
+                          ? "Enter a new password to continue."
+                          : "Create a secure password to activate your account."
+                        : "We sent a setup link to your email."}
+                  </CardDescription>
+                </>
+              )}
             </CardHeader>
             <CardContent className="pb-8">
               {isSuccess ? (
@@ -307,6 +304,7 @@ function SetupAccountContent() {
                           className="h-11 pr-10"
                           autoFocus
                           minLength={6}
+                          autoComplete="new-password"
                         />
                         <button
                           type="button"
@@ -329,6 +327,7 @@ function SetupAccountContent() {
                           required
                           className="h-11 pr-10"
                           minLength={6}
+                          autoComplete="new-password"
                         />
                         <button
                           type="button"
@@ -444,6 +443,7 @@ function SetupAccountContent() {
                         onChange={(e) => setEmail(e.target.value)}
                         className="h-11 text-base"
                         autoFocus
+                        autoComplete="email"
                       />
                     </FormFieldGroup>
 
@@ -460,35 +460,35 @@ function SetupAccountContent() {
                   </div>
                 </form>
               )}
-            </CardContent>
-          </Card>
-
-          {/* Help Text */}
-          <Card className="border bg-blue-50 dark:bg-blue-950/20">
-            <CardContent className="p-4">
-              <div className="flex gap-3">
-                <div className="mt-0.5 text-blue-600 dark:text-blue-400">
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-                <div className="text-sm text-blue-900 dark:text-blue-100">
-                  <p className="mb-1 font-medium">Already have a password?</p>
-                  <p>
-                    If you&apos;ve already set up your account, go to the{" "}
-                    <Link href="/auth/login" className="font-semibold underline underline-offset-4">
-                      login page
-                    </Link>{" "}
-                    and sign in with your email and password.
-                  </p>
-                </div>
+              <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-center dark:border-blue-900 dark:bg-blue-950/20">
+                <p className="text-sm text-blue-900 dark:text-blue-100">
+                  <span className="font-medium">Already have a password?</span>{" "}
+                  <Link href="/auth/login" className="font-semibold underline underline-offset-4">
+                    Go to login
+                  </Link>
+                  .
+                </p>
               </div>
             </CardContent>
           </Card>
+
+          <aside className="bg-card text-card-foreground hidden rounded-2xl border p-8 shadow-xl lg:flex lg:flex-col lg:justify-between">
+            <div className="space-y-8">
+              <Image src={logoSrc} alt="ACOB Lighting" width={260} height={66} className="h-14 w-auto" />
+              <div className="space-y-3">
+                <h2 className="text-2xl font-semibold tracking-tight">ACOB Internal Workspace</h2>
+                <p className="text-muted-foreground text-sm leading-6">
+                  Secure onboarding for authorized employees to access operations, reporting, and administrative tools.
+                </p>
+              </div>
+              <div className="text-muted-foreground space-y-3 text-sm">
+                <p className="border-primary/70 text-foreground border-l-2 pl-3">Use your registered company email.</p>
+                <p className="border-primary/70 border-l-2 pl-3">Complete OTP or setup-link verification first.</p>
+                <p className="border-primary/70 border-l-2 pl-3">Create a strong password to activate your account.</p>
+              </div>
+            </div>
+            <p className="text-muted-foreground text-xs">ACOB Lighting Technology Limited</p>
+          </aside>
         </div>
       </div>
     </div>
@@ -497,9 +497,7 @@ function SetupAccountContent() {
 
 export default function SetupAccountPage() {
   return (
-    <Suspense
-      fallback={<div className="flex min-h-screen items-center justify-center font-medium">Loading setup page...</div>}
-    >
+    <Suspense fallback={<FormPageSkeleton sections={2} fieldsPerSection={4} showSidebar={true} />}>
       <SetupAccountContent />
     </Suspense>
   )

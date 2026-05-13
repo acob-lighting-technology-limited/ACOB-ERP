@@ -13,6 +13,8 @@ import { toast } from "sonner"
 import { Lock, CheckCircle, Eye, EyeOff } from "lucide-react"
 import Image from "next/image"
 import { useTheme } from "next-themes"
+import { getSeasonalLogoPaths } from "@/lib/seasonal-branding"
+import { FormPageSkeleton } from "@/components/skeletons"
 
 export default function SetPasswordPage() {
   const [password, setPassword] = useState("")
@@ -29,10 +31,8 @@ export default function SetPasswordPage() {
 
   // Default to light logo for SSR to prevent hydration mismatch
   const logoSrc = !mounted
-    ? "/images/acob-logo-light.webp"
-    : resolvedTheme === "dark"
-      ? "/images/acob-logo-dark.webp"
-      : "/images/acob-logo-light.webp"
+    ? getSeasonalLogoPaths("light").navbar
+    : getSeasonalLogoPaths(resolvedTheme === "dark" ? "dark" : "light").navbar
 
   useEffect(() => {
     setMounted(true)
@@ -100,14 +100,7 @@ export default function SetPasswordPage() {
   }
 
   if (isChecking) {
-    return (
-      <div className="from-background via-background to-muted/20 flex min-h-screen w-full items-center justify-center bg-gradient-to-br p-4 md:p-6">
-        <div className="text-muted-foreground text-center">
-          <div className="border-primary mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
-          <p>Verifying your invitation...</p>
-        </div>
-      </div>
-    )
+    return <FormPageSkeleton sections={2} fieldsPerSection={3} showSidebar={false} />
   }
 
   return (
@@ -117,7 +110,7 @@ export default function SetPasswordPage() {
           {/* Header Section */}
           <div className="space-y-4 text-center">
             <div className="mx-auto flex h-20 items-center justify-center">
-              <Image src={logoSrc} alt="ACOB Lighting" width={200} height={60} priority className="h-12 w-auto" />
+              <Image src={logoSrc} alt="ACOB Lighting" width={240} height={62} priority className="h-14 w-auto" />
             </div>
             <h1 className="text-4xl font-bold tracking-tight">Welcome to ACOB ERP</h1>
             <p className="text-muted-foreground text-lg">Set up your password to complete your account</p>
@@ -174,11 +167,13 @@ export default function SetPasswordPage() {
                           className="h-11 pr-10 text-base"
                           autoFocus
                           minLength={6}
+                          autoComplete="new-password"
                         />
                         <button
                           type="button"
                           onClick={() => setShowPassword(!showPassword)}
                           className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
+                          aria-label={showPassword ? "Hide password" : "Show password"}
                         >
                           {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                         </button>
@@ -200,11 +195,13 @@ export default function SetPasswordPage() {
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           className="h-11 pr-10 text-base"
                           minLength={6}
+                          autoComplete="new-password"
                         />
                         <button
                           type="button"
                           onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                           className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2"
+                          aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}
                         >
                           {showConfirmPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                         </button>

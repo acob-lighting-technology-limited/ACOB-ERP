@@ -15,6 +15,7 @@ import { toast } from "sonner"
 import { KeyRound, Mail, ArrowLeft, Eye, EyeOff } from "lucide-react"
 import Image from "next/image"
 import { useTheme } from "next-themes"
+import { getSeasonalLogoPaths } from "@/lib/seasonal-branding"
 
 import { logger } from "@/lib/logger"
 
@@ -36,10 +37,8 @@ export default function LoginPage() {
 
   // Default to light logo for SSR to prevent hydration mismatch
   const logoSrc = !mounted
-    ? "/images/acob-logo-light.webp"
-    : resolvedTheme === "dark"
-      ? "/images/acob-logo-dark.webp"
-      : "/images/acob-logo-light.webp"
+    ? getSeasonalLogoPaths("light").navbar
+    : getSeasonalLogoPaths(resolvedTheme === "dark" ? "dark" : "light").navbar
 
   useEffect(() => {
     setMounted(true)
@@ -299,20 +298,20 @@ export default function LoginPage() {
       <div className="w-full max-w-6xl">
         <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_420px] xl:gap-8">
           <Card className="border-2 shadow-xl">
-            <CardHeader className="space-y-3 pb-6">
+            <CardHeader className="space-y-4 pb-6">
               <div className="mb-2 flex justify-center lg:hidden">
-                <Image src={logoSrc} alt="ACOB Lighting" width={170} height={52} priority className="h-10 w-auto" />
+                <Image src={logoSrc} alt="ACOB Lighting" width={220} height={56} priority className="h-14 w-auto" />
               </div>
-              <h1 className="text-3xl font-bold tracking-tight lg:text-4xl">Welcome Back</h1>
-              <p className="text-muted-foreground text-base lg:text-lg">
-                Sign in to continue to the ACOB employee portal
-              </p>
-              <CardTitle className="text-2xl font-semibold">
+              <div className="space-y-2">
+                <h1 className="text-3xl font-bold tracking-tight lg:text-4xl">Welcome Back</h1>
+                <p className="text-muted-foreground text-sm lg:text-base">Access your ACOB workspace securely.</p>
+              </div>
+              <CardTitle className="text-xl font-semibold lg:text-2xl">
                 {step === "credentials" ? "Sign In" : "Verify Your Code"}
               </CardTitle>
-              <CardDescription className="text-base">
+              <CardDescription className="text-sm lg:text-base">
                 {step === "credentials"
-                  ? "Choose your preferred login method"
+                  ? "Choose your sign-in method to continue."
                   : `Enter the 6-digit code sent to ${email}`}
               </CardDescription>
             </CardHeader>
@@ -409,7 +408,13 @@ export default function LoginPage() {
                           </div>
                         </div>
                         {error && (
-                          <p className="rounded-md bg-red-50 p-3 text-sm text-red-500 dark:bg-red-950/30">{error}</p>
+                          <p
+                            role="alert"
+                            aria-live="polite"
+                            className="rounded-md bg-red-50 p-3 text-sm text-red-500 dark:bg-red-950/30"
+                          >
+                            {error}
+                          </p>
                         )}
                         <Button type="submit" className="h-11 w-full text-base font-semibold" loading={isLoading}>
                           Login with Password
@@ -432,10 +437,17 @@ export default function LoginPage() {
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
                             className="h-11 text-base"
+                            autoComplete="email"
                           />
                         </div>
                         {error && (
-                          <p className="rounded-md bg-red-50 p-3 text-sm text-red-500 dark:bg-red-950/30">{error}</p>
+                          <p
+                            role="alert"
+                            aria-live="polite"
+                            className="rounded-md bg-red-50 p-3 text-sm text-red-500 dark:bg-red-950/30"
+                          >
+                            {error}
+                          </p>
                         )}
                         <Button type="submit" className="h-11 w-full text-base font-semibold" loading={isLoading}>
                           Send One-Time Code
@@ -492,7 +504,13 @@ export default function LoginPage() {
                     </div>
 
                     {error && (
-                      <p className="rounded-md bg-red-50 p-3 text-sm text-red-500 dark:bg-red-950/30">{error}</p>
+                      <p
+                        role="alert"
+                        aria-live="polite"
+                        className="rounded-md bg-red-50 p-3 text-sm text-red-500 dark:bg-red-950/30"
+                      >
+                        {error}
+                      </p>
                     )}
                     <Button type="submit" className="h-11 w-full text-base font-semibold" loading={isLoading}>
                       Verify &amp; Sign In
@@ -516,32 +534,28 @@ export default function LoginPage() {
             </CardContent>
           </Card>
 
-          <aside className="hidden rounded-2xl border bg-zinc-950 p-8 text-zinc-100 shadow-xl lg:flex lg:flex-col lg:justify-between">
+          <aside className="bg-card text-card-foreground hidden rounded-2xl border p-8 shadow-xl lg:flex lg:flex-col lg:justify-between">
             <div className="space-y-8">
-              <Image
-                src="/images/acob-logo-dark.webp"
-                alt="ACOB Lighting"
-                width={220}
-                height={64}
-                className="h-12 w-auto"
-              />
+              <Image src={logoSrc} alt="ACOB Lighting" width={260} height={66} className="h-14 w-auto" />
               <div className="space-y-3">
                 <h2 className="text-2xl font-semibold tracking-tight">ACOB Internal Workspace</h2>
-                <p className="text-sm leading-6 text-zinc-300">
+                <p className="text-muted-foreground text-sm leading-6">
                   Secure access for authorized employees across operations, reporting, and administrative workflows.
                 </p>
               </div>
-              <div className="space-y-3 text-sm text-zinc-200">
-                <p className="border-l-2 border-emerald-400/70 pl-3">Use your company email domain to sign in.</p>
-                <p className="border-l-2 border-emerald-400/70 pl-3">
+              <div className="text-muted-foreground space-y-3 text-sm">
+                <p className="border-primary/70 text-foreground border-l-2 pl-3">
+                  Use your company email domain to sign in.
+                </p>
+                <p className="border-primary/70 border-l-2 pl-3">
                   Choose password or one-time code based on your access setup.
                 </p>
-                <p className="border-l-2 border-emerald-400/70 pl-3">
+                <p className="border-primary/70 border-l-2 pl-3">
                   Contact Admin & HR if your account has not been provisioned.
                 </p>
               </div>
             </div>
-            <p className="text-xs text-zinc-400">ACOB Lighting Technology Limited</p>
+            <p className="text-muted-foreground text-xs">ACOB Lighting Technology Limited</p>
           </aside>
         </div>
       </div>

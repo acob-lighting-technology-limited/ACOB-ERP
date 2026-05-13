@@ -11,10 +11,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FormFieldGroup } from "@/components/ui/patterns"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useDepartments } from "@/hooks/use-departments"
 import { toast } from "sonner"
 import Image from "next/image"
+import { useTheme } from "next-themes"
+import { getSeasonalLogoPaths } from "@/lib/seasonal-branding"
 
 export default function SignUpPage() {
   const { departments: DEPARTMENTS } = useDepartments()
@@ -30,7 +32,18 @@ export default function SignUpPage() {
   })
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [mounted, setMounted] = useState(false)
   const router = useRouter()
+  const { resolvedTheme } = useTheme()
+
+  // Default to light logo for SSR to prevent hydration mismatch
+  const logoSrc = !mounted
+    ? getSeasonalLogoPaths("light").navbar
+    : getSeasonalLogoPaths(resolvedTheme === "dark" ? "dark" : "light").navbar
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -87,13 +100,7 @@ export default function SignUpPage() {
           <Card className="border-2 shadow-xl">
             <CardHeader className="space-y-3 pb-6">
               <div className="mb-2 flex justify-center lg:hidden">
-                <Image
-                  src="/images/acob-logo-light.webp"
-                  alt="ACOB Lighting"
-                  width={170}
-                  height={52}
-                  className="h-10 w-auto"
-                />
+                <Image src={logoSrc} alt="ACOB Lighting" width={220} height={56} className="h-14 w-auto" />
               </div>
               <h1 className="text-3xl font-bold tracking-tight lg:text-4xl">Join ACOB</h1>
               <p className="text-muted-foreground text-base lg:text-lg">
@@ -114,6 +121,7 @@ export default function SignUpPage() {
                         onChange={(e) => setFormData({ ...formData, firstName: e.target.value })}
                         required
                         className="h-11 text-base"
+                        autoComplete="given-name"
                       />
                     </FormFieldGroup>
                     <div className="grid gap-3">
@@ -126,6 +134,7 @@ export default function SignUpPage() {
                         onChange={(e) => setFormData({ ...formData, lastName: e.target.value })}
                         required
                         className="h-11 text-base"
+                        autoComplete="family-name"
                       />
                     </div>
                   </div>
@@ -140,6 +149,7 @@ export default function SignUpPage() {
                       onChange={(e) => setFormData({ ...formData, otherNames: e.target.value })}
                       className="h-11 text-base"
                       placeholder="Optional"
+                      autoComplete="additional-name"
                     />
                   </div>
 
@@ -157,6 +167,7 @@ export default function SignUpPage() {
                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                         required
                         className="h-11 text-base"
+                        autoComplete="email"
                       />
                     </div>
                     <div className="grid gap-3">
@@ -172,6 +183,7 @@ export default function SignUpPage() {
                         required
                         minLength={6}
                         className="h-11 text-base"
+                        autoComplete="new-password"
                       />
                     </div>
                   </div>
@@ -213,6 +225,7 @@ export default function SignUpPage() {
                         }}
                         placeholder="+2348012345678"
                         className="h-11 text-base"
+                        autoComplete="tel"
                       />
                     </div>
                   </div>
@@ -228,10 +241,19 @@ export default function SignUpPage() {
                       onChange={(e) => setFormData({ ...formData, residentialAddress: e.target.value })}
                       className="h-11 text-base"
                       placeholder="Your home address"
+                      autoComplete="street-address"
                     />
                   </div>
 
-                  {error && <p className="rounded-md bg-red-50 p-3 text-sm text-red-500 dark:bg-red-950/30">{error}</p>}
+                  {error && (
+                    <p
+                      role="alert"
+                      aria-live="polite"
+                      className="rounded-md bg-red-50 p-3 text-sm text-red-500 dark:bg-red-950/30"
+                    >
+                      {error}
+                    </p>
+                  )}
                   <Button type="submit" className="mt-2 h-12 w-full text-base font-semibold" loading={isLoading}>
                     Create Account
                   </Button>
@@ -248,34 +270,28 @@ export default function SignUpPage() {
             </CardContent>
           </Card>
 
-          <aside className="hidden rounded-2xl border bg-zinc-950 p-8 text-zinc-100 shadow-xl lg:flex lg:flex-col lg:justify-between">
+          <aside className="bg-card text-card-foreground hidden rounded-2xl border p-8 shadow-xl lg:flex lg:flex-col lg:justify-between">
             <div className="space-y-8">
-              <Image
-                src="/images/acob-logo-dark.webp"
-                alt="ACOB Lighting"
-                width={220}
-                height={64}
-                className="h-12 w-auto"
-              />
+              <Image src={logoSrc} alt="ACOB Lighting" width={260} height={66} className="h-14 w-auto" />
               <div className="space-y-3">
                 <h2 className="text-2xl font-semibold tracking-tight">Employee Onboarding</h2>
-                <p className="text-sm leading-6 text-zinc-300">
+                <p className="text-muted-foreground text-sm leading-6">
                   Register with your official company details to activate internal access and complete account setup.
                 </p>
               </div>
-              <div className="space-y-3 text-sm text-zinc-200">
-                <p className="border-l-2 border-emerald-400/70 pl-3">
+              <div className="text-muted-foreground space-y-3 text-sm">
+                <p className="border-primary/70 text-foreground border-l-2 pl-3">
                   Use only your approved ACOB company email domain.
                 </p>
-                <p className="border-l-2 border-emerald-400/70 pl-3">
+                <p className="border-primary/70 border-l-2 pl-3">
                   Ensure your department and contact details are accurate.
                 </p>
-                <p className="border-l-2 border-emerald-400/70 pl-3">
+                <p className="border-primary/70 border-l-2 pl-3">
                   Confirm your email after sign-up to activate your account.
                 </p>
               </div>
             </div>
-            <p className="text-xs text-zinc-400">ACOB Lighting Technology Limited</p>
+            <p className="text-muted-foreground text-xs">ACOB Lighting Technology Limited</p>
           </aside>
         </div>
       </div>

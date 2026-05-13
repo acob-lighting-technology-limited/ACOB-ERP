@@ -20,11 +20,10 @@ import {
   Menu,
   X,
   User,
-  MessageSquare,
-  LayoutDashboard,
-  FileSignature,
+  ClipboardList,
+  Calendar,
+  Clock,
   ShieldCheck,
-  Droplet,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react"
@@ -59,7 +58,6 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
   const isMaintenancePage = pathname.startsWith("/maintenance")
   const { resolvedTheme } = useTheme()
   const dashboardHref = isAdminMode ? "/admin" : "/profile"
-  const dashboardLabel = isAdminMode ? "Admin Dashboard" : "Home"
   const use2026Logo = isTemporary2026LogoPeriod()
   const logoWidth = use2026Logo ? 220 : 150
   const logoHeight = use2026Logo ? 56 : 150
@@ -189,53 +187,42 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
         {!isMaintenancePage && (
           <>
             <DropdownMenuItem asChild>
-              <Link href={dashboardHref} className="cursor-pointer">
-                <LayoutDashboard className="mr-2 h-4 w-4" />
-                {dashboardLabel}
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
               <Link href="/profile" className="cursor-pointer">
                 <User className="mr-2 h-4 w-4" />
                 Profile
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/feedback" className="cursor-pointer">
-                <MessageSquare className="mr-2 h-4 w-4" />
-                Feedback
+              <Link href="/tasks" className="cursor-pointer">
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Task
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/tools/signature" className="cursor-pointer">
-                <FileSignature className="mr-2 h-4 w-4" />
-                Signature
+              <Link href="/help-desk" className="cursor-pointer">
+                <ClipboardList className="mr-2 h-4 w-4" />
+                Help Desk
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
-              <Link href="/tools/watermark" className="cursor-pointer">
-                <Droplet className="mr-2 h-4 w-4" />
-                Watermark
+              <Link href="/leave" className="cursor-pointer">
+                <Calendar className="mr-2 h-4 w-4" />
+                Leave
               </Link>
             </DropdownMenuItem>
-            {canAccessAdmin && !isAdminMode && (
+            <DropdownMenuItem asChild>
+              <Link href="/attendance" className="cursor-pointer">
+                <Clock className="mr-2 h-4 w-4" />
+                Attendance
+              </Link>
+            </DropdownMenuItem>
+            {canAccessAdmin && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
                   <Link href="/admin" className="flex cursor-pointer items-center">
                     <ShieldCheck className="mr-2 h-4 w-4" />
                     Admin
-                  </Link>
-                </DropdownMenuItem>
-              </>
-            )}
-            {isAdminMode && (
-              <>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem asChild>
-                  <Link href="/profile" className="flex cursor-pointer items-center">
-                    <LayoutDashboard className="mr-2 h-4 w-4" />
-                    User Dashboard
                   </Link>
                 </DropdownMenuItem>
               </>
@@ -257,8 +244,8 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
       className={cn(
         "fixed top-0 right-0 left-0 z-50 w-full overflow-visible border-b",
         isAdminMode
-          ? "border-[var(--admin-sidebar-border)] bg-[var(--admin-ribbon-bg)] backdrop-blur-md"
-          : "border-border bg-background"
+          ? "border-[var(--admin-sidebar-border)] bg-[var(--admin-sidebar-bg)] backdrop-blur-md"
+          : "border-border bg-card"
       )}
     >
       <div className="flex h-16 w-full max-w-full items-center overflow-visible">
@@ -370,18 +357,6 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
             </div>
           </div>
           <Link
-            href={dashboardHref}
-            className={cn(
-              "flex items-center gap-2 rounded px-4 py-2 text-sm",
-              isAdminMode
-                ? "hover:bg-[var(--navbar-admin-accent-soft,var(--admin-accent-soft))] hover:text-[var(--navbar-admin-primary,var(--admin-primary))]"
-                : "hover:bg-accent"
-            )}
-          >
-            <LayoutDashboard className="h-4 w-4" />
-            {dashboardLabel}
-          </Link>
-          <Link
             href="/profile"
             className={cn(
               "flex items-center gap-2 rounded px-4 py-2 text-sm",
@@ -394,7 +369,7 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
             Profile
           </Link>
           <Link
-            href="/feedback"
+            href="/tasks"
             className={cn(
               "flex items-center gap-2 rounded px-4 py-2 text-sm",
               isAdminMode
@@ -402,11 +377,11 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
                 : "hover:bg-accent"
             )}
           >
-            <MessageSquare className="h-4 w-4" />
-            Feedback
+            <ClipboardList className="h-4 w-4" />
+            Task
           </Link>
           <Link
-            href="/tools/signature"
+            href="/help-desk"
             className={cn(
               "flex items-center gap-2 rounded px-4 py-2 text-sm",
               isAdminMode
@@ -414,11 +389,11 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
                 : "hover:bg-accent"
             )}
           >
-            <FileSignature className="h-4 w-4" />
-            Signature
+            <ClipboardList className="h-4 w-4" />
+            Help Desk
           </Link>
           <Link
-            href="/tools/watermark"
+            href="/leave"
             className={cn(
               "flex items-center gap-2 rounded px-4 py-2 text-sm",
               isAdminMode
@@ -426,10 +401,22 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
                 : "hover:bg-accent"
             )}
           >
-            <Droplet className="h-4 w-4" />
-            Watermark
+            <Calendar className="h-4 w-4" />
+            Leave
           </Link>
-          {canAccessAdmin && !isAdminMode && (
+          <Link
+            href="/attendance"
+            className={cn(
+              "flex items-center gap-2 rounded px-4 py-2 text-sm",
+              isAdminMode
+                ? "hover:bg-[var(--navbar-admin-accent-soft,var(--admin-accent-soft))] hover:text-[var(--navbar-admin-primary,var(--admin-primary))]"
+                : "hover:bg-accent"
+            )}
+          >
+            <Clock className="h-4 w-4" />
+            Attendance
+          </Link>
+          {canAccessAdmin && (
             <>
               <div
                 className={cn(
@@ -442,30 +429,6 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
               <Link href="/admin" className="hover:bg-accent flex items-center gap-2 rounded px-4 py-2 text-sm">
                 <ShieldCheck className="h-4 w-4" />
                 Admin
-              </Link>
-            </>
-          )}
-          {isAdminMode && (
-            <>
-              <div
-                className={cn(
-                  "my-2 border-t",
-                  isAdminMode
-                    ? "border-[var(--navbar-admin-sidebar-border,var(--admin-sidebar-border))]"
-                    : "border-border"
-                )}
-              />
-              <Link
-                href="/profile"
-                className={cn(
-                  "flex items-center gap-2 rounded px-4 py-2 text-sm",
-                  isAdminMode
-                    ? "hover:bg-[var(--navbar-admin-accent-soft,var(--admin-accent-soft))] hover:text-[var(--navbar-admin-primary,var(--admin-primary))]"
-                    : "hover:bg-accent"
-                )}
-              >
-                <LayoutDashboard className="h-4 w-4" />
-                User Dashboard
               </Link>
             </>
           )}
