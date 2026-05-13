@@ -67,6 +67,7 @@ export default function RootLayout({
                 <NProgressHandler />
                 <ClientErrorMonitor />
                 <HeaderWrapperWithData />
+                {/* Intentionally public routes outside (app): /kss, /employee/new, /maintenance */}
                 {children}
                 <Toaster />
               </SidebarProvider>

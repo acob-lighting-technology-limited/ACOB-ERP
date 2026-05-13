@@ -78,6 +78,45 @@ export async function POST(req: Request) {
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
+    const authUserExistsById = async (id: string): Promise<boolean> => {
+      if (!id) return false
+      try {
+        const { data, error } = await supabaseAdmin.auth.admin.getUserById(id)
+        if (error) return false
+        return Boolean(data?.user?.id)
+      } catch (_error) {
+        return false
+      }
+    }
+    const findAuthUserIdByEmail = async (email: string): Promise<string | null> => {
+      const normalizedTarget = String(email || "")
+        .trim()
+        .toLowerCase()
+      if (!normalizedTarget) return null
+
+      try {
+        let page = 1
+        const perPage = 200
+        while (true) {
+          const { data: listed, error: listError } = await supabaseAdmin.auth.admin.listUsers({ page, perPage })
+          if (listError) break
+          const users = listed?.users || []
+          const matched = users.find(
+            (candidate) =>
+              String(candidate.email || "")
+                .trim()
+                .toLowerCase() === normalizedTarget
+          )
+          if (matched?.id) return matched.id
+          if (users.length < perPage) break
+          page += 1
+        }
+      } catch (_error) {
+        // Non-fatal; caller handles null.
+      }
+
+      return null
+    }
 
     const body = await req.json()
     const parsed = ApproveUserSchema.safeParse(body)
@@ -153,14 +192,82 @@ export async function POST(req: Request) {
     })
 
     // 3. Create or Update Auth User
-    // First check if user already exists
-    const { data: existingProfile } = await supabaseAdmin
+    // First check if profile or auth user already exists
+    const { data: matchingProfiles, error: matchingProfilesError } = await supabaseAdmin
       .from("profiles")
-      .select("id")
-      .eq("company_email", pendingUser.company_email)
-      .maybeSingle()
+      .select("id, company_email, employee_number, employment_status")
+      .ilike("company_email", pendingUser.company_email)
+    if (matchingProfilesError) {
+      throw new Error(`Profile creation failed: ${matchingProfilesError.message}`)
+    }
 
-    let authUserId = existingProfile?.id
+    const existingProfiles = (matchingProfiles || []) as Array<{
+      id: string
+      company_email?: string | null
+      employee_number?: string | null
+      employment_status?: string | null
+    }>
+    let authUserId: string | null = null
+    const normalizedCompanyEmail = String(pendingUser.company_email || "")
+      .trim()
+      .toLowerCase()
+    log.info(
+      {
+        companyEmail: normalizedCompanyEmail,
+        matchingProfilesCount: existingProfiles.length,
+        matchingProfiles: existingProfiles.map((row) => ({
+          id: row.id,
+          company_email: row.company_email,
+          employee_number: row.employee_number,
+          employment_status: row.employment_status,
+        })),
+      },
+      "Approval profile preflight matches"
+    )
+    for (const profile of existingProfiles) {
+      const authExists = await authUserExistsById(profile.id)
+      if (authExists) {
+        log.info(
+          { profileId: profile.id, companyEmail: normalizedCompanyEmail },
+          "Found existing auth user by profile id"
+        )
+        authUserId = profile.id
+        break
+      }
+      const hasEmployeeNumber = Boolean(String(profile.employee_number || "").trim())
+      const currentStatus = String(profile.employment_status || "")
+        .trim()
+        .toLowerCase()
+      const isDisposableProfile = !hasEmployeeNumber && currentStatus !== "active"
+      if (!isDisposableProfile) {
+        throw new Error(
+          "Profile creation failed: Existing profile is not linked to auth user. Please contact support to repair this account."
+        )
+      }
+      const archivedEmail = `orphan+${Date.now()}+${profile.id.slice(0, 8)}@acoblighting.local`
+      const { error: orphanUpdateError } = await supabaseAdmin
+        .from("profiles")
+        .update({
+          company_email: archivedEmail,
+          personal_email: null,
+          employment_status: "separated",
+          termination_reason: "orphaned_profile_recovery",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", profile.id)
+
+      if (orphanUpdateError) {
+        throw new Error(`Profile creation failed: ${orphanUpdateError.message}`)
+      }
+      log.warn(
+        { profileId: profile.id, oldCompanyEmail: profile.company_email, newCompanyEmail: archivedEmail },
+        "Archived orphan profile row during approval recovery"
+      )
+    }
+
+    if (!authUserId) {
+      authUserId = await findAuthUserIdByEmail(normalizedCompanyEmail)
+    }
 
     if (!authUserId) {
       const { data: newAuthUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -175,9 +282,82 @@ export async function POST(req: Request) {
       })
 
       if (authError) {
-        throw new Error(`Auth creation failed: ${authError.message}`)
+        log.error(
+          {
+            authErrorMessage: authError.message,
+            authErrorCode: "code" in authError ? String(authError.code) : null,
+            authErrorStatus: "status" in authError ? String(authError.status) : null,
+            companyEmail: normalizedCompanyEmail,
+          },
+          "Auth admin createUser failed"
+        )
+        // Probe path for diagnostics: determine if auth creation is globally broken
+        // (e.g., trigger/function misconfiguration) vs this specific email conflict.
+        try {
+          const probeEmail = `probe-${Date.now()}@org.acoblighting.com`
+          const { data: probeData, error: probeError } = await supabaseAdmin.auth.admin.createUser({
+            email: probeEmail,
+            password: emailPreview.tempPassword,
+            email_confirm: true,
+            user_metadata: {
+              first_name: "Probe",
+              last_name: "User",
+              full_name: "Probe User",
+            },
+          })
+
+          if (probeError) {
+            log.error(
+              {
+                probeEmail,
+                probeErrorMessage: probeError.message,
+                probeErrorCode: "code" in probeError ? String(probeError.code) : null,
+                probeErrorStatus: "status" in probeError ? String(probeError.status) : null,
+              },
+              "Auth probe createUser failed"
+            )
+          } else if (probeData?.user?.id) {
+            log.info(
+              { probeEmail, probeUserId: probeData.user.id },
+              "Auth probe createUser succeeded; deleting probe user"
+            )
+            await supabaseAdmin.auth.admin
+              .deleteUser(probeData.user.id)
+              .catch((probeDeleteError) =>
+                log.error(
+                  { err: String(probeDeleteError), probeUserId: probeData.user.id },
+                  "Failed to delete probe user"
+                )
+              )
+          }
+        } catch (probeUnhandledError) {
+          log.error({ err: String(probeUnhandledError) }, "Auth probe execution failed unexpectedly")
+        }
+        // Recovery path:
+        // If auth user already exists (often returned as generic DB error), reuse it.
+        const recoveredAuthUserId = await findAuthUserIdByEmail(normalizedCompanyEmail)
+
+        if (recoveredAuthUserId) {
+          const { error: recoveredUpdateError } = await supabaseAdmin.auth.admin.updateUserById(recoveredAuthUserId, {
+            password: emailPreview.tempPassword,
+            email_confirm: true,
+            user_metadata: {
+              first_name: pendingUser.first_name,
+              last_name: pendingUser.last_name,
+              full_name: `${pendingUser.first_name} ${pendingUser.last_name}`,
+            },
+          })
+          if (recoveredUpdateError) {
+            throw new Error(`Auth creation failed: ${authError.message}`)
+          }
+          authUserId = recoveredAuthUserId
+        } else {
+          throw new Error(`Auth creation failed: ${authError.message}`)
+        }
       }
-      authUserId = newAuthUser.user.id
+      if (!authUserId) {
+        authUserId = newAuthUser?.user?.id ?? null
+      }
     } else {
       const { error: updateAuthError } = await supabaseAdmin.auth.admin.updateUserById(authUserId, {
         password: emailPreview.tempPassword,
@@ -210,7 +390,7 @@ export async function POST(req: Request) {
 
     if (approvalError) {
       // Clean up orphaned auth user if we just created one
-      if (!existingProfile && authUserId) {
+      if (existingProfiles.length === 0 && authUserId) {
         await supabaseAdmin.auth.admin
           .deleteUser(authUserId)
           .catch((e) => log.error({ err: String(e) }, "Failed to clean up orphaned auth user"))
@@ -283,8 +463,18 @@ export async function POST(req: Request) {
       log.error({ err: String(emailError) }, "Failed to send stakeholder notification emails")
     }
 
-    // Sync employment_status into JWT metadata so middleware doesn't need a DB query
-    await syncEmploymentStatusToAuth(authUserId!, "active")
+    // Sync employment_status into JWT metadata so middleware doesn't need a DB query.
+    // This should not fail the approval if metadata sync hits a transient auth error.
+    try {
+      await syncEmploymentStatusToAuth(authUserId!, "active")
+    } catch (syncError) {
+      log.error({ err: String(syncError), authUserId }, "Employment status auth sync failed after approval")
+      emailWarnings.push({
+        audience: "management",
+        reason: "Employment status sync warning (approval completed)",
+        recipients: [],
+      })
+    }
 
     // Audit: new employee onboarding is a critical action
     const supabaseForAudit = await createServerClient()
@@ -310,9 +500,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ success: true, employeeId, emailWarnings })
   } catch (error: unknown) {
     log.error({ err: String(error) }, "Approval process failed")
-    // Redact internal error details from the client
+    // Redact internal error details from the client while still surfacing known actionable failures.
+    const knownPrefixes = [
+      "Auth creation failed:",
+      "Auth update failed:",
+      "Profile creation failed:",
+      "Failed to generate employee number:",
+    ]
+    const safeKnownError =
+      error instanceof Error ? knownPrefixes.find((prefix) => error.message.startsWith(prefix)) : null
     const message =
-      error instanceof Error && error.message.includes("Auth creation failed")
+      error instanceof Error && safeKnownError
         ? error.message
         : "An unexpected error occurred during the approval process. Please check system logs."
     return NextResponse.json({ error: message }, { status: 500 })

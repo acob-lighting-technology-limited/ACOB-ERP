@@ -17,8 +17,11 @@ export async function PATCH(_request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Get today's attendance record
-    const today = new Date().toISOString().split("T")[0]
+    // Use a single timestamp so date and time are from the same instant in UTC
+    const now = new Date()
+    const today = now.toISOString().split("T")[0]
+    const clockOutTime = now.toISOString().split("T")[1].split(".")[0] // HH:MM:SS UTC
+
     const { data: record } = await supabase
       .from("attendance_records")
       .select("*")
@@ -33,8 +36,6 @@ export async function PATCH(_request: NextRequest) {
     if (record.clock_out) {
       return NextResponse.json({ error: "You have already clocked out today" }, { status: 400 })
     }
-
-    const clockOutTime = new Date().toTimeString().split(" ")[0]
 
     // Calculate total hours
     const clockIn = new Date(`${today}T${record.clock_in}`)

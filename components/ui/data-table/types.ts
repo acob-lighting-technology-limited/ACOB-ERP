@@ -145,6 +145,8 @@ export interface DataTableProps<TData> {
   onSearchChange?: (query: string) => void
   /** Called when filter values change */
   onFilterChange?: (filters: Record<string, string[]>) => void
+  /** Called when table rows are processed with current search/filter/sort (before pagination) */
+  onProcessedDataChange?: (rows: TData[]) => void
 
   // ── Expandable ───────────────────────────────────────────────────────────
   expandable?: ExpandableConfig<TData>

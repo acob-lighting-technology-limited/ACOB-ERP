@@ -7,26 +7,12 @@ import { Users, Package, ClipboardList, FileText, MessageSquare, Shield } from "
 import { formatName } from "@/lib/utils"
 import { PageWrapper, PageHeader, Section } from "@/components/layout"
 import { StatCard } from "@/components/ui/stat-card"
-import { ActionQueue } from "@/components/admin/action-queue"
-import { PrimaryModuleGrid, SecondaryModuleGrid } from "@/components/admin/module-grid"
 import { RecentActivityFeed } from "@/components/admin/recent-activity-feed"
-import type { NotificationItem } from "@/components/admin/dashboard-types"
-import {
-  normalizeToken,
-  buildRecentActivity,
-  primaryModules,
-  secondaryModules,
-} from "@/components/admin/dashboard-helpers"
+import { normalizeToken, buildRecentActivity } from "@/components/admin/dashboard-helpers"
 import { logger } from "@/lib/logger"
 import { buildAccessContextV2, canAccessRouteV2, resolveAdminRouteKeyV2 } from "@/lib/admin/policy-v2"
 
 const log = logger("")
-
-const notificationPriority: Record<NotificationItem["type"], number> = {
-  error: 0,
-  warning: 1,
-  info: 2,
-}
 
 type ProfileIdRow = {
   id: string
@@ -171,164 +157,9 @@ export default async function AdminDashboardPage() {
   const canAccessAction = (_requiredRoles: string[], href: string) =>
     Boolean(accessContext && canAccessRouteV2(accessContext, resolveAdminRouteKeyV2(href)))
 
-  // Notifications
-  const notifications: NotificationItem[] = []
-
-  let pendingUsersQ = supabase.from("pending_users").select("*", { count: "exact", head: true }).eq("status", "pending")
-  if (departmentScope) {
-    pendingUsersQ =
-      queryDepartmentScope && queryDepartmentScope.length > 0
-        ? pendingUsersQ.in("department", queryDepartmentScope)
-        : pendingUsersQ.eq("id", "__none__")
-  }
-  const { count: pendingUsersCount } = await pendingUsersQ
-  if (pendingUsersCount && pendingUsersCount > 0) {
-    notifications.push({
-      id: "pending-users",
-      type: "warning",
-      title: "Pending User Approvals",
-      message: `You have ${pendingUsersCount} user${pendingUsersCount > 1 ? "s" : ""} waiting for approval.`,
-      timestamp: "Just now",
-      link: "/admin/hr/employees",
-      linkText: "Review Employees",
-    })
-  }
-
-  let openFeedbackQ = supabase.from("feedback").select("*", { count: "exact", head: true }).eq("status", "open")
-  if (departmentScope) {
-    openFeedbackQ =
-      scopedUserIds.length > 0 ? openFeedbackQ.in("user_id", scopedUserIds) : openFeedbackQ.eq("id", "__none__")
-  }
-  const { count: openFeedbackCount } = await openFeedbackQ
-  if (openFeedbackCount && openFeedbackCount > 0) {
-    notifications.push({
-      id: "open-feedback",
-      type: "info",
-      title: "Open Feedback",
-      message: `There ${openFeedbackCount === 1 ? "is" : "are"} ${openFeedbackCount} open feedback item${openFeedbackCount > 1 ? "s" : ""} that need attention.`,
-      timestamp: "Recent",
-      link: "/admin/feedback",
-      linkText: "View Feedback",
-    })
-  }
-
-  let urgentTasksQ = supabase
-    .from("tasks")
-    .select("*", { count: "exact", head: true })
-    .eq("priority", "urgent")
-    .in("status", ["pending", "in_progress"])
-  if (departmentScope) {
-    urgentTasksQ =
-      queryDepartmentScope && queryDepartmentScope.length > 0
-        ? urgentTasksQ.in("department", queryDepartmentScope)
-        : urgentTasksQ.eq("id", "__none__")
-  }
-  const { count: urgentTasksCount } = await urgentTasksQ
-  if (urgentTasksCount && urgentTasksCount > 0) {
-    notifications.push({
-      id: "urgent-tasks",
-      type: "error",
-      title: "Urgent Tasks",
-      message: `You have ${urgentTasksCount} urgent task${urgentTasksCount > 1 ? "s" : ""} that need immediate attention.`,
-      timestamp: "Urgent",
-      link: "/admin/tasks",
-      linkText: "View Tasks",
-    })
-  }
-
-  const today = new Date().toISOString().split("T")[0]
-  let overdueQ = supabase
-    .from("tasks")
-    .select("id", { count: "exact", head: false })
-    .lt("due_date", today)
-    .in("status", ["pending", "in_progress"])
-  if (departmentScope) {
-    overdueQ =
-      queryDepartmentScope && queryDepartmentScope.length > 0
-        ? overdueQ.in("department", queryDepartmentScope)
-        : overdueQ.eq("id", "__none__")
-  }
-  const { data: overdueTasks } = await overdueQ
-  if (overdueTasks && overdueTasks.length > 0) {
-    notifications.push({
-      id: "overdue-tasks",
-      type: "error",
-      title: "Overdue Tasks",
-      message: `There ${overdueTasks.length === 1 ? "is" : "are"} ${overdueTasks.length} overdue task${overdueTasks.length > 1 ? "s" : ""} that need to be completed.`,
-      timestamp: "Overdue",
-      link: "/admin/tasks",
-      linkText: "View Tasks",
-    })
-  }
-
-  if (user?.id && canAccessAction(["developer", "super_admin", "admin"], "/admin/hr/leave/approve")) {
-    const [approverQueueResult, relieverQueueResult] = await Promise.all([
-      dataClient
-        .from("leave_requests")
-        .select("id")
-        .eq("current_approver_user_id", user.id)
-        .in("status", ["pending", "pending_evidence"]),
-      dataClient
-        .from("leave_requests")
-        .select("id")
-        .eq("reliever_id", user.id)
-        .in("current_stage_code", ["pending_reliever", "reliever_pending"])
-        .in("status", ["pending", "pending_evidence"]),
-    ])
-
-    const pendingLeaveIds = new Set<string>([
-      ...((approverQueueResult.data || []) as { id: string }[]).map((row) => row.id),
-      ...((relieverQueueResult.data || []) as { id: string }[]).map((row) => row.id),
-    ])
-
-    if (pendingLeaveIds.size > 0) {
-      notifications.push({
-        id: "pending-leave-approvals",
-        type: "warning",
-        title: "Pending Leave Approvals",
-        message: `${pendingLeaveIds.size} leave request${pendingLeaveIds.size > 1 ? "s" : ""} awaiting your review.`,
-        timestamp: "Recent",
-        link: "/admin/hr/leave/approve",
-        linkText: "Review Leave",
-      })
-    }
-  }
-
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
-  if (canSeeAuditActivity) {
-    let todayAuditQ = supabase
-      .from("audit_logs")
-      .select("*", { count: "exact", head: true })
-      .gte("created_at", todayStart.toISOString())
-    if (departmentScope) {
-      todayAuditQ =
-        queryDepartmentScope && queryDepartmentScope.length > 0
-          ? todayAuditQ.in("department", queryDepartmentScope)
-          : todayAuditQ.eq("id", "__none__")
-    }
-    const { count: todayAuditCount } = await todayAuditQ
-    if (todayAuditCount && todayAuditCount > 50) {
-      notifications.push({
-        id: "high-activity",
-        type: "info",
-        title: "High System Activity",
-        message: `There have been ${todayAuditCount} system activities today. Review audit logs for details.`,
-        timestamp: "Today",
-        link: "/admin/audit-logs",
-        linkText: "View Audit Logs",
-      })
-    }
-  }
-
-  const filteredPrimaryModules = primaryModules.filter((a) => canAccessAction(a.roles, a.href))
-  const filteredSecondaryModules = secondaryModules.filter((a) => canAccessAction(a.roles, a.href))
   const canManageEmployees = canAccessAction(["developer", "super_admin", "admin"], "/admin/hr/employees")
   const canReviewTasks = canAccessAction(["developer", "super_admin", "admin"], "/admin/tasks")
   const canOpenReports = canAccessAction(["developer", "super_admin", "admin"], "/admin/reports")
-  const sortedNotifications = [...notifications].sort(
-    (a, b) => notificationPriority[a.type] - notificationPriority[b.type]
-  )
 
   return (
     <PageWrapper maxWidth="full" background="gradient">
@@ -356,10 +187,6 @@ export default async function AdminDashboardPage() {
           </>
         }
       />
-
-      <Section title="Action Queue" description="Priority items that require administrative attention.">
-        <ActionQueue notifications={sortedNotifications} />
-      </Section>
 
       <Section title="Core KPIs" description="Current operational totals across core business areas.">
         <div className="grid grid-cols-2 gap-2 sm:gap-3 md:gap-4 lg:grid-cols-5">
@@ -404,14 +231,6 @@ export default async function AdminDashboardPage() {
             iconColor="text-cyan-600 dark:text-cyan-400"
           />
         </div>
-      </Section>
-
-      <Section title="Primary Modules" description="Core admin workstreams used for daily operational control.">
-        <PrimaryModuleGrid modules={filteredPrimaryModules} />
-      </Section>
-
-      <Section title="Secondary Modules" description="Additional administrative modules and supporting functions.">
-        <SecondaryModuleGrid modules={filteredSecondaryModules} />
       </Section>
 
       {canSeeAuditActivity && (

@@ -63,6 +63,12 @@ Be cautious with helper wrappers around Supabase queries in build-sensitive code
 - manual filtering with `isAssignableEmploymentStatus(...)` when needed
 - If a helper begins causing deep generic inference failures, replace it with a direct query and explicit post-filtering.
 
+## `services/` vs `lib/` Placement Rule
+
+- Put reusable data-access helpers (Supabase queries, fetch wrappers, DB CRUD utilities) under `lib/`.
+- Use `services/` only for true orchestration/business-flow layers that coordinate multiple `lib/` modules.
+- Do not create new top-level `services/` files for single-table CRUD wrappers; place them in `lib/services/` or the relevant `lib/<domain>/` folder.
+
 ## Nullability Discipline
 
 - Do not pass `string | null | undefined` to code that requires `string`.
@@ -339,7 +345,7 @@ const filters: DataTableFilter<MyRow>[] = [
 | Bulk select + actions toolbar | ✅ | Pass `selectable` + `bulkActions` |
 | Keyboard navigation ↑↓ / Enter | ✅ | Always on |
 | List / card view toggle | ✅ | Pass `viewToggle` + `cardRenderer` |
-| Auto card view on mobile | ✅ | Switches automatically at < 768px if `cardRenderer` provided |
+| List / card view toggle (mobile) | ✅ | Mobile defaults to list view with horizontal scroll; users opt into card view via the toggle |
 | URL-synced filters | ✅ | Pass `urlSync` — search + filters write to query params |
 
 ### Stats cards — required on every table page
@@ -347,7 +353,7 @@ const filters: DataTableFilter<MyRow>[] = [
 ```tsx
 import { StatCard } from "@/components/ui/stat-card"
 
-<div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+<div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
   <StatCard title="Total"   value={total}   icon={Users}      iconBgColor="bg-blue-500/10"    iconColor="text-blue-500" />
   <StatCard title="Active"  value={active}  icon={Check}      iconBgColor="bg-emerald-500/10" iconColor="text-emerald-500" />
   <StatCard title="Pending" value={pending} icon={Clock}      iconBgColor="bg-amber-500/10"   iconColor="text-amber-500" />

@@ -60,20 +60,6 @@ function useDebounce<T>(value: T, delay = 300): T {
   return debounced
 }
 
-// ─── Mobile detection hook ───────────────────────────────────────────────────
-
-function useIsMobile(breakpoint = 768): boolean {
-  const [isMobile, setIsMobile] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia(`(max-width: ${breakpoint - 1}px)`)
-    setIsMobile(mq.matches)
-    const handler = (e: MediaQueryListEvent) => setIsMobile(e.matches)
-    mq.addEventListener("change", handler)
-    return () => mq.removeEventListener("change", handler)
-  }, [breakpoint])
-  return isMobile
-}
-
 // ─── Column resize hook ──────────────────────────────────────────────────────
 
 function useColumnResize(initialWidths: Record<string, number>) {
@@ -286,6 +272,7 @@ export function DataTable<TData>({
   onPageChange,
   onSearchChange,
   onFilterChange,
+  onProcessedDataChange,
   // Expandable
   expandable,
   // Actions
@@ -382,14 +369,9 @@ export function DataTable<TData>({
   // ─── Selected rows ─────────────────────────────────────────────────────────
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
 
-  // ─── View mode (auto-switch on mobile) ────────────────────────────────────
-  const isMobile = useIsMobile()
+  // ─── View mode (user-controlled; never auto-switch) ──────────────────────
   const [manualViewMode, setManualViewMode] = useState<"list" | "card" | null>(null)
-  const viewMode = useMemo(() => {
-    if (manualViewMode !== null) return manualViewMode
-    if (isMobile && cardRenderer) return "card"
-    return "list"
-  }, [manualViewMode, isMobile, cardRenderer])
+  const viewMode = manualViewMode ?? "list"
 
   // ─── Column visibility ────────────────────────────────────────────────────
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(
@@ -497,6 +479,12 @@ export function DataTable<TData>({
       return sortConfig.direction === "asc" ? cmp : -cmp
     })
   }, [filteredData, sortConfig, sortFn, columns, isServerPagination])
+
+  const processedDataSignature = useMemo(() => sortedData.map((row) => getRowId(row)).join("|"), [sortedData, getRowId])
+
+  useEffect(() => {
+    if (onProcessedDataChange) onProcessedDataChange(sortedData)
+  }, [processedDataSignature, sortedData, onProcessedDataChange])
 
   // ─── Pagination ────────────────────────────────────────────────────────────
   const total = isServerPagination ? (totalRows ?? data.length) : sortedData.length

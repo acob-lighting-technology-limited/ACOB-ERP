@@ -37,34 +37,35 @@ export function ProfileHero({ profile, onEdit }: ProfileHeroProps) {
       <Button
         onClick={onEdit}
         variant="outline"
-        className="bg-background/80 absolute top-4 right-4 z-10 gap-2 backdrop-blur-sm"
+        size="sm"
+        className="bg-background/80 absolute top-3 right-3 z-10 gap-2 backdrop-blur-sm sm:top-4 sm:right-4"
       >
         <Edit className="h-4 w-4" />
-        Edit Profile
+        <span className="hidden sm:inline">Edit Profile</span>
       </Button>
 
-      <div className="bg-primary/10 h-28 md:h-36 lg:h-44" />
+      <div className="bg-primary/10 h-20 sm:h-28 md:h-36 lg:h-44" />
 
-      <CardContent className="relative px-6 pb-6">
-        <div className="-mt-14 flex items-end gap-4 md:-mt-16 lg:-mt-20 lg:gap-6">
-          <Avatar className="border-background h-28 w-28 border-4 shadow-lg md:h-32 md:w-32 lg:h-40 lg:w-40">
-            <AvatarFallback className="bg-primary text-primary-foreground text-3xl font-bold md:text-4xl lg:text-5xl">
+      <CardContent className="relative px-4 pb-4 sm:px-6 sm:pb-6">
+        <div className="-mt-10 flex items-end gap-3 sm:-mt-14 sm:gap-4 md:-mt-16 lg:-mt-20 lg:gap-6">
+          <Avatar className="border-background h-20 w-20 border-4 shadow-lg sm:h-28 sm:w-28 md:h-32 md:w-32 lg:h-40 lg:w-40">
+            <AvatarFallback className="bg-primary text-primary-foreground text-2xl font-bold sm:text-3xl md:text-4xl lg:text-5xl">
               {getInitials(profile.first_name, profile.last_name)}
             </AvatarFallback>
           </Avatar>
-          <div className="pb-2 lg:pb-4">
-            <h1 className="text-xl font-bold md:text-2xl lg:text-3xl">
+          <div className="pb-1 sm:pb-2 lg:pb-4">
+            <h1 className="text-lg font-bold sm:text-xl md:text-2xl lg:text-3xl">
               {formatName(profile.first_name)}
               {profile.other_names && ` ${formatName(profile.other_names)}`}
               {` ${formatName(profile.last_name)}`}
             </h1>
-            <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-0.5">
-              <p className="text-muted-foreground flex items-center gap-1.5 text-sm md:text-base lg:text-lg">
-                <Briefcase className="h-4 w-4 lg:h-5 lg:w-5" />
+            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 sm:gap-x-4">
+              <p className="text-muted-foreground flex items-center gap-1.5 text-xs sm:text-sm md:text-base lg:text-lg">
+                <Briefcase className="h-3.5 w-3.5 sm:h-4 sm:w-4 lg:h-5 lg:w-5" />
                 {profile.designation || "employee Member"}
               </p>
-              <p className="text-muted-foreground flex items-center gap-1.5 text-sm md:text-base lg:text-lg">
-                <Building2 className="h-4 w-4 lg:h-5 lg:w-5" />
+              <p className="text-muted-foreground flex items-center gap-1.5 text-xs sm:text-sm md:text-base lg:text-lg">
+                <Building2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 lg:h-5 lg:w-5" />
                 {profile.department || "Unassigned Department"}
               </p>
             </div>
