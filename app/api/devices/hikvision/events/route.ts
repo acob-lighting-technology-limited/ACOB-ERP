@@ -93,10 +93,11 @@ export async function POST(request: NextRequest) {
 
   const userId = profile.id
 
-  // Parse timestamp from device — device sends ISO 8601 with offset
-  const eventDate = new Date(dateTime)
-  const date = eventDate.toISOString().split("T")[0]
-  const time = eventDate.toISOString().split("T")[1].split(".")[0]
+  // Strip timezone offset and use the local time as-is from the device
+  // e.g. "2026-05-14T17:45:00+01:00" → date="2026-05-14", time="17:45:00"
+  const localPart = dateTime.replace(/[+-]\d{2}:\d{2}$/, "")
+  const [date, timeFull] = localPart.split("T")
+  const time = timeFull ? timeFull.substring(0, 8) : "00:00:00"
 
   // Determine action: explicit status or toggle logic
   let action: "in" | "out" | "skip"
