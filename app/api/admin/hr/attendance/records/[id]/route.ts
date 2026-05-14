@@ -1,0 +1,97 @@
+import { NextRequest, NextResponse } from "next/server"
+import { z } from "zod"
+import { createClient } from "@/lib/supabase/server"
+import { logger } from "@/lib/logger"
+import { writeAuditLog } from "@/lib/audit/write-audit"
+import { rateLimit, getClientId } from "@/lib/rate-limit"
+
+const log = logger("admin-hr-attendance-record-patch")
+
+const PatchSchema = z.object({
+  clock_in: z
+    .string()
+    .regex(/^\d{2}:\d{2}(:\d{2})?$/, "Invalid time format")
+    .optional(),
+  clock_out: z
+    .string()
+    .regex(/^\d{2}:\d{2}(:\d{2})?$/, "Invalid time format")
+    .optional(),
+  status: z.enum(["present", "late", "absent", "half_day", "incomplete"]).optional(),
+  waived: z.boolean().optional(),
+  waiver_reason: z.string().max(200).optional().nullable(),
+})
+
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const rl = await rateLimit(`admin-attendance-patch:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+  if (!rl.allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
+
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+
+    const role = String(profile?.role || "")
+    if (!["developer", "admin", "super_admin"].includes(role)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    const parsed = PatchSchema.safeParse(await request.json())
+    if (!parsed.success) {
+      return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, { status: 400 })
+    }
+
+    const { id } = await params
+
+    const { data: record } = await supabase
+      .from("attendance_records")
+      .select("id, clock_in, clock_out, date")
+      .eq("id", id)
+      .maybeSingle()
+
+    if (!record) return NextResponse.json({ error: "Record not found" }, { status: 404 })
+
+    const updates: Record<string, unknown> = { ...parsed.data }
+
+    // Recalculate total_hours if both times are known after update
+    const clockIn = parsed.data.clock_in ?? record.clock_in
+    const clockOut = parsed.data.clock_out ?? record.clock_out
+    if (clockIn && clockOut) {
+      const inMs = new Date(`${record.date}T${clockIn}Z`).getTime()
+      const outMs = new Date(`${record.date}T${clockOut}Z`).getTime()
+      updates.total_hours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
+    }
+
+    const { data: updated, error } = await supabase
+      .from("attendance_records")
+      .update(updates)
+      .eq("id", id)
+      .select()
+      .single()
+
+    if (error) {
+      log.error({ err: String(error) }, "Failed to update attendance record")
+      return NextResponse.json({ error: "Failed to update record" }, { status: 500 })
+    }
+
+    await writeAuditLog(
+      supabase,
+      {
+        action: "update",
+        entityType: "attendance_record",
+        entityId: id,
+        newValues: updates,
+        context: { actorId: user.id, source: "api", route: `/api/admin/hr/attendance/records/${id}` },
+      },
+      { failOpen: true }
+    )
+
+    return NextResponse.json({ data: updated, message: "Record updated" })
+  } catch (error) {
+    log.error({ err: String(error) }, "Error in PATCH /api/admin/hr/attendance/records/[id]")
+    return NextResponse.json({ error: "An error occurred" }, { status: 500 })
+  }
+}

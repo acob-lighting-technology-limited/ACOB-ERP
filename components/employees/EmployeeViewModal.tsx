@@ -74,6 +74,7 @@ interface EditForm {
   date_of_birth: string
   employment_date: string
   job_description: string
+  attendance_exempt: boolean
 }
 
 interface EmployeeViewModalProps {
@@ -739,6 +740,19 @@ export function EmployeeViewModal({
                   </div>
                   <p className="text-muted-foreground mt-1 text-xs">
                     When enabled, the selected department is used automatically as the lead department.
+                  </p>
+                  <div className="mt-4 flex items-center gap-2">
+                    <input
+                      id="attendance_exempt"
+                      type="checkbox"
+                      checked={editForm.attendance_exempt}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, attendance_exempt: e.target.checked }))}
+                      className="rounded"
+                    />
+                    <Label htmlFor="attendance_exempt">Exempt from attendance tracking</Label>
+                  </div>
+                  <p className="text-muted-foreground mt-1 text-xs">
+                    When enabled, this employee will not appear in attendance reports or deduction calculations.
                   </p>
                 </div>
 

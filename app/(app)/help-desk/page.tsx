@@ -99,9 +99,8 @@ async function getData() {
   return {
     userId: user.id,
     userDepartment: profile?.department || null,
-    canReviewPendingApprovals: Boolean(
-      profile?.is_department_lead || ["developer", "admin", "super_admin"].includes(String(profile?.role || ""))
-    ),
+    // User portal never grants approval review — admins/leads use /admin/help-desk for that.
+    canReviewPendingApprovals: false,
     initialDepartments: ((departmentRows as DepartmentRow[] | null) || [])
       .map((row) => String(row.name || "").trim())
       .filter(Boolean),

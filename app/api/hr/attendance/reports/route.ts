@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
 import { normalizeDepartmentName } from "@/shared/departments"
+import { latenessDeduction } from "@/lib/hr/attendance-utils"
 import { logger } from "@/lib/logger"
 
 const log = logger("hr-attendance-reports-api")
@@ -11,6 +12,8 @@ type AttendanceRow = {
   user_id: string | null
   status?: string | null
   total_hours?: number | null
+  clock_in?: string | null
+  waived?: boolean | null
 }
 
 type ProfileRow = {
@@ -18,6 +21,14 @@ type ProfileRow = {
   first_name?: string | null
   last_name?: string | null
   department?: string | null
+  attendance_exempt?: boolean | null
+}
+
+type LeaveRow = {
+  user_id: string
+  start_date: string
+  end_date: string
+  status: string
 }
 
 export async function GET(request: NextRequest) {
@@ -44,7 +55,9 @@ export async function GET(request: NextRequest) {
     const requestedDepartment = normalizeDepartmentName(String(params.get("department") || "all"))
 
     const dataClient = getServiceRoleClientOrFallback(supabase)
-    let attendanceQuery = dataClient.from("attendance_records").select("user_id, status, total_hours")
+
+    // Fetch attendance records including clock_in and waived for deduction calc
+    let attendanceQuery = dataClient.from("attendance_records").select("user_id, status, total_hours, clock_in, waived")
     if (startDate) attendanceQuery = attendanceQuery.gte("date", startDate)
     if (endDate) attendanceQuery = attendanceQuery.lte("date", endDate)
 
@@ -62,11 +75,32 @@ export async function GET(request: NextRequest) {
 
     const { data: profiles, error: profileError } = await dataClient
       .from("profiles")
-      .select("id, first_name, last_name, department")
+      .select("id, first_name, last_name, department, attendance_exempt")
       .in("id", userIds)
       .returns<ProfileRow[]>()
     if (profileError) {
       return NextResponse.json({ error: profileError.message }, { status: 500 })
+    }
+
+    // Fetch approved leave requests that overlap the selected date range
+    let leaveQuery = dataClient
+      .from("leave_requests")
+      .select("user_id, start_date, end_date, status")
+      .in("user_id", userIds)
+      .eq("status", "approved")
+    if (startDate) leaveQuery = leaveQuery.lte("start_date", endDate ?? startDate)
+    if (endDate) leaveQuery = leaveQuery.gte("end_date", startDate ?? endDate)
+
+    const { data: leaveRows } = await leaveQuery.returns<LeaveRow[]>()
+
+    // Build set of (user_id, date) that are covered by approved leave
+    const onLeaveSet = new Set<string>()
+    for (const lr of leaveRows ?? []) {
+      const start = new Date(lr.start_date)
+      const end = new Date(lr.end_date)
+      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+        onLeaveSet.add(`${lr.user_id}:${d.toISOString().split("T")[0]}`)
+      }
     }
 
     const scopedDepartmentSet =
@@ -75,6 +109,7 @@ export async function GET(request: NextRequest) {
         : new Set(routeAccess.dataScope.map((department) => normalizeDepartmentName(department)))
 
     const allowedProfiles = (profiles || []).filter((profile) => {
+      if (profile.attendance_exempt) return false
       const department = normalizeDepartmentName(String(profile.department || ""))
       if (scopedDepartmentSet && !scopedDepartmentSet.has(department)) return false
       if (requestedDepartment !== "all" && department !== requestedDepartment) return false
@@ -94,6 +129,7 @@ export async function GET(request: NextRequest) {
         late_days: number
         absent_days: number
         total_hours: number
+        lateness_deduction: number
         attendance_rate: number
       }
     >()
@@ -103,7 +139,7 @@ export async function GET(request: NextRequest) {
       const profile = profileById.get(row.user_id)
       if (!profile) continue
 
-      const existing = summaryMap.get(row.user_id) || {
+      const existing = summaryMap.get(row.user_id) ?? {
         user_id: row.user_id,
         user_name: `${String(profile.first_name || "").trim()} ${String(profile.last_name || "").trim()}`.trim(),
         department: String(profile.department || "N/A"),
@@ -112,6 +148,7 @@ export async function GET(request: NextRequest) {
         late_days: 0,
         absent_days: 0,
         total_hours: 0,
+        lateness_deduction: 0,
         attendance_rate: 0,
       }
 
@@ -120,6 +157,10 @@ export async function GET(request: NextRequest) {
       if (row.status === "present") existing.present_days += 1
       else if (row.status === "late") existing.late_days += 1
       else if (row.status === "absent") existing.absent_days += 1
+
+      if (!row.waived && row.status !== "absent") {
+        existing.lateness_deduction += latenessDeduction(row.clock_in)
+      }
 
       summaryMap.set(row.user_id, existing)
     }
