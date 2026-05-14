@@ -10,8 +10,8 @@ const log = logger("hikvision-events")
 const HikvisionEventSchema = z.object({
   dateTime: z.string(),
   AccessControllerEvent: z.object({
-    employeeNoString: z.string().min(1),
-    attendanceStatus: z.string(),
+    employeeNoString: z.string().min(1).optional(),
+    attendanceStatus: z.string().optional(),
     name: z.string().optional(),
     subEventType: z.number().optional(),
   }),
@@ -67,6 +67,11 @@ export async function POST(request: NextRequest) {
 
   const { dateTime, AccessControllerEvent: event } = result.data
   const { employeeNoString, attendanceStatus } = event
+
+  // Skip events with no employee ID (e.g. door-open access-control events)
+  if (!employeeNoString) {
+    return NextResponse.json({ success: true })
+  }
 
   // Skip break events
   if (attendanceStatus === "breakIn" || attendanceStatus === "breakOut") {
