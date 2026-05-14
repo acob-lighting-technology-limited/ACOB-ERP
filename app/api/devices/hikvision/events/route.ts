@@ -99,73 +99,31 @@ export async function POST(request: NextRequest) {
   const [date, timeFull] = localPart.split("T")
   const time = timeFull ? timeFull.substring(0, 8) : "00:00:00"
 
-  // Determine action: explicit status or toggle logic
-  let action: "in" | "out" | "skip"
+  // Fetch today's record to decide clock-in vs clock-out
+  const { data: existing } = await supabase
+    .from("attendance_records")
+    .select("id, clock_in, clock_out")
+    .eq("user_id", userId)
+    .eq("date", date)
+    .maybeSingle()
 
-  if (attendanceStatus === "checkIn") {
-    action = "in"
-  } else if (attendanceStatus === "checkOut") {
-    action = "out"
-  } else {
-    // Toggle logic for "undefined" or unknown status
-    const { data: existing } = await supabase
-      .from("attendance_records")
-      .select("id, clock_in, clock_out")
-      .eq("user_id", userId)
-      .eq("date", date)
-      .maybeSingle()
-
-    if (!existing || !existing.clock_in) {
-      action = "in"
-    } else if (!existing.clock_out) {
-      action = "out"
-    } else {
-      action = "skip"
-    }
-  }
-
-  if (action === "skip") {
-    return NextResponse.json({ success: true })
-  }
+  // First scan of the day → clock-in. Every scan after → update clock-out.
+  const action: "in" | "out" = !existing?.clock_in ? "in" : "out"
 
   if (action === "in") {
-    const { error } = await supabase.from("attendance_records").upsert(
-      {
-        user_id: userId,
-        date,
-        clock_in: time,
-        status: "present",
-        source: "hikvision",
-      },
-      {
-        onConflict: "user_id,date",
-        ignoreDuplicates: false,
-      }
-    )
+    const { error } = await supabase
+      .from("attendance_records")
+      .upsert(
+        { user_id: userId, date, clock_in: time, status: "present", source: "hikvision" },
+        { onConflict: "user_id,date", ignoreDuplicates: false }
+      )
 
     if (error) {
       log.error({ err: String(error), userId, date }, "Failed to upsert clock-in")
       return NextResponse.json({ error: "Failed to record clock-in" }, { status: 500 })
     }
   } else {
-    // Fetch current record for total_hours calculation
-    const { data: existing } = await supabase
-      .from("attendance_records")
-      .select("id, clock_in")
-      .eq("user_id", userId)
-      .eq("date", date)
-      .maybeSingle()
-
-    if (!existing?.clock_in) {
-      // No clock-in to pair with — create a clock-out only record
-      const { error } = await supabase
-        .from("attendance_records")
-        .upsert({ user_id: userId, date, clock_out: time, source: "hikvision" }, { onConflict: "user_id,date" })
-      if (error) log.error({ err: String(error) }, "Failed to upsert clock-out (no prior clock-in)")
-      return NextResponse.json({ success: true })
-    }
-
-    const clockIn = new Date(`${date}T${existing.clock_in}Z`)
+    const clockIn = new Date(`${date}T${existing!.clock_in}Z`)
     const clockOut = new Date(`${date}T${time}Z`)
     const totalHours = Math.max(0, (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60))
 
@@ -174,7 +132,6 @@ export async function POST(request: NextRequest) {
       .update({ clock_out: time, total_hours: totalHours, source: "hikvision" })
       .eq("user_id", userId)
       .eq("date", date)
-      .is("clock_out", null)
 
     if (error) {
       log.error({ err: String(error), userId, date }, "Failed to update clock-out")
