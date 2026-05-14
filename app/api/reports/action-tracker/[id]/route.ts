@@ -3,6 +3,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { logger } from "@/lib/logger"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("action-tracker-item-route")
 
@@ -75,6 +76,12 @@ async function findActionEntity(
 
 export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`reports-action-tracker:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {
@@ -150,6 +157,12 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
 
 export async function DELETE(_: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit("reports-action-tracker", { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {

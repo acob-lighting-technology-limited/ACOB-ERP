@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
+import { createClient as createServerClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
-import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
+import { getRequestScope } from "@/lib/admin/api-scope"
+import { buildAccessContextV2 } from "@/lib/admin/policy-v2"
+import { enforceRouteAccessV2 } from "@/lib/admin/api-guard-v2"
 import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
 import { logger } from "@/lib/logger"
 
@@ -15,15 +18,22 @@ export const dynamic = "force-dynamic"
  * - Leads / admins in lead mode → only their managed departments
  */
 export async function GET() {
-  const result = await requireApiAdminScope()
-  if (!result.ok) return result.response
+  const scope = await getRequestScope()
+  if (!scope) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+  }
+  const context = buildAccessContextV2(scope)
 
-  const { scope, supabase } = result
+  const routeAccess = enforceRouteAccessV2(context, "hr.main")
+  if (!routeAccess.ok) return routeAccess.response
+
+  const supabase = await createServerClient()
   const dataClient = getServiceRoleClientOrFallback(supabase)
 
   let query = dataClient.from("profiles").select("*").order("last_name", { ascending: true })
 
-  const scopedDepts = getScopedDepartments(scope)
+  const scopedDepts =
+    routeAccess.dataScope === "all" ? null : routeAccess.dataScope === "none" ? [] : routeAccess.dataScope
 
   if (scopedDepts !== null) {
     // Scoped lead or admin in lead mode
@@ -32,7 +42,7 @@ export async function GET() {
       return NextResponse.json({ data: [] })
     }
     // Expand aliases and filter
-    const expandedDepts = expandDepartmentScopeForQuery(scope.managedDepartments)
+    const expandedDepts = expandDepartmentScopeForQuery(scopedDepts)
     if (expandedDepts.length > 0) {
       query = query.in("department", expandedDepts)
     }

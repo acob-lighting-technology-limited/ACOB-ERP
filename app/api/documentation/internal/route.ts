@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { getOneDriveService } from "@/lib/onedrive"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 import {
   buildDocumentationFolderPath,
   buildDocumentationTextBackup,
@@ -153,6 +154,11 @@ async function uploadDocumentationAssets(params: {
 
 export async function POST(request: Request) {
   try {
+    const rl = await rateLimit(`documentation-create:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 })
+    }
+
     const { supabase, user } = await getAuthenticatedUser()
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

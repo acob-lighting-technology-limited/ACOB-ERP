@@ -2,18 +2,25 @@ import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { logger } from "@/lib/logger"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { apiError, ApiErrorCode } from "@/lib/api/errors"
 
 const log = logger("tasks-complete-route")
 
-export async function POST(_: Request, props: { params: Promise<{ id: string }> }) {
+export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
   try {
+    const rl = await rateLimit(`tasks-complete:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+    if (!rl.allowed) {
+      return apiError("Too many requests. Please try again later.", ApiErrorCode.RATE_LIMITED, 429)
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!user) return apiError("Unauthorized", ApiErrorCode.UNAUTHORIZED, 401)
 
     const { data: assignment } = await supabase
       .from("task_assignments")
@@ -23,7 +30,7 @@ export async function POST(_: Request, props: { params: Promise<{ id: string }> 
       .maybeSingle()
 
     if (!assignment) {
-      return NextResponse.json({ error: "Only assigned users can complete this task" }, { status: 403 })
+      return apiError("Only assigned users can complete this task", ApiErrorCode.FORBIDDEN, 403)
     }
 
     const { data: existingCompletion } = await supabase
@@ -34,7 +41,7 @@ export async function POST(_: Request, props: { params: Promise<{ id: string }> 
       .maybeSingle()
 
     if (existingCompletion) {
-      return NextResponse.json({ error: "Task completion already recorded" }, { status: 409 })
+      return apiError("Task completion already recorded", ApiErrorCode.CONFLICT, 409)
     }
 
     const { error: insertError } = await supabase.from("task_user_completion").insert({
@@ -43,7 +50,7 @@ export async function POST(_: Request, props: { params: Promise<{ id: string }> 
     })
 
     if (insertError) {
-      return NextResponse.json({ error: insertError.message }, { status: 500 })
+      return apiError(insertError.message, ApiErrorCode.DATABASE_ERROR, 500)
     }
 
     const [{ count: assignmentCount }, { count: completionCount }] = await Promise.all([
@@ -74,6 +81,6 @@ export async function POST(_: Request, props: { params: Promise<{ id: string }> 
     return NextResponse.json({ completed: true, allDone })
   } catch (error) {
     log.error({ err: String(error) }, "Unhandled error in task complete POST")
-    return NextResponse.json({ error: "Failed to record completion" }, { status: 500 })
+    return apiError("Failed to record completion", ApiErrorCode.INTERNAL_ERROR, 500)
   }
 }

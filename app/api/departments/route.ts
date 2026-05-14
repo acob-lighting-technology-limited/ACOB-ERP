@@ -5,6 +5,7 @@ import { z } from "zod"
 import { getDepartmentScope, resolveAdminScope } from "@/lib/admin/rbac"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("departments")
 
@@ -77,6 +78,12 @@ export async function GET() {
 
 // POST /api/departments - Create a new department (admin-like only)
 export async function POST(request: Request) {
+  const rl = await rateLimit(`departments:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
 

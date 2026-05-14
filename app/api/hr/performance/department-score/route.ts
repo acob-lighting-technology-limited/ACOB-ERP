@@ -3,6 +3,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { computeDepartmentPerformanceScore } from "@/lib/performance/scoring"
+import { getRequestScope } from "@/lib/admin/api-scope"
 
 const log = logger("hr-performance-department-score")
 
@@ -43,10 +44,11 @@ export async function GET(request: NextRequest) {
     }
 
     const department = parsed.data.department
-    const role = String(profile?.role || "").toLowerCase()
+    const deptScope = await getRequestScope()
+    const isGlobalAdmin = deptScope?.isAdminLike === true && deptScope.scopeMode !== "lead"
     const managedDepartments = Array.isArray(profile?.lead_departments) ? profile.lead_departments : []
     const canAccessDepartment =
-      ["developer", "admin", "super_admin"].includes(role) ||
+      isGlobalAdmin ||
       profile?.department === department ||
       (profile?.is_department_lead === true &&
         (managedDepartments.includes(department) || profile.department === department))

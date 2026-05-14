@@ -7,6 +7,7 @@ import { computeIndividualPerformanceScore } from "@/lib/performance/scoring"
 import { getUnifiedPerformanceReviews } from "@/lib/performance/review-data"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("hr-performance-reviews")
 
@@ -189,6 +190,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-reviews:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const adminSupabase = getServiceRoleClientOrFallback(supabase)
@@ -226,8 +233,8 @@ export async function POST(request: NextRequest) {
         .maybeSingle<{ department?: string | null }>(),
     ])
 
-    const role = String(profile?.role || "").toLowerCase()
-    const isAdmin = ["developer", "admin", "super_admin"].includes(role)
+    const reviewsScope = await getRequestScope()
+    const isAdmin = reviewsScope?.isAdminLike === true && reviewsScope.scopeMode !== "lead"
     const managedDepartments = Array.isArray(profile?.lead_departments) ? profile.lead_departments : []
     const canLeadTarget =
       profile?.is_department_lead === true &&
@@ -377,6 +384,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-reviews:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const adminSupabase = getServiceRoleClientOrFallback(supabase)

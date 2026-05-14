@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/server"
 import { createClient as createAdminClient, type SupabaseClient } from "@supabase/supabase-js"
 import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { DEPT_EXECUTIVE_MANAGEMENT, DEPT_CORPORATE_SERVICES } from "@/config/constants"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 type StepResult = {
   step: string
@@ -479,6 +480,12 @@ async function testTask(admin: SupabaseClient, body: TestFlowBody): Promise<{ ok
 }
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`dev-flow-tests:${getClientId(request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   if (process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "Not available in production" }, { status: 404 })
   }
@@ -515,5 +522,11 @@ export async function PATCH(request: NextRequest) {
 
 // POST kept for backwards compat — prefer PATCH
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`dev-flow-tests:${getClientId(request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   return PATCH(request)
 }

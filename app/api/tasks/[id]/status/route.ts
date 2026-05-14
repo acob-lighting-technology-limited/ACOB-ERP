@@ -3,6 +3,10 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { logger } from "@/lib/logger"
+import { checkRequestSize } from "@/lib/api/request-size"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { apiError, ApiErrorCode } from "@/lib/api/errors"
+import { getRequestScope, type AdminScope } from "@/lib/admin/api-scope"
 
 const log = logger("tasks-status-route")
 
@@ -39,9 +43,8 @@ type ProfileRecord = {
   lead_departments?: string[] | null
 }
 
-function isAdminProfile(profile: ProfileRecord | null) {
-  const role = String(profile?.role || "").toLowerCase()
-  return role === "developer" || role === "admin" || role === "super_admin"
+function isAdminProfile(scope: AdminScope | null) {
+  return scope?.isAdminLike === true && scope.scopeMode !== "lead"
 }
 
 function isLeadForTask(profile: ProfileRecord | null, taskDepartment: string | null | undefined) {
@@ -53,16 +56,29 @@ function isLeadForTask(profile: ProfileRecord | null, taskDepartment: string | n
 export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
   try {
+    const rl = await rateLimit(`tasks-status:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+    if (!rl.allowed) {
+      return apiError("Too many requests. Please try again later.", ApiErrorCode.RATE_LIMITED, 429)
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!user) return apiError("Unauthorized", ApiErrorCode.UNAUTHORIZED, 401)
+
+    const sizeError = checkRequestSize(request)
+    if (sizeError) return sizeError
 
     const parsed = StatusBodySchema.safeParse(await request.json())
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
+      return apiError(
+        parsed.error.issues[0]?.message ?? "Validation failed",
+        ApiErrorCode.VALIDATION_ERROR,
+        400,
+        parsed.error.issues
+      )
     }
 
     const { data: task, error: taskError } = await supabase
@@ -74,7 +90,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       .single<TaskRecord>()
 
     if (taskError || !task) {
-      return NextResponse.json({ error: "Task not found" }, { status: 404 })
+      return apiError("Task not found", ApiErrorCode.NOT_FOUND, 404)
     }
 
     const [{ data: profile }, { data: assignments }] = await Promise.all([
@@ -86,7 +102,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       supabase.from("task_assignments").select("user_id").eq("task_id", task.id).eq("user_id", user.id).limit(1),
     ])
 
-    const isAdmin = isAdminProfile(profile)
+    const taskScope = await getRequestScope()
+    const isAdmin = isAdminProfile(taskScope)
     const hasAssignment = Boolean(assignments && assignments.length > 0)
     const canAccess =
       task.assigned_to === user.id ||
@@ -96,16 +113,16 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       isLeadForTask(profile ?? null, task.department)
 
     if (!canAccess) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      return apiError("Forbidden", ApiErrorCode.FORBIDDEN, 403)
     }
 
     if (!task.goal_id) {
-      return NextResponse.json({ error: "Task must be linked to a goal before it can be updated" }, { status: 400 })
+      return apiError("Task must be linked to a goal before it can be updated", ApiErrorCode.INVALID_STATE, 400)
     }
 
     // Policy: department tasks are updated by department leads only.
     if (task.assignment_type === "department" && !isLeadForTask(profile ?? null, task.department)) {
-      return NextResponse.json({ error: "Only department leads can update department tasks" }, { status: 403 })
+      return apiError("Only department leads can update department tasks", ApiErrorCode.FORBIDDEN, 403)
     }
 
     const oldStatus = task.status
@@ -117,7 +134,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     if (!isAdmin) {
       const allowed = VALID_TRANSITIONS[oldStatus] || []
       if (!allowed.includes(nextStatus)) {
-        return NextResponse.json({ error: `Cannot transition from ${oldStatus} to ${nextStatus}` }, { status: 400 })
+        return apiError(`Cannot transition from ${oldStatus} to ${nextStatus}`, ApiErrorCode.INVALID_STATE, 400)
       }
     }
 
@@ -138,7 +155,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       .single()
 
     if (updateError || !updatedTask) {
-      return NextResponse.json({ error: updateError?.message || "Failed to update task" }, { status: 500 })
+      return apiError(updateError?.message || "Failed to update task", ApiErrorCode.DATABASE_ERROR, 500)
     }
 
     if (parsed.data.comment) {
@@ -184,6 +201,6 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     return NextResponse.json({ success: true, task: updatedTask })
   } catch (error) {
     log.error({ err: String(error) }, "Unhandled error in task status PATCH")
-    return NextResponse.json({ error: "Failed to update task status" }, { status: 500 })
+    return apiError("Failed to update task status", ApiErrorCode.INTERNAL_ERROR, 500)
   }
 }

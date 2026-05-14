@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("peer-feedback")
 
@@ -121,9 +122,9 @@ export async function GET(request: NextRequest) {
           is_department_lead?: boolean | null
           lead_departments?: string[] | null
         }>()
-      const role = String(profile?.role || "").toLowerCase()
-      const isAdmin = ["developer", "admin", "super_admin"].includes(role)
-      if (!isAdmin && !profile?.is_department_lead) {
+      const peerScope = await getRequestScope()
+      const isGlobalAdmin = peerScope?.isAdminLike === true && peerScope.scopeMode !== "lead"
+      if (!isGlobalAdmin && !profile?.is_department_lead) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }
     }
@@ -193,6 +194,12 @@ export async function GET(request: NextRequest) {
  * One submission per reviewer+subject+cycle (upsert behaviour).
  */
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-peer-feedback:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const adminSupabase = getServiceRoleClientOrFallback(supabase)

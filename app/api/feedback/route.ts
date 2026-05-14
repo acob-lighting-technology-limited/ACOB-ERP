@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { logger } from "@/lib/logger"
+import { checkRequestSize } from "@/lib/api/request-size"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("feedback-route")
 
@@ -16,6 +18,11 @@ const CreateFeedbackSchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const rl = await rateLimit(`feedback:${getClientId(request)}`, { limit: 10, windowSec: 60 })
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 })
+    }
+
     const supabase = await createClient()
     const dataClient = getServiceRoleClientOrFallback(supabase)
     const {
@@ -25,6 +32,9 @@ export async function POST(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    const sizeError = checkRequestSize(request)
+    if (sizeError) return sizeError
 
     const parsed = CreateFeedbackSchema.safeParse(await request.json())
     if (!parsed.success) {

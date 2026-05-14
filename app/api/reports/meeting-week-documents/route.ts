@@ -9,6 +9,7 @@ import { convertOfficeDocumentToPdf } from "@/lib/reports/office-pdf"
 import { logger } from "@/lib/logger"
 import { getOneDriveService } from "@/lib/onedrive"
 import { buildReportDocumentPath, isOneDriveReportDocumentPath } from "@/lib/reports/document-storage"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("api-reports-meeting-week-documents")
 const BUCKET = "meeting_documents"
@@ -281,6 +282,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const rl = await rateLimit(`reports-meeting-week-documents:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {
@@ -556,6 +563,12 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const rl = await rateLimit(`reports-meeting-week-documents:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {
@@ -650,6 +663,12 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const rl = await rateLimit(`reports-meeting-week-documents:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {

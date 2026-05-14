@@ -15,6 +15,10 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Building2, Phone, MapPin, DollarSign } from "lucide-react"
 import { FormFieldGroup } from "@/components/ui/patterns"
+import { useEffect } from "react"
+import { useForm } from "react-hook-form"
+import { z } from "zod"
+import { zodResolver } from "@hookform/resolvers/zod"
 import type { Department, Category, PaymentEditFormData } from "./payment-types"
 
 interface PaymentEditDialogProps {
@@ -22,13 +26,31 @@ interface PaymentEditDialogProps {
   onOpenChange: (open: boolean) => void
   formData: PaymentEditFormData
   onFormDataChange: (data: PaymentEditFormData) => void
-  onSubmit: (e: React.FormEvent) => void
+  onSubmit: (data: PaymentEditFormData) => void
   updating: boolean
   departments: Department[]
   categories: Category[]
   /** When true, shows a payment_type select instead of using category as type */
   showPaymentTypeField?: boolean
 }
+
+const PaymentEditDialogSchema = z.object({
+  department_id: z.string().trim().min(1, "Department is required"),
+  payment_type: z.union([z.literal(""), z.enum(["one-time", "recurring"])]),
+  category: z.string().trim().min(1, "Category is required"),
+  title: z.string().trim().min(1, "Title is required"),
+  description: z.string(),
+  amount: z.string().trim().min(1, "Amount is required"),
+  currency: z.string().trim().min(1, "Currency is required"),
+  recurrence_period: z.string(),
+  next_payment_due: z.string(),
+  payment_date: z.string(),
+  issuer_name: z.string().trim().min(1, "Issuer Name is required"),
+  issuer_phone_number: z.string().trim().min(1, "Issuer Phone is required"),
+  issuer_address: z.string(),
+  payment_reference: z.string(),
+  notes: z.string(),
+})
 
 export function PaymentEditDialog({
   open,
@@ -41,7 +63,22 @@ export function PaymentEditDialog({
   categories,
   showPaymentTypeField = false,
 }: PaymentEditDialogProps) {
-  const isRecurring = showPaymentTypeField ? formData.payment_type === "recurring" : formData.category === "recurring"
+  const form = useForm<PaymentEditFormData>({
+    resolver: zodResolver(PaymentEditDialogSchema),
+    defaultValues: formData,
+  })
+  useEffect(() => {
+    form.reset(formData)
+  }, [form, formData])
+  useEffect(() => {
+    const subscription = form.watch((value) => {
+      onFormDataChange({ ...formData, ...value } as PaymentEditFormData)
+    })
+    return () => subscription.unsubscribe()
+  }, [form, formData, onFormDataChange])
+
+  const values = form.watch()
+  const recurringState = showPaymentTypeField ? values.payment_type === "recurring" : values.category === "recurring"
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -50,12 +87,12 @@ export function PaymentEditDialog({
           <DialogTitle>Edit Payment</DialogTitle>
           <DialogDescription>Update the payment details below.</DialogDescription>
         </DialogHeader>
-        <form onSubmit={onSubmit} className="space-y-4">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <FormFieldGroup label="Department">
               <Select
-                value={formData.department_id}
-                onValueChange={(value) => onFormDataChange({ ...formData, department_id: value })}
+                value={values.department_id}
+                onValueChange={(value) => form.setValue("department_id", value, { shouldValidate: true })}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="Select department" />
@@ -74,10 +111,8 @@ export function PaymentEditDialog({
               <div className="space-y-2">
                 <Label htmlFor="payment_type">Payment Type</Label>
                 <Select
-                  value={formData.payment_type}
-                  onValueChange={(value: "one-time" | "recurring") =>
-                    onFormDataChange({ ...formData, payment_type: value })
-                  }
+                  value={values.payment_type}
+                  onValueChange={(value: "one-time" | "recurring") => form.setValue("payment_type", value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select Type" />
@@ -92,10 +127,8 @@ export function PaymentEditDialog({
               <div className="space-y-2">
                 <Label htmlFor="category">Category</Label>
                 <Select
-                  value={formData.category}
-                  onValueChange={(value: "one-time" | "recurring") =>
-                    onFormDataChange({ ...formData, category: value })
-                  }
+                  value={values.category}
+                  onValueChange={(value: "one-time" | "recurring") => form.setValue("category", value)}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select Category" />
@@ -111,10 +144,7 @@ export function PaymentEditDialog({
             {showPaymentTypeField && (
               <div className="space-y-2">
                 <Label htmlFor="category">Category</Label>
-                <Select
-                  value={formData.category}
-                  onValueChange={(value) => onFormDataChange({ ...formData, category: value })}
-                >
+                <Select value={values.category} onValueChange={(value) => form.setValue("category", value)}>
                   <SelectTrigger>
                     <SelectValue placeholder="Select Category" />
                   </SelectTrigger>
@@ -135,8 +165,8 @@ export function PaymentEditDialog({
               <Label htmlFor="title">Title</Label>
               <Input
                 id="title"
-                value={formData.title}
-                onChange={(e) => onFormDataChange({ ...formData, title: e.target.value })}
+                value={values.title}
+                onChange={(e) => form.setValue("title", e.target.value, { shouldValidate: true })}
               />
             </div>
           </div>
@@ -151,8 +181,8 @@ export function PaymentEditDialog({
                 <Input
                   id="issuer_name"
                   className="pl-9"
-                  value={formData.issuer_name}
-                  onChange={(e) => onFormDataChange({ ...formData, issuer_name: e.target.value })}
+                  value={values.issuer_name}
+                  onChange={(e) => form.setValue("issuer_name", e.target.value, { shouldValidate: true })}
                   required
                 />
               </div>
@@ -164,8 +194,8 @@ export function PaymentEditDialog({
                 <Input
                   id="issuer_phone"
                   className="pl-9"
-                  value={formData.issuer_phone_number}
-                  onChange={(e) => onFormDataChange({ ...formData, issuer_phone_number: e.target.value })}
+                  value={values.issuer_phone_number}
+                  onChange={(e) => form.setValue("issuer_phone_number", e.target.value, { shouldValidate: true })}
                   required
                 />
               </div>
@@ -177,8 +207,8 @@ export function PaymentEditDialog({
                 <Input
                   id="issuer_address"
                   className="pl-9"
-                  value={formData.issuer_address}
-                  onChange={(e) => onFormDataChange({ ...formData, issuer_address: e.target.value })}
+                  value={values.issuer_address}
+                  onChange={(e) => form.setValue("issuer_address", e.target.value)}
                 />
               </div>
             </div>
@@ -193,17 +223,14 @@ export function PaymentEditDialog({
                   id="amount"
                   type="number"
                   className="pl-9"
-                  value={formData.amount}
-                  onChange={(e) => onFormDataChange({ ...formData, amount: e.target.value })}
+                  value={values.amount}
+                  onChange={(e) => form.setValue("amount", e.target.value, { shouldValidate: true })}
                 />
               </div>
             </div>
             <div className="space-y-2">
               <Label htmlFor="currency">Currency</Label>
-              <Select
-                value={formData.currency}
-                onValueChange={(value) => onFormDataChange({ ...formData, currency: value })}
-              >
+              <Select value={values.currency} onValueChange={(value) => form.setValue("currency", value)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -216,13 +243,13 @@ export function PaymentEditDialog({
             </div>
           </div>
 
-          {isRecurring ? (
+          {recurringState ? (
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="recurrence">Recurrence Period</Label>
                 <Select
-                  value={formData.recurrence_period}
-                  onValueChange={(value) => onFormDataChange({ ...formData, recurrence_period: value })}
+                  value={values.recurrence_period}
+                  onValueChange={(value) => form.setValue("recurrence_period", value)}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -239,8 +266,8 @@ export function PaymentEditDialog({
                 <Input
                   id="next_due"
                   type="date"
-                  value={formData.next_payment_due}
-                  onChange={(e) => onFormDataChange({ ...formData, next_payment_due: e.target.value })}
+                  value={values.next_payment_due}
+                  onChange={(e) => form.setValue("next_payment_due", e.target.value)}
                 />
               </div>
             </div>
@@ -250,8 +277,8 @@ export function PaymentEditDialog({
               <Input
                 id="payment_date"
                 type="date"
-                value={formData.payment_date}
-                onChange={(e) => onFormDataChange({ ...formData, payment_date: e.target.value })}
+                value={values.payment_date}
+                onChange={(e) => form.setValue("payment_date", e.target.value)}
               />
             </div>
           )}
@@ -260,8 +287,8 @@ export function PaymentEditDialog({
             <Label htmlFor="description">Description</Label>
             <Textarea
               id="description"
-              value={formData.description}
-              onChange={(e) => onFormDataChange({ ...formData, description: e.target.value })}
+              value={values.description}
+              onChange={(e) => form.setValue("description", e.target.value)}
             />
           </div>
 

@@ -12,11 +12,13 @@ import {
   appendAuditLog,
   resolveLeadForDepartment,
 } from "@/lib/help-desk/server"
+import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { sendHelpDeskMail } from "@/lib/help-desk/mailer"
 import { logger } from "@/lib/logger"
 import { getPaginationRange, paginatedResponse, PaginationSchema } from "@/lib/pagination"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { checkIdempotency, getIdempotencyKey, storeIdempotencyKey } from "@/lib/idempotency"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("help-desk-tickets")
 export const dynamic = "force-dynamic"
@@ -103,6 +105,8 @@ export async function GET(request: NextRequest) {
       .order("created_at", { ascending: false })
 
     const managedDepartments = getManagedDepartments(profile as HelpDeskProfile)
+    const requestScope = await getRequestScope()
+    const scopedDepts = requestScope ? getScopedDepartments(requestScope) : []
 
     if (scope === "mine") {
       query = query.or(`requester_id.eq.${user.id},assigned_to.eq.${user.id},created_by.eq.${user.id}`)
@@ -112,17 +116,19 @@ export async function GET(request: NextRequest) {
       }
       query = query.eq("service_department", profile.department).in("handling_mode", ["queue", "department"])
     } else if (scope === "department") {
-      if (!isAdminRole(profile.role) && !profile.is_department_lead) {
+      // Global admin (scopeMode: "global") → scopedDepts is null → no filter.
+      // Lead-mode admin or department lead → scopedDepts is an array → filter by managed depts.
+      if (scopedDepts !== null && !profile.is_department_lead) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }
 
-      if (isAdminRole(profile.role)) {
-        // Admin can see all departments in this scope.
-      } else if (!managedDepartments.length) {
+      if (scopedDepts === null) {
+        // Global admin — no department filter needed
+      } else if (!scopedDepts.length) {
         return NextResponse.json(paginatedResponse([], 0, pagination))
       } else {
-        const scopedDepartments = managedDepartments.join(",")
-        query = query.or(`service_department.in.(${scopedDepartments}),requester_department.in.(${scopedDepartments})`)
+        const deptList = scopedDepts.join(",")
+        query = query.or(`service_department.in.(${deptList}),requester_department.in.(${deptList})`)
       }
     }
 
@@ -159,6 +165,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`help-desk-tickets:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const { supabase, user, profile } = await getAuthContext()
     const idempotencyClient = getServiceRoleClientOrFallback(supabase)
@@ -187,7 +199,9 @@ export async function POST(request: NextRequest) {
     const requestType = parsed.data.request_type
     const priority = parsed.data.priority
 
-    if (!isAdminRole(profile.role) && profile.department && profile.department === serviceDepartment) {
+    const postScope = await getRequestScope()
+    const isGlobalAdminPost = isAdminRole(profile.role) && postScope?.scopeMode !== "lead"
+    if (!isGlobalAdminPost && profile.department && profile.department === serviceDepartment) {
       return NextResponse.json(
         { error: "You cannot submit help desk requests to your own department" },
         { status: 400 }

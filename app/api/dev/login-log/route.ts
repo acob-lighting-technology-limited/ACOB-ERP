@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("dev-login-log")
 const DevLoginLogSchema = z.object({
@@ -9,6 +10,12 @@ const DevLoginLogSchema = z.object({
 })
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`dev-login-log:${getClientId(request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   if (process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "Not available in production" }, { status: 404 })
   }

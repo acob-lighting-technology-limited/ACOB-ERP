@@ -8,7 +8,7 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import type { CorrespondenceRecord } from "@/types/correspondence"
-import { CreateReferenceDialog } from "@/components/correspondence/create-reference-dialog"
+import { CreateReferenceDialog, type CreateReferenceForm } from "@/components/correspondence/create-reference-dialog"
 import { formatName } from "@/lib/utils"
 
 interface DepartmentCodeOption {
@@ -18,6 +18,7 @@ interface DepartmentCodeOption {
 
 interface PortalReferenceGeneratorContentProps {
   currentViewerName: string
+  currentViewerId: string
   currentViewerDepartment: string
   currentViewerRole?: string
   isDepartmentLead?: boolean
@@ -29,8 +30,11 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
+const EDITABLE_STATUSES = ["under_review", "returned_for_correction", "rejected"]
+
 export function PortalReferenceGeneratorContent({
   currentViewerName,
+  currentViewerId,
   currentViewerDepartment,
   initialRecords,
   departmentCodes,
@@ -45,19 +49,27 @@ export function PortalReferenceGeneratorContent({
   const [activeTab, setActiveTab] = useState<"internal" | "external">("internal")
   const [isSaving, setIsSaving] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
-  const [dispatchingId, setDispatchingId] = useState<string | null>(null)
-  const [form, setForm] = useState({
+  const [editOpen, setEditOpen] = useState(false)
+  const [editingRecord, setEditingRecord] = useState<CorrespondenceRecord | null>(null)
+
+  const emptyForm: CreateReferenceForm = {
     department_name: initialDepartment,
     letter_type: "external",
-    category: "notice",
+    category: "",
+    custom_category_name: "",
+    custom_category_code: "",
     subject: "",
     recipient_name: "",
-    sender_name: currentViewerName,
+    recipient_code: "",
+    requester_id: currentViewerId,
     action_required: false,
     due_date: "",
     metadata_text: "",
-    attachments: [] as File[],
-  })
+    attachments: [],
+  }
+
+  const [form, setForm] = useState<CreateReferenceForm>(emptyForm)
+  const [editForm, setEditForm] = useState<CreateReferenceForm>(emptyForm)
 
   const stats = useMemo(
     () => ({
@@ -65,7 +77,7 @@ export function PortalReferenceGeneratorContent({
       open: records.filter((record) =>
         ["open", "draft", "under_review", "assigned_action_pending"].includes(record.status)
       ).length,
-      closed: records.filter((record) => ["closed", "sent", "filed"].includes(record.status)).length,
+      closed: records.filter((record) => ["closed", "sent", "filed", "approved"].includes(record.status)).length,
       internal: records.filter((record) => record.letter_type === "internal").length,
       external: records.filter((record) => record.letter_type === "external").length,
     }),
@@ -92,7 +104,7 @@ export function PortalReferenceGeneratorContent({
     let active = true
 
     async function loadRecords() {
-      const response = await fetch("/api/correspondence/records?page=1&limit=100", { cache: "no-store" })
+      const response = await fetch("/api/correspondence/records?page=1&limit=100&scope=mine", { cache: "no-store" })
       const payload = await response.json()
       if (!response.ok || !active) return
       setRecords(payload.data || [])
@@ -115,41 +127,54 @@ export function PortalReferenceGeneratorContent({
       toast.error("Department is required")
       return
     }
+    if (!form.recipient_code.trim()) {
+      toast.error("Recipient Code is required")
+      return
+    }
+    if (!form.due_date) {
+      toast.error("Due Date is required")
+      return
+    }
 
     setIsSaving(true)
     try {
+      let categoryValue = form.category === "__custom__" ? "" : form.category
+      if (form.category === "__custom__") {
+        if (!form.custom_category_name.trim() || !form.custom_category_code.trim()) {
+          toast.error("Custom category name and code are required")
+          setIsSaving(false)
+          return
+        }
+        const catRes = await fetch("/api/correspondence/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: form.custom_category_name.trim(), code: form.custom_category_code.trim() }),
+        })
+        const catPayload = await catRes.json()
+        if (!catRes.ok && catRes.status !== 409) throw new Error(catPayload.error || "Failed to save custom category")
+        categoryValue = form.custom_category_code.trim().toUpperCase()
+      }
+
       const metadata = form.metadata_text.trim() ? { notes: form.metadata_text.trim() } : null
       const formPayload = new FormData()
       formPayload.append("department_name", form.department_name)
-      formPayload.append("letter_type", form.letter_type)
-      formPayload.append("category", form.category)
+      formPayload.append("letter_type", form.letter_type || "external")
+      formPayload.append("category", categoryValue)
       formPayload.append("subject", form.subject)
       formPayload.append("recipient_name", form.recipient_name || "")
-      formPayload.append("sender_name", form.sender_name || "")
+      formPayload.append("recipient_code", form.recipient_code.trim().toUpperCase())
+      formPayload.append("originator_id", form.requester_id || currentViewerId)
       formPayload.append("action_required", String(form.action_required))
-      formPayload.append("due_date", form.due_date || "")
+      formPayload.append("due_date", form.due_date)
       formPayload.append("metadata", JSON.stringify(metadata || {}))
       form.attachments.forEach((file) => formPayload.append("attachments", file))
-      const response = await fetch("/api/correspondence/records", {
-        method: "POST",
-        body: formPayload,
-      })
+
+      const response = await fetch("/api/correspondence/records", { method: "POST", body: formPayload })
       const responsePayload = await response.json()
       if (!response.ok) throw new Error(responsePayload.error || "Failed to create correspondence")
       toast.success("Correspondence created")
       setCreateOpen(false)
-      setForm({
-        department_name: initialDepartment,
-        letter_type: "external",
-        category: "notice",
-        subject: "",
-        recipient_name: "",
-        sender_name: currentViewerName,
-        action_required: false,
-        due_date: "",
-        metadata_text: "",
-        attachments: [],
-      })
+      setForm({ ...emptyForm })
       setRecords((current) => [responsePayload.data, ...current])
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Failed to create correspondence"))
@@ -158,44 +183,82 @@ export function PortalReferenceGeneratorContent({
     }
   }
 
-  async function updateStatus(recordId: string, status: string) {
+  function openEdit(row: CorrespondenceRecord) {
+    setEditingRecord(row)
+    setEditForm({
+      department_name: row.department_name || "",
+      letter_type: row.letter_type || "external",
+      category: row.category || "",
+      custom_category_name: "",
+      custom_category_code: "",
+      subject: row.subject,
+      recipient_name: row.recipient_name || "",
+      recipient_code: row.recipient_code || "",
+      requester_id: row.originator_id || currentViewerId,
+      action_required: row.action_required ?? false,
+      due_date: row.due_date || "",
+      metadata_text: (row.metadata as Record<string, string> | null)?.notes || "",
+      attachments: [],
+    })
+    setEditOpen(true)
+  }
+
+  async function updateRecord(event: React.FormEvent) {
+    event.preventDefault()
+    if (!editingRecord) return
+    if (!editForm.subject.trim()) {
+      toast.error("Subject is required")
+      return
+    }
+    if (!editForm.due_date) {
+      toast.error("Due Date is required")
+      return
+    }
+
+    setIsSaving(true)
     try {
-      const response = await fetch(`/api/correspondence/records/${recordId}`, {
+      const isResubmit = editingRecord.status === "rejected"
+      const metadata = editForm.metadata_text.trim() ? { notes: editForm.metadata_text.trim() } : {}
+      const body: Record<string, unknown> = {
+        subject: editForm.subject.trim(),
+        recipient_name: editForm.recipient_name.trim() || null,
+        letter_type: editForm.letter_type || "external",
+        category: editForm.category || null,
+        due_date: editForm.due_date,
+        metadata,
+      }
+      if (isResubmit) body.status = "under_review"
+
+      const res = await fetch(`/api/correspondence/records/${editingRecord.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status }),
+        body: JSON.stringify(body),
       })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || "Failed to update status")
-      toast.success("Status updated")
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error || "Failed to update correspondence")
+
+      toast.success(isResubmit ? "Correspondence resubmitted for review" : "Correspondence updated")
+      setEditOpen(false)
+      setEditingRecord(null)
       setRecords((current) =>
-        current.map((record) =>
-          record.id === recordId ? { ...record, status: status as typeof record.status } : record
-        )
+        current.map((r) => (r.id === editingRecord.id ? { ...r, ...(payload.data as CorrespondenceRecord) } : r))
       )
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "Failed to update status"))
+      toast.error(getErrorMessage(error, "Failed to update correspondence"))
+    } finally {
+      setIsSaving(false)
     }
   }
 
-  async function dispatchRecord(recordId: string) {
-    setDispatchingId(recordId)
+  async function deleteRecord(recordId: string) {
     try {
-      const response = await fetch(`/api/correspondence/records/${recordId}/dispatch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ final_status: "sent", dispatch_method: "email" }),
-      })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || "Failed to dispatch correspondence")
-      toast.success("Correspondence dispatched")
-      setRecords((current) =>
-        current.map((record) => (record.id === recordId ? { ...record, status: "sent" } : record))
-      )
+      const res = await fetch(`/api/correspondence/records/${recordId}`, { method: "DELETE" })
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error || "Failed to delete correspondence")
+      toast.success("Correspondence deleted")
+      setRecords((current) => current.filter((r) => r.id !== recordId))
     } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "Failed to dispatch correspondence"))
-    } finally {
-      setDispatchingId(null)
+      toast.error(getErrorMessage(error, "Failed to delete correspondence"))
     }
   }
 
@@ -208,7 +271,11 @@ export function PortalReferenceGeneratorContent({
         accessor: (row) => row.reference_number,
         resizable: true,
         initialWidth: 220,
-        render: (row) => <span className="font-medium">{row.status === "approved" ? row.reference_number : "-"}</span>,
+        render: (row) => (
+          <span className="font-medium">
+            {["approved", "sent", "filed"].includes(row.status) ? row.reference_number : "-"}
+          </span>
+        ),
       },
       {
         key: "letter_type",
@@ -237,6 +304,7 @@ export function PortalReferenceGeneratorContent({
         accessor: (row) => row.subject,
       },
     ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     []
   )
 
@@ -274,15 +342,34 @@ export function PortalReferenceGeneratorContent({
       activeTab={activeTab}
       onTabChange={(tab) => setActiveTab(tab as "internal" | "external")}
       actions={
-        <CreateReferenceDialog
-          open={createOpen}
-          onOpenChange={setCreateOpen}
-          form={form}
-          onFormChange={setForm}
-          onSubmit={createRecord}
-          isSaving={isSaving}
-          departmentCodes={departmentCodes}
-        />
+        <>
+          <CreateReferenceDialog
+            open={createOpen}
+            onOpenChange={setCreateOpen}
+            form={form}
+            onFormChange={setForm}
+            onSubmit={createRecord}
+            isSaving={isSaving}
+            departmentCodes={departmentCodes}
+            currentUserId={currentViewerId}
+            currentUserName={currentViewerName}
+          />
+          <CreateReferenceDialog
+            mode="edit"
+            open={editOpen}
+            onOpenChange={(open) => {
+              setEditOpen(open)
+              if (!open) setEditingRecord(null)
+            }}
+            form={editForm}
+            onFormChange={setEditForm}
+            onSubmit={updateRecord}
+            isSaving={isSaving}
+            departmentCodes={departmentCodes}
+            currentUserId={currentViewerId}
+            currentUserName={currentViewerName}
+          />
+        </>
       }
       stats={
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -301,7 +388,7 @@ export function PortalReferenceGeneratorContent({
             iconColor="text-amber-500"
           />
           <StatCard
-            title="Closed"
+            title="Approved"
             value={stats.closed}
             icon={FileCode2}
             iconBgColor="bg-emerald-500/10"
@@ -330,18 +417,16 @@ export function PortalReferenceGeneratorContent({
         }
         rowActions={[
           {
-            label: "Send for Review",
-            onClick: (row) => {
-              void updateStatus(row.id, "under_review")
-            },
-            hidden: (row) => row.status !== "draft",
+            label: "Edit",
+            onClick: (row) => openEdit(row),
+            hidden: (row) => !EDITABLE_STATUSES.includes(row.status),
           },
           {
-            label: dispatchingId ? "Dispatching..." : "Dispatch",
+            label: "Delete",
             onClick: (row) => {
-              void dispatchRecord(row.id)
+              void deleteRecord(row.id)
             },
-            hidden: (row) => row.status !== "approved" || dispatchingId === row.id,
+            hidden: (row) => !EDITABLE_STATUSES.includes(row.status),
           },
         ]}
         expandable={{
@@ -349,6 +434,7 @@ export function PortalReferenceGeneratorContent({
             <div className="grid gap-3 md:grid-cols-2">
               <p className="text-sm">
                 <span className="text-muted-foreground">Recipient:</span> {row.recipient_name || "-"}
+                {row.recipient_code ? ` (${row.recipient_code})` : ""}
               </p>
               <p className="text-sm">
                 <span className="text-muted-foreground">Sender:</span> {row.sender_name || "-"}
@@ -359,6 +445,11 @@ export function PortalReferenceGeneratorContent({
               <p className="text-sm">
                 <span className="text-muted-foreground">Action Required:</span> {row.action_required ? "Yes" : "No"}
               </p>
+              {row.status === "rejected" && (
+                <p className="text-destructive text-sm md:col-span-2">
+                  <span className="font-medium">Rejected</span> — you can edit and resubmit, or delete this record.
+                </p>
+              )}
             </div>
           ),
         }}

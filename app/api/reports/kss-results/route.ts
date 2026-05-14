@@ -3,6 +3,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("api-reports-kss-results")
 
@@ -48,6 +49,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`reports-kss-results:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {

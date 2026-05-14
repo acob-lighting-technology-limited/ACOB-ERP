@@ -7,6 +7,7 @@ import { buildGeneratedReportExportPath } from "@/lib/reports/document-storage"
 import { generateActionPointsDocxBuffer } from "@/lib/reports/action-points-template"
 import { generateActionPointsPdfFromDocxBuffer } from "@/lib/reports/action-points-word-pdf"
 import { normalizeDepartmentName } from "@/shared/departments"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("api-reports-action-points-export")
 const INVALID_FILENAME_CHARS = /[<>:"/\\|?*\u0000-\u001F]+/g
@@ -91,6 +92,12 @@ async function persistPdf(filePath: string, pdfBuffer: Uint8Array): Promise<void
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`reports-action-points-export:${getClientId(request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const body = (await request.json()) as ExportBody
     const { actions, week, year, meetingDate, department, format, persist = false, reuseStored = false } = body

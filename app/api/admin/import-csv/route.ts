@@ -4,6 +4,7 @@ import { createClient as createServiceClient } from "@supabase/supabase-js"
 import { canAccessAdminSection, resolveAdminScope } from "@/lib/admin/rbac"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("import-csv")
 
@@ -11,6 +12,12 @@ type AdminImportClient = Awaited<ReturnType<typeof createClient>>
 type CsvRecord = Record<string, string>
 
 export async function PATCH(_request: Request) {
+  const rl = await rateLimit(`admin-import-csv:${getClientId(_request)}`, { limit: 5, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
 
@@ -321,5 +328,11 @@ export async function PATCH(_request: Request) {
 
 // POST kept for backwards compat — prefer PATCH
 export async function POST(_request: Request) {
+  const rl = await rateLimit(`admin-import-csv:${getClientId(_request)}`, { limit: 5, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   return PATCH(_request)
 }

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { getAuthContext, HelpDeskProfile, HelpDeskTicketRow, isAdminRole } from "@/lib/help-desk/server"
+import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { logger } from "@/lib/logger"
 
 const log = logger("help-desk-dashboard")
@@ -24,14 +25,18 @@ export async function GET() {
       ? ((profile as HelpDeskProfile).managed_departments ?? [])
       : []
 
-    if (!isAdminRole(profile.role)) {
-      if (profile.is_department_lead) {
-        if (managedDepartments.length) {
-          // Filter in memory because a ticket may be actionable either by
-          // service department ownership or requester-department approval.
-        } else {
-          query = query.eq("requester_id", user.id)
-        }
+    const requestScope = await getRequestScope()
+    // scopedDepts === null  → global admin, unrestricted
+    // scopedDepts === []    → no managed depts (lead or lead-mode admin with no scope)
+    // scopedDepts === [...] → filter to these departments
+    const scopedDepts = requestScope ? getScopedDepartments(requestScope) : []
+
+    if (scopedDepts !== null) {
+      // Not a global admin — apply restrictions
+      if (scopedDepts.length > 0) {
+        // Has managed departments — fetch all and filter in memory below
+      } else if (profile.is_department_lead) {
+        query = query.eq("requester_id", user.id)
       } else {
         query = query.or(`requester_id.eq.${user.id},assigned_to.eq.${user.id}`)
       }
@@ -41,11 +46,11 @@ export async function GET() {
     if (error) throw error
 
     let rows: HelpDeskTicketRow[] = (tickets as HelpDeskTicketRow[] | null) || []
-    if (!isAdminRole(profile.role) && profile.is_department_lead && managedDepartments.length) {
+    if (scopedDepts !== null && scopedDepts.length > 0) {
       rows = rows.filter(
         (ticket) =>
-          managedDepartments.includes(ticket.service_department ?? "") ||
-          managedDepartments.includes(ticket.requester_department ?? "")
+          scopedDepts.includes(ticket.service_department ?? "") ||
+          scopedDepts.includes(ticket.requester_department ?? "")
       )
     }
     const now = Date.now()

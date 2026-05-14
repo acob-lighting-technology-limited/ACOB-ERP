@@ -8,6 +8,7 @@ import { resolveEffectiveMeetingDateIso } from "@/lib/reports/meeting-date"
 import { logger } from "@/lib/logger"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getPaginationRange, paginatedResponse, PaginationSchema } from "@/lib/pagination"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("api-reports-kss-roster")
 
@@ -211,6 +212,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const rl = await rateLimit(`reports-kss-roster:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {
@@ -301,6 +308,12 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const rl = await rateLimit(`reports-kss-roster:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {
@@ -397,6 +410,12 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const rl = await rateLimit(`reports-kss-roster:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {

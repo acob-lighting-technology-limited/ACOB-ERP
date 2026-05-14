@@ -12,6 +12,7 @@ import { formValidation } from "@/lib/validation"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { checkIdempotency, getIdempotencyKey, storeIdempotencyKey } from "@/lib/idempotency"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("admin-create-user")
 
@@ -20,6 +21,12 @@ export const dynamic = "force-dynamic"
 type AdminCreateUserClient = Awaited<ReturnType<typeof createServerClient>>
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`admin-create-user:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   // First, verify the caller is authenticated and has user-management privileges
   const supabase = await createServerClient()
   const {
@@ -288,5 +295,11 @@ export async function PATCH(request: NextRequest) {
 
 // POST kept for backwards compat — prefer PATCH
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`admin-create-user:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   return PATCH(request)
 }

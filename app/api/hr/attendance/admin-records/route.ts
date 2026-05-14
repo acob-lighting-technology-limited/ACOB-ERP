@@ -3,6 +3,8 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { getRequestScope } from "@/lib/admin/api-scope"
 
 const log = logger("hr-attendance-admin-records")
 
@@ -41,6 +43,12 @@ function reviewStatusPriority(status: string | null | undefined) {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`hr-attendance-admin-records:${getClientId(request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {
@@ -65,6 +73,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
+    const attendanceScope = await getRequestScope()
+    const role = String(actorProfile?.role || "").toLowerCase()
+    const isAdminLike = ["developer", "admin", "super_admin"].includes(role)
+    // Global admin (scopeMode: "global") bypasses department restriction.
+    // Admin in lead mode is restricted the same as a department lead.
+    const isGlobalAdmin = isAdminLike && attendanceScope?.scopeMode !== "lead"
+
     const { data: targetProfile } = await supabase
       .from("profiles")
       .select("id, department")
@@ -75,9 +90,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Employee not found" }, { status: 404 })
     }
 
-    const role = String(actorProfile?.role || "").toLowerCase()
-    const isAdminLike = ["developer", "admin", "super_admin"].includes(role)
-    if (!isAdminLike) {
+    if (!isGlobalAdmin) {
       const managed = Array.from(
         new Set([actorProfile?.department, ...(actorProfile?.lead_departments || [])].filter(Boolean) as string[])
       )

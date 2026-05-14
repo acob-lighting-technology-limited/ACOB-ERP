@@ -9,8 +9,10 @@ import {
   isAdminRole,
   resolveLeadForDepartment,
 } from "@/lib/help-desk/server"
+import { getRequestScope } from "@/lib/admin/api-scope"
 import { sendHelpDeskMail } from "@/lib/help-desk/mailer"
 import { logger } from "@/lib/logger"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("help-desk-tickets-pivot")
 export const dynamic = "force-dynamic"
@@ -38,6 +40,12 @@ function normalizeApprovalProfiles(profiles: ApprovalProfileRow[] | null | undef
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`help-desk-tickets-pivot:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const { supabase, user, profile } = await getAuthContext()
 
@@ -62,10 +70,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 })
     }
 
+    const pivotScope = await getRequestScope()
+    const isGlobalAdmin = isAdminRole(profile.role) && pivotScope?.scopeMode !== "lead"
     const canPivot =
-      ticket.assigned_to === user.id ||
-      isAdminRole(profile.role) ||
-      canLeadDepartment(profile, ticket.service_department)
+      ticket.assigned_to === user.id || isGlobalAdmin || canLeadDepartment(profile, ticket.service_department)
 
     if (!canPivot) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })

@@ -5,6 +5,7 @@ import { z } from "zod"
 import { getDepartmentScope, resolveAdminScope } from "@/lib/admin/rbac"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("departments")
 
@@ -84,6 +85,12 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
 // PUT /api/departments/[id] - Update a department (admin-like only)
 export async function PUT(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`departments:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
 
@@ -145,6 +152,12 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
 // DELETE /api/departments/[id] - Soft delete a department (admin-like only)
 export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`departments:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
 

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getOneDriveService } from "@/lib/onedrive"
 import { logger } from "@/lib/logger"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("hr-leave-evidence-upload")
 
@@ -12,6 +13,12 @@ function sanitizeFileName(name: string): string {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`hr-leave-evidence-upload:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {

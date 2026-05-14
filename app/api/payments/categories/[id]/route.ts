@@ -5,6 +5,7 @@ import { z } from "zod"
 import { resolveAdminScope } from "@/lib/admin/rbac"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("payments-categories")
 
@@ -41,6 +42,12 @@ async function createClient() {
 // PUT /api/payments/categories/[id] - Update a payment category
 export async function PUT(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`payments-categories:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
 
@@ -96,6 +103,12 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
 // DELETE /api/payments/categories/[id] - Delete a payment category
 export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`payments-categories:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
 

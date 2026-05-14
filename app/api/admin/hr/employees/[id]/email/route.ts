@@ -6,6 +6,7 @@ import { writeAuditLog } from "@/lib/audit/write-audit"
 import { logger } from "@/lib/logger"
 import { createClient } from "@/lib/supabase/server"
 import { formValidation } from "@/lib/validation"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("admin-hr-employee-email")
 
@@ -28,6 +29,12 @@ function isManageUsersRole(role: string | null | undefined): boolean {
 
 export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`admin-hr-employees-email:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {

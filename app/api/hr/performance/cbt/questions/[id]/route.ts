@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("hr-performance-cbt-question-detail")
 
@@ -31,6 +32,12 @@ async function getAuthorizedContext() {
 
 export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`hr-performance-cbt-questions:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const { supabase, dataClient, user } = await getAuthorizedContext()
     if (!user) {
@@ -85,6 +92,12 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
 
 export async function DELETE(_: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit("hr-performance-cbt-questions", { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const { supabase, dataClient, user } = await getAuthorizedContext()
     if (!user) {

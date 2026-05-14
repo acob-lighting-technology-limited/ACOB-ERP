@@ -3,6 +3,8 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { getRequestScope, type AdminScope } from "@/lib/admin/api-scope"
 
 const log = logger("competency-frameworks")
 
@@ -31,8 +33,8 @@ const UpdateCompetencySchema = z.object({
   is_active: z.boolean().optional(),
 })
 
-function requireAdmin(role: string | null | undefined) {
-  return ["developer", "admin", "super_admin"].includes(String(role || "").toLowerCase())
+function requireAdmin(scope: AdminScope | null) {
+  return scope?.isAdminLike === true && scope.scopeMode !== "lead"
 }
 
 export async function GET() {
@@ -62,6 +64,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-competencies:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const adminSupabase = getServiceRoleClientOrFallback(supabase)
@@ -76,7 +84,7 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .single<{ role?: string | null }>()
 
-    if (!requireAdmin(profile?.role)) {
+    if (!requireAdmin(await getRequestScope())) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -107,6 +115,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-competencies:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const adminSupabase = getServiceRoleClientOrFallback(supabase)
@@ -121,7 +135,7 @@ export async function PATCH(request: NextRequest) {
       .eq("id", user.id)
       .single<{ role?: string | null }>()
 
-    if (!requireAdmin(profile?.role)) {
+    if (!requireAdmin(await getRequestScope())) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -153,6 +167,12 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-competencies:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const adminSupabase = getServiceRoleClientOrFallback(supabase)
@@ -167,7 +187,7 @@ export async function DELETE(request: NextRequest) {
       .eq("id", user.id)
       .single<{ role?: string | null }>()
 
-    if (!requireAdmin(profile?.role)) {
+    if (!requireAdmin(await getRequestScope())) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

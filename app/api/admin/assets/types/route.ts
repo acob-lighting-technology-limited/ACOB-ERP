@@ -4,6 +4,7 @@ import { canAccessAdminSection, resolveAdminScope } from "@/lib/admin/rbac"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 interface CreateAssetTypePayload {
   label?: string
@@ -60,6 +61,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`admin-assets-types:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   const supabase = await createClient()
   const {
     data: { user },

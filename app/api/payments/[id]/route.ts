@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { getDepartmentScope, resolveAdminScope, normalizeDepartmentName } from "@/lib/admin/rbac"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 type PaymentsClient = Awaited<ReturnType<typeof createClient>>
 
@@ -117,6 +118,12 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
 // PATCH /api/payments/[id] - Update a payment
 export async function PATCH(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`payments:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const { id } = params
@@ -233,6 +240,12 @@ export async function PATCH(request: Request, props: { params: Promise<{ id: str
 // DELETE /api/payments/[id] - Soft delete a payment
 export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`payments:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const { id } = params

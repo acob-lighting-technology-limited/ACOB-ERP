@@ -535,37 +535,11 @@ export function PaymentsTable({
     },
   ]
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault()
+  const handleSubmit = async (submittedFormData: CreatePaymentFormData) => {
     setSubmitting(true)
 
     try {
-      if (
-        !formData.department_id ||
-        !formData.payment_type ||
-        !formData.amount ||
-        !formData.title ||
-        !formData.issuer_name ||
-        !formData.issuer_phone_number
-      ) {
-        toast.error("Please fill in all required fields (including Issuer Name & Phone)")
-        setSubmitting(false)
-        return
-      }
-
-      if (formData.payment_type === "recurring" && (!formData.recurrence_period || !formData.next_payment_due)) {
-        toast.error("Recurring payments require a period and start date")
-        setSubmitting(false)
-        return
-      }
-
-      if (formData.payment_type === "one-time" && !formData.payment_date) {
-        toast.error("One-time payments require a payment date")
-        setSubmitting(false)
-        return
-      }
-
-      if (formData.payment_type === "one-time" && !receiptFile) {
+      if (submittedFormData.payment_type === "one-time" && !receiptFile) {
         toast.error("One-time payments require a receipt to be uploaded")
         setSubmitting(false)
         return
@@ -575,9 +549,9 @@ export function PaymentsTable({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...formData,
-          category: formData.payment_type,
-          amount: parseFloat(formData.amount),
+          ...submittedFormData,
+          category: submittedFormData.payment_type,
+          amount: parseFloat(submittedFormData.amount),
         }),
       })
 
@@ -590,12 +564,12 @@ export function PaymentsTable({
       const data = await response.json()
       const paymentId = data.data.id
 
-      if (formData.payment_type === "one-time" && receiptFile) {
+      if (submittedFormData.payment_type === "one-time" && receiptFile) {
         const uploadFormData = new FormData()
         uploadFormData.append("file", receiptFile)
         uploadFormData.append("payment_id", paymentId)
         uploadFormData.append("document_type", "receipt")
-        uploadFormData.append("applicable_date", formData.payment_date)
+        uploadFormData.append("applicable_date", submittedFormData.payment_date)
 
         const uploadResponse = await fetch(`/api/payments/${paymentId}/documents`, {
           method: "POST",

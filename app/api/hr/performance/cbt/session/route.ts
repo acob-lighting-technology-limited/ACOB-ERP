@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { logger } from "@/lib/logger"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("hr-performance-cbt-session")
 
@@ -86,6 +87,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-cbt-session:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const parsed = StartSchema.safeParse(await request.json())
     if (!parsed.success) {
@@ -188,6 +195,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-cbt-session:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const parsed = SubmitSchema.safeParse(await request.json())
     if (!parsed.success) {

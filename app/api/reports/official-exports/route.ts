@@ -11,6 +11,8 @@ import {
   tryReadStoredOfficialPdf,
   type OfficialReportExportType,
 } from "@/lib/reports/official-pdf"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { getRequestScope } from "@/lib/admin/api-scope"
 
 const log = logger("api-reports-official-exports")
 
@@ -99,6 +101,12 @@ async function ensureOfficialExportForWeek(
 }
 
 export async function PATCH() {
+  const rl = await rateLimit("reports-official-exports", { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const isAuthorizedCron = await isAuthorizedCronRequest()
     const supabase = await createClient()
@@ -110,8 +118,8 @@ export async function PATCH() {
 
       if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-      if (!["developer", "admin", "super_admin"].includes(profile?.role)) {
+      const exportScope = await getRequestScope()
+      if (!exportScope?.isAdminLike || exportScope.scopeMode === "lead") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }
     }
@@ -158,5 +166,11 @@ export async function PATCH() {
 }
 
 export async function POST() {
+  const rl = await rateLimit("reports-official-exports", { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   return PATCH()
 }

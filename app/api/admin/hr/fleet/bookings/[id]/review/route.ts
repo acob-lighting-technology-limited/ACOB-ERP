@@ -4,6 +4,7 @@ import { z } from "zod"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const ReviewFleetBookingSchema = z.object({
   action: z.enum(["approve", "reject"], {
@@ -14,6 +15,12 @@ const ReviewFleetBookingSchema = z.object({
 
 export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`admin-hr-fleet-bookings-review:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const dataClient = getServiceRoleClientOrFallback(supabase)

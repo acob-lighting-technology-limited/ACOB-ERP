@@ -13,6 +13,8 @@ import { getRouteStageByOrder, stageCodeForRole } from "@/lib/hr/leave-routing"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getRequestScope } from "@/lib/admin/api-scope"
+import { apiError, ApiErrorCode } from "@/lib/api/errors"
+import { checkRequestSize } from "@/lib/api/request-size"
 
 const log = logger("hr-leave-approve")
 
@@ -105,12 +107,6 @@ function inferCurrentStageCode(leaveRequest: LeaveRequestApprovalRow) {
   return leaveRequest.current_stage_code || leaveRequest.approval_stage
 }
 
-function toWorkflowRejectionStage(stageCode: string) {
-  if (stageCode === stageCodeForRole("reliever")) return "reliever"
-  if (stageCode === stageCodeForRole("department_lead")) return "supervisor"
-  return "hr"
-}
-
 function humanStage(stageCode: string) {
   switch (stageCode) {
     case "pending_reliever":
@@ -131,7 +127,7 @@ function humanStage(stageCode: string) {
 export async function PATCH(request: NextRequest) {
   const rl = await rateLimit(`leave-approve:${getClientId(request)}`, { limit: 30, windowSec: 600 })
   if (!rl.allowed) {
-    return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 })
+    return apiError("Too many requests. Please try again later.", ApiErrorCode.RATE_LIMITED, 429)
   }
 
   try {
@@ -141,7 +137,7 @@ export async function PATCH(request: NextRequest) {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!user) return apiError("Unauthorized", ApiErrorCode.UNAUTHORIZED, 401)
 
     const supabaseAdmin =
       process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -150,10 +146,18 @@ export async function PATCH(request: NextRequest) {
           })
         : supabase
 
+    const sizeError = checkRequestSize(request)
+    if (sizeError) return sizeError
+
     const body = await request.json()
     const parsed = ApproveLeaveRequestSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
+      return apiError(
+        parsed.error.issues[0]?.message ?? "Validation failed",
+        ApiErrorCode.VALIDATION_ERROR,
+        400,
+        parsed.error.issues
+      )
     }
 
     const { leave_request_id, comments, override_evidence } = parsed.data
@@ -204,13 +208,13 @@ export async function PATCH(request: NextRequest) {
       .single()
 
     if (fetchError || !leaveRequest) {
-      return NextResponse.json({ error: "Leave request not found" }, { status: 404 })
+      return apiError("Leave request not found", ApiErrorCode.NOT_FOUND, 404)
     }
 
     const typedLeaveRequest = leaveRequest as LeaveRequestApprovalRow
 
     if (!["pending", "pending_evidence"].includes(typedLeaveRequest.status)) {
-      return NextResponse.json({ error: "Only active requests can be processed" }, { status: 400 })
+      return apiError("Only active requests can be processed", ApiErrorCode.INVALID_STATE, 400)
     }
 
     const stageCode = inferCurrentStageCode(typedLeaveRequest)
@@ -219,7 +223,7 @@ export async function PATCH(request: NextRequest) {
       : []
 
     if (!stageCode) {
-      return NextResponse.json({ error: "LEAVE_APPROVER_NOT_CONFIGURED:current_stage_code" }, { status: 400 })
+      return apiError("LEAVE_APPROVER_NOT_CONFIGURED:current_stage_code", ApiErrorCode.INVALID_STATE, 400)
     }
 
     const currentStageOrder = Number(typedLeaveRequest.current_stage_order || 1)
@@ -227,63 +231,38 @@ export async function PATCH(request: NextRequest) {
 
     const expectedApproverId = typedLeaveRequest.current_approver_user_id || currentStage?.approver_user_id
     if (!expectedApproverId) {
-      return NextResponse.json({ error: "LEAVE_APPROVER_NOT_CONFIGURED:current_stage" }, { status: 400 })
+      return apiError("LEAVE_APPROVER_NOT_CONFIGURED:current_stage", ApiErrorCode.INVALID_STATE, 400)
     }
 
     if (expectedApproverId !== actorProfileId) {
-      return NextResponse.json({ error: "LEAVE_STAGE_NOT_ASSIGNED_TO_ACTOR" }, { status: 403 })
+      return apiError("LEAVE_STAGE_NOT_ASSIGNED_TO_ACTOR", ApiErrorCode.FORBIDDEN, 403)
     }
 
     if (typedLeaveRequest.status === "pending_evidence" && action === "approved" && !canOverrideEvidence) {
-      return NextResponse.json({ error: "Request is awaiting evidence verification before approval." }, { status: 400 })
+      return apiError("Request is awaiting evidence verification before approval.", ApiErrorCode.INVALID_STATE, 400)
     }
 
     const now = new Date().toISOString()
 
     if (action === "rejected") {
-      const { error: updateError } = await supabaseAdmin
-        .from("leave_requests")
-        .update({
-          status: "rejected",
-          approval_stage: "rejected",
-          current_stage_code: "rejected",
-          rejected_reason: comments,
-          workflow_rejection_stage: toWorkflowRejectionStage(stageCode),
-          reliever_decision_at:
-            stageCode === stageCodeForRole("reliever") ? now : typedLeaveRequest.reliever_decision_at,
-          supervisor_decision_at:
-            stageCode === stageCodeForRole("department_lead") ? now : typedLeaveRequest.supervisor_decision_at,
-          hr_decision_at:
-            stageCode === stageCodeForRole("admin_hr_lead") || stageCode === stageCodeForRole("hcs")
-              ? now
-              : typedLeaveRequest.hr_decision_at,
-        })
-        .eq("id", leave_request_id)
-
-      if (updateError) {
-        return NextResponse.json({ error: `Failed to reject leave request: ${updateError.message}` }, { status: 500 })
-      }
-
-      const { error: rejectionAuditError } = await supabaseAdmin.from("leave_approvals").upsert(
-        {
-          leave_request_id,
-          approver_id: actorProfileId,
-          approval_level: currentStageOrder,
-          status: action,
-          comments: comments || null,
-          approved_at: now,
-          stage_code: stageCode,
-          stage_order: currentStageOrder,
-          reliever_revision: typedLeaveRequest.reliever_revision || 1,
-          superseded: false,
-        },
-        { onConflict: "leave_request_id,approver_id,approval_level" }
-      )
-      if (rejectionAuditError) {
-        return NextResponse.json(
-          { error: `Failed to record rejection audit: ${rejectionAuditError.message}` },
-          { status: 500 }
-        )
+      const { error: rejectionError } = await supabaseAdmin.rpc("atomic_leave_reject", {
+        p_leave_request_id: leave_request_id,
+        p_actor_profile_id: actorProfileId,
+        p_current_stage_order: currentStageOrder,
+        p_stage_code: stageCode,
+        p_comments: comments || null,
+        p_reliever_revision: typedLeaveRequest.reliever_revision || 1,
+        p_reliever_decision_at:
+          stageCode === stageCodeForRole("reliever") ? now : typedLeaveRequest.reliever_decision_at,
+        p_supervisor_decision_at:
+          stageCode === stageCodeForRole("department_lead") ? now : typedLeaveRequest.supervisor_decision_at,
+        p_hr_decision_at:
+          stageCode === stageCodeForRole("admin_hr_lead") || stageCode === stageCodeForRole("hcs")
+            ? now
+            : typedLeaveRequest.hr_decision_at,
+      })
+      if (rejectionError) {
+        return apiError(`Failed to reject leave request: ${rejectionError.message}`, ApiErrorCode.DATABASE_ERROR, 500)
       }
 
       await notifyUsers(supabaseAdmin, {
@@ -325,28 +304,6 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Approval history row
-    const { error: approvalAuditError } = await supabaseAdmin.from("leave_approvals").upsert(
-      {
-        leave_request_id,
-        approver_id: actorProfileId,
-        approval_level: currentStageOrder,
-        status: action,
-        comments: comments || null,
-        approved_at: now,
-        stage_code: stageCode,
-        stage_order: currentStageOrder,
-        reliever_revision: typedLeaveRequest.reliever_revision || 1,
-        superseded: false,
-      },
-      { onConflict: "leave_request_id,approver_id,approval_level" }
-    )
-    if (approvalAuditError) {
-      return NextResponse.json(
-        { error: `Failed to record approval audit: ${approvalAuditError.message}` },
-        { status: 500 }
-      )
-    }
-
     const nextStageOrder = currentStageOrder + 1
     const nextStage = getRouteStageByOrder(snapshot, nextStageOrder)
 
@@ -357,40 +314,37 @@ export async function PATCH(request: NextRequest) {
 
       if (!evidenceStatus.complete) {
         if (!override_evidence) {
-          return NextResponse.json(
-            {
-              error: `Required evidence not complete. Missing: ${evidenceStatus.missing.join(", ")}`,
-              missing_documents: evidenceStatus.missing,
-            },
-            { status: 400 }
+          return apiError(
+            `Required evidence not complete. Missing: ${evidenceStatus.missing.join(", ")}`,
+            ApiErrorCode.VALIDATION_ERROR,
+            400,
+            { missing_documents: evidenceStatus.missing }
           )
         }
 
         if (!policy.override_allowed) {
-          return NextResponse.json({ error: "Policy does not allow evidence override" }, { status: 400 })
+          return apiError("Policy does not allow evidence override", ApiErrorCode.INVALID_STATE, 400)
         }
 
         if (!comments?.trim()) {
-          return NextResponse.json({ error: "Override reason is required" }, { status: 400 })
+          return apiError("Override reason is required", ApiErrorCode.MISSING_REQUIRED_FIELD, 400)
         }
       }
 
-      const { error: updateError } = await supabaseAdmin
-        .from("leave_requests")
-        .update({
-          status: "approved",
-          approval_stage: "completed",
-          current_stage_code: "completed",
-          approved_by: actorProfileId,
-          approved_at: now,
-          hr_decision_at: now,
-          hr_comment: comments || null,
-          lead_reconfirm_required: false,
-        })
-        .eq("id", leave_request_id)
-
-      if (updateError) {
-        return NextResponse.json({ error: `Failed to approve leave request: ${updateError.message}` }, { status: 500 })
+      const { error: finalApproveError } = await supabaseAdmin.rpc("atomic_leave_approve_final", {
+        p_leave_request_id: leave_request_id,
+        p_actor_profile_id: actorProfileId,
+        p_current_stage_order: currentStageOrder,
+        p_stage_code: stageCode,
+        p_comments: comments || null,
+        p_reliever_revision: typedLeaveRequest.reliever_revision || 1,
+      })
+      if (finalApproveError) {
+        return apiError(
+          `Failed to approve leave request: ${finalApproveError.message}`,
+          ApiErrorCode.DATABASE_ERROR,
+          500
+        )
       }
 
       await supabaseAdmin.rpc("update_leave_balance", {
@@ -445,39 +399,31 @@ export async function PATCH(request: NextRequest) {
     }
 
     if (!nextStage.approver_user_id) {
-      return NextResponse.json({ error: "LEAVE_APPROVER_NOT_CONFIGURED:next_stage_approver" }, { status: 400 })
+      return apiError("LEAVE_APPROVER_NOT_CONFIGURED:next_stage_approver", ApiErrorCode.INVALID_STATE, 400)
     }
 
-    const transitionUpdates: Record<string, unknown> = {
-      approval_stage: nextStage.stage_code,
-      current_stage_code: nextStage.stage_code,
-      current_stage_order: nextStage.stage_order,
-      current_approver_user_id: nextStage.approver_user_id,
-      lead_reconfirm_required:
-        stageCode === stageCodeForRole("department_lead") ? false : typedLeaveRequest.lead_reconfirm_required,
-    }
-
-    if (stageCode === stageCodeForRole("reliever")) {
-      transitionUpdates.reliever_decision_at = now
-      transitionUpdates.reliever_comment = comments || null
-    }
-
-    if (stageCode === stageCodeForRole("department_lead")) {
-      transitionUpdates.supervisor_decision_at = now
-      transitionUpdates.supervisor_comment = comments || null
-    }
-
-    if (stageCode === stageCodeForRole("admin_hr_lead") || stageCode === stageCodeForRole("hcs")) {
-      transitionUpdates.hr_decision_at = now
-      transitionUpdates.hr_comment = comments || null
-    }
-
-    const { error: updateError } = await supabaseAdmin
-      .from("leave_requests")
-      .update(transitionUpdates)
-      .eq("id", leave_request_id)
-    if (updateError) {
-      return NextResponse.json({ error: `Failed to advance leave request: ${updateError.message}` }, { status: 500 })
+    const { error: transitionError } = await supabaseAdmin.rpc("atomic_leave_approve_transition", {
+      p_leave_request_id: leave_request_id,
+      p_actor_profile_id: actorProfileId,
+      p_current_stage_order: currentStageOrder,
+      p_stage_code: stageCode,
+      p_next_stage_code: nextStage.stage_code,
+      p_next_stage_order: nextStage.stage_order,
+      p_next_approver_user_id: nextStage.approver_user_id,
+      p_comments: comments || null,
+      p_reliever_revision: typedLeaveRequest.reliever_revision || 1,
+      p_reliever_decision_at: stageCode === stageCodeForRole("reliever") ? now : typedLeaveRequest.reliever_decision_at,
+      p_supervisor_decision_at:
+        stageCode === stageCodeForRole("department_lead") ? now : typedLeaveRequest.supervisor_decision_at,
+      p_hr_decision_at:
+        stageCode === stageCodeForRole("admin_hr_lead") || stageCode === stageCodeForRole("hcs")
+          ? now
+          : typedLeaveRequest.hr_decision_at,
+      p_lead_reconfirm_required:
+        stageCode === stageCodeForRole("department_lead") ? false : Boolean(typedLeaveRequest.lead_reconfirm_required),
+    })
+    if (transitionError) {
+      return apiError(`Failed to advance leave request: ${transitionError.message}`, ApiErrorCode.DATABASE_ERROR, 500)
     }
 
     await notifyUsers(supabaseAdmin, {
@@ -515,7 +461,7 @@ export async function PATCH(request: NextRequest) {
     return NextResponse.json({ message: "Approval recorded" })
   } catch (error) {
     log.error({ err: String(error) }, "Error in POST /api/hr/leave/approve:")
-    return NextResponse.json({ error: error instanceof Error ? error.message : "An error occurred" }, { status: 500 })
+    return apiError(error instanceof Error ? error.message : "An error occurred", ApiErrorCode.INTERNAL_ERROR, 500)
   }
 }
 

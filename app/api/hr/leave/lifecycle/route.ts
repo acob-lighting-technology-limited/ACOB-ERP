@@ -10,6 +10,8 @@ import {
 } from "@/lib/hr/leave-workflow"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { getRequestScope } from "@/lib/admin/api-scope"
 
 const log = logger("hr-leave-lifecycle")
 const LeaveLifecycleSchema = z.object({
@@ -42,6 +44,12 @@ async function restoreBalance(supabase: SupabaseServerClient, userId: string, le
 }
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`hr-leave-lifecycle:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
 
@@ -58,8 +66,8 @@ export async function PATCH(request: NextRequest) {
     }
     const { leave_request_id, action, reason, extension_days, early_return_date } = parsed.data
 
-    const { data: actorProfile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-    const isHR = ["developer", "admin", "super_admin"].includes(actorProfile?.role)
+    const lifecycleScope = await getRequestScope()
+    const isHR = lifecycleScope?.isAdminLike === true && lifecycleScope.scopeMode !== "lead"
 
     const { data: leaveRequest, error: fetchError } = await supabase
       .from("leave_requests")
@@ -257,5 +265,11 @@ export async function PATCH(request: NextRequest) {
 
 // POST kept for backwards compat — prefer PATCH
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`hr-leave-lifecycle:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   return PATCH(request)
 }

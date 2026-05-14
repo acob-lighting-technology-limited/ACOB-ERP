@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("hr-performance-cbt-questions")
 
@@ -84,6 +85,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-cbt-questions:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const { supabase, dataClient, user } = await getAuthorizedProfile()
     if (!user) {

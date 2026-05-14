@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger"
 import { getDepartmentScope, resolveAdminScope, normalizeDepartmentName } from "@/lib/admin/rbac"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { buildPaymentDocumentFolderPathByType, buildPaymentDocumentPath } from "@/lib/payments/document-storage"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("payments-documents")
 
@@ -149,6 +150,12 @@ export async function GET(request: Request, props: { params: Promise<{ id: strin
 // POST /api/payments/[id]/documents - Upload a new document (with optional replacement)
 export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`payments-documents:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const dataClient = getServiceRoleClientOrFallback(supabase)

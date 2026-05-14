@@ -12,19 +12,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { PromptDialog } from "@/components/ui/prompt-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import {
-  CheckCircle,
-  Clock,
-  FileText,
-  ListFilter,
-  ChevronDown,
-  ChevronUp,
-  Building2,
-  Send,
-  Archive,
-  ShieldCheck,
-} from "lucide-react"
-import type { CorrespondenceRecord } from "@/types/correspondence"
+import { CheckCircle, Clock, FileText, ListFilter, ChevronDown, ChevronUp, Building2, ShieldCheck } from "lucide-react"
+import type { CorrespondenceRecord, CorrespondenceStatus } from "@/types/correspondence"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
@@ -68,6 +57,7 @@ export function AdminReferenceGeneratorContent({
   const [total, setTotal] = useState(initialRecords.length)
   const [isLoading, setIsLoading] = useState(false)
   const [showCodeManagement, setShowCodeManagement] = useState(false)
+  const [globalCounts, setGlobalCounts] = useState({ total: 0, underReview: 0, approved: 0, rejected: 0 })
 
   const codeForm = useForm<DepartmentCodeFormValues>({
     resolver: zodResolver(DepartmentCodeFormSchema),
@@ -79,15 +69,42 @@ export function AdminReferenceGeneratorContent({
     decision: "approved" | "rejected" | "returned_for_correction"
   } | null>(null)
 
+  useEffect(() => {
+    async function fetchGlobalCounts() {
+      try {
+        const [all, underReview, approved, rejected] = await Promise.all([
+          fetch("/api/correspondence/records?page=1&limit=1", { cache: "no-store" }).then((r) => r.json()),
+          fetch("/api/correspondence/records?page=1&limit=1&status=under_review", { cache: "no-store" }).then((r) =>
+            r.json()
+          ),
+          fetch("/api/correspondence/records?page=1&limit=1&status=approved", { cache: "no-store" }).then((r) =>
+            r.json()
+          ),
+          fetch("/api/correspondence/records?page=1&limit=1&status=rejected", { cache: "no-store" }).then((r) =>
+            r.json()
+          ),
+        ])
+        setGlobalCounts({
+          total: Number(all.total || 0),
+          underReview: Number(underReview.total || 0),
+          approved: Number(approved.total || 0),
+          rejected: Number(rejected.total || 0),
+        })
+      } catch (err) {
+        log.error("Failed to fetch global counts", err)
+      }
+    }
+    void fetchGlobalCounts()
+  }, [])
+
   const stats = useMemo(() => {
     return {
-      total: total,
-      underReview: records.filter((r) => r.status === "under_review").length,
-      awaitingAction: records.filter((r) => r.status === "assigned_action_pending").length,
-      approved: records.filter((r) => r.status === "approved").length,
-      finalized: records.filter((r) => ["sent", "filed", "closed"].includes(r.status)).length,
+      total: globalCounts.total,
+      underReview: globalCounts.underReview,
+      approved: globalCounts.approved,
+      rejected: globalCounts.rejected,
     }
-  }, [records, total])
+  }, [globalCounts])
   const statusLabel = (status: string) => (status === "under_review" ? "Sent for review" : formatName(status))
 
   useEffect(() => {
@@ -123,6 +140,7 @@ export function AdminReferenceGeneratorContent({
     if (!decisionPrompt) return
 
     const { recordId, decision } = decisionPrompt
+    const prevRecord = records.find((r) => r.id === recordId)
     setLoadingRecordId(recordId)
     try {
       const res = await fetch(`/api/correspondence/records/${recordId}/approvals`, {
@@ -136,43 +154,23 @@ export function AdminReferenceGeneratorContent({
         throw new Error(body.error || "Failed to apply decision")
       }
 
-      toast.success(`Record ${decision.replaceAll("_", " ")}`)
+      const newStatus = ((body.data?.record?.status as string) ?? decision) as CorrespondenceStatus
+      toast.success(`Record ${newStatus.replaceAll("_", " ")}`)
       setRecords((current) =>
-        current.map((record) => (record.id === recordId ? { ...record, status: decision } : record))
+        current.map((record) => (record.id === recordId ? { ...record, status: newStatus } : record))
       )
+      setGlobalCounts((prev) => {
+        const next = { ...prev }
+        if (prevRecord?.status === "under_review") next.underReview = Math.max(0, prev.underReview - 1)
+        if (newStatus === "approved") next.approved = prev.approved + 1
+        if (newStatus === "rejected") next.rejected = prev.rejected + 1
+        return next
+      })
     } catch (error: unknown) {
       toast.error(getErrorMessage(error, "Failed to apply decision"))
     } finally {
       setLoadingRecordId(null)
       setDecisionPrompt(null)
-    }
-  }
-
-  async function dispatch(recordId: string, finalStatus: "sent" | "filed") {
-    setLoadingRecordId(recordId)
-    try {
-      const res = await fetch(`/api/correspondence/records/${recordId}/dispatch`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          final_status: finalStatus,
-          dispatch_method: "email",
-        }),
-      })
-
-      const body = await res.json()
-      if (!res.ok) {
-        throw new Error(body.error || "Failed to finalize dispatch")
-      }
-
-      toast.success(`Record marked ${finalStatus}`)
-      setRecords((current) =>
-        current.map((record) => (record.id === recordId ? { ...record, status: finalStatus } : record))
-      )
-    } catch (error: unknown) {
-      toast.error(getErrorMessage(error, "Failed to finalize dispatch"))
-    } finally {
-      setLoadingRecordId(null)
     }
   }
 
@@ -205,101 +203,44 @@ export function AdminReferenceGeneratorContent({
       key: "reference_number",
       label: "Reference",
       sortable: true,
+      resizable: true,
+      initialWidth: 220,
       accessor: (r) => r.reference_number,
       render: (r) => (
-        <div className="flex flex-col">
-          <span className="font-mono text-xs font-bold">{r.status === "approved" ? r.reference_number : "-"}</span>
-          <span className="text-muted-foreground line-clamp-1 max-w-[300px] text-[10px] italic">{r.subject}</span>
-        </div>
+        <span className="font-medium">
+          {["approved", "sent", "filed"].includes(r.status) ? r.reference_number : "-"}
+        </span>
       ),
     },
     {
-      key: "direction",
-      label: "Direction",
-      accessor: (r) => r.direction,
-      render: (r) => (
-        <Badge variant="outline" className="capitalize">
-          {r.direction === "incoming" ? "External" : "Internal"}
-        </Badge>
-      ),
-    },
-    {
-      key: "department",
-      label: "Dept",
-      accessor: (r) => r.department_name || r.assigned_department_name || "-",
-      render: (r) => (
-        <div className="flex items-center gap-1.5">
-          <Building2 className="text-muted-foreground h-3 w-3" />
-          <span className="text-xs">{r.department_name || r.assigned_department_name || "—"}</span>
-        </div>
-      ),
+      key: "letter_type",
+      label: "Type",
+      sortable: true,
+      accessor: (r) => r.letter_type || "external",
+      render: (r) => <Badge variant="outline">{r.letter_type || "external"}</Badge>,
     },
     {
       key: "status",
       label: "Status",
+      sortable: true,
       accessor: (r) => r.status,
-      render: (r) => <Badge className="capitalize">{statusLabel(r.status)}</Badge>,
+      render: (r) => <Badge>{statusLabel(r.status)}</Badge>,
     },
     {
-      key: "actions",
-      label: "Actions",
-      render: (r) => (
-        <div className="flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
-          {r.status === "under_review" && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-[10px]"
-                onClick={() => decide(r.id, "approved")}
-                disabled={loadingRecordId === r.id}
-              >
-                Approve
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                className="h-7 px-2 text-[10px]"
-                onClick={() => decide(r.id, "rejected")}
-                disabled={loadingRecordId === r.id}
-              >
-                Reject
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="h-7 px-2 text-[10px]"
-                onClick={() => decide(r.id, "returned_for_correction")}
-                disabled={loadingRecordId === r.id}
-              >
-                Return
-              </Button>
-            </>
-          )}
-          {r.status === "approved" && (
-            <>
-              <Button
-                size="sm"
-                variant="outline"
-                className="h-7 gap-1 px-2 text-[10px]"
-                onClick={() => dispatch(r.id, "sent")}
-                disabled={loadingRecordId === r.id}
-              >
-                <Send className="h-3 w-3" /> Mark Sent
-              </Button>
-              <Button
-                size="sm"
-                variant="secondary"
-                className="h-7 gap-1 px-2 text-[10px]"
-                onClick={() => dispatch(r.id, "filed")}
-                disabled={loadingRecordId === r.id}
-              >
-                <Archive className="h-3 w-3" /> Mark Filed
-              </Button>
-            </>
-          )}
-        </div>
-      ),
+      key: "created_by",
+      label: "Created by",
+      sortable: true,
+      accessor: (r) => r.sender_name || "-",
+    },
+    {
+      key: "created_at",
+      label: "Date",
+      sortable: true,
+      accessor: (r) => r.created_at,
+      render: (r) =>
+        r.created_at
+          ? new Date(r.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+          : "-",
     },
   ]
 
@@ -307,7 +248,7 @@ export function AdminReferenceGeneratorContent({
     { key: "all", label: "All" },
     { key: "under_review", label: "Under Review" },
     { key: "approved", label: "Approved" },
-    { key: "finalized", label: "Finalized" },
+    { key: "rejected", label: "Rejected" },
   ]
 
   const filters: DataTableFilter<CorrespondenceRecord>[] = [
@@ -327,11 +268,11 @@ export function AdminReferenceGeneratorContent({
       ],
     },
     {
-      key: "direction",
-      label: "Direction",
+      key: "letter_type",
+      label: "Type",
       options: [
-        { value: "outgoing", label: "Internal" },
-        { value: "incoming", label: "External" },
+        { value: "internal", label: "Internal" },
+        { value: "external", label: "External" },
       ],
     },
     {
@@ -363,10 +304,10 @@ export function AdminReferenceGeneratorContent({
         if (tab === "all") setStatusFilter("all")
         if (tab === "under_review") setStatusFilter("under_review")
         if (tab === "approved") setStatusFilter("approved")
-        if (tab === "finalized") setStatusFilter("sent")
+        if (tab === "rejected") setStatusFilter("rejected")
       }}
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard
             title="Total"
             value={stats.total}
@@ -382,13 +323,6 @@ export function AdminReferenceGeneratorContent({
             iconColor="text-amber-500"
           />
           <StatCard
-            title="Pending Action"
-            value={stats.awaitingAction}
-            icon={Clock}
-            iconBgColor="bg-blue-500/10"
-            iconColor="text-blue-500"
-          />
-          <StatCard
             title="Approved"
             value={stats.approved}
             icon={CheckCircle}
@@ -396,11 +330,11 @@ export function AdminReferenceGeneratorContent({
             iconColor="text-emerald-500"
           />
           <StatCard
-            title="Finalized"
-            value={stats.finalized}
+            title="Rejected"
+            value={stats.rejected}
             icon={ShieldCheck}
-            iconBgColor="bg-violet-500/10"
-            iconColor="text-violet-500"
+            iconBgColor="bg-red-500/10"
+            iconColor="text-red-500"
           />
         </div>
       }
@@ -516,6 +450,53 @@ export function AdminReferenceGeneratorContent({
               setStatusFilter("all")
             }
           }}
+          rowActions={[
+            {
+              label: "Approve",
+              onClick: (r) => decide(r.id, "approved"),
+              hidden: (r) => r.status !== "under_review" || loadingRecordId === r.id,
+            },
+            {
+              label: "Reject",
+              onClick: (r) => decide(r.id, "rejected"),
+              hidden: (r) => r.status !== "under_review" || loadingRecordId === r.id,
+            },
+            {
+              label: "Return for correction",
+              onClick: (r) => decide(r.id, "returned_for_correction"),
+              hidden: (r) => r.status !== "under_review" || loadingRecordId === r.id,
+            },
+          ]}
+          expandable={{
+            render: (r) => (
+              <div className="grid gap-3 md:grid-cols-2">
+                <p className="text-sm md:col-span-2">
+                  <span className="text-muted-foreground">Subject:</span> {r.subject}
+                </p>
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Department:</span>{" "}
+                  {r.department_name || r.assigned_department_name || "-"}
+                </p>
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Recipient:</span> {r.recipient_name || "-"}
+                  {r.recipient_code ? ` (${r.recipient_code})` : ""}
+                </p>
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Sender:</span> {r.sender_name || "-"}
+                </p>
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Due Date:</span> {r.due_date || "-"}
+                </p>
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Action Required:</span> {r.action_required ? "Yes" : "No"}
+                </p>
+              </div>
+            ),
+          }}
+          emptyTitle="No references found"
+          emptyDescription="No correspondence records match the current filters."
+          emptyIcon={ListFilter}
+          skeletonRows={5}
           urlSync
         />
       </div>
