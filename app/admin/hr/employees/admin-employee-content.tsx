@@ -183,6 +183,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     date_of_birth: "",
     employment_date: "",
     job_description: "",
+    attendance_exempt: false,
   })
   const [showMoreOptions, setShowMoreOptions] = useState(false)
 
@@ -241,6 +242,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             date_of_birth: fullProfile.date_of_birth || "",
             employment_date: fullProfile.employment_date || "",
             job_description: fullProfile.job_description || "",
+            attendance_exempt: Boolean(fullProfile.attendance_exempt),
           })
         }
 
@@ -347,6 +349,9 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         employment_date: editForm.employment_date || null,
         job_description: editForm.job_description || null,
       }
+
+      // attendance_exempt is not in the generated DB type yet — cast to allow it
+      ;(updateData as Record<string, unknown>).attendance_exempt = editForm.attendance_exempt
 
       const emailSyncResponse = await fetch(`/api/admin/hr/employees/${selectedEmployee.id}/email`, {
         method: "PATCH",
