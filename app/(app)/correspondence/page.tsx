@@ -40,33 +40,19 @@ async function getData() {
     user.email ||
     ""
 
+  // User portal: only personal records (originator or responsible officer).
+  // Admins and leads use /admin/correspondence to see scoped admin data.
   const { data: records } = await supabase
     .from("correspondence_records")
     .select("*")
-    .returns<CorrespondenceRecord[]>()
+    .or(`originator_id.eq.${user.id},responsible_officer_id.eq.${user.id}`)
     .order("created_at", { ascending: false })
     .limit(50)
+    .returns<CorrespondenceRecord[]>()
 
   const role = profile?.role || ""
   const isDeptLead = Boolean(profile?.is_department_lead)
-  const managedDepartments = Array.from(
-    new Set(
-      [...(Array.isArray(profile?.lead_departments) ? profile.lead_departments : []), profile?.department].filter(
-        Boolean
-      )
-    )
-  )
-  const scopedRecords = (records || []).filter((record) => {
-    if (record.originator_id === user.id || record.responsible_officer_id === user.id) return true
-    if (["developer", "admin", "super_admin"].includes(role)) return true
-    if (isDeptLead) {
-      return (
-        managedDepartments.includes(record.department_name) ||
-        managedDepartments.includes(record.assigned_department_name)
-      )
-    }
-    return false
-  })
+  const scopedRecords = records || []
 
   const { data: departmentCodes } = await supabase
     .from("correspondence_department_codes")
@@ -79,6 +65,7 @@ async function getData() {
     currentViewerRole: role,
     isDepartmentLead: isDeptLead,
     currentViewerName,
+    currentViewerId: user.id,
     currentViewerDepartment: profile?.department || "",
     records: scopedRecords || [],
     departmentCodes: departmentCodes || [],
@@ -97,6 +84,7 @@ export default async function CorrespondencePage() {
       currentViewerRole={data.currentViewerRole}
       isDepartmentLead={data.isDepartmentLead}
       currentViewerName={data.currentViewerName}
+      currentViewerId={data.currentViewerId}
       currentViewerDepartment={data.currentViewerDepartment}
       initialRecords={data.records}
       departmentCodes={data.departmentCodes}
