@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { computeIndividualPerformanceScore } from "@/lib/performance/scoring"
+import { getRequestScope } from "@/lib/admin/api-scope"
 
 const log = logger("hr-performance-score")
 
@@ -28,7 +29,9 @@ export async function GET(request: NextRequest) {
         .eq("id", user.id)
         .single()
 
-      if (!profile || (!["developer", "admin", "super_admin"].includes(profile.role) && !profile.is_department_lead)) {
+      const scoreScope = await getRequestScope()
+      const isGlobalAdmin = scoreScope?.isAdminLike === true && scoreScope.scopeMode !== "lead"
+      if (!profile || (!isGlobalAdmin && !profile.is_department_lead)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }
     }

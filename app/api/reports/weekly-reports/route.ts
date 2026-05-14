@@ -7,6 +7,7 @@ import { logger } from "@/lib/logger"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
 import { canMutateV2 } from "@/lib/admin/policy-v2"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("api-reports-weekly-reports")
 
@@ -68,6 +69,12 @@ async function canMutateWeek(supabase: ReportsClient, week: number, year: number
 }
 
 export async function PATCH(request: Request) {
+  const rl = await rateLimit(`reports-weekly-reports:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {
@@ -293,5 +300,11 @@ export async function PATCH(request: Request) {
 
 // POST kept for backwards compat — prefer PATCH
 export async function POST(request: Request) {
+  const rl = await rateLimit(`reports-weekly-reports:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   return PATCH(request)
 }

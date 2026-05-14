@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { getRequestScope, type AdminScope } from "@/lib/admin/api-scope"
 
-type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 const HolidayEntrySchema = z.record(z.unknown())
 const SaveHolidaysSchema = z.union([HolidayEntrySchema, z.array(HolidayEntrySchema)])
 
-async function assertHR(supabase: SupabaseServerClient, userId: string) {
-  const { data } = await supabase.from("profiles").select("role").eq("id", userId).single()
-  return ["developer", "admin", "super_admin"].includes(data?.role)
+function assertHR(scope: AdminScope | null) {
+  return scope?.isAdminLike === true && scope.scopeMode !== "lead"
 }
 
 export async function GET(request: NextRequest) {
@@ -36,6 +36,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`hr-leave-holidays:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {
@@ -43,7 +49,7 @@ export async function PATCH(request: NextRequest) {
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const isHR = await assertHR(supabase, user.id)
+    const isHR = assertHR(await getRequestScope())
     if (!isHR) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
     const body = await request.json()
@@ -80,5 +86,11 @@ export async function PATCH(request: NextRequest) {
 
 // POST kept for backwards compat — prefer PATCH
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`hr-leave-holidays:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   return PATCH(request)
 }

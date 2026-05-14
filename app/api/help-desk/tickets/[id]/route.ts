@@ -9,8 +9,10 @@ import {
   isAdminRole,
   syncHelpDeskTicketTask,
 } from "@/lib/help-desk/server"
+import { getRequestScope } from "@/lib/admin/api-scope"
 import { sendHelpDeskMail } from "@/lib/help-desk/mailer"
 import { logger } from "@/lib/logger"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("help-desk-ticket")
 export const dynamic = "force-dynamic"
@@ -63,8 +65,10 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 })
     }
 
+    const getScope = await getRequestScope()
+    const isGlobalAdmin = isAdminRole(profile.role) && getScope?.scopeMode !== "lead"
     const canView =
-      isAdminRole(profile.role) ||
+      isGlobalAdmin ||
       canLeadDepartment(profile, ticket.service_department) ||
       canLeadDepartment(profile, ticket.requester_department) ||
       ticket.requester_id === user.id ||
@@ -104,6 +108,12 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
 
 export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`help-desk-tickets:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const { supabase, user, profile } = await getAuthContext()
 
@@ -131,13 +141,15 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     const csatRating = parsed.data.csat_rating
     const csatFeedback = parsed.data.csat_feedback ? String(parsed.data.csat_feedback) : null
 
+    const patchScope = await getRequestScope()
+    const isGlobalAdminPatch = isAdminRole(profile.role) && patchScope?.scopeMode !== "lead"
     const canManageWorkflow =
-      isAdminRole(profile.role) ||
+      isGlobalAdminPatch ||
       canLeadDepartment(profile, ticket.service_department) ||
       canLeadDepartment(profile, ticket.requester_department) ||
       ticket.assigned_to === user.id
     const canLeadWorkflow =
-      isAdminRole(profile.role) ||
+      isGlobalAdminPatch ||
       canLeadDepartment(profile, ticket.service_department) ||
       canLeadDepartment(profile, ticket.requester_department)
     const isDepartmentTicket =

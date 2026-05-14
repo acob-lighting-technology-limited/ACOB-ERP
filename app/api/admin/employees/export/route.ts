@@ -3,6 +3,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { resolveAdminScope, canAccessAdminSection } from "@/lib/admin/rbac"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const ExportSchema = z.object({
   format: z.enum(["csv", "xlsx"]),
@@ -35,6 +36,12 @@ async function getDepartmentIdByName(
 }
 
 export async function POST(req: NextRequest) {
+  const rl = await rateLimit(`admin-employees-export:${getClientId(req)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   const supabase = await createClient()
   const {
     data: { user },

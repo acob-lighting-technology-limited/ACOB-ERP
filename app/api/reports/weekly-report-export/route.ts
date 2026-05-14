@@ -7,6 +7,7 @@ import {
   persistOfficialPdf,
   tryReadCurrentStoredOfficialPdf,
 } from "@/lib/reports/official-pdf"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("api-reports-weekly-report-export")
 
@@ -19,6 +20,12 @@ type RequestBody = {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`reports-weekly-report-export:${getClientId(request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const body = (await request.json()) as RequestBody
     const { week, year, type = "weekly_report", persist = false, reuseStored = false } = body

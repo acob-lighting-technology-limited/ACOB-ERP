@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { ADMIN_SCOPE_MODE_COOKIE, resolveAdminScope, type AdminScopeMode } from "@/lib/admin/rbac"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 function normalizeMode(value: string | undefined): AdminScopeMode {
   return value === "lead" ? "lead" : "global"
@@ -30,6 +31,12 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const rl = await rateLimit(`admin-scope-mode:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   const supabase = await createClient()
   const {
     data: { user },

@@ -1,10 +1,17 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 import { logger } from "@/lib/logger"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("auth-create-profile")
 
 export async function POST(_request: Request) {
+  const rl = await rateLimit(`auth-create-profile:${getClientId(_request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
 

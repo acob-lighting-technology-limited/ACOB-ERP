@@ -3,6 +3,7 @@ import { z } from "zod"
 import { createClient as createServerClient } from "@/lib/supabase/server"
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { normalizeDepartmentName } from "@/shared/departments"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const RejectUserSchema = z.object({
   pendingUserId: z.string().trim().min(1, "Missing pendingUserId"),
@@ -16,6 +17,12 @@ type CallerProfile = {
 }
 
 export async function POST(req: Request) {
+  const rl = await rateLimit(`admin-reject-user:${getClientId(req)}`, { limit: 30, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   const supabase = await createServerClient()
   const {
     data: { user: caller },

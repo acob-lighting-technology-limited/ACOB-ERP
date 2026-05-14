@@ -8,7 +8,13 @@ export async function checkIdempotency(
 ): Promise<{ isDuplicate: boolean; cachedResponse?: unknown }> {
   if (!key) return { isDuplicate: false }
 
-  const { data } = await supabase.from("idempotency_keys").select("response_body, created_at").eq("key", key).single()
+  const nowIso = new Date().toISOString()
+  const { data } = await supabase
+    .from("idempotency_keys")
+    .select("response_body, created_at")
+    .eq("key", key)
+    .gt("expires_at", nowIso)
+    .single()
 
   if (data) {
     const createdAt = new Date(data.created_at)
@@ -32,6 +38,7 @@ export async function storeIdempotencyKey(supabase: SupabaseClient, key: string,
       key,
       response_body: responseBody,
       created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
     })
     .select()
 }

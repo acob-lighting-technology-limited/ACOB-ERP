@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { getOneDriveService } from "@/lib/onedrive"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 import {
   buildDocumentationFolderPath,
   buildDocumentationTextBackup,
@@ -184,6 +185,11 @@ async function deleteSharePointFolderIfExists(folderPath: string | null) {
 export async function PUT(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
   try {
+    const rl = await rateLimit(`documentation-update:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 })
+    }
+
     const { supabase, user, doc } = await getAuthenticatedDoc(params.id)
 
     if (!user) {
@@ -294,9 +300,14 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
   }
 }
 
-export async function DELETE(_request: Request, props: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
   try {
+    const rl = await rateLimit(`documentation-delete:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+    if (!rl.allowed) {
+      return NextResponse.json({ error: "Too many requests. Please try again later." }, { status: 429 })
+    }
+
     const { supabase, user, doc } = await getAuthenticatedDoc(params.id)
 
     if (!user) {

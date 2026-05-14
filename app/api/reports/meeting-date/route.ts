@@ -4,6 +4,7 @@ import { NextResponse } from "next/server"
 import { z } from "zod"
 import { resolveAdminScope } from "@/lib/admin/rbac"
 import { resolveCanonicalMeetingSetup, upsertCanonicalMeetingDate } from "@/lib/reports/meeting-date"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 type ReportsClient = Awaited<ReturnType<typeof createClient>>
 
@@ -85,6 +86,12 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const rl = await rateLimit(`reports-meeting-date:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {

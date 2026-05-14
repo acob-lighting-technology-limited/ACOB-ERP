@@ -25,6 +25,7 @@ import {
   stageCodeForRole,
 } from "@/lib/hr/leave-routing"
 import { computeLeaveDates, getLeavePolicy, resolveProfileByIdentifier } from "@/lib/hr/leave-workflow"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 type StepResult = {
   step: string
@@ -42,6 +43,12 @@ function err(step: string, detail: string): StepResult {
 }
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`dev-leave-flow-test:${getClientId(request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   if (process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "Not available in production" }, { status: 404 })
   }
@@ -331,5 +338,11 @@ export async function PATCH(request: NextRequest) {
 
 // POST kept for backwards compat — prefer PATCH
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`dev-leave-flow-test:${getClientId(request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   return PATCH(request)
 }

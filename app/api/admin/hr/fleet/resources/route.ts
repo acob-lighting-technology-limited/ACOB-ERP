@@ -4,6 +4,7 @@ import { z } from "zod"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 type FleetResourcePatch = Record<string, string | boolean | null>
 
@@ -49,6 +50,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`admin-hr-fleet-resources:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const dataClient = getServiceRoleClientOrFallback(supabase)
@@ -112,6 +119,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`admin-hr-fleet-resources:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const dataClient = getServiceRoleClientOrFallback(supabase)

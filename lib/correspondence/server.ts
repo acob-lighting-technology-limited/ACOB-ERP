@@ -78,9 +78,14 @@ export async function getAuthContext() {
   }
 }
 
+/**
+ * Department-membership check ONLY — no admin bypass.
+ * Callers that want to allow global admins must OR this with their own
+ * `isGlobalAdmin` check (derived from `getRequestScope()` + `scopeMode`).
+ * This separation lets lead-mode admins be restricted the same as leads.
+ */
 export function canAccessDepartment(profile: ProfileLike | null | undefined, department?: string | null): boolean {
   if (!department) return false
-  if (isAdminRole(profile?.role)) return true
   if (!profile?.is_department_lead) return false
 
   const managedDepartments = Array.isArray(profile?.managed_departments)
@@ -97,12 +102,16 @@ export function canAccessDepartment(profile: ProfileLike | null | undefined, dep
   return normalizedManaged.some((dept) => targetAliases.has(dept)) || targetAliases.has(normalizedPrimary)
 }
 
+/**
+ * Per-record access check — no admin bypass.
+ * Callers that want to allow global admins must OR this with their own
+ * `isGlobalAdmin` check.
+ */
 export function canAccessRecord(
   profile: ProfileLike | null | undefined,
   userId: string,
   record: Partial<CorrespondenceRecord>
 ): boolean {
-  if (isAdminRole(profile?.role)) return true
   if (record.originator_id === userId) return true
   if (record.responsible_officer_id === userId) return true
 

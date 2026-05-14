@@ -23,6 +23,7 @@ import {
 } from "@/lib/hr/leave-routing"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getPaginationRange, PaginationSchema } from "@/lib/pagination"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("leave-requests")
 const BLACKOUT_MONTHS = new Set([12, 1])
@@ -653,6 +654,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`hr-leave-requests:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const validationClient = getServiceRoleClientOrFallback(supabase)
@@ -952,6 +959,12 @@ export async function POST(request: NextRequest) {
 
 // POST kept for backwards compat — prefer PATCH
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`hr-leave-requests:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const validationClient = getServiceRoleClientOrFallback(supabase)
@@ -1306,6 +1319,12 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+  const rl = await rateLimit(`hr-leave-requests:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const dataClient = getServiceRoleClientOrFallback(supabase)

@@ -161,21 +161,14 @@ export default function PaymentDetailsPage(props: { params: Promise<{ id: string
     setEditDialogOpen(true)
   }
 
-  const handleUpdate = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!editFormData.issuer_name || !editFormData.issuer_phone_number) {
-      toast.error("Issuer Name and Phone are required.")
-      return
-    }
-
+  const handleUpdate = async (submittedFormData: PaymentEditFormData) => {
     try {
       setUpdating(true)
       const payload = {
-        ...editFormData,
-        amount: parseFloat(editFormData.amount),
-        next_payment_due: editFormData.next_payment_due || null,
-        payment_date: editFormData.payment_date || null,
+        ...submittedFormData,
+        amount: parseFloat(submittedFormData.amount),
+        next_payment_due: submittedFormData.next_payment_due || null,
+        payment_date: submittedFormData.payment_date || null,
       }
 
       const response = await fetch(`/api/payments/${params.id}`, {

@@ -2,6 +2,7 @@ import { createClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { checkRequestSize } from "@/lib/api/request-size"
 
 const OnboardingSubmitSchema = z.object({
   first_name: z.string().trim().min(2),
@@ -24,6 +25,9 @@ export async function POST(req: Request) {
   if (!rl.allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 })
   }
+
+  const sizeError = checkRequestSize(req)
+  if (sizeError) return sizeError
 
   const body = await req.json().catch(() => null)
   const parsed = OnboardingSubmitSchema.safeParse(body)

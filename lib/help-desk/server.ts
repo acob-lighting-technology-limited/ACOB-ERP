@@ -145,8 +145,12 @@ export function isLeadRole(profile?: { is_department_lead?: boolean } | null): b
   return Boolean(profile?.is_department_lead)
 }
 
+/**
+ * Department-lead membership check — no admin bypass.
+ * Callers that want to allow global admins must OR this with their own
+ * `isGlobalAdmin` check (derived from `getRequestScope()` + `scopeMode`).
+ */
 export function canLeadDepartment(profile: ProfileLike | null | undefined, department: string): boolean {
-  if (isAdminRole(profile?.role)) return true
   if (!profile?.is_department_lead) return false
 
   const managedDepartments = Array.isArray(profile?.managed_departments)
@@ -157,8 +161,13 @@ export function canLeadDepartment(profile: ProfileLike | null | undefined, depar
   return managedDepartments.includes(department) || profile?.department === department
 }
 
+/**
+ * Dept-membership / lead check — no admin bypass.
+ * Callers that want to allow global admins must OR this with their own
+ * `isGlobalAdmin` check.
+ */
 export function canWorkDepartment(profile: ProfileLike | null | undefined, department: string): boolean {
-  return isAdminRole(profile?.role) || profile?.department === department || canLeadDepartment(profile, department)
+  return profile?.department === department || canLeadDepartment(profile, department)
 }
 
 export function resolveLeadForDepartment<

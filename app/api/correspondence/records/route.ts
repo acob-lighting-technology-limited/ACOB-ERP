@@ -8,13 +8,17 @@ import {
   getDepartmentCodeByName,
   isAdminRole,
 } from "@/lib/correspondence/server"
+import { getRequestScope } from "@/lib/admin/api-scope"
 import { logger } from "@/lib/logger"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getPaginationRange, paginatedResponse, PaginationSchema } from "@/lib/pagination"
 import { checkIdempotency, getIdempotencyKey, storeIdempotencyKey } from "@/lib/idempotency"
 import { getOneDriveService } from "@/lib/onedrive"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("correspondence-records")
+
+const EXEC_MANAGEMENT_DEPT = "Executive Management"
 
 type CorrespondenceListRecord = {
   department_name?: string | null
@@ -35,9 +39,11 @@ const CreateCorrespondenceRecordSchema = z.object({
   letter_type: z.string().optional().nullable(),
   category: z.string().optional().nullable(),
   recipient_name: z.string().optional().nullable(),
+  recipient_code: z.string().trim().min(1, "recipient_code is required").max(12),
   sender_name: z.string().optional().nullable(),
+  originator_id: z.string().uuid().optional().nullable(),
   action_required: z.boolean().optional().default(false),
-  due_date: z.string().optional().nullable(),
+  due_date: z.string().min(1, "due_date is required"),
   responsible_officer_id: z.string().optional().nullable(),
   source_mode: z.string().optional().nullable(),
   metadata: z.unknown().optional().nullable(),
@@ -71,22 +77,31 @@ export async function GET(request: NextRequest) {
       per_page: paginationParsed.data.limit,
     })
     const { from, to } = getPaginationRange(pagination)
-    const directionParam = searchParams.get("direction")
-    const direction =
-      directionParam === "internal" ? "outgoing" : directionParam === "external" ? "incoming" : directionParam
+    const letterTypeParam = searchParams.get("letter_type")
     const status = paginationParsed.data.status || searchParams.get("status")
     const department = searchParams.get("department")
     const dateFrom = searchParams.get("date_from")
     const dateTo = searchParams.get("date_to")
     const search = paginationParsed.data.search.trim()
 
+    const requestScope = await getRequestScope()
+    // A global admin (scopeMode: "global") may see all records.
+    // An admin in lead mode (scopeMode: "lead") is treated the same as a department lead
+    // and must be filtered to their own records, just like any non-global user.
+    const isGlobalAdmin = isAdminRole(profile.role) && requestScope?.scopeMode !== "lead"
+    const scopeMine = searchParams.get("scope") === "mine"
+
     let query = supabase
       .from("correspondence_records")
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
 
-    if (direction === "incoming" || direction === "outgoing") {
-      query = query.eq("direction", direction)
+    if (!isGlobalAdmin || scopeMine) {
+      query = query.or(`originator_id.eq.${user.id},created_by_id.eq.${user.id}`)
+    }
+
+    if (letterTypeParam === "internal" || letterTypeParam === "external") {
+      query = query.eq("letter_type", letterTypeParam)
     }
 
     if (status) {
@@ -128,6 +143,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`correspondence-records:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const { supabase, user, profile } = await getAuthContext()
     const dataClient = getServiceRoleClientOrFallback(supabase)
@@ -162,9 +183,11 @@ export async function POST(request: NextRequest) {
         letter_type: String(formData.get("letter_type") || "") || null,
         category: String(formData.get("category") || "") || null,
         recipient_name: String(formData.get("recipient_name") || "") || null,
+        recipient_code: String(formData.get("recipient_code") || ""),
         sender_name: String(formData.get("sender_name") || "") || null,
+        originator_id: String(formData.get("originator_id") || "") || null,
         action_required: String(formData.get("action_required") || "false") === "true",
-        due_date: String(formData.get("due_date") || "") || null,
+        due_date: String(formData.get("due_date") || ""),
         metadata: parsedMetadata,
       }
       const incomingFiles = formData.getAll("attachments")
@@ -179,14 +202,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
     }
 
-    const direction = "outgoing"
     const subject = parsed.data.subject
     const profileDepartment = profile?.department ? String(profile.department).trim() : null
     const departmentName = parsed.data.department_name ? String(parsed.data.department_name).trim() : profileDepartment
     const assignedDepartmentName = departmentName
 
-    if (direction === "outgoing" && !departmentName) {
-      return NextResponse.json({ error: "department_name is required for outgoing correspondence" }, { status: 400 })
+    if (!departmentName) {
+      return NextResponse.json({ error: "department_name is required" }, { status: 400 })
     }
     const resolvedDepartmentName = departmentName as string
 
@@ -198,53 +220,57 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (profile.is_department_lead && !isAdminRole(profile.role)) {
+    const postScope = await getRequestScope()
+    const isGlobalAdminPost = isAdminRole(profile.role) && postScope?.scopeMode !== "lead"
+    if (!isGlobalAdminPost && profile.is_department_lead) {
       const accessDepartment = departmentName || assignedDepartmentName
       if (accessDepartment && !canAccessDepartment(profile, accessDepartment)) {
         return NextResponse.json({ error: "Forbidden: outside your department scope" }, { status: 403 })
       }
     }
 
-    const initialStatus = "draft"
-    const senderName =
+    // If entering on behalf of someone else, fetch their profile for sender_name
+    const originatorId = parsed.data.originator_id || user.id
+    let senderName =
       profile?.full_name ||
       [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() ||
       user.email ||
       null
 
-    const deriveRecipientCode = (recipient: string | null | undefined) => {
-      const raw = String(recipient || "")
-        .toUpperCase()
-        .replace(/[^A-Z0-9\s]/g, " ")
-        .trim()
-      if (!raw) return "GEN"
-      const compact = raw.split(/\s+/).join("")
-      return (compact.slice(0, 8) || "GEN").toUpperCase()
+    if (originatorId !== user.id) {
+      const { data: originatorProfile } = await supabase
+        .from("profiles")
+        .select("full_name, first_name, last_name")
+        .eq("id", originatorId)
+        .single()
+      if (originatorProfile) {
+        senderName =
+          originatorProfile.full_name ||
+          [originatorProfile.first_name, originatorProfile.last_name].filter(Boolean).join(" ").trim() ||
+          senderName
+      }
     }
-    const recipientCode = deriveRecipientCode(parsed.data.recipient_name || null)
 
     const insertPayload: Record<string, unknown> = {
-      direction,
       subject,
       department_name: resolvedDepartmentName,
       department_code: departmentCode,
-      letter_type: parsed.data.letter_type || null,
+      letter_type: parsed.data.letter_type || "external",
       category: parsed.data.category || null,
       recipient_name: parsed.data.recipient_name ? String(parsed.data.recipient_name).trim() : null,
+      recipient_code: parsed.data.recipient_code.toUpperCase(),
       sender_name: senderName,
       action_required: parsed.data.action_required,
-      due_date: parsed.data.due_date || null,
+      due_date: parsed.data.due_date,
       responsible_officer_id: parsed.data.responsible_officer_id || null,
       assigned_department_name: assignedDepartmentName,
       source_mode: parsed.data.source_mode || null,
-      metadata: {
-        ...(typeof parsed.data.metadata === "object" && parsed.data.metadata !== null
+      metadata:
+        typeof parsed.data.metadata === "object" && parsed.data.metadata !== null
           ? (parsed.data.metadata as Record<string, unknown>)
-          : {}),
-        recipient_code: recipientCode,
-      },
-      status: initialStatus,
-      originator_id: user.id,
+          : {},
+      status: "under_review",
+      originator_id: originatorId,
       submitted_at: new Date().toISOString(),
       received_at: null,
     }
@@ -256,6 +282,137 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) throw error
+
+    // Initialize approval chain immediately (record goes straight to under_review)
+    try {
+      const { data: originatorProfile } = await dataClient
+        .from("profiles")
+        .select("id, department, lead_departments, is_department_lead, designation, role")
+        .eq("id", originatorId)
+        .single()
+
+      const originatorDept = originatorProfile?.department || created.department_name
+
+      const { data: deptLeadCandidates } = await dataClient
+        .from("profiles")
+        .select("id, lead_departments, department, is_department_lead, role")
+        .eq("is_department_lead", true)
+
+      const deptLead = originatorDept
+        ? (deptLeadCandidates || []).find(
+            (p) =>
+              p.id !== originatorId && (p.lead_departments?.includes(originatorDept) || p.department === originatorDept)
+          )
+        : null
+
+      const execLead = (deptLeadCandidates || []).find(
+        (p) =>
+          p.id !== originatorId &&
+          (p.lead_departments?.includes(EXEC_MANAGEMENT_DEPT) || p.department === EXEC_MANAGEMENT_DEPT)
+      )
+
+      const originatorIsExecLead =
+        execLead?.id === originatorId ||
+        originatorProfile?.lead_departments?.includes(EXEC_MANAGEMENT_DEPT) ||
+        originatorProfile?.department === EXEC_MANAGEMENT_DEPT ||
+        originatorProfile?.designation?.toLowerCase().includes("managing director") ||
+        originatorProfile?.designation?.toLowerCase() === "md"
+
+      const originatorIsDeptLead =
+        originatorProfile?.is_department_lead === true &&
+        originatorDept &&
+        originatorProfile?.lead_departments?.includes(originatorDept)
+
+      const now = new Date().toISOString()
+
+      if (originatorIsExecLead) {
+        await supabase
+          .from("correspondence_records")
+          .update({ status: "approved", approved_at: now })
+          .eq("id", created.id)
+        created.status = "approved"
+        if (execLead?.id) {
+          await dataClient.from("correspondence_approvals").upsert(
+            {
+              correspondence_id: created.id,
+              approval_stage: "exec_review",
+              approver_id: execLead.id,
+              status: "approved",
+              comments: "Auto-approved: requester is the executive lead",
+              requested_at: now,
+              decided_at: now,
+            },
+            { onConflict: "correspondence_id,approval_stage" }
+          )
+        }
+      } else if (originatorIsDeptLead) {
+        if (execLead?.id) {
+          await dataClient.from("correspondence_approvals").upsert(
+            {
+              correspondence_id: created.id,
+              approval_stage: "exec_review",
+              approver_id: execLead.id,
+              status: "pending",
+              requested_at: now,
+            },
+            { onConflict: "correspondence_id,approval_stage" }
+          )
+          await supabase.rpc("create_notification", {
+            p_user_id: execLead.id,
+            p_type: "task_assigned",
+            p_category: "operations",
+            p_title: "Correspondence pending your approval",
+            p_message: `${created.reference_number} - ${created.subject}`,
+            p_priority: "normal",
+            p_link_url: "/admin/correspondence",
+            p_actor_id: user.id,
+            p_entity_type: "correspondence_record",
+            p_entity_id: created.id,
+            p_rich_content: { stage: "exec_review" },
+          })
+        }
+      } else {
+        if (deptLead?.id) {
+          await dataClient.from("correspondence_approvals").upsert(
+            {
+              correspondence_id: created.id,
+              approval_stage: "dept_review",
+              approver_id: deptLead.id,
+              status: "pending",
+              requested_at: now,
+            },
+            { onConflict: "correspondence_id,approval_stage" }
+          )
+          await supabase.rpc("create_notification", {
+            p_user_id: deptLead.id,
+            p_type: "task_assigned",
+            p_category: "operations",
+            p_title: "Correspondence pending your approval",
+            p_message: `${created.reference_number} - ${created.subject}`,
+            p_priority: "normal",
+            p_link_url: "/admin/correspondence",
+            p_actor_id: user.id,
+            p_entity_type: "correspondence_record",
+            p_entity_id: created.id,
+            p_rich_content: { stage: "dept_review" },
+          })
+        }
+        if (execLead?.id) {
+          await dataClient.from("correspondence_approvals").upsert(
+            {
+              correspondence_id: created.id,
+              approval_stage: "exec_review",
+              approver_id: execLead.id,
+              status: "pending",
+              requested_at: now,
+            },
+            { onConflict: "correspondence_id,approval_stage" }
+          )
+        }
+      }
+    } catch (chainError) {
+      log.error({ err: String(chainError), recordId: created.id }, "Approval chain setup failed on create")
+    }
 
     try {
       if (attachments.length > 0) {
@@ -302,9 +459,9 @@ export async function POST(request: NextRequest) {
         eventType: "correspondence_created",
         newStatus: created.status,
         details: {
-          direction,
           department_name: created.department_name,
           assigned_department_name: created.assigned_department_name,
+          recipient_code: created.recipient_code,
         },
       })
     } catch (eventError) {
@@ -321,8 +478,8 @@ export async function POST(request: NextRequest) {
         critical: false,
         newValues: {
           reference_number: created.reference_number,
-          direction: created.direction,
           status: created.status,
+          recipient_code: created.recipient_code,
         },
       })
     } catch (auditError) {
@@ -353,7 +510,7 @@ export async function POST(request: NextRequest) {
             p_actor_id: user.id,
             p_entity_type: "correspondence_record",
             p_entity_id: created.id,
-            p_rich_content: { direction: created.direction, status: created.status },
+            p_rich_content: { status: created.status, recipient_code: created.recipient_code },
           })
         }
       }

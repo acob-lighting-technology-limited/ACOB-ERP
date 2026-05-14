@@ -11,6 +11,7 @@ import {
 import { logger } from "@/lib/logger"
 import { syncEmploymentStatusToAuth } from "@/lib/supabase/admin"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("admin-users-role")
 const ALLOWED_ADMIN_DOMAINS = ["hr", "finance", "assets", "reports", "tasks", "projects", "communications"] as const
@@ -33,6 +34,12 @@ const UpdateUserRoleSchema = z
   })
 
 export async function PATCH(request: Request) {
+  const rl = await rateLimit(`admin-users-role:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {
@@ -175,5 +182,11 @@ export async function PATCH(request: Request) {
 
 // POST kept for backwards compat — prefer PATCH
 export async function POST(request: Request) {
+  const rl = await rateLimit(`admin-users-role:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   return PATCH(request)
 }

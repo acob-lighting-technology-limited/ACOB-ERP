@@ -3,6 +3,7 @@ import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { resolveAdminScope } from "@/lib/admin/rbac"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 async function createClient() {
   const cookieStore = await cookies()
@@ -39,6 +40,12 @@ const UpsertSchema = z.object({
 })
 
 export async function POST(request: Request) {
+  const rl = await rateLimit(`reports-office-year-config:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   const supabase = await createClient()
 
   const {

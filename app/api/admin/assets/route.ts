@@ -3,6 +3,9 @@ import { canAccessAdminSection, resolveAdminScope } from "@/lib/admin/rbac"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { apiError, ApiErrorCode } from "@/lib/api/errors"
+import { checkRequestSize } from "@/lib/api/request-size"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 type AssignmentType = "individual" | "department" | "office"
 
@@ -115,6 +118,11 @@ async function closeCurrentAssetAssignments(
 }
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`admin-assets:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+  if (!rl.allowed) {
+    return apiError("Too many requests. Please try again later.", ApiErrorCode.RATE_LIMITED, 429)
+  }
+
   const supabase = await createClient()
   const {
     data: { user },
@@ -122,24 +130,27 @@ export async function PATCH(request: NextRequest) {
   } = await supabase.auth.getUser()
 
   if (userError || !user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    return apiError("Unauthorized", ApiErrorCode.UNAUTHORIZED, 401)
   }
 
   const scope = await resolveAdminScope(supabase as AdminAssetsClient, user.id)
   if (!scope || !scope.isAdminLike || !canAccessAdminSection(scope, "assets")) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    return apiError("Forbidden", ApiErrorCode.FORBIDDEN, 403)
   }
+
+  const sizeError = checkRequestSize(request)
+  if (sizeError) return sizeError
 
   const payload = (await request.json().catch(() => null)) as SaveAssetPayload | null
   const mode = payload?.mode
   const form = payload?.assetForm
 
   if (!mode || !form) {
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 })
+    return apiError("Invalid payload", ApiErrorCode.VALIDATION_ERROR, 400)
   }
 
   if (!String(form.asset_type || "").trim()) {
-    return NextResponse.json({ error: "Please select an asset type" }, { status: 400 })
+    return apiError("Please select an asset type", ApiErrorCode.MISSING_REQUIRED_FIELD, 400)
   }
 
   const dataClient = getServiceRoleClientOrFallback(supabase as AdminAssetsClient)
@@ -149,7 +160,7 @@ export async function PATCH(request: NextRequest) {
     if (mode === "update") {
       const selected = payload?.selectedAsset
       if (!selected?.id) {
-        return NextResponse.json({ error: "Asset id is required for update" }, { status: 400 })
+        return apiError("Asset id is required for update", ApiErrorCode.MISSING_REQUIRED_FIELD, 400)
       }
 
       const { error: updateError } = await dataClient
@@ -179,7 +190,7 @@ export async function PATCH(request: NextRequest) {
 
       if (isAssigneeChanged) {
         const assignmentData = await buildAssignmentData(dataClient, selected.id, user.id, form)
-        if (!assignmentData.ok) return NextResponse.json({ error: assignmentData.error }, { status: 400 })
+        if (!assignmentData.ok) return apiError(assignmentData.error, ApiErrorCode.VALIDATION_ERROR, 400)
 
         const { error: rpcError } = await dataClient.rpc("reassign_asset", {
           p_asset_id: selected.id,
@@ -196,22 +207,20 @@ export async function PATCH(request: NextRequest) {
         if (rpcError) throw new Error(rpcError.message)
       } else if (selected.status !== "assigned" && form.status === "assigned") {
         const assignmentData = await buildAssignmentData(dataClient, selected.id, user.id, form)
-        if (!assignmentData.ok) return NextResponse.json({ error: assignmentData.error }, { status: 400 })
+        if (!assignmentData.ok) return apiError(assignmentData.error, ApiErrorCode.VALIDATION_ERROR, 400)
 
-        await closeCurrentAssetAssignments(dataClient, selected.id, "Reassigned via Edit")
-
-        const { error: assignError } = await dataClient.from("asset_assignments").insert(assignmentData.data)
-        if (assignError) throw new Error(assignError.message)
-
-        const { error: assetFieldsError } = await dataClient
-          .from("assets")
-          .update({
-            assignment_type: form.assignment_type,
-            department: assignmentData.data.department || null,
-            office_location: assignmentData.data.office_location || null,
-          })
-          .eq("id", selected.id)
-        if (assetFieldsError) throw new Error(assetFieldsError.message)
+        const { error: atomicAssignError } = await dataClient.rpc("atomic_assign_asset", {
+          p_asset_id: selected.id,
+          p_assigned_by: assignmentData.data.assigned_by,
+          p_assigned_at: assignmentData.data.assigned_at,
+          p_assignment_type: form.assignment_type,
+          p_assigned_to: assignmentData.data.assigned_to || null,
+          p_department: assignmentData.data.department || null,
+          p_office_location: assignmentData.data.office_location || null,
+          p_notes: assignmentData.data.assignment_notes,
+          p_handover_notes: "Reassigned via Edit",
+        })
+        if (atomicAssignError) throw new Error(atomicAssignError.message)
       }
 
       return NextResponse.json({ message: "Asset updated successfully" })
@@ -219,14 +228,15 @@ export async function PATCH(request: NextRequest) {
 
     const rawQuantity = Number(payload?.quantity ?? 1)
     if (!Number.isInteger(rawQuantity) || rawQuantity < 1 || rawQuantity > 100) {
-      return NextResponse.json({ error: "Quantity must be an integer between 1 and 100" }, { status: 400 })
+      return apiError("Quantity must be an integer between 1 and 100", ApiErrorCode.VALIDATION_ERROR, 400)
     }
     const quantity = rawQuantity
 
     if (quantity > 1 && String(form.serial_number || "").trim()) {
-      return NextResponse.json(
-        { error: "Serial number cannot be set when creating multiple assets in one batch" },
-        { status: 400 }
+      return apiError(
+        "Serial number cannot be set when creating multiple assets in one batch",
+        ApiErrorCode.VALIDATION_ERROR,
+        400
       )
     }
 
@@ -240,9 +250,10 @@ export async function PATCH(request: NextRequest) {
     if (latestError) throw new Error(latestError.message)
 
     if (latestAsset && form.acquisition_year < Number(latestAsset.acquisition_year || 0)) {
-      return NextResponse.json(
-        { error: `Year must be ${latestAsset.acquisition_year} or later for this asset type.` },
-        { status: 400 }
+      return apiError(
+        `Year must be ${latestAsset.acquisition_year} or later for this asset type.`,
+        ApiErrorCode.VALIDATION_ERROR,
+        400
       )
     }
 
@@ -271,7 +282,7 @@ export async function PATCH(request: NextRequest) {
 
       if (form.status === "assigned" && newAsset?.id) {
         const assignmentData = await buildAssignmentData(dataClient, newAsset.id, user.id, form)
-        if (!assignmentData.ok) return NextResponse.json({ error: assignmentData.error }, { status: 400 })
+        if (!assignmentData.ok) return apiError(assignmentData.error, ApiErrorCode.VALIDATION_ERROR, 400)
 
         const { error: assignError } = await dataClient.from("asset_assignments").insert(assignmentData.data)
         if (assignError) throw new Error(assignError.message)
@@ -312,7 +323,7 @@ export async function PATCH(request: NextRequest) {
     const baseError = error instanceof Error ? error.message : "Failed to save asset"
     const errorMessage =
       createdCodes.length > 0 ? `Created ${createdCodes.length} asset(s) before failure. ${baseError}` : baseError
-    return NextResponse.json({ error: errorMessage }, { status: 500 })
+    return apiError(errorMessage, ApiErrorCode.INTERNAL_ERROR, 500)
   }
 }
 

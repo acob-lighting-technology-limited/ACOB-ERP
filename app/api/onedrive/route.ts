@@ -11,6 +11,7 @@ import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getDepartmentContextFromPath, isPathAllowed, resolveOneDriveAccessScope } from "@/lib/onedrive/access"
 import { logger } from "@/lib/logger"
 import type { FileItem } from "@/lib/onedrive/types"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("onedrive")
 
@@ -347,6 +348,12 @@ export async function GET(request: Request) {
  *   - name: New folder name
  */
 export async function POST(request: Request) {
+  const rl = await rateLimit(`onedrive:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const formData = await request.formData()
     const accessMode = typeof formData.get("accessMode") === "string" ? String(formData.get("accessMode")) : null
@@ -424,6 +431,12 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const rl = await rateLimit(`onedrive:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const body = (await request.json()) as { path?: string; newName?: string; accessMode?: string }
     const context = await getRequestContext(body.accessMode ?? null, true)
@@ -466,6 +479,12 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const rl = await rateLimit(`onedrive:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const { searchParams } = new URL(request.url)
     const context = await getRequestContext(searchParams.get("accessMode"), true)

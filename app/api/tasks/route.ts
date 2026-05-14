@@ -3,6 +3,9 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { logger } from "@/lib/logger"
+import { checkRequestSize } from "@/lib/api/request-size"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { apiError, ApiErrorCode } from "@/lib/api/errors"
 import {
   canAssignTasks,
   canAssignToDepartment,
@@ -30,12 +33,17 @@ const TaskBodySchema = z.object({
 
 export async function POST(request: NextRequest) {
   try {
+    const rl = await rateLimit(`tasks-create:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+    if (!rl.allowed) {
+      return apiError("Too many requests. Please try again later.", ApiErrorCode.RATE_LIMITED, 429)
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!user) return apiError("Unauthorized", ApiErrorCode.UNAUTHORIZED, 401)
 
     const { data: profile } = await supabase
       .from("profiles")
@@ -44,12 +52,20 @@ export async function POST(request: NextRequest) {
       .single<TaskAssignmentAuthorityProfile>()
 
     if (!profile || !canAssignTasks(profile)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      return apiError("Forbidden", ApiErrorCode.FORBIDDEN, 403)
     }
+
+    const sizeError = checkRequestSize(request)
+    if (sizeError) return sizeError
 
     const parsed = TaskBodySchema.safeParse(await request.json())
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
+      return apiError(
+        parsed.error.issues[0]?.message ?? "Validation failed",
+        ApiErrorCode.VALIDATION_ERROR,
+        400,
+        parsed.error.issues
+      )
     }
 
     const payload = parsed.data
@@ -57,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     if (payload.assignment_type === "individual") {
       if (!payload.assigned_to) {
-        return NextResponse.json({ error: "Assignee is required for individual tasks" }, { status: 400 })
+        return apiError("Assignee is required for individual tasks", ApiErrorCode.MISSING_REQUIRED_FIELD, 400)
       }
 
       const { data: assignee } = await supabase
@@ -67,11 +83,11 @@ export async function POST(request: NextRequest) {
         .single<TaskAssignmentTargetProfile>()
 
       if (!assignee) {
-        return NextResponse.json({ error: "Selected assignee was not found" }, { status: 400 })
+        return apiError("Selected assignee was not found", ApiErrorCode.NOT_FOUND, 400)
       }
 
       if (!canAssignToProfile(profile, assignee)) {
-        return NextResponse.json({ error: "You can only assign tasks within your approved scope" }, { status: 403 })
+        return apiError("You can only assign tasks within your approved scope", ApiErrorCode.FORBIDDEN, 403)
       }
 
       resolvedDepartment = assignee.department || resolvedDepartment
@@ -79,11 +95,11 @@ export async function POST(request: NextRequest) {
 
     if (payload.assignment_type === "department") {
       if (!payload.department) {
-        return NextResponse.json({ error: "Department is required for department tasks" }, { status: 400 })
+        return apiError("Department is required for department tasks", ApiErrorCode.MISSING_REQUIRED_FIELD, 400)
       }
 
       if (!canAssignToDepartment(profile, payload.department)) {
-        return NextResponse.json({ error: "You can only assign tasks within your approved scope" }, { status: 403 })
+        return apiError("You can only assign tasks within your approved scope", ApiErrorCode.FORBIDDEN, 403)
       }
     }
 
@@ -105,7 +121,7 @@ export async function POST(request: NextRequest) {
 
     const { data: task, error } = await supabase.from("tasks").insert(insertPayload).select("*").single()
     if (error || !task) {
-      return NextResponse.json({ error: error?.message || "Failed to create task" }, { status: 500 })
+      return apiError(error?.message || "Failed to create task", ApiErrorCode.DATABASE_ERROR, 500)
     }
 
     await writeAuditLog(
@@ -123,6 +139,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ data: task }, { status: 201 })
   } catch (error) {
     log.error({ err: String(error) }, "Unhandled error in tasks POST")
-    return NextResponse.json({ error: "Failed to create task" }, { status: 500 })
+    return apiError("Failed to create task", ApiErrorCode.INTERNAL_ERROR, 500)
   }
 }

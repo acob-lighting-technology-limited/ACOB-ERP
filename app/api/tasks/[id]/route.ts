@@ -3,6 +3,9 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { logger } from "@/lib/logger"
+import { checkRequestSize } from "@/lib/api/request-size"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { apiError, ApiErrorCode } from "@/lib/api/errors"
 import {
   canAssignTasks,
   canAssignToDepartment,
@@ -40,20 +43,33 @@ async function assertManagerAccess(supabase: Awaited<ReturnType<typeof createCli
 export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
   try {
+    const rl = await rateLimit(`tasks-update:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+    if (!rl.allowed) {
+      return apiError("Too many requests. Please try again later.", ApiErrorCode.RATE_LIMITED, 429)
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!user) return apiError("Unauthorized", ApiErrorCode.UNAUTHORIZED, 401)
     const assignerProfile = await assertManagerAccess(supabase, user.id)
     if (!assignerProfile) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      return apiError("Forbidden", ApiErrorCode.FORBIDDEN, 403)
     }
+
+    const sizeError = checkRequestSize(request)
+    if (sizeError) return sizeError
 
     const parsed = UpdateTaskSchema.safeParse(await request.json())
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
+      return apiError(
+        parsed.error.issues[0]?.message ?? "Validation failed",
+        ApiErrorCode.VALIDATION_ERROR,
+        400,
+        parsed.error.issues
+      )
     }
 
     const payload = parsed.data
@@ -72,7 +88,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       }>()
 
     if (!existingTask) {
-      return NextResponse.json({ error: "Task not found" }, { status: 404 })
+      return apiError("Task not found", ApiErrorCode.NOT_FOUND, 404)
     }
 
     const finalAssignmentType = payload.assignment_type || existingTask.assignment_type || "individual"
@@ -85,7 +101,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
 
     if (assignmentFieldsTouched && finalAssignmentType === "individual") {
       if (!finalAssignedTo) {
-        return NextResponse.json({ error: "Assignee is required for individual tasks" }, { status: 400 })
+        return apiError("Assignee is required for individual tasks", ApiErrorCode.MISSING_REQUIRED_FIELD, 400)
       }
 
       const { data: assignee } = await supabase
@@ -95,11 +111,11 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
         .single<TaskAssignmentTargetProfile>()
 
       if (!assignee) {
-        return NextResponse.json({ error: "Selected assignee was not found" }, { status: 400 })
+        return apiError("Selected assignee was not found", ApiErrorCode.NOT_FOUND, 400)
       }
 
       if (!canAssignToProfile(assignerProfile, assignee)) {
-        return NextResponse.json({ error: "You can only assign tasks within your approved scope" }, { status: 403 })
+        return apiError("You can only assign tasks within your approved scope", ApiErrorCode.FORBIDDEN, 403)
       }
 
       finalDepartment = assignee.department || finalDepartment
@@ -107,10 +123,10 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
 
     if (assignmentFieldsTouched && finalAssignmentType === "department") {
       if (!finalDepartment) {
-        return NextResponse.json({ error: "Department is required for department tasks" }, { status: 400 })
+        return apiError("Department is required for department tasks", ApiErrorCode.MISSING_REQUIRED_FIELD, 400)
       }
       if (!canAssignToDepartment(assignerProfile, finalDepartment)) {
-        return NextResponse.json({ error: "You can only assign tasks within your approved scope" }, { status: 403 })
+        return apiError("You can only assign tasks within your approved scope", ApiErrorCode.FORBIDDEN, 403)
       }
     }
 
@@ -134,7 +150,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       .single()
 
     if (error || !updatedTask) {
-      return NextResponse.json({ error: error?.message || "Failed to update task" }, { status: 500 })
+      return apiError(error?.message || "Failed to update task", ApiErrorCode.DATABASE_ERROR, 500)
     }
 
     await writeAuditLog(
@@ -152,27 +168,32 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     return NextResponse.json({ data: updatedTask })
   } catch (error) {
     log.error({ err: String(error) }, "Unhandled error in task PATCH")
-    return NextResponse.json({ error: "Failed to update task" }, { status: 500 })
+    return apiError("Failed to update task", ApiErrorCode.INTERNAL_ERROR, 500)
   }
 }
 
-export async function DELETE(_: NextRequest, props: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
   try {
+    const rl = await rateLimit(`tasks-delete:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+    if (!rl.allowed) {
+      return apiError("Too many requests. Please try again later.", ApiErrorCode.RATE_LIMITED, 429)
+    }
+
     const supabase = await createClient()
     const {
       data: { user },
     } = await supabase.auth.getUser()
 
-    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!user) return apiError("Unauthorized", ApiErrorCode.UNAUTHORIZED, 401)
     if (!(await assertManagerAccess(supabase, user.id))) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      return apiError("Forbidden", ApiErrorCode.FORBIDDEN, 403)
     }
 
     const { data: existingTask } = await supabase.from("tasks").select("id, title, status").eq("id", params.id).single()
 
     const { error } = await supabase.from("tasks").delete().eq("id", params.id)
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return apiError(error.message, ApiErrorCode.DATABASE_ERROR, 500)
 
     await writeAuditLog(
       supabase,
@@ -189,6 +210,6 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
     return NextResponse.json({ success: true })
   } catch (error) {
     log.error({ err: String(error) }, "Unhandled error in task DELETE")
-    return NextResponse.json({ error: "Failed to delete task" }, { status: 500 })
+    return apiError("Failed to delete task", ApiErrorCode.INTERNAL_ERROR, 500)
   }
 }

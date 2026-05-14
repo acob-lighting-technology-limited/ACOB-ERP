@@ -5,6 +5,7 @@ import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { DEFAULT_MAINTENANCE_MESSAGE, canManageMaintenanceMode, parseMaintenanceMode } from "@/lib/maintenance"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("dev-maintenance")
 export const dynamic = "force-dynamic"
@@ -66,6 +67,12 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  const rl = await rateLimit(`dev-maintenance:${getClientId(request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   if (process.env.NODE_ENV === "production") {
     return NextResponse.json({ error: "Not available in production" }, { status: 404 })
   }

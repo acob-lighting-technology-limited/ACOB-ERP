@@ -13,6 +13,9 @@ import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getPaginationRange, paginatedResponse, PaginationSchema } from "@/lib/pagination"
 import { checkIdempotency, getIdempotencyKey, storeIdempotencyKey } from "@/lib/idempotency"
+import { apiError, ApiErrorCode } from "@/lib/api/errors"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { checkRequestSize } from "@/lib/api/request-size"
 
 const log = logger("payments")
 
@@ -104,9 +107,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url)
     const paginationParsed = PaginationSchema.safeParse(Object.fromEntries(searchParams))
     if (!paginationParsed.success) {
-      return NextResponse.json(
-        { error: paginationParsed.error.issues[0]?.message ?? "Invalid pagination params" },
-        { status: 400 }
+      return apiError(
+        paginationParsed.error.issues[0]?.message ?? "Invalid pagination params",
+        ApiErrorCode.VALIDATION_ERROR,
+        400,
+        paginationParsed.error.issues
       )
     }
     const pagination = paginationParsed.data
@@ -122,7 +127,7 @@ export async function GET(request: Request) {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return apiError("Unauthorized", ApiErrorCode.UNAUTHORIZED, 401)
     }
 
     const { data: profile } = await supabase
@@ -195,13 +200,18 @@ export async function GET(request: Request) {
     return NextResponse.json(paginatedResponse(payments || [], count || 0, pagination))
   } catch (error) {
     log.error({ err: String(error) }, "Error fetching payments:")
-    return NextResponse.json({ error: "Failed to fetch payments" }, { status: 500 })
+    return apiError("Failed to fetch payments", ApiErrorCode.INTERNAL_ERROR, 500)
   }
 }
 
 // POST /api/payments - Create a new payment
 export async function POST(request: Request) {
   try {
+    const rl = await rateLimit(`payments-create:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+    if (!rl.allowed) {
+      return apiError("Too many requests. Please try again later.", ApiErrorCode.RATE_LIMITED, 429)
+    }
+
     const supabase = await createClient()
 
     // Get current user
@@ -209,7 +219,7 @@ export async function POST(request: Request) {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return apiError("Unauthorized", ApiErrorCode.UNAUTHORIZED, 401)
     }
 
     const dataClient = getServiceRoleClientOrFallback(supabase)
@@ -221,10 +231,18 @@ export async function POST(request: Request) {
       }
     }
 
+    const sizeError = checkRequestSize(request)
+    if (sizeError) return sizeError
+
     const body = await request.json()
     const parsed = CreatePaymentSchema.safeParse(body)
     if (!parsed.success) {
-      return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
+      return apiError(
+        parsed.error.issues[0]?.message ?? "Validation failed",
+        ApiErrorCode.VALIDATION_ERROR,
+        400,
+        parsed.error.issues
+      )
     }
 
     const {
@@ -267,10 +285,7 @@ export async function POST(request: Request) {
           .eq("id", department_id)
           .single()
         if (!targetDepartment || !queryScopedDepartments.includes(targetDepartment.name)) {
-          return NextResponse.json(
-            { error: "You can only create finance records in your scoped departments" },
-            { status: 403 }
-          )
+          return apiError("You can only create finance records in your scoped departments", ApiErrorCode.FORBIDDEN, 403)
         }
       }
     } else {
@@ -287,7 +302,7 @@ export async function POST(request: Request) {
         userDepartmentId = userDept?.id || null
       }
       if (!userDepartmentId || userDepartmentId !== department_id) {
-        return NextResponse.json({ error: "You can only create payments in your own department" }, { status: 403 })
+        return apiError("You can only create payments in your own department", ApiErrorCode.FORBIDDEN, 403)
       }
     }
 
@@ -344,6 +359,6 @@ export async function POST(request: Request) {
   } catch (error: unknown) {
     log.error({ err: String(error) }, "Error creating payment:")
     const message = error instanceof Error ? error.message : "Failed to create payment"
-    return NextResponse.json({ error: message }, { status: 500 })
+    return apiError(message, ApiErrorCode.INTERNAL_ERROR, 500)
   }
 }

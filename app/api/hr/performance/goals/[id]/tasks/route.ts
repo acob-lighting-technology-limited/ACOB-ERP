@@ -3,6 +3,8 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { logger } from "@/lib/logger"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { getRequestScope, type AdminScope } from "@/lib/admin/api-scope"
 
 const log = logger("goal-linked-tasks-route")
 
@@ -23,9 +25,8 @@ type ProfileRecord = {
   lead_departments?: string[] | null
 }
 
-function isAdmin(profile: ProfileRecord | null) {
-  const role = String(profile?.role || "").toLowerCase()
-  return role === "developer" || role === "admin" || role === "super_admin"
+function isAdmin(scope: AdminScope | null) {
+  return scope?.isAdminLike === true && scope.scopeMode !== "lead"
 }
 
 function canLead(profile: ProfileRecord | null, department: string | null | undefined) {
@@ -53,7 +54,8 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
     ])
 
     if (!goal) return NextResponse.json({ error: "Goal not found" }, { status: 404 })
-    if (goal.user_id !== user.id && !isAdmin(profile ?? null) && !canLead(profile ?? null, goal.department)) {
+    const getScope = await getRequestScope()
+    if (goal.user_id !== user.id && !isAdmin(getScope) && !canLead(profile ?? null, goal.department)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -73,6 +75,12 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`hr-performance-goals-tasks:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {
@@ -95,7 +103,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     ])
 
     if (!goal) return NextResponse.json({ error: "Goal not found" }, { status: 404 })
-    if (!isAdmin(profile ?? null) && !canLead(profile ?? null, goal.department)) {
+    const postScope = await getRequestScope()
+    if (!isAdmin(postScope) && !canLead(profile ?? null, goal.department)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

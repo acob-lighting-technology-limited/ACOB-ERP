@@ -7,7 +7,9 @@ import {
   getAuthContext,
   isAdminRole,
 } from "@/lib/help-desk/server"
+import { getRequestScope } from "@/lib/admin/api-scope"
 import { logger } from "@/lib/logger"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("help-desk-tickets-comments")
 const CreateHelpDeskCommentSchema = z.object({
@@ -34,8 +36,10 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 })
     }
 
+    const getScope = await getRequestScope()
+    const isGlobalAdmin = isAdminRole(profile.role) && getScope?.scopeMode !== "lead"
     const canView =
-      isAdminRole(profile.role) ||
+      isGlobalAdmin ||
       canLeadDepartment(profile, ticket.service_department) ||
       canLeadDepartment(profile, ticket.requester_department) ||
       ticket.requester_id === user.id ||
@@ -62,6 +66,12 @@ export async function GET(_: NextRequest, props: { params: Promise<{ id: string 
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`help-desk-tickets-comments:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const { supabase, user, profile } = await getAuthContext()
 
@@ -88,8 +98,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       return NextResponse.json({ error: "Ticket not found" }, { status: 404 })
     }
 
+    const postScope = await getRequestScope()
+    const isGlobalAdminPost = isAdminRole(profile.role) && postScope?.scopeMode !== "lead"
     const canComment =
-      isAdminRole(profile.role) ||
+      isGlobalAdminPost ||
       canLeadDepartment(profile, ticket.service_department) ||
       canLeadDepartment(profile, ticket.requester_department) ||
       ticket.requester_id === user.id ||

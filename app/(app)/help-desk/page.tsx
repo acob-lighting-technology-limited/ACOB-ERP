@@ -42,27 +42,21 @@ async function getData() {
 
   const { data: profile } = await dataClient
     .from("profiles")
-    .select("department, role, is_department_lead")
+    .select("department, is_department_lead, role")
     .eq("id", user.id)
     .maybeSingle()
 
+  // User portal: only personal tickets (requester, assignee, or created_by).
+  // Admins and leads use /admin/help-desk to see scoped admin data and queue/department tickets.
   const { data: personalTickets, error: personalError } = await dataClient
     .from("help_desk_tickets")
     .select("*")
     .or(`requester_id.eq.${user.id},assigned_to.eq.${user.id},created_by.eq.${user.id}`)
     .order("created_at", { ascending: false })
 
-  const { data: departmentTickets, error: departmentError } = profile?.department
-    ? await dataClient
-        .from("help_desk_tickets")
-        .select("*")
-        .eq("service_department", profile.department)
-        .in("handling_mode", ["queue", "department"])
-        .order("created_at", { ascending: false })
-    : { data: [], error: null }
-
+  const departmentError = null
   const mergedTickets = Array.from(
-    new Map([...(personalTickets || []), ...(departmentTickets || [])].map((ticket) => [ticket.id, ticket])).values()
+    new Map((personalTickets || []).map((ticket) => [ticket.id, ticket])).values()
   ) as HelpDeskTicket[]
 
   const goalIds = Array.from(

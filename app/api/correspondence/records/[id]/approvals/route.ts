@@ -7,10 +7,19 @@ import {
   canAccessRecord,
   getAuthContext,
 } from "@/lib/correspondence/server"
+import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
+import { getRequestScope } from "@/lib/admin/api-scope"
 import { logger } from "@/lib/logger"
 import { normalizeDepartmentName } from "@/shared/departments"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("correspondence-records-approvals")
+
+const STAGE_DEPT = "dept_review"
+const STAGE_EXEC = "exec_review"
+// Support legacy stage names from records created before v2
+const STAGE_DEPT_LEGACY = "department_review"
+const STAGE_EXEC_LEGACY = "executive_review"
 
 const CreateCorrespondenceApprovalSchema = z.object({
   decision: z.enum(["approved", "rejected", "returned_for_correction"], {
@@ -21,6 +30,13 @@ const CreateCorrespondenceApprovalSchema = z.object({
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`correspondence-records-approvals:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
+
   try {
     const { supabase, user, profile } = await getAuthContext()
 
@@ -38,7 +54,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       return NextResponse.json({ error: "Record not found" }, { status: 404 })
     }
 
-    if (!canAccessRecord(profile, user.id, record)) {
+    const approvalsScope = await getRequestScope()
+    const isGlobalAdmin = approvalsScope?.isAdminLike === true && approvalsScope.scopeMode !== "lead"
+    if (!isGlobalAdmin && !canAccessRecord(profile, user.id, record)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -50,22 +68,30 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
     const decision = parsed.data.decision
     const comments = parsed.data.comments ? String(parsed.data.comments).trim() : null
+    const now = new Date().toISOString()
 
     const approvalScopeDepartment = String(record.department_name || record.assigned_department_name || "")
-    const normalizedScopeDepartment = normalizeDepartmentName(approvalScopeDepartment)
     const designation = String((profile as { designation?: string | null })?.designation || "").toLowerCase()
     const role = String(profile.role || "").toLowerCase()
+
     const isManagingDirector =
-      role === "super_admin" || designation.includes("managing director") || designation === "md"
+      role === "super_admin" ||
+      role === "developer" ||
+      designation.includes("managing director") ||
+      designation === "md"
+
     const isExecutiveLead =
       Boolean(profile.is_department_lead) &&
-      normalizedScopeDepartment === normalizeDepartmentName("Executive Management") &&
+      normalizeDepartmentName(approvalScopeDepartment) === normalizeDepartmentName("Executive Management") &&
       canAccessDepartment(profile, "Executive Management")
+
     const isDepartmentLeadForRecord =
       Boolean(profile.is_department_lead) &&
       Boolean(approvalScopeDepartment) &&
       canAccessDepartment(profile, approvalScopeDepartment)
+
     const isExecutiveApprover = isManagingDirector || isExecutiveLead
+    const canBypassChain = role === "super_admin" || role === "developer"
 
     const { data: existingApprovals, error: approvalError } = await supabase
       .from("correspondence_approvals")
@@ -75,12 +101,98 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
     if (approvalError) throw approvalError
 
-    const departmentApproval = (existingApprovals || []).find(
-      (approval) => approval.approval_stage === "department_review"
+    const approvals = existingApprovals || []
+
+    const deptApproval = approvals.find(
+      (a) => a.approval_stage === STAGE_DEPT || a.approval_stage === STAGE_DEPT_LEGACY
     )
-    const executiveApproval = (existingApprovals || []).find(
-      (approval) => approval.approval_stage === "executive_review"
+    const execApproval = approvals.find(
+      (a) => a.approval_stage === STAGE_EXEC || a.approval_stage === STAGE_EXEC_LEGACY
     )
+
+    // ── Super admin / developer bypass ─────────────────────────────────────────
+    if (canBypassChain && decision === "approved") {
+      const dataClient = getServiceRoleClientOrFallback(supabase)
+      const pendingStages = [
+        { key: STAGE_DEPT, existing: deptApproval },
+        { key: STAGE_EXEC, existing: execApproval },
+      ]
+
+      for (const { key, existing } of pendingStages) {
+        if (existing) {
+          await dataClient
+            .from("correspondence_approvals")
+            .update({
+              approver_id: user.id,
+              status: "approved",
+              comments: "Approved by administrator",
+              decided_at: now,
+            })
+            .eq("id", existing.id)
+        } else {
+          await dataClient.from("correspondence_approvals").insert({
+            correspondence_id: record.id,
+            approval_stage: key,
+            approver_id: user.id,
+            status: "approved",
+            comments: "Approved by administrator",
+            requested_at: now,
+            decided_at: now,
+          })
+        }
+      }
+
+      const { data: updatedRecord, error: recordUpdateError } = await supabase
+        .from("correspondence_records")
+        .update({ status: "approved", approved_at: now })
+        .eq("id", record.id)
+        .select("*")
+        .single()
+
+      if (recordUpdateError) throw recordUpdateError
+
+      await appendCorrespondenceEvent({
+        correspondenceId: record.id,
+        actorId: user.id,
+        eventType: "approval_decision",
+        oldStatus: record.status,
+        newStatus: "approved",
+        details: { decision: "approved", bypass: true, comments },
+      })
+
+      await appendCorrespondenceAuditLog({
+        actorId: user.id,
+        action: "correspondence_approval_approved",
+        recordId: record.id,
+        department: approvalScopeDepartment || null,
+        route: "/api/correspondence/records/[id]/approvals",
+        critical: true,
+        oldValues: { status: record.status },
+        newValues: { status: "approved", bypass: true },
+      })
+
+      try {
+        await supabase.rpc("create_notification", {
+          p_user_id: record.originator_id,
+          p_type: "approval",
+          p_category: "operations",
+          p_title: "Correspondence approved",
+          p_message: `${record.reference_number} was approved`,
+          p_priority: "normal",
+          p_link_url: "/correspondence",
+          p_actor_id: user.id,
+          p_entity_type: "correspondence_record",
+          p_entity_id: record.id,
+          p_rich_content: { decision: "approved", reference_number: record.reference_number },
+        })
+      } catch (notifyError) {
+        log.error({ err: String(notifyError) }, "Correspondence approval notification error:")
+      }
+
+      return NextResponse.json({ data: { record: updatedRecord } })
+    }
+
+    // ── Normal chain flow ───────────────────────────────────────────────────────
 
     if (decision !== "approved" && !isDepartmentLeadForRecord && !isExecutiveApprover) {
       return NextResponse.json(
@@ -89,62 +201,59 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       )
     }
 
-    if (decision === "approved" && !departmentApproval && !isDepartmentLeadForRecord) {
-      return NextResponse.json({ error: "Department lead approval is required first" }, { status: 403 })
-    }
-
-    let targetApproval = departmentApproval
+    let targetApproval = deptApproval || execApproval
     let nextRecordStatus: "under_review" | "approved" | "rejected" | "returned_for_correction" = "under_review"
     let approvedAt: string | null = null
 
     if (decision === "approved") {
-      if (!departmentApproval || departmentApproval.status !== "approved") {
-        if (!isDepartmentLeadForRecord) {
+      const deptApproved = deptApproval?.status === "approved"
+
+      if (!deptApproved) {
+        // Stage 1: dept_review
+        if (!isDepartmentLeadForRecord && !isExecutiveApprover) {
           return NextResponse.json({ error: "Department lead approval is required first" }, { status: 403 })
         }
 
-        if (!departmentApproval) {
+        if (!deptApproval) {
           const { data: inserted, error: insertError } = await supabase
             .from("correspondence_approvals")
             .insert({
               correspondence_id: record.id,
-              approval_stage: "department_review",
+              approval_stage: STAGE_DEPT,
               approver_id: user.id,
               status: "approved",
               comments,
-              decided_at: new Date().toISOString(),
+              requested_at: now,
+              decided_at: now,
             })
             .select("*")
             .single()
           if (insertError) throw insertError
           targetApproval = inserted
         } else {
-          const { data: updatedApproval, error: updateApprovalError } = await supabase
+          const { data: updatedApproval, error: updateError } = await supabase
             .from("correspondence_approvals")
-            .update({
-              approver_id: user.id,
-              status: "approved",
-              comments,
-              decided_at: new Date().toISOString(),
-            })
-            .eq("id", departmentApproval.id)
+            .update({ approver_id: user.id, status: "approved", comments, decided_at: now })
+            .eq("id", deptApproval.id)
             .select("*")
             .single()
-          if (updateApprovalError) throw updateApprovalError
+          if (updateError) throw updateError
           targetApproval = updatedApproval
         }
 
-        if (!executiveApproval) {
-          const { error: insertExecutiveError } = await supabase.from("correspondence_approvals").insert({
+        // Ensure exec_review record exists for next stage
+        if (!execApproval) {
+          await supabase.from("correspondence_approvals").insert({
             correspondence_id: record.id,
-            approval_stage: "executive_review",
+            approval_stage: STAGE_EXEC,
             status: "pending",
+            requested_at: now,
           })
-          if (insertExecutiveError) throw insertExecutiveError
         }
 
         nextRecordStatus = "under_review"
       } else {
+        // Stage 2: exec_review
         if (!isExecutiveApprover) {
           return NextResponse.json(
             { error: "Only Managing Director or Executive Management lead can finalize approval" },
@@ -152,54 +261,52 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
           )
         }
 
-        if (!executiveApproval) {
-          const { data: insertedExecutive, error: insertExecutiveError } = await supabase
+        if (!execApproval) {
+          const { data: inserted, error: insertError } = await supabase
             .from("correspondence_approvals")
             .insert({
               correspondence_id: record.id,
-              approval_stage: "executive_review",
+              approval_stage: STAGE_EXEC,
               approver_id: user.id,
               status: "approved",
               comments,
-              decided_at: new Date().toISOString(),
+              requested_at: now,
+              decided_at: now,
             })
             .select("*")
             .single()
-          if (insertExecutiveError) throw insertExecutiveError
-          targetApproval = insertedExecutive
+          if (insertError) throw insertError
+          targetApproval = inserted
         } else {
-          const { data: updatedExecutive, error: updateExecutiveError } = await supabase
+          const { data: updatedExec, error: updateError } = await supabase
             .from("correspondence_approvals")
-            .update({
-              approver_id: user.id,
-              status: "approved",
-              comments,
-              decided_at: new Date().toISOString(),
-            })
-            .eq("id", executiveApproval.id)
+            .update({ approver_id: user.id, status: "approved", comments, decided_at: now })
+            .eq("id", execApproval.id)
             .select("*")
             .single()
-          if (updateExecutiveError) throw updateExecutiveError
-          targetApproval = updatedExecutive
+          if (updateError) throw updateError
+          targetApproval = updatedExec
         }
 
         nextRecordStatus = "approved"
-        approvedAt = new Date().toISOString()
+        approvedAt = now
       }
     } else {
-      const stage = decision === "rejected" ? "department_review" : "department_review"
-      const candidate =
-        (existingApprovals || []).find((approval) => approval.approval_stage === stage) || departmentApproval
-      if (!candidate) {
+      // Rejection or return-for-correction
+      const activeApproval = deptApproval && deptApproval.status !== "approved" ? deptApproval : execApproval
+      const stageToUse = activeApproval?.approval_stage || STAGE_DEPT
+
+      if (!activeApproval) {
         const { data: inserted, error: insertError } = await supabase
           .from("correspondence_approvals")
           .insert({
             correspondence_id: record.id,
-            approval_stage: stage,
+            approval_stage: stageToUse,
             approver_id: user.id,
             status: decision,
             comments,
-            decided_at: new Date().toISOString(),
+            requested_at: now,
+            decided_at: now,
           })
           .select("*")
           .single()
@@ -208,13 +315,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       } else {
         const { data: updated, error: updateError } = await supabase
           .from("correspondence_approvals")
-          .update({
-            approver_id: user.id,
-            status: decision,
-            comments,
-            decided_at: new Date().toISOString(),
-          })
-          .eq("id", candidate.id)
+          .update({ approver_id: user.id, status: decision, comments, decided_at: now })
+          .eq("id", activeApproval.id)
           .select("*")
           .single()
         if (updateError) throw updateError
@@ -226,10 +328,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
     const { data: updatedRecord, error: recordUpdateError } = await supabase
       .from("correspondence_records")
-      .update({
-        status: nextRecordStatus,
-        approved_at: approvedAt,
-      })
+      .update({ status: nextRecordStatus, approved_at: approvedAt })
       .eq("id", record.id)
       .select("*")
       .single()
@@ -244,7 +343,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       newStatus: nextRecordStatus,
       details: {
         decision,
-        approval_stage: targetApproval.approval_stage,
+        approval_stage: targetApproval?.approval_stage,
         comments,
       },
     })
@@ -285,5 +384,4 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   }
 }
 
-// POST kept for backwards compat — prefer PATCH
 export { POST as PATCH }

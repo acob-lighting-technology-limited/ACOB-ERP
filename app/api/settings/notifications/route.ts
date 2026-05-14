@@ -3,6 +3,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { NOTIFICATION_KEYS, isNotificationKey } from "@/lib/notifications/delivery-policy"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 type ModulePreferencePayload = {
   notification_key: string
@@ -136,6 +137,12 @@ export async function GET() {
 }
 
 export async function PUT(request: NextRequest) {
+  const rl = await rateLimit(`settings-notifications:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {

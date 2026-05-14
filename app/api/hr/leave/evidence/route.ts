@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { areRequiredDocumentsVerified, getLeavePolicy, notifyUsers } from "@/lib/hr/leave-workflow"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("hr-leave-evidence")
 const UploadLeaveEvidenceSchema = z.object({
@@ -14,6 +15,12 @@ const UploadLeaveEvidenceSchema = z.object({
 })
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`hr-leave-evidence:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {
@@ -96,5 +103,11 @@ export async function PATCH(request: NextRequest) {
 
 // POST kept for backwards compat — prefer PATCH
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`hr-leave-evidence:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   return PATCH(request)
 }

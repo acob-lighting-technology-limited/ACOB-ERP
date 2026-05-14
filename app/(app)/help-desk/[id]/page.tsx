@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { TicketDetailContent } from "./ticket-detail-content"
-import { canLeadDepartment } from "@/lib/help-desk/server"
 
 export default async function HelpDeskTicketPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params
@@ -12,12 +11,7 @@ export default async function HelpDeskTicketPage(props: { params: Promise<{ id: 
 
   if (!user) redirect("/auth/login")
 
-  const [profileResult, ticketResult, commentsResult] = await Promise.all([
-    supabase
-      .from("profiles")
-      .select("role, department, is_department_lead, lead_departments")
-      .eq("id", user.id)
-      .maybeSingle(),
+  const [ticketResult, commentsResult] = await Promise.all([
     supabase.from("help_desk_tickets").select("*").eq("id", params.id).maybeSingle(),
     supabase.from("help_desk_comments").select("*").eq("ticket_id", params.id).order("created_at", { ascending: true }),
   ])
@@ -37,20 +31,15 @@ export default async function HelpDeskTicketPage(props: { params: Promise<{ id: 
       ])
     : [{ data: [] }, { data: [] }]
 
-  const role = String(profileResult.data?.role || "").toLowerCase()
   const ticket = ticketResult.data
 
   if (!ticket) {
     redirect("/help-desk")
   }
 
-  const isAdmin = ["developer", "admin", "super_admin"].includes(role)
-  const canView =
-    isAdmin ||
-    canLeadDepartment(profileResult.data, ticket.service_department) ||
-    canLeadDepartment(profileResult.data, ticket.requester_department) ||
-    ticket.requester_id === user.id ||
-    ticket.assigned_to === user.id
+  // User portal: only personal access (requester or assignee).
+  // Admins/leads use /admin/help-desk to see tickets outside their personal scope.
+  const canView = ticket.requester_id === user.id || ticket.assigned_to === user.id
 
   if (!canView) {
     redirect("/help-desk")

@@ -3,6 +3,8 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { getRequestScope } from "@/lib/admin/api-scope"
 
 const log = logger("development-plan-actions")
 
@@ -19,6 +21,15 @@ const UpdateActionSchema = z.object({
 })
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-development-plans-actions:${getClientId(request)}`, {
+    limit: 20,
+    windowSec: 60,
+  })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const adminSupabase = getServiceRoleClientOrFallback(supabase)
@@ -54,12 +65,9 @@ export async function PATCH(request: NextRequest) {
 
     // Only the employee or an admin can update action status
     if (plan.user_id !== user.id) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single<{ role?: string | null }>()
-      if (!["developer", "admin", "super_admin"].includes(String(profile?.role || "").toLowerCase())) {
+      const actionScope = await getRequestScope()
+      const isGlobalAdmin = actionScope?.isAdminLike === true && actionScope.scopeMode !== "lead"
+      if (!isGlobalAdmin) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }
     }

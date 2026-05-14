@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { getAuthContext, isAdminRole } from "@/lib/correspondence/server"
+import { getAuthContext } from "@/lib/correspondence/server"
+import { getRequestScope } from "@/lib/admin/api-scope"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("correspondence-department-codes")
 
@@ -35,6 +37,12 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`correspondence-department-codes:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const { supabase, user, profile } = await getAuthContext()
 
@@ -42,7 +50,8 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    if (!isAdminRole(profile.role)) {
+    const codesScope = await getRequestScope()
+    if (!codesScope?.isAdminLike || codesScope.scopeMode === "lead") {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

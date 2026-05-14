@@ -3,6 +3,8 @@ import { headers } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { notifyUsers } from "@/lib/hr/leave-workflow"
 import { logger } from "@/lib/logger"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { getRequestScope } from "@/lib/admin/api-scope"
 
 const log = logger("hr-leave-sla-reminders")
 
@@ -36,6 +38,12 @@ const LEGACY_SLA_STAGE_MAP: Record<string, string> = {
 }
 
 export async function PATCH() {
+  const rl = await rateLimit("hr-leave-sla-reminders", { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const cronSecret = process.env.CRON_SECRET
@@ -56,8 +64,8 @@ export async function PATCH() {
 
       if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
-      if (!["developer", "admin", "super_admin"].includes(profile?.role)) {
+      const reminderScope = await getRequestScope()
+      if (!reminderScope?.isAdminLike || reminderScope.scopeMode === "lead") {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }
     }
@@ -169,5 +177,11 @@ export async function PATCH() {
 
 // POST kept for backwards compat — prefer PATCH
 export async function POST() {
+  const rl = await rateLimit("hr-leave-sla-reminders", { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   return PATCH()
 }

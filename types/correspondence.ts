@@ -1,5 +1,3 @@
-export type CorrespondenceDirection = "incoming" | "outgoing"
-
 export type CorrespondenceStatus =
   | "draft"
   | "under_review"
@@ -21,25 +19,27 @@ export type SourceMode = "email" | "physical" | "portal" | "courier"
 
 export type LetterType = "internal" | "external"
 
-export type LetterCategory = "approval" | "notice" | "contract" | "invoice" | "other"
+/** Category is now open-ended — values come from the correspondence_categories table. */
+export type LetterCategory = string
 
 export interface CorrespondenceRecord {
   id: string
   reference_number: string
-  direction: CorrespondenceDirection
   company_code: string
   department_name: string | null
   department_code: string | null
   letter_type: LetterType | null
-  category: LetterCategory | null
+  category: string | null
   subject: string
   recipient_name: string | null
+  recipient_code: string | null
   sender_name: string | null
   status: CorrespondenceStatus
   action_required: boolean
-  due_date: string | null
+  due_date: string
   responsible_officer_id: string | null
   originator_id: string
+  created_by_id: string | null
   assigned_department_name: string | null
   source_mode: SourceMode | null
   dispatch_method: DispatchMethod | null
@@ -89,16 +89,25 @@ export interface CorrespondenceVersion {
   created_at: string
 }
 
+export interface CorrespondenceCategory {
+  id: string
+  name: string
+  code: string
+  created_by: string | null
+  created_at: string
+}
+
 export interface CreateCorrespondenceInput {
-  direction: CorrespondenceDirection
   department_name?: string | null
   letter_type?: LetterType | null
-  category?: LetterCategory | null
+  category?: string | null
   subject: string
   recipient_name?: string | null
+  recipient_code: string
   sender_name?: string | null
+  originator_id?: string | null
   action_required?: boolean
-  due_date?: string | null
+  due_date: string
   responsible_officer_id?: string | null
   assigned_department_name?: string | null
   source_mode?: SourceMode | null
@@ -108,9 +117,10 @@ export interface CreateCorrespondenceInput {
 export interface UpdateCorrespondenceInput {
   status?: CorrespondenceStatus
   letter_type?: LetterType | null
-  category?: LetterCategory | null
+  category?: string | null
   subject?: string
   recipient_name?: string | null
+  recipient_code?: string | null
   sender_name?: string | null
   action_required?: boolean
   due_date?: string | null

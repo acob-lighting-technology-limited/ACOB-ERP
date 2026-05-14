@@ -3,6 +3,9 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { getRequestScope, type AdminScope } from "@/lib/admin/api-scope"
+import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
 
 const log = logger("performance-goals")
 const CreateGoalSchema = z.object({
@@ -91,14 +94,17 @@ async function attachGoalCycles(supabase: Awaited<ReturnType<typeof createClient
   }))
 }
 
-function isAdminProfile(profile: GoalProfileRecord | null | undefined) {
-  return ["developer", "admin", "super_admin"].includes(String(profile?.role || "").toLowerCase())
-}
-
-function canManageGoalOwner(profile: GoalProfileRecord | null | undefined, goalDepartment: string | null | undefined) {
-  if (isAdminProfile(profile)) return true
+function canManageGoalOwner(
+  scope: AdminScope | null,
+  profile: GoalProfileRecord | null | undefined,
+  goalDepartment: string | null | undefined
+) {
+  if (scope?.isAdminLike === true && scope.scopeMode !== "lead") return true
   if (!profile?.is_department_lead || !goalDepartment) return false
-  const managedDepartments = Array.isArray(profile.lead_departments) ? profile.lead_departments : []
+  // Prefer scope.managedDepartments (alias-expanded) over raw profile.lead_departments
+  const managedDepartments = scope?.managedDepartments?.length
+    ? expandDepartmentScopeForQuery(scope.managedDepartments)
+    : expandDepartmentScopeForQuery(Array.isArray(profile.lead_departments) ? profile.lead_departments : [])
   return profile.department === goalDepartment || managedDepartments.includes(goalDepartment)
 }
 
@@ -139,10 +145,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: [] })
     }
 
+    const getScope = await getRequestScope()
+    // Global admin (scopeMode: "global") may access any department's goals.
+    // Admin in lead mode is restricted the same as a department lead.
+    const isGlobalAdmin = getScope?.isAdminLike === true && getScope.scopeMode !== "lead"
+
     if (
       targetDepartment !== profile?.department &&
-      !isAdminProfile(profile) &&
-      !canManageGoalOwner(profile, targetDepartment)
+      !isGlobalAdmin &&
+      !canManageGoalOwner(getScope, profile, targetDepartment)
     ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
@@ -172,6 +183,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-goals:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
 
@@ -196,7 +213,9 @@ export async function POST(request: NextRequest) {
       .eq("id", user.id)
       .single<GoalProfileRecord>()
 
-    const canCreateForDepartment = isAdminProfile(actorProfile) || canManageGoalOwner(actorProfile, department)
+    const postScope = await getRequestScope()
+    const isGlobalAdminPost = postScope?.isAdminLike === true && postScope.scopeMode !== "lead"
+    const canCreateForDepartment = isGlobalAdminPost || canManageGoalOwner(postScope, actorProfile, department)
 
     if (!canCreateForDepartment) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -279,6 +298,12 @@ export async function POST(request: NextRequest) {
 
 // PATCH: approve or reject a KPI (managers/admins only)
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-goals:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
 
@@ -296,7 +321,9 @@ export async function PATCH(request: NextRequest) {
       .eq("id", user.id)
       .single()
 
-    if (!profile || (!["developer", "admin", "super_admin"].includes(profile.role) && !profile.is_department_lead)) {
+    const patchScope = await getRequestScope()
+    const isGlobalAdminPatch = patchScope?.isAdminLike === true && patchScope.scopeMode !== "lead"
+    if (!profile || (!isGlobalAdminPatch && !profile.is_department_lead)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -343,6 +370,12 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-goals:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
 
@@ -369,8 +402,9 @@ export async function PUT(request: NextRequest) {
         .single<GoalProfileRecord>(),
     ])
     if (!existingGoal) return NextResponse.json({ error: "Goal not found" }, { status: 404 })
+    const putScope = await getRequestScope()
     const isOwner = existingGoal.user_id === user.id
-    const managerCanUpdate = canManageGoalOwner(profile, existingGoal.department)
+    const managerCanUpdate = canManageGoalOwner(putScope, profile, existingGoal.department)
     if (!isOwner && !managerCanUpdate) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }

@@ -21,7 +21,7 @@ function buildReferenceInfo(record: CorrespondenceRecord) {
     details: [
       {
         label: "What this item is",
-        value: `${record.reference_number} is a ${record.direction.toLowerCase()} correspondence item for ${record.department_name || record.assigned_department_name || "the selected department"}.`,
+        value: `${record.reference_number} is a ${(record.letter_type || "external").toLowerCase()} correspondence item for ${record.department_name || record.assigned_department_name || "the selected department"}.`,
       },
       {
         label: "Current workflow meaning",
@@ -40,12 +40,7 @@ function buildReferenceInfo(record: CorrespondenceRecord) {
   }
 }
 
-export function CorrespondenceTable({
-  records,
-  dispatchingId,
-  onUpdateStatus,
-  onDispatch,
-}: CorrespondenceTableProps) {
+export function CorrespondenceTable({ records, dispatchingId, onUpdateStatus, onDispatch }: CorrespondenceTableProps) {
   return (
     <Card>
       <CardHeader>
@@ -57,7 +52,7 @@ export function CorrespondenceTable({
             <TableRow>
               <TableHead className="w-14">S/N</TableHead>
               <TableHead>Reference</TableHead>
-              <TableHead>Direction</TableHead>
+              <TableHead>Type</TableHead>
               <TableHead>Department</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Subject</TableHead>
@@ -75,7 +70,7 @@ export function CorrespondenceTable({
                   </div>
                 </TableCell>
                 <TableCell>
-                  <Badge variant="outline">{record.direction}</Badge>
+                  <Badge variant="outline">{record.letter_type || "external"}</Badge>
                 </TableCell>
                 <TableCell>{record.department_name || record.assigned_department_name || "-"}</TableCell>
                 <TableCell>

@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getPaginationRange, paginatedResponse, PaginationSchema } from "@/lib/pagination"
 import { checkIdempotency, getIdempotencyKey, storeIdempotencyKey } from "@/lib/idempotency"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 type FleetBookingAttachmentRow = {
   id: string
@@ -112,6 +113,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`fleet-bookings:${getClientId(request)}`, { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   const uploadedPaths: string[] = []
   try {
     const supabase = await createClient()

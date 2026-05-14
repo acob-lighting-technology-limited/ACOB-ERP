@@ -1,9 +1,16 @@
 ﻿import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 export async function PATCH(_: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit("fleet-bookings-cancel", { limit: 15, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {

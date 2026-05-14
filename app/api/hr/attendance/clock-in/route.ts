@@ -47,6 +47,7 @@ export async function POST(request: NextRequest) {
         date: today,
         clock_in: clockInTime,
         status: "present",
+        source: "manual",
       })
       .select()
       .single()

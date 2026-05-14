@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { logger } from "@/lib/logger"
 import { fetchActionTrackerItems } from "@/lib/reports/action-tracker-data"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("action-tracker-carry-forward-route")
 
@@ -25,6 +26,15 @@ function getPreviousWeek(week: number, year: number) {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`reports-action-tracker-carry-forward:${getClientId(request)}`, {
+    limit: 20,
+    windowSec: 60,
+  })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const {

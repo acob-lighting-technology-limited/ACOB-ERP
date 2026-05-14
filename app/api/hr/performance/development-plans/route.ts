@@ -4,6 +4,8 @@ import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { getRequestScope, type AdminScope } from "@/lib/admin/api-scope"
 
 const log = logger("development-plans")
 
@@ -70,13 +72,9 @@ type ProfileRow = {
   lead_departments?: string[] | null
 }
 
-function isAdminRole(role: string | null | undefined) {
-  return ["developer", "admin", "super_admin"].includes(String(role || "").toLowerCase())
-}
-
-function canManageUser(actor: ProfileRow | null, targetDept: string | null | undefined) {
+function canManageUser(scope: AdminScope | null, actor: ProfileRow | null, targetDept: string | null | undefined) {
   if (!actor) return false
-  if (isAdminRole(actor.role)) return true
+  if (scope?.isAdminLike === true && scope.scopeMode !== "lead") return true
   if (!actor.is_department_lead || !targetDept) return false
   const managed = Array.isArray(actor.lead_departments) ? actor.lead_departments : []
   return actor.department === targetDept || managed.includes(targetDept)
@@ -107,7 +105,7 @@ export async function GET(request: NextRequest) {
         .eq("id", targetUserId)
         .maybeSingle<{ department?: string | null }>()
 
-      if (!canManageUser(profile, targetProfile?.department)) {
+      if (!canManageUser(await getRequestScope(), profile, targetProfile?.department)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }
     }
@@ -134,6 +132,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-development-plans:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const adminSupabase = getServiceRoleClientOrFallback(supabase)
@@ -164,7 +168,7 @@ export async function POST(request: NextRequest) {
           .eq("id", planData.user_id)
           .maybeSingle<{ department?: string | null }>(),
       ])
-      if (!canManageUser(profile, targetProfile?.department)) {
+      if (!canManageUser(await getRequestScope(), profile, targetProfile?.department)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }
     }
@@ -214,6 +218,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-development-plans:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
     const adminSupabase = getServiceRoleClientOrFallback(supabase)
@@ -252,7 +262,7 @@ export async function PATCH(request: NextRequest) {
           .eq("id", existing.user_id)
           .maybeSingle<{ department?: string | null }>(),
       ])
-      if (!canManageUser(profile, targetProfile?.department)) {
+      if (!canManageUser(await getRequestScope(), profile, targetProfile?.department)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }
     }

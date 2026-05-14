@@ -5,12 +5,14 @@ import {
   appendCorrespondenceEvent,
   appendCorrespondenceAuditLog,
 } from "@/lib/correspondence/server"
+import { getRequestScope } from "@/lib/admin/api-scope"
 import { logger } from "@/lib/logger"
 import { getOneDriveService } from "@/lib/onedrive"
 import {
   buildCorrespondenceDocumentPath,
   isOneDriveCorrespondenceDocumentPath,
 } from "@/lib/correspondence/document-storage"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("correspondence-records-documents")
 
@@ -48,7 +50,9 @@ export async function GET(_request: Request, props: { params: Promise<{ id: stri
       return NextResponse.json({ error: "Record not found" }, { status: 404 })
     }
 
-    if (!canAccessRecord(profile, user.id, record)) {
+    const getScope = await getRequestScope()
+    const isGlobalAdmin = getScope?.isAdminLike === true && getScope.scopeMode !== "lead"
+    if (!isGlobalAdmin && !canAccessRecord(profile, user.id, record)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -113,6 +117,12 @@ export async function GET(_request: Request, props: { params: Promise<{ id: stri
 
 export async function POST(request: Request, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
+  const rl = await rateLimit(`correspondence-records-documents:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const { supabase, user, profile } = await getAuthContext()
 
@@ -130,7 +140,9 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
       return NextResponse.json({ error: "Record not found" }, { status: 404 })
     }
 
-    if (!canAccessRecord(profile, user.id, record)) {
+    const postScope = await getRequestScope()
+    const isGlobalAdminPost = postScope?.isAdminLike === true && postScope.scopeMode !== "lead"
+    if (!isGlobalAdminPost && !canAccessRecord(profile, user.id, record)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

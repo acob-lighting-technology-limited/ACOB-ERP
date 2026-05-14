@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const UpdateProfileSchema = z.object({
   first_name: z.string().nullable().optional(),
@@ -21,6 +22,12 @@ const UpdateProfileSchema = z.object({
 })
 
 export async function PATCH(request: Request) {
+  const rl = await rateLimit(`profile-update:${getClientId(request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const body = await request.json()
     const parsed = UpdateProfileSchema.safeParse(body)
@@ -84,5 +91,11 @@ export async function PATCH(request: Request) {
 
 // POST kept for backwards compat — prefer PATCH
 export async function POST(request: Request) {
+  const rl = await rateLimit(`profile-update:${getClientId(request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   return PATCH(request)
 }

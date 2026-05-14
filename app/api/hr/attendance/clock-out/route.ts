@@ -2,10 +2,17 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("hr-attendance-clock-out")
 
 export async function PATCH(_request: NextRequest) {
+  const rl = await rateLimit(`hr-attendance-clock-out:${getClientId(_request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = await createClient()
 
@@ -50,6 +57,7 @@ export async function PATCH(_request: NextRequest) {
       .update({
         clock_out: clockOutTime,
         total_hours: workHours,
+        source: "manual",
       })
       .eq("id", record.id)
       .select()
@@ -84,5 +92,11 @@ export async function PATCH(_request: NextRequest) {
 
 // POST kept for backwards compat — prefer PATCH
 export async function POST(_request: NextRequest) {
+  const rl = await rateLimit(`hr-attendance-clock-out:${getClientId(_request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   return PATCH(_request)
 }
