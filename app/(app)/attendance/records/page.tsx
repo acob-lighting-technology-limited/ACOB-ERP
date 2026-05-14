@@ -17,6 +17,7 @@ interface AttendanceRecord {
   clock_out: string | null
   total_hours: number | null
   status: string
+  source: string | null
 }
 
 async function fetchAttendanceRecords(): Promise<AttendanceRecord[]> {
@@ -103,15 +104,16 @@ export default function AttendanceRecordsPage() {
             />
           ) : (
             <div className="space-y-2">
-              <div className="bg-muted grid grid-cols-5 gap-4 rounded-lg px-4 py-2 text-sm font-medium">
+              <div className="bg-muted grid grid-cols-6 gap-4 rounded-lg px-4 py-2 text-sm font-medium">
                 <div>Date</div>
                 <div>Clock In</div>
                 <div>Clock Out</div>
                 <div>Hours</div>
                 <div>Status</div>
+                <div>Source</div>
               </div>
               {records.map((record) => (
-                <div key={record.id} className="grid grid-cols-5 gap-4 border-b px-4 py-3 last:border-0">
+                <div key={record.id} className="grid grid-cols-6 gap-4 border-b px-4 py-3 last:border-0">
                   <div className="font-medium">{formatDate(record.date)}</div>
                   <div className="flex items-center gap-1">
                     <Clock className="text-muted-foreground h-3 w-3" />
@@ -124,6 +126,15 @@ export default function AttendanceRecordsPage() {
                   <div>{record.total_hours?.toFixed(1) || "-"}</div>
                   <div>
                     <Badge className={getStatusBadge(record.status)}>{record.status}</Badge>
+                  </div>
+                  <div>
+                    <Badge
+                      className={
+                        record.source === "hikvision" ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"
+                      }
+                    >
+                      {record.source === "hikvision" ? "Device" : "Manual"}
+                    </Badge>
                   </div>
                 </div>
               ))}

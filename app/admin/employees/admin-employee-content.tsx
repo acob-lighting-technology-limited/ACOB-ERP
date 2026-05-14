@@ -196,6 +196,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     date_of_birth: "",
     employment_date: "",
     job_description: "",
+    hikvision_employee_id: "",
   })
   const [showMoreOptions, setShowMoreOptions] = useState(false)
 
@@ -259,6 +260,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           date_of_birth: fullProfile.date_of_birth || "",
           employment_date: fullProfile.employment_date || "",
           job_description: fullProfile.job_description || "",
+          hikvision_employee_id: fullProfile.hikvision_employee_id || "",
         })
       } else {
         setEditForm({
@@ -284,6 +286,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           date_of_birth: "",
           employment_date: "",
           job_description: "",
+          hikvision_employee_id: "",
         })
       }
 
@@ -494,6 +497,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         date_of_birth: editForm.date_of_birth || null,
         employment_date: editForm.employment_date || null,
         job_description: editForm.job_description || null,
+        hikvision_employee_id: editForm.hikvision_employee_id.trim() || null,
       }
 
       const emailSyncResponse = await fetch(`/api/admin/hr/employees/${selectedEmployee.id}/email`, {
@@ -506,7 +510,11 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         throw new Error(emailSyncResult.error || "Failed to sync employee login email")
       }
 
-      const { error } = await supabase.from("profiles").update(updateData).eq("id", selectedEmployee.id)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await supabase
+        .from("profiles")
+        .update({ ...updateData, hikvision_employee_id: editForm.hikvision_employee_id.trim() || null } as any)
+        .eq("id", selectedEmployee.id)
 
       if (error) throw error
 
