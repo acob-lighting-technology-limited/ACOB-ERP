@@ -73,11 +73,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true })
   }
 
-  // Resolve employee from hikvision_employee_id
+  // Resolve employee by matching the numeric suffix of employee_number (e.g. "038" matches "ACOB/2025/038")
   const { data: profile } = await supabase
     .from("profiles")
     .select("id")
-    .eq("hikvision_employee_id", employeeNoString)
+    .like("employee_number", `%/${employeeNoString}`)
     .eq("employment_status", "active")
     .maybeSingle()
 

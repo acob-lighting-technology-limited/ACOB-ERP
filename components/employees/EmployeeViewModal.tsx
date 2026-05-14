@@ -74,7 +74,6 @@ interface EditForm {
   date_of_birth: string
   employment_date: string
   job_description: string
-  hikvision_employee_id: string
 }
 
 interface EmployeeViewModalProps {
@@ -954,23 +953,6 @@ export function EmployeeViewModal({
                             placeholder="Job description or responsibilities"
                             rows={4}
                           />
-                        </div>
-                      </div>
-
-                      {/* Device Integration */}
-                      <div className="space-y-4 border-t pt-4">
-                        <h4 className="text-foreground text-sm font-semibold">Device Integration</h4>
-                        <div>
-                          <Label htmlFor="edit_hikvision_employee_id">Hikvision Device Employee ID</Label>
-                          <Input
-                            id="edit_hikvision_employee_id"
-                            value={editForm.hikvision_employee_id}
-                            onChange={(e) => setEditForm({ ...editForm, hikvision_employee_id: e.target.value })}
-                            placeholder="e.g. 038"
-                          />
-                          <p className="text-muted-foreground mt-1 text-xs">
-                            The numeric ID assigned to this employee on the Hikvision attendance device.
-                          </p>
                         </div>
                       </div>
                     </div>

@@ -183,7 +183,6 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     date_of_birth: "",
     employment_date: "",
     job_description: "",
-    hikvision_employee_id: "",
   })
   const [showMoreOptions, setShowMoreOptions] = useState(false)
 
@@ -242,7 +241,6 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             date_of_birth: fullProfile.date_of_birth || "",
             employment_date: fullProfile.employment_date || "",
             job_description: fullProfile.job_description || "",
-            hikvision_employee_id: fullProfile.hikvision_employee_id || "",
           })
         }
 
@@ -357,11 +355,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       })
       if (!emailSyncResponse.ok) throw new Error("Failed to sync employee login email")
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { error } = await supabase
-        .from("profiles")
-        .update({ ...updateData, hikvision_employee_id: editForm.hikvision_employee_id.trim() || null } as any)
-        .eq("id", selectedEmployee.id)
+      const { error } = await supabase.from("profiles").update(updateData).eq("id", selectedEmployee.id)
       if (error) throw error
 
       toast.success("Employee updated successfully")
