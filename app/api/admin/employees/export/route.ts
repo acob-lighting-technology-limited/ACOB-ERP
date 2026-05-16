@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { resolveAdminScope, canAccessAdminSection } from "@/lib/admin/rbac"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const ExportSchema = z.object({
   format: z.enum(["csv", "xlsx"]),
@@ -133,7 +134,7 @@ export async function POST(req: NextRequest) {
     return new NextResponse(csv, {
       headers: {
         "Content-Type": "text/csv",
-        "Content-Disposition": `attachment; filename="employees-${new Date().toISOString().slice(0, 10)}.csv"`,
+        "Content-Disposition": `attachment; filename="employees-${toLocalISODate()}.csv"`,
       },
     })
   }

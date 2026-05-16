@@ -23,6 +23,7 @@ import Link from "next/link"
 import { AdminUserModal } from "./admin-user-modal"
 import { AdminUserTable } from "@/components/admin/AdminUserTable"
 import { AdminUserDetailsDialog } from "@/components/admin/AdminUserDetailsDialog"
+import { toLocalISODate } from "@/lib/utils/date"
 
 interface AdminDashboardProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -101,7 +102,7 @@ export function AdminDashboard({ users, currentUserId: _currentUserId, feedbackB
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `employee-data-${new Date().toISOString().split("T")[0]}.csv`
+    a.download = `employee-data-${toLocalISODate()}.csv`
     a.click()
     toast.success("CSV exported successfully!")
   }
@@ -112,7 +113,7 @@ export function AdminDashboard({ users, currentUserId: _currentUserId, feedbackB
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `employee-data-${new Date().toISOString().split("T")[0]}.json`
+    a.download = `employee-data-${toLocalISODate()}.json`
     a.click()
     toast.success("JSON exported successfully!")
   }
@@ -133,7 +134,7 @@ export function AdminDashboard({ users, currentUserId: _currentUserId, feedbackB
       )
       const workbook = utils.book_new()
       utils.book_append_sheet(workbook, worksheet, "employee")
-      writeFile(workbook, `employee-data-${new Date().toISOString().split("T")[0]}.xlsx`)
+      writeFile(workbook, `employee-data-${toLocalISODate()}.xlsx`)
       toast.success("XLSX exported successfully!")
     } catch {
       toast.error("Failed to export XLSX")
@@ -156,7 +157,7 @@ export function AdminDashboard({ users, currentUserId: _currentUserId, feedbackB
           user.phone_number,
         ]),
       })
-      doc.save(`employee-data-${new Date().toISOString().split("T")[0]}.pdf`)
+      doc.save(`employee-data-${toLocalISODate()}.pdf`)
       toast.success("PDF exported successfully!")
     } catch {
       toast.error("Failed to export PDF")

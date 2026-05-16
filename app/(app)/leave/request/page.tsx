@@ -13,6 +13,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FormFieldGroup } from "@/components/ui/patterns"
+import { toLocalISODate } from "@/lib/utils/date"
 
 type LeaveTypeOption = {
   id: string
@@ -75,14 +76,14 @@ export default function LeaveRequestPage() {
     if (!formData.start_date || !formData.days_count) return ""
     const end = new Date(`${formData.start_date}T00:00:00.000Z`)
     end.setUTCDate(end.getUTCDate() + Number(formData.days_count) - 1)
-    return end.toISOString().slice(0, 10)
+    return toLocalISODate(end)
   })()
 
   const previewResume = (() => {
     if (!previewEnd) return ""
     const resume = new Date(`${previewEnd}T00:00:00.000Z`)
     resume.setUTCDate(resume.getUTCDate() + 1)
-    return resume.toISOString().slice(0, 10)
+    return toLocalISODate(resume)
   })()
 
   const { mutate: submitRequest, isPending: loading } = useMutation({

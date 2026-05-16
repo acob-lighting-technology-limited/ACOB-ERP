@@ -28,6 +28,7 @@ import {
 import { EmployeeListView } from "@/components/employees/EmployeeListView"
 import { getAssignableRolesForActor } from "@/lib/role-management"
 import { formValidation } from "@/lib/validation"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("employees-admin-employee-content")
 
@@ -887,7 +888,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         setSelectedColumns={setSelectedColumns}
         onConfirm={async () => {
           const rows = buildEmployeeExportRows(filteredEmployees, { selectedColumns })
-          const filename = `employees-export-${new Date().toISOString().split("T")[0]}`
+          const filename = `employees-export-${toLocalISODate()}`
           if (exportType === "excel") await exportEmployeesToExcel(rows, filename)
           else if (exportType === "pdf") await exportEmployeesToPDF(filteredEmployees, { selectedColumns }, filename)
           else if (exportType === "word") await exportEmployeesToWord(rows, filename)

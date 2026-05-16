@@ -47,6 +47,7 @@ import {
   exportEmployeeReportToPDF,
   exportEmployeeReportToWord,
 } from "@/lib/assets/asset-export"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("assets-admin-assets-content")
 
@@ -1141,7 +1142,7 @@ export function AdminAssetsContent({
       { selectedColumns, employees, getDepartmentForOffice },
       (asset, withStatus) => getAssignedToLabel(asset, withStatus)
     )
-    const filename = `assets-export-${new Date().toISOString().split("T")[0]}`
+    const filename = `assets-export-${toLocalISODate()}`
     if (exportType === "excel") await exportAssetsToExcel(rows, filename)
     else if (exportType === "pdf") await exportAssetsToPDF(rows, filename, { total: exportableAssets.length })
     else if (exportType === "word") await exportAssetsToWord(rows, filename)
@@ -1165,7 +1166,7 @@ export function AdminAssetsContent({
       selectedTypes: employeeReportSelectedTypes,
       assetTypeMap: ASSET_TYPE_MAP,
     }
-    const filename = `employees-assets-report-${new Date().toISOString().split("T")[0]}`
+    const filename = `employees-assets-report-${toLocalISODate()}`
     if (employeeReportExportType === "excel") await exportEmployeeReportToExcel(input, filename)
     else if (employeeReportExportType === "pdf") await exportEmployeeReportToPDF(input, filename)
     else if (employeeReportExportType === "word") await exportEmployeeReportToWord(input, filename)

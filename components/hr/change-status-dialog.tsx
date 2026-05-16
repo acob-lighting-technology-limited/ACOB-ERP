@@ -28,6 +28,7 @@ import { toast } from "sonner"
 import type { EmploymentStatus } from "@/types/database"
 import { EmployeeStatusBadge } from "./employee-status-badge"
 import { createClient } from "@/lib/supabase/client"
+import { toLocalISODate } from "@/lib/utils/date"
 
 interface ChangeStatusDialogProps {
   open: boolean
@@ -329,7 +330,7 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
             type="date"
             value={suspensionEndDate}
             onChange={(e) => setSuspensionEndDate(e.target.value)}
-            min={new Date().toISOString().split("T")[0]}
+            min={toLocalISODate()}
           />
         </div>
       )}

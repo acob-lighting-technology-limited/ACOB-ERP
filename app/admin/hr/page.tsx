@@ -14,6 +14,7 @@ import type { Database } from "@/types/database"
 import { getDepartmentAliases, normalizeDepartmentName } from "@/shared/departments"
 import { useAdminScope } from "@/components/admin-scope-context"
 import type { ClientAdminScope } from "@/components/admin-scope-context"
+import { toLocalISODate } from "@/lib/utils/date"
 
 interface DashboardStats {
   pendingLeaveRequests: number
@@ -77,7 +78,7 @@ async function fetchHrDashboardStats(scope: ClientAdminScope): Promise<Dashboard
     pendingLeaveCount = 0
   }
 
-  const today = new Date().toISOString().split("T")[0]
+  const today = toLocalISODate()
   const { data: attendance } = await supabase
     .from("attendance_records")
     .select("id, user_id")

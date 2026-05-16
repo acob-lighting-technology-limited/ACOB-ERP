@@ -15,6 +15,7 @@ import { FormFieldGroup } from "@/components/ui/patterns"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { logger } from "@/lib/logger"
 import type { QueryClient } from "@tanstack/react-query"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("finance-invoice-dialog")
 
@@ -65,8 +66,8 @@ export function InvoiceFormDialog({
     customer_name: "",
     customer_email: "",
     customer_address: "",
-    issue_date: new Date().toISOString().split("T")[0],
-    due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    issue_date: toLocalISODate(),
+    due_date: toLocalISODate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)),
     currency: "NGN",
     notes: "",
     terms: "Payment is due within 30 days of invoice date.",
@@ -94,8 +95,8 @@ export function InvoiceFormDialog({
       customer_name: "",
       customer_email: "",
       customer_address: "",
-      issue_date: new Date().toISOString().split("T")[0],
-      due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+      issue_date: toLocalISODate(),
+      due_date: toLocalISODate(new Date(Date.now() + 30 * 24 * 60 * 60 * 1000)),
       currency: "NGN",
       notes: "",
       terms: "Payment is due within 30 days of invoice date.",

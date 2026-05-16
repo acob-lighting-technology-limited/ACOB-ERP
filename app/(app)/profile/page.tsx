@@ -106,6 +106,26 @@ export interface LeaveItem {
   created_at: string
 }
 
+type LeaveItemLegacyRow = {
+  id: string
+  leave_type: string
+  status: string
+  start_date: string
+  end_date: string
+  days_requested: number
+  created_at: string
+}
+
+type LeaveItemModernRow = {
+  id: string
+  leave_type_id: string | null
+  status: string
+  start_date: string
+  end_date: string
+  days_count: number | null
+  created_at: string
+}
+
 export interface AttendanceItem {
   id: string
   date: string
@@ -369,14 +389,40 @@ async function getProfileData() {
   const { data: paymentsData, error: paymentsError } = await paymentsQuery.returns<PaymentItem[]>()
   if (paymentsError) loadErrors.push("payments")
 
-  const { data: leaveData, error: leaveError } = await dataClient
+  let leaveData: LeaveItem[] = []
+  const { data: legacyLeaveData, error: legacyLeaveError } = await dataClient
     .from("leave_requests")
     .select("id, leave_type, status, start_date, end_date, days_requested, created_at")
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
     .limit(20)
-    .returns<LeaveItem[]>()
-  if (leaveError) loadErrors.push("leave")
+    .returns<LeaveItemLegacyRow[]>()
+
+  if (!legacyLeaveError && legacyLeaveData) {
+    leaveData = legacyLeaveData
+  } else {
+    const { data: modernLeaveData, error: modernLeaveError } = await dataClient
+      .from("leave_requests")
+      .select("id, leave_type_id, status, start_date, end_date, days_count, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(20)
+      .returns<LeaveItemModernRow[]>()
+
+    if (modernLeaveError) {
+      loadErrors.push("leave")
+    } else if (modernLeaveData) {
+      leaveData = modernLeaveData.map((row) => ({
+        id: row.id,
+        leave_type: row.leave_type_id || "Leave",
+        status: row.status,
+        start_date: row.start_date,
+        end_date: row.end_date,
+        days_requested: row.days_count || 0,
+        created_at: row.created_at,
+      }))
+    }
+  }
 
   const { data: attendanceData, error: attendanceError } = await dataClient
     .from("attendance_records")
@@ -428,7 +474,7 @@ async function getProfileData() {
     correspondence: correspondenceData || [],
     helpDesk: helpDeskData || [],
     payments: paymentsData || [],
-    leave: leaveData || [],
+    leave: leaveData,
     attendance: attendanceData || [],
     recentActivity,
     loadError,

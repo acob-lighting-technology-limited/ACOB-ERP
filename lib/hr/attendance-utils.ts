@@ -1,3 +1,6 @@
+import { toLocalISODate, toLocalYearMonth } from "@/lib/utils/date"
+export { toLocalISODate, toLocalYearMonth }
+
 /**
  * Lateness deduction rules:
  * - Grace period: up to 8:20am → ₦0
@@ -16,6 +19,9 @@ export function latenessDeduction(clockIn: string | null | undefined): number {
   return (Math.floor(minutesSinceStart / 60) + 1) * 1000
 }
 
+/** Flat deduction applied to a fully absent day (no clock-in at all). */
+export const ABSENT_DEDUCTION = 10_000
+
 export function formatNaira(amount: number): string {
   return `₦${amount.toLocaleString("en-NG")}`
 }
@@ -28,7 +34,7 @@ export function getWorkdaysInMonth(yearMonth: string): string[] {
   while (date.getMonth() === month - 1) {
     const dow = date.getDay()
     if (dow !== 0 && dow !== 6) {
-      days.push(date.toISOString().split("T")[0])
+      days.push(toLocalISODate(date))
     }
     date.setDate(date.getDate() + 1)
   }
@@ -38,7 +44,7 @@ export function getWorkdaysInMonth(yearMonth: string): string[] {
 /** Returns first and last date of a YYYY-MM month as YYYY-MM-DD strings. */
 export function monthBounds(yearMonth: string): { start: string; end: string } {
   const [year, month] = yearMonth.split("-").map(Number)
-  const start = new Date(year, month - 1, 1).toISOString().split("T")[0]
-  const end = new Date(year, month, 0).toISOString().split("T")[0]
+  const start = toLocalISODate(new Date(year, month - 1, 1))
+  const end = toLocalISODate(new Date(year, month, 0))
   return { start, end }
 }

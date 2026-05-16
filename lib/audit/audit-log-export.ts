@@ -16,6 +16,7 @@ import {
   getDepartmentLocation,
 } from "@/lib/audit/audit-log-display"
 import type { AuditLog } from "@/app/admin/audit-logs/types"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("audit-log-export")
 
@@ -59,7 +60,7 @@ export async function exportAuditLogsToExcel(logs: AuditLog[]): Promise<void> {
       new Blob([buffer], {
         type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
       }),
-      `audit-logs-export-${new Date().toISOString().split("T")[0]}.xlsx`
+      `audit-logs-export-${toLocalISODate()}.xlsx`
     )
     toast.success("Audit logs exported to Excel successfully")
   } catch (error) {
@@ -104,7 +105,7 @@ export async function exportAuditLogsToPDF(logs: AuditLog[]): Promise<void> {
       alternateRowStyles: { fillColor: [245, 247, 250] },
     })
 
-    doc.save(`audit-logs-export-${new Date().toISOString().split("T")[0]}.pdf`)
+    doc.save(`audit-logs-export-${toLocalISODate()}.pdf`)
     toast.success("Audit logs exported to PDF successfully")
   } catch (error) {
     log.error("Error exporting to PDF:", error)
@@ -166,7 +167,7 @@ export async function exportAuditLogsToWord(logs: AuditLog[]): Promise<void> {
     })
 
     const blob = await Packer.toBlob(doc)
-    saveAs(blob, `audit-logs-export-${new Date().toISOString().split("T")[0]}.docx`)
+    saveAs(blob, `audit-logs-export-${toLocalISODate()}.docx`)
     toast.success("Audit logs exported to Word successfully")
   } catch (error) {
     log.error("Error exporting to Word:", error)

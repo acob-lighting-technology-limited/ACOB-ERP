@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { evaluateLeaveEligibility, getLeavePolicy } from "@/lib/hr/leave-workflow"
 import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { LeaveContent } from "./leave-content"
+import { toLocalISODate } from "@/lib/utils/date"
 
 export interface LeaveApprovalAudit {
   id: string
@@ -190,7 +191,7 @@ async function getLeaveData() {
         policy,
         requesterProfile,
         leaveType,
-        startDate: new Date().toISOString().slice(0, 10),
+        startDate: toLocalISODate(),
         daysCount: 1,
       })
 

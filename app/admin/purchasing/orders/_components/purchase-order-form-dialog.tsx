@@ -17,6 +17,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { toast } from "sonner"
 import { FormFieldGroup } from "@/components/ui/patterns"
 import type { QueryClient } from "@tanstack/react-query"
+import { toLocalISODate } from "@/lib/utils/date"
 
 interface Supplier {
   id: string
@@ -65,8 +66,8 @@ export function PurchaseOrderFormDialog({ open, onOpenChange, queryClient }: Pur
   const [saving, setSaving] = useState(false)
   const [formData, setFormData] = useState({
     supplier_id: "",
-    order_date: new Date().toISOString().split("T")[0],
-    expected_date: new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+    order_date: toLocalISODate(),
+    expected_date: toLocalISODate(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)),
     currency: "NGN",
     notes: "",
   })

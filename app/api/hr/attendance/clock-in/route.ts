@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("hr-attendance-clock-in")
 
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     // Use a single timestamp so date and time are from the same instant in UTC
     const now = new Date()
-    const today = now.toISOString().split("T")[0]
+    const today = toLocalISODate(now)
     const clockInTime = now.toISOString().split("T")[1].split(".")[0] // HH:MM:SS UTC
 
     const { data: existingRecord } = await supabase
@@ -39,14 +40,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "You have already clocked in today" }, { status: 400 })
     }
 
-    // Create attendance record
+    // Clock-in alone is incomplete; final presence/late is set when clock-out is captured.
+    const status = "incomplete"
     const { data: record, error } = await supabase
       .from("attendance_records")
       .insert({
         user_id: user.id,
         date: today,
         clock_in: clockInTime,
-        status: "present",
+        status,
         source: "manual",
       })
       .select()
@@ -63,7 +65,7 @@ export async function POST(request: NextRequest) {
         action: "create",
         entityType: "attendance_record",
         entityId: record.id,
-        newValues: { date: today, clock_in: record.clock_in, status: "present" },
+        newValues: { date: today, clock_in: record.clock_in, status },
         context: { actorId: user.id, source: "api", route: "/api/hr/attendance/clock-in" },
       },
       { failOpen: true }

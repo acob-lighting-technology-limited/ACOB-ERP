@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { StatCard } from "@/components/ui/stat-card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { exportPmsRowsToExcel } from "@/lib/pms/export"
+import { toLocalISODate } from "@/lib/utils/date"
 
 type Profile = {
   id: string
@@ -269,9 +270,7 @@ export default function AdminPeerFeedbackPage() {
           size="sm"
           className="gap-2"
           disabled={exportRows.length === 0}
-          onClick={() =>
-            void exportPmsRowsToExcel(exportRows, `peer-feedback-${new Date().toISOString().slice(0, 10)}`)
-          }
+          onClick={() => void exportPmsRowsToExcel(exportRows, `peer-feedback-${toLocalISODate()}`)}
         >
           <Download className="h-4 w-4" />
           Export

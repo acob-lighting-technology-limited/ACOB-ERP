@@ -8,6 +8,7 @@ import { getUnifiedPerformanceReviews } from "@/lib/performance/review-data"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("hr-performance-reviews")
 
@@ -311,7 +312,7 @@ export async function POST(request: NextRequest) {
       user_id,
       reviewer_id: user.id,
       review_cycle_id,
-      review_date: new Date().toISOString().slice(0, 10),
+      review_date: toLocalISODate(),
       overall_rating: overall_rating ?? computedScore.final_score,
       strengths,
       areas_for_improvement,

@@ -18,24 +18,13 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const userId = searchParams.get("user_id") || user.id
+    const userId = user.id
     const startDate = searchParams.get("start_date")
     const endDate = searchParams.get("end_date")
 
     let query = supabase
       .from("attendance_records")
-      .select(
-        `
-        *,
-        user:profiles!attendance_records_user_id_fkey (
-          id,
-          first_name,
-          last_name,
-          full_name,
-          company_email
-        )
-      `
-      )
+      .select("*")
       .eq("user_id", userId)
       .order("date", { ascending: false })
 

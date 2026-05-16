@@ -26,6 +26,7 @@ import {
 } from "@/lib/hr/leave-routing"
 import { computeLeaveDates, getLeavePolicy, resolveProfileByIdentifier } from "@/lib/hr/leave-workflow"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { toLocalISODate } from "@/lib/utils/date"
 
 type StepResult = {
   step: string
@@ -150,7 +151,7 @@ export async function PATCH(request: NextRequest) {
 
     // ── Step 4: Compute leave dates ─────────────────────────────────────────────
     const policy = await getLeavePolicy(admin, leave_type_id)
-    const startDate = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10) // 7 days from now
+    const startDate = toLocalISODate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)) // 7 days from now
     const { endDate, resumeDate } = await computeLeaveDates({
       supabase: admin,
       startDate,

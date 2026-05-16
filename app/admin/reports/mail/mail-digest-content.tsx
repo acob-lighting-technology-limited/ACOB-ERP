@@ -30,6 +30,7 @@ import {
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { getCurrentOfficeWeek } from "@/lib/meeting-week"
+import { toLocalISODate } from "@/lib/utils/date"
 
 type Employee = {
   id: string
@@ -837,7 +838,7 @@ export function MailDigestContent({ employees, currentUser }: Props) {
                       type="date"
                       value={scheduledDate}
                       onChange={(e) => setScheduledDate(e.target.value)}
-                      min={new Date().toISOString().split("T")[0]}
+                      min={toLocalISODate()}
                       className="w-[180px]"
                     />
                   </div>

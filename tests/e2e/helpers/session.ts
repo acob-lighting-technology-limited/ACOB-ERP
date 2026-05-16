@@ -1,6 +1,7 @@
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test"
 import type { SeedUser } from "./seed"
 import { loginAs } from "./auth"
+import { toLocalISODate } from "../../../lib/utils/date"
 
 export async function createLoggedInSession(
   browser: Browser,
@@ -26,7 +27,7 @@ export function uniqueLabel(prefix: string) {
 export function futureIsoDate(daysFromNow: number) {
   const date = new Date()
   date.setDate(date.getDate() + daysFromNow)
-  return date.toISOString().slice(0, 10)
+  return toLocalISODate(date)
 }
 
 export function previousOfficeWeek(baseDate = new Date()) {

@@ -229,38 +229,7 @@ export async function GET(request: NextRequest) {
                   .map((entry) => entry.id)
               }
               if (metric === "attendance") {
-                const [{ data: attendanceReviewRows }, { data: attendanceRows }] = await Promise.all([
-                  supabase
-                    .from("performance_reviews")
-                    .select("user_id")
-                    .eq("review_cycle_id", selectedCycleId)
-                    .not("attendance_score", "is", null)
-                    .in(
-                      "user_id",
-                      context.users.map((entry) => entry.id)
-                    ),
-                  (() => {
-                    const cycleWindow = context.cycles.find((cycle) => cycle.id === selectedCycleId)
-                    if (!cycleWindow?.start_date || !cycleWindow?.end_date) {
-                      return Promise.resolve({ data: [] as Array<{ user_id: string }> })
-                    }
-                    return supabase
-                      .from("attendance_records")
-                      .select("user_id")
-                      .in(
-                        "user_id",
-                        context.users.map((entry) => entry.id)
-                      )
-                      .gte("date", cycleWindow.start_date)
-                      .lte("date", cycleWindow.end_date)
-                  })(),
-                ])
-                return Array.from(
-                  new Set([
-                    ...(attendanceReviewRows || []).map((row) => row.user_id),
-                    ...(attendanceRows || []).map((row) => row.user_id),
-                  ])
-                )
+                return context.users.map((entry) => entry.id)
               }
               if (metric === "behaviour") {
                 const { data: reviewRows } = await supabase
@@ -323,7 +292,7 @@ export async function GET(request: NextRequest) {
             metric === "kpi"
               ? (latestReviewMetric?.kpi_score ?? null)
               : metric === "attendance"
-                ? (latestReviewMetric?.attendance_score ?? null)
+                ? score.breakdown.attendance.score
                 : (latestReviewMetric?.behaviour_score ?? null)
           return {
             user_id: entry.id,
@@ -336,10 +305,7 @@ export async function GET(request: NextRequest) {
               typeof latestReviewMetric?.kpi_score === "number" && latestReviewMetric.kpi_score > 0
                 ? latestReviewMetric.kpi_score
                 : null,
-            attendance_score:
-              typeof latestReviewMetric?.attendance_score === "number" && latestReviewMetric.attendance_score > 0
-                ? latestReviewMetric.attendance_score
-                : null,
+            attendance_score: score.breakdown.attendance.score,
             behaviour_score:
               typeof latestReviewMetric?.behaviour_score === "number" && latestReviewMetric.behaviour_score > 0
                 ? latestReviewMetric.behaviour_score
@@ -350,7 +316,7 @@ export async function GET(request: NextRequest) {
         })
         .filter((row) => {
           if (metric === "kpi") return hasMetric(row.kpi_score) || Number(row._goal_count || 0) > 0
-          if (metric === "attendance") return hasMetric(row.attendance_score) || Number(row._attendance_total || 0) > 0
+          if (metric === "attendance") return true
           return hasMetric(row.behaviour_score)
         })
         .map(({ _goal_count, _attendance_total, ...row }) => row)

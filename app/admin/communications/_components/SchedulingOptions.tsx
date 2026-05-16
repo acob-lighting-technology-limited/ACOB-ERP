@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Send, Clock, Repeat, Trash2 } from "lucide-react"
 import { capitalize } from "./composer-utils"
+import { toLocalISODate } from "@/lib/utils/date"
 
 type SendTiming = "now" | "scheduled" | "recurring"
 
@@ -111,7 +112,7 @@ export function SchedulingOptions({
               type="date"
               value={scheduledDate}
               onChange={(e) => setScheduledDate(e.target.value)}
-              min={new Date().toISOString().split("T")[0]}
+              min={toLocalISODate()}
               className="w-[180px]"
             />
           </div>

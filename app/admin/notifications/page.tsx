@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { AdminNotificationContent, type DynamicNotification } from "./admin-notification-content"
 import { getDepartmentScope, resolveAdminScope } from "@/lib/admin/rbac"
+import { toLocalISODate } from "@/lib/utils/date"
 
 type ProfileIdRow = { id: string }
 type DepartmentIdRow = { id: string }
@@ -64,7 +65,7 @@ async function getAdminNotificationsData() {
 
   const notificationList: DynamicNotification[] = []
   const now = new Date()
-  const today = now.toISOString().split("T")[0]
+  const today = toLocalISODate(now)
   const timestamp = await formatRelativeTime(now.toISOString())
 
   // Pending user approvals

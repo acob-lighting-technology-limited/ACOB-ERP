@@ -8,6 +8,7 @@ import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-tabl
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { StatCard } from "@/components/ui/stat-card"
 import { exportPmsRowsToExcel, exportPmsRowsToPdf } from "@/lib/pms/export"
+import { toLocalISODate } from "@/lib/utils/date"
 
 type IconKey = "kpi" | "goals" | "attendance" | "cbt" | "behaviour" | "reviews"
 type TableColumn = { key: string; label: string }
@@ -277,7 +278,7 @@ export function PmsTablePage({
           { id: "pdf", label: "PDF", icon: "pdf" },
         ]}
         onSelect={(id) => {
-          const filename = `${title.toLowerCase().replace(/\s+/g, "-")}-${new Date().toISOString().split("T")[0]}`
+          const filename = `${title.toLowerCase().replace(/\s+/g, "-")}-${toLocalISODate()}`
           if (id === "excel") {
             void exportPmsRowsToExcel(exportRows, filename)
             return
