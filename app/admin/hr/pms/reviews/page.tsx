@@ -15,6 +15,7 @@ import { CreateReviewDialog } from "../../performance/_components/create-review-
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { exportPmsRowsToExcel, exportPmsRowsToPdf } from "@/lib/pms/export"
 import { CalibrationView } from "./_components/calibration-view"
+import { toLocalISODate } from "@/lib/utils/date"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -1003,7 +1004,7 @@ export default function AdminPmsReviewsPage() {
           { id: "pdf", label: "PDF", icon: "pdf" },
         ]}
         onSelect={(id) => {
-          const filename = `pms-reviews-${tab}-${new Date().toISOString().slice(0, 10)}`
+          const filename = `pms-reviews-${tab}-${toLocalISODate()}`
           if (id === "excel") void exportPmsRowsToExcel(exportRows, filename)
           else void exportPmsRowsToPdf(exportRows, filename, "PMS Reviews")
         }}

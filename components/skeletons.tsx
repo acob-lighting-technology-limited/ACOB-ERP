@@ -77,17 +77,123 @@ type CardGridPageSkeletonProps = {
 }
 
 export function TablePageSkeleton(_props: TablePageSkeletonProps) {
-  return <FormPageSkeleton sections={2} fieldsPerSection={4} showSidebar={false} />
+  const { filters = 3, columns = 6, rows = 8, showStats = true, statCards = 4 } = _props
+
+  return (
+    <div className="container mx-auto max-w-full space-y-6 p-4 md:p-6 lg:p-8">
+      <div className="space-y-2">
+        <SkeletonLine className="h-9 w-56" />
+        <SkeletonLine className="h-5 w-80 max-w-full" />
+      </div>
+
+      {showStats ? (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {Array.from({ length: statCards }).map((_, i) => (
+            <div key={`stat-${i}`} className="bg-card rounded-lg border p-4">
+              <SkeletonLine className="mb-3 h-4 w-24" />
+              <SkeletonLine className="h-8 w-20" />
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      <div className="bg-card rounded-lg border p-4">
+        <div className="mb-4 flex flex-wrap gap-3">
+          <SkeletonLine className="h-10 w-72 max-w-full" />
+          {Array.from({ length: filters }).map((_, i) => (
+            <SkeletonLine key={`filter-${i}`} className="h-10 w-40" />
+          ))}
+        </div>
+
+        <div className="space-y-3">
+          <div className="grid gap-3" style={{ gridTemplateColumns: `repeat(${columns}, minmax(90px, 1fr))` }}>
+            {Array.from({ length: columns }).map((_, i) => (
+              <SkeletonLine key={`head-${i}`} className="h-5 w-full" />
+            ))}
+          </div>
+          {Array.from({ length: rows }).map((_, r) => (
+            <div
+              key={`row-${r}`}
+              className="grid gap-3"
+              style={{ gridTemplateColumns: `repeat(${columns}, minmax(90px, 1fr))` }}
+            >
+              {Array.from({ length: columns }).map((__, c) => (
+                <SkeletonLine key={`cell-${r}-${c}`} className="h-6 w-full" />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function DetailPageSkeleton(_props: DetailPageSkeletonProps) {
-  return <FormPageSkeleton sections={2} fieldsPerSection={3} showSidebar={false} />
+  const { showSidebar = true, sections = 3 } = _props
+  return <FormPageSkeleton sections={sections} fieldsPerSection={3} showSidebar={showSidebar} />
 }
 
 export function DashboardSkeleton(_props: DashboardSkeletonProps) {
-  return <FormPageSkeleton sections={3} fieldsPerSection={2} showSidebar={false} />
+  const { statCards = 4, showActivity = true } = _props
+
+  return (
+    <div className="container mx-auto max-w-full space-y-6 p-4 md:p-6 lg:p-8">
+      <div className="space-y-2">
+        <SkeletonLine className="h-9 w-64" />
+        <SkeletonLine className="h-5 w-96 max-w-full" />
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {Array.from({ length: statCards }).map((_, i) => (
+          <div key={`dash-stat-${i}`} className="bg-card rounded-lg border p-4">
+            <SkeletonLine className="mb-3 h-4 w-24" />
+            <SkeletonLine className="h-8 w-20" />
+          </div>
+        ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-3">
+        <div className="bg-card rounded-lg border p-4 lg:col-span-2">
+          <SkeletonLine className="mb-4 h-6 w-40" />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <SkeletonLine key={`dash-main-${i}`} className="mb-3 h-8 w-full" />
+          ))}
+        </div>
+        <div className="bg-card rounded-lg border p-4">
+          <SkeletonLine className="mb-4 h-6 w-32" />
+          {Array.from({ length: showActivity ? 7 : 3 }).map((_, i) => (
+            <SkeletonLine key={`dash-side-${i}`} className="mb-3 h-6 w-full" />
+          ))}
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export function CardGridPageSkeleton(_props: CardGridPageSkeletonProps) {
-  return <FormPageSkeleton sections={2} fieldsPerSection={3} showSidebar={false} />
+  const { cards = 8, columns = 4 } = _props
+
+  return (
+    <div className="container mx-auto max-w-full space-y-6 p-4 md:p-6 lg:p-8">
+      <div className="space-y-2">
+        <SkeletonLine className="h-9 w-56" />
+        <SkeletonLine className="h-5 w-80 max-w-full" />
+      </div>
+
+      <div
+        className="grid gap-4"
+        style={{
+          gridTemplateColumns: `repeat(${Math.max(1, columns)}, minmax(0, 1fr))`,
+        }}
+      >
+        {Array.from({ length: cards }).map((_, i) => (
+          <div key={`card-${i}`} className="bg-card rounded-lg border p-4">
+            <SkeletonLine className="mb-4 h-36 w-full" />
+            <SkeletonLine className="mb-2 h-5 w-2/3" />
+            <SkeletonLine className="h-4 w-1/2" />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
 }

@@ -17,6 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner"
 import { Loader2, Plus, Save, X } from "lucide-react"
 import { getCurrentOfficeWeek } from "@/lib/meeting-week"
+import { toLocalISODate } from "@/lib/utils/date"
 
 interface EditableAction {
   id: string
@@ -77,7 +78,7 @@ export function ActionFormDialog({
         description: editingAction.description || "",
         priority: editingAction.priority || "medium",
         status: editingAction.status || "pending",
-        due_date: editingAction.due_date ? new Date(editingAction.due_date).toISOString().split("T")[0] : "",
+        due_date: editingAction.due_date ? toLocalISODate(new Date(editingAction.due_date)) : "",
       })
       setDept(editingAction.department)
       setWeek(editingAction.week_number)

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
+import { latenessDeduction } from "@/lib/hr/attendance-utils"
+import { DB_WRITABLE_STATUSES } from "@/lib/hr/attendance-status"
 
 const log = logger("admin-hr-attendance-record-patch")
 
@@ -16,7 +19,7 @@ const PatchSchema = z.object({
     .string()
     .regex(/^\d{2}:\d{2}(:\d{2})?$/, "Invalid time format")
     .optional(),
-  status: z.enum(["present", "late", "absent", "half_day", "incomplete"]).optional(),
+  status: z.enum(DB_WRITABLE_STATUSES).optional(),
   waived: z.boolean().optional(),
   waiver_reason: z.string().max(200).optional().nullable(),
 })
@@ -45,8 +48,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const { id } = await params
+    const dataClient = getServiceRoleClientOrFallback(supabase)
 
-    const { data: record } = await supabase
+    const { data: record } = await dataClient
       .from("attendance_records")
       .select("id, clock_in, clock_out, date")
       .eq("id", id)
@@ -59,13 +63,41 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     // Recalculate total_hours if both times are known after update
     const clockIn = parsed.data.clock_in ?? record.clock_in
     const clockOut = parsed.data.clock_out ?? record.clock_out
+    if (clockIn && clockOut && clockOut < clockIn) {
+      return NextResponse.json({ error: "Clock out cannot be before clock in" }, { status: 400 })
+    }
+    if (parsed.data.waived !== true && !clockIn && !clockOut) {
+      return NextResponse.json({ error: "Provide both clock in and clock out before saving" }, { status: 400 })
+    }
+    if ((clockIn && !clockOut) || (!clockIn && clockOut)) {
+      return NextResponse.json({ error: "Clock in and clock out must be provided together" }, { status: 400 })
+    }
     if (clockIn && clockOut) {
       const inMs = new Date(`${record.date}T${clockIn}Z`).getTime()
       const outMs = new Date(`${record.date}T${clockOut}Z`).getTime()
       updates.total_hours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
     }
+    if (parsed.data.waived === true) {
+      updates.status = "waiver"
+    } else if (parsed.data.clock_in !== undefined || parsed.data.clock_out !== undefined) {
+      if (!clockIn && !clockOut) {
+        updates.status = "absent"
+      } else if (clockIn && !clockOut) {
+        updates.status = "incomplete"
+      } else if (clockIn && clockOut) {
+        updates.status = latenessDeduction(clockIn) > 0 ? "late" : "present"
+      }
+    } else if (parsed.data.waived === false) {
+      if (!clockIn && !clockOut) {
+        updates.status = "absent"
+      } else if (clockIn && !clockOut) {
+        updates.status = "incomplete"
+      } else if (clockIn && clockOut) {
+        updates.status = latenessDeduction(clockIn) > 0 ? "late" : "present"
+      }
+    }
 
-    const { data: updated, error } = await supabase
+    const { data: updated, error } = await dataClient
       .from("attendance_records")
       .update(updates)
       .eq("id", id)
@@ -73,7 +105,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       .single()
 
     if (error) {
-      log.error({ err: String(error) }, "Failed to update attendance record")
+      log.error({ err: JSON.stringify(error) }, "Failed to update attendance record")
       return NextResponse.json({ error: "Failed to update record" }, { status: 500 })
     }
 

@@ -3,6 +3,7 @@ import { resolveChannelEligibleUserIds } from "@/lib/notifications/delivery-poli
 import { logger } from "@/lib/logger"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Json } from "@/types/database"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("leave-workflow")
 
@@ -88,7 +89,7 @@ export function parseISODate(dateString: string) {
 }
 
 export function toISODate(date: Date) {
-  return date.toISOString().slice(0, 10)
+  return toLocalISODate(date)
 }
 
 export function addDays(date: Date, days: number) {

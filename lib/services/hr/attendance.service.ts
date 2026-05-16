@@ -1,4 +1,5 @@
 import { BaseService } from "../base.service"
+import { toLocalISODate } from "@/lib/utils/date"
 
 /**
  * Attendance Service
@@ -82,7 +83,7 @@ export class AttendanceService extends BaseService {
   async clockIn(employeeId: string) {
     const supabase = await this.getClient()
     const now = new Date()
-    const today = now.toISOString().split("T")[0]
+    const today = toLocalISODate(now)
     const time = now.toTimeString().split(" ")[0]
 
     const { data, error } = await supabase
@@ -126,7 +127,7 @@ export class AttendanceService extends BaseService {
     const supabase = await this.getClient()
 
     const startDate = `${year}-${String(month).padStart(2, "0")}-01`
-    const endDate = new Date(year, month, 0).toISOString().split("T")[0]
+    const endDate = toLocalISODate(new Date(year, month, 0))
 
     const { data, error } = await supabase
       .from("attendance_records")

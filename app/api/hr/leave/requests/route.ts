@@ -24,6 +24,7 @@ import {
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getPaginationRange, PaginationSchema } from "@/lib/pagination"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("leave-requests")
 const BLACKOUT_MONTHS = new Set([12, 1])
@@ -543,7 +544,7 @@ export async function GET(request: NextRequest) {
 
     let relieverCommitments: LeaveRequestRow[] = []
     if (!all) {
-      const todayIsoDate = new Date().toISOString().slice(0, 10)
+      const todayIsoDate = toLocalISODate()
       const { data: relieverRows } = await supabase
         .from("leave_requests")
         .select(

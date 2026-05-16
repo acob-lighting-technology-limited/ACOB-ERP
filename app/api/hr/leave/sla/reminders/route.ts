@@ -5,6 +5,7 @@ import { notifyUsers } from "@/lib/hr/leave-workflow"
 import { logger } from "@/lib/logger"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { getRequestScope } from "@/lib/admin/api-scope"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("hr-leave-sla-reminders")
 
@@ -85,7 +86,7 @@ export async function PATCH() {
     if (error) return NextResponse.json({ error: "Failed to fetch pending leave requests" }, { status: 500 })
 
     const now = Date.now()
-    const today = new Date().toISOString().slice(0, 10)
+    const today = toLocalISODate()
     let remindersSent = 0
 
     for (const request of (pendingRequests || []) as PendingLeaveRequestRow[]) {

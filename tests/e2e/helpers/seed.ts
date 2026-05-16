@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
+import { toLocalISODate } from "../../../lib/utils/date"
 
 export interface SeedUser {
   email: string
@@ -103,7 +104,7 @@ async function ensureAttendance(admin: SupabaseClient, userId: string) {
     date.setDate(today.getDate() - index)
     return {
       user_id: userId,
-      date: date.toISOString().slice(0, 10),
+      date: toLocalISODate(date),
       status: "present",
       notes: "Playwright seed record",
     }
@@ -126,8 +127,8 @@ async function ensureReviewCycle(admin: SupabaseClient): Promise<string | undefi
   if (latest?.id) return latest.id
 
   const now = new Date()
-  const startDate = new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10)
-  const endDate = new Date(now.getFullYear(), 11, 31).toISOString().slice(0, 10)
+  const startDate = toLocalISODate(new Date(now.getFullYear(), 0, 1))
+  const endDate = toLocalISODate(new Date(now.getFullYear(), 11, 31))
 
   const { data: created } = await admin
     .from("review_cycles")

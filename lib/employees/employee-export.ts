@@ -8,6 +8,7 @@ import { getRoleDisplayName } from "@/lib/permissions"
 import { logger } from "@/lib/logger"
 import { toast } from "sonner"
 import type { UserRole, EmploymentStatus } from "@/types/database"
+import { toLocalISODate } from "@/lib/utils/date"
 
 export interface Employee {
   id: string
@@ -101,9 +102,7 @@ export async function exportEmployeesToExcel(rows: Record<string, unknown>[], fi
     const data = new Blob([excelBuffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     })
-    const outputFilename = filename
-      ? `${filename}.xlsx`
-      : `employees-export-${new Date().toISOString().split("T")[0]}.xlsx`
+    const outputFilename = filename ? `${filename}.xlsx` : `employees-export-${toLocalISODate()}.xlsx`
     saveAs(data, outputFilename)
     toast.success("Employees exported to Excel successfully")
   } catch (error: unknown) {
@@ -143,6 +142,10 @@ export async function exportEmployeesToPDF(
       if (selectedColumns["#"]) {
         row.push(index + 1)
         headers.push("#")
+      }
+      if (selectedColumns["Employee No."]) {
+        row.push(member.employee_number || "-")
+        headers.push("Employee No.")
       }
       if (selectedColumns["Last Name"]) {
         row.push(formatName(member.last_name) || "-")
@@ -240,9 +243,7 @@ export async function exportEmployeesToPDF(
       alternateRowStyles: { fillColor: [245, 247, 250] },
     })
 
-    const outputFilename = filename
-      ? `${filename}.pdf`
-      : `acob-employee-report-${new Date().toISOString().split("T")[0]}.pdf`
+    const outputFilename = filename ? `${filename}.pdf` : `acob-employee-report-${toLocalISODate()}.pdf`
     doc.save(outputFilename)
     toast.success("Employees exported to PDF successfully")
   } catch (error: unknown) {
@@ -324,9 +325,7 @@ export async function exportEmployeesToWord(rows: Record<string, unknown>[], fil
     })
 
     const blob = await Packer.toBlob(doc)
-    const outputFilename = filename
-      ? `${filename}.docx`
-      : `employees-export-${new Date().toISOString().split("T")[0]}.docx`
+    const outputFilename = filename ? `${filename}.docx` : `employees-export-${toLocalISODate()}.docx`
     saveAs(blob, outputFilename)
     toast.success("Employee exported to Word successfully")
   } catch (error: unknown) {

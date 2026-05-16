@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { toLocalISODate } from "@/lib/utils/date"
+import { latenessDeduction } from "@/lib/hr/attendance-utils"
 
 const log = logger("hr-attendance-clock-out")
 
@@ -26,7 +28,7 @@ export async function PATCH(_request: NextRequest) {
 
     // Use a single timestamp so date and time are from the same instant in UTC
     const now = new Date()
-    const today = now.toISOString().split("T")[0]
+    const today = toLocalISODate(now)
     const clockOutTime = now.toISOString().split("T")[1].split(".")[0] // HH:MM:SS UTC
 
     const { data: record } = await supabase
@@ -51,12 +53,15 @@ export async function PATCH(_request: NextRequest) {
     const breakDuration = record.break_duration || 0
     const workHours = totalHours - breakDuration / 60
 
+    const status = latenessDeduction(record.clock_in) > 0 ? "late" : "present"
+
     // Update attendance record
     const { data: updatedRecord, error } = await supabase
       .from("attendance_records")
       .update({
         clock_out: clockOutTime,
         total_hours: workHours,
+        status,
         source: "manual",
       })
       .eq("id", record.id)
@@ -74,7 +79,7 @@ export async function PATCH(_request: NextRequest) {
         action: "update",
         entityType: "attendance_record",
         entityId: record.id,
-        newValues: { clock_out: clockOutTime, total_hours: workHours },
+        newValues: { clock_out: clockOutTime, total_hours: workHours, status },
         context: { actorId: user.id, source: "api", route: "/api/hr/attendance/clock-out" },
       },
       { failOpen: true }

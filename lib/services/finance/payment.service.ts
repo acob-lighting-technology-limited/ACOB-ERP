@@ -1,5 +1,6 @@
 import { BaseService } from "../base.service"
 import type { Database } from "@/types/database"
+import { toLocalISODate } from "@/lib/utils/date"
 
 /**
  * Payment Service
@@ -157,7 +158,7 @@ export class PaymentService extends BaseService {
       `
       )
       .eq("payment_type", "recurring")
-      .lte("next_payment_due", futureDate.toISOString().split("T")[0])
+      .lte("next_payment_due", toLocalISODate(futureDate))
       .order("next_payment_due", { ascending: true })
 
     if (error) throw error

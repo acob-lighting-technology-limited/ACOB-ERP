@@ -16,9 +16,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatCard } from "@/components/ui/stat-card"
-import { Clock, Calendar, Pencil, AlertCircle } from "lucide-react"
+import { Clock, Calendar, Pencil, AlertCircle, Download } from "lucide-react"
+import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
+import { toLocalISODate } from "@/lib/utils/date"
+import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
 
 const log = logger("admin-attendance-records")
 
@@ -50,24 +53,26 @@ function formatTime(t: string | null) {
 }
 
 function StatusBadge({ status }: { status: string }) {
-  const colors: Record<string, string> = {
-    present: "bg-green-100 text-green-800",
-    late: "bg-yellow-100 text-yellow-800",
-    absent: "bg-red-100 text-red-800",
-    half_day: "bg-orange-100 text-orange-800",
-    incomplete: "bg-red-100 text-red-700",
-  }
-  return <Badge className={colors[status] ?? "bg-gray-100 text-gray-800"}>{status}</Badge>
+  return (
+    <Badge
+      className={
+        ATTENDANCE_STATUS_COLORS[status as keyof typeof ATTENDANCE_STATUS_COLORS] ?? "bg-gray-100 text-gray-800"
+      }
+    >
+      {ATTENDANCE_STATUS_LABELS[status as keyof typeof ATTENDANCE_STATUS_LABELS] ?? status}
+    </Badge>
+  )
 }
 
 export default function AdminAttendanceRecordsPage() {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState({
-    start_date: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-    end_date: new Date().toISOString().split("T")[0],
+    start_date: toLocalISODate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)),
+    end_date: toLocalISODate(),
   })
 
+  const [exportOpen, setExportOpen] = useState(false)
   const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null)
   const [editForm, setEditForm] = useState({ clock_in: "", clock_out: "" })
   const [saving, setSaving] = useState(false)
@@ -124,6 +129,28 @@ export default function AdminAttendanceRecordsPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  function downloadCSV() {
+    const headers = ["Date", "Employee", "Department", "Clock In", "Clock Out", "Hours", "Status", "Source"]
+    const rows = records.map((r) => [
+      formatDate(r.date),
+      r.user_name,
+      r.department,
+      formatTime(r.clock_in),
+      formatTime(r.clock_out),
+      r.total_hours?.toFixed(2) ?? "-",
+      r.status,
+      r.source === "hikvision" ? "Device" : "Manual",
+    ])
+    const csv = [headers, ...rows].map((row) => row.map((v) => `"${v}"`).join(",")).join("\n")
+    const blob = new Blob([csv], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = `attendance-records-${filters.start_date}-to-${filters.end_date}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   const incomplete = records.filter((r) => !r.clock_out).length
@@ -249,6 +276,12 @@ export default function AdminAttendanceRecordsPage() {
         description="View and fix individual attendance records."
         icon={Calendar}
         backLink={{ href: "/admin/hr/attendance", label: "Back to Attendance" }}
+        actions={
+          <Button variant="outline" size="sm" onClick={() => setExportOpen(true)} disabled={records.length === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            Export
+          </Button>
+        }
         stats={
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             <StatCard title="Total Records" value={records.length} icon={Calendar} />
@@ -302,6 +335,16 @@ export default function AdminAttendanceRecordsPage() {
           minWidth="900px"
         />
       </DataTablePage>
+
+      <ExportOptionsDialog
+        open={exportOpen}
+        onOpenChange={setExportOpen}
+        options={[{ id: "csv", label: "CSV (.csv)", icon: "excel" }]}
+        onSelect={() => {
+          downloadCSV()
+          setExportOpen(false)
+        }}
+      />
 
       <Dialog open={!!editRecord} onOpenChange={(open) => !open && setEditRecord(null)}>
         <DialogContent className="max-w-sm">

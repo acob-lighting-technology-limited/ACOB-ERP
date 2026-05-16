@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { logger } from "@/lib/logger"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("cron-attendance-mark-incomplete")
 
@@ -20,10 +21,10 @@ export async function GET(request: NextRequest) {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
-  // Yesterday in UTC
+  // Yesterday in local time
   const yesterday = new Date()
-  yesterday.setUTCDate(yesterday.getUTCDate() - 1)
-  const date = yesterday.toISOString().split("T")[0]
+  yesterday.setDate(yesterday.getDate() - 1)
+  const date = toLocalISODate(yesterday)
 
   const { data, error } = await supabase
     .from("attendance_records")

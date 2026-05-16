@@ -1,3 +1,5 @@
+import { toLocalISODate } from "@/lib/utils/date"
+
 export const DEFAULT_TEAMS_LINK =
   "https://teams.microsoft.com/l/meetup-join/19%3ameeting_MWZhNTgwYjEtMzdjMi00ZDZkLWJhM2YtZjFiNjgxNDEzN2Nk%40thread.v2/0?context=%7b%22Tid%22%3a%22b1f048ac-9f61-4cfd-98a3-13454b2682e5%22%2c%22Oid%22%3a%22224317b2-9cfb-425c-bc86-57bb397c73cd%22%7d"
 
@@ -17,7 +19,7 @@ export function getNextMondayFormatted(): string {
   const daysUntilMonday = day === 0 ? 1 : day === 1 ? 0 : 8 - day
   const nextMonday = new Date(now)
   nextMonday.setDate(now.getDate() + daysUntilMonday)
-  return nextMonday.toISOString().split("T")[0]
+  return toLocalISODate(nextMonday)
 }
 
 export function formatDateNice(dateStr: string): string {

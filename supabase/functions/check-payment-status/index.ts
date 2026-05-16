@@ -40,11 +40,18 @@ type PaymentEvent = {
   creatorId: string
 }
 
+function toLocalISODate(date: Date = new Date()): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  const d = String(date.getDate()).padStart(2, "0")
+  return `${y}-${m}-${d}`
+}
+
 function toDateKey(value: string | null | undefined): string | null {
   if (!value) return null
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return null
-  return date.toISOString().slice(0, 10)
+  return toLocalISODate(date)
 }
 
 function buildPaymentEmailHtml(params: {
@@ -104,7 +111,7 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     const appUrl = Deno.env.get("APP_BASE_URL") || Deno.env.get("NEXT_PUBLIC_APP_URL") || SUPABASE_URL
-    const todayKey = new Date().toISOString().slice(0, 10)
+    const todayKey = toLocalISODate()
 
     console.log("Checking payment statuses...")
 

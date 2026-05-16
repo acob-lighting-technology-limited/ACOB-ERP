@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("hr-performance-cbt")
 
@@ -288,7 +289,7 @@ export async function POST(request: NextRequest) {
         user_id,
         review_cycle_id,
         reviewer_id: user.id,
-        review_date: new Date().toISOString().slice(0, 10),
+        review_date: toLocalISODate(),
         cbt_score,
         status: "draft",
       })

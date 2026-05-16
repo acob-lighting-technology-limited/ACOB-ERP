@@ -3,6 +3,7 @@ import { formatName } from "@/lib/utils"
 import { ASSET_TYPE_MAP } from "@/lib/asset-types"
 import { getDepartmentForOffice } from "@/lib/office-locations"
 import { logger } from "@/lib/logger"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("assets-export")
 
@@ -187,7 +188,7 @@ export async function exportAssetsToExcel(rows: AssetExportRow[], filename?: str
     const data = new Blob([excelBuffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     })
-    saveAs(data, filename ?? `assets-export-${new Date().toISOString().split("T")[0]}.xlsx`)
+    saveAs(data, filename ?? `assets-export-${toLocalISODate()}.xlsx`)
     toast.success("Assets exported to Excel successfully")
   } catch (error: unknown) {
     log.error("Error exporting to Excel:", error)
@@ -229,7 +230,7 @@ export async function exportAssetsToPDF(
       alternateRowStyles: { fillColor: [245, 247, 250] },
     })
 
-    doc.save(filename ?? `assets-export-${new Date().toISOString().split("T")[0]}.pdf`)
+    doc.save(filename ?? `assets-export-${toLocalISODate()}.pdf`)
     toast.success("Assets exported to PDF successfully")
   } catch (error: unknown) {
     log.error("Error exporting to PDF:", error)
@@ -301,7 +302,7 @@ export async function exportAssetsToWord(rows: AssetExportRow[], filename?: stri
     })
 
     const blob = await Packer.toBlob(doc)
-    saveAs(blob, filename ?? `assets-export-${new Date().toISOString().split("T")[0]}.docx`)
+    saveAs(blob, filename ?? `assets-export-${toLocalISODate()}.docx`)
     toast.success("Assets exported to Word successfully")
   } catch (error: unknown) {
     log.error("Error exporting to Word:", error)
@@ -384,7 +385,7 @@ export async function exportEmployeeReportToExcel(input: EmployeeReportInput, fi
     const data = new Blob([excelBuffer], {
       type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     })
-    saveAs(data, filename ?? `employees-assets-report-${new Date().toISOString().split("T")[0]}.xlsx`)
+    saveAs(data, filename ?? `employees-assets-report-${toLocalISODate()}.xlsx`)
     toast.success("Employee Assets Report exported to Excel successfully")
   } catch (error: unknown) {
     log.error("Error exporting Employee Report to Excel:", error)
@@ -424,7 +425,7 @@ export async function exportEmployeeReportToPDF(input: EmployeeReportInput, file
       headStyles: { fillColor: [34, 139, 34] },
     })
 
-    doc.save(filename ?? `employees-assets-report-${new Date().toISOString().split("T")[0]}.pdf`)
+    doc.save(filename ?? `employees-assets-report-${toLocalISODate()}.pdf`)
     toast.success("Employee Assets Report exported to PDF successfully")
   } catch (error: unknown) {
     log.error("Error exporting Employee Report to PDF:", error)
@@ -502,7 +503,7 @@ export async function exportEmployeeReportToWord(input: EmployeeReportInput, fil
     })
 
     const blob = await Packer.toBlob(doc)
-    saveAs(blob, filename ?? `employees-assets-report-${new Date().toISOString().split("T")[0]}.docx`)
+    saveAs(blob, filename ?? `employees-assets-report-${toLocalISODate()}.docx`)
     toast.success("Employee Assets Report exported to Word successfully")
   } catch (error: unknown) {
     log.error("Error exporting Employee Report to Word:", error)

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Clock, Send, Repeat, Trash2 } from "lucide-react"
+import { toLocalISODate } from "@/lib/utils/date"
 
 type SendTiming = "now" | "scheduled" | "recurring"
 
@@ -123,7 +124,7 @@ export function SchedulingOptions({
                 type="date"
                 value={scheduledDate}
                 onChange={(e) => setScheduledDate(e.target.value)}
-                min={new Date().toISOString().split("T")[0]}
+                min={toLocalISODate()}
                 className="w-[180px]"
               />
             </div>

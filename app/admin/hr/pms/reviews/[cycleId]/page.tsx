@@ -13,6 +13,7 @@ import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "
 import { CreateReviewDialog } from "../../../performance/_components/create-review-dialog"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { exportPmsRowsToExcel, exportPmsRowsToPdf } from "@/lib/pms/export"
+import { toLocalISODate } from "@/lib/utils/date"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -685,7 +686,7 @@ export default function AdminPmsQuarterReviewsPage() {
           { id: "pdf", label: "PDF", icon: "pdf" },
         ]}
         onSelect={(id) => {
-          const filename = `${cycleName.replace(/\s+/g, "-").toLowerCase()}-reviews-${new Date().toISOString().slice(0, 10)}`
+          const filename = `${cycleName.replace(/\s+/g, "-").toLowerCase()}-reviews-${toLocalISODate()}`
           if (id === "excel") {
             void exportPmsRowsToExcel(exportRows, filename)
             return

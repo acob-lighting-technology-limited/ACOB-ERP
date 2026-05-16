@@ -15,6 +15,7 @@ import { createClient as createAdminClient, type SupabaseClient } from "@supabas
 import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { DEPT_EXECUTIVE_MANAGEMENT, DEPT_CORPORATE_SERVICES } from "@/config/constants"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { toLocalISODate } from "@/lib/utils/date"
 
 type StepResult = {
   step: string
@@ -412,7 +413,7 @@ async function testTask(admin: SupabaseClient, body: TestFlowBody): Promise<{ ok
     if (!typedAssignee) return { ok: false, steps }
 
     // Step 3: Create task
-    const due = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+    const due = toLocalISODate(new Date(Date.now() + 3 * 24 * 60 * 60 * 1000))
     const { data: task, error: taskErr } = await db
       .from("tasks")
       .insert({

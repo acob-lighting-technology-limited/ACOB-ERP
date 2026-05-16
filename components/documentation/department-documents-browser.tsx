@@ -60,6 +60,7 @@ import { getFileCategory } from "@/lib/onedrive"
 import { toast } from "sonner"
 import JSZip from "jszip"
 import { saveAs } from "file-saver"
+import { toLocalISODate } from "@/lib/utils/date"
 
 interface DepartmentDocumentsBrowserProps {
   initialPath?: string
@@ -437,7 +438,7 @@ export function DepartmentDocumentsBrowser({
             zip.file(zipPath || file.name, blob)
           }
           const archiveBlob = await zip.generateAsync({ type: "blob" })
-          const archiveName = `department-documents-${new Date().toISOString().slice(0, 10)}.zip`
+          const archiveName = `department-documents-${toLocalISODate()}.zip`
           saveAs(archiveBlob, archiveName)
         } else {
           await triggerFileDownload(downloadQueue[0].path)

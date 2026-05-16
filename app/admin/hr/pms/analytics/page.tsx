@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { StatCard } from "@/components/ui/stat-card"
 import { exportPmsRowsToExcel } from "@/lib/pms/export"
+import { toLocalISODate } from "@/lib/utils/date"
 
 type ReviewRow = {
   id: string
@@ -323,9 +324,7 @@ export default function PmsAnalyticsPage() {
           size="sm"
           className="gap-2"
           disabled={exportRows.length === 0}
-          onClick={() =>
-            void exportPmsRowsToExcel(exportRows, `pms-analytics-${new Date().toISOString().slice(0, 10)}`)
-          }
+          onClick={() => void exportPmsRowsToExcel(exportRows, `pms-analytics-${toLocalISODate()}`)}
         >
           <Download className="h-4 w-4" />
           Export

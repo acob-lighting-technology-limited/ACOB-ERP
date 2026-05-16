@@ -24,6 +24,7 @@ import { toast } from "sonner"
 import { format } from "date-fns"
 import { cn, formatName } from "@/lib/utils"
 import { QUERY_KEYS } from "@/lib/query-keys"
+import { toLocalISODate } from "@/lib/utils/date"
 
 import { logger } from "@/lib/logger"
 
@@ -85,7 +86,7 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
   const [isProcessing, setIsProcessing] = useState(false)
   const [pendingReject, setPendingReject] = useState(false)
   const [employeeId, setEmployeeId] = useState("")
-  const [hireDate, setHireDate] = useState(new Date().toISOString().split("T")[0])
+  const [hireDate, setHireDate] = useState(toLocalISODate())
 
   const [supabase] = useState(() => createClient())
   const queryClient = useQueryClient()

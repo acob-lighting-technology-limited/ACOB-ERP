@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useRouter } from "next/navigation"
 import { BarChart3, CheckCircle2, Clock3, Download, Loader2, Plus, ShieldCheck, Target, Users } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -14,6 +15,7 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "@/components/ui/data-table"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { exportPmsRowsToExcel, exportPmsRowsToPdf } from "@/lib/pms/export"
+import { toLocalISODate } from "@/lib/utils/date"
 
 type MetricKey = "kpi" | "goals" | "attendance" | "behaviour"
 type TabKey = "individual" | "department" | "cycle"
@@ -140,21 +142,6 @@ function MetricAddDialog({
           setGoalId(asString(item?.id) === "-" ? "" : asString(item?.id))
         }
 
-        if (metric === "attendance") {
-          const response = await fetch(
-            `/api/hr/performance/reviews?user_id=${encodeURIComponent(userId)}&cycle_id=${encodeURIComponent(cycleId)}`,
-            { cache: "no-store" }
-          )
-          const payload = (await response.json().catch(() => null)) as {
-            data?: Array<{ attendance_score?: number | null }>
-          } | null
-          const item = payload?.data?.[0]
-          if (!active) return
-          setScoreValue(
-            item?.attendance_score !== null && item?.attendance_score !== undefined ? String(item.attendance_score) : ""
-          )
-        }
-
         if (metric === "behaviour") {
           const response = await fetch(
             `/api/hr/performance/score?user_id=${encodeURIComponent(userId)}&cycle_id=${encodeURIComponent(cycleId)}`,
@@ -229,17 +216,6 @@ function MetricAddDialog({
         })
         const payload = (await response.json().catch(() => null)) as { error?: string } | null
         if (!response.ok) throw new Error(payload?.error || "Failed to save")
-      } else if (metric === "attendance") {
-        const numericScore = Number(scoreValue)
-        if (!Number.isFinite(numericScore) || numericScore <= 0 || numericScore > 100)
-          throw new Error("Attendance score must be between 1 and 100")
-        const response = await fetch("/api/hr/attendance/admin-records", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: userId, review_cycle_id: cycleId, attendance_score: numericScore }),
-        })
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null
-        if (!response.ok) throw new Error(payload?.error || "Failed to save")
       } else {
         const response = await fetch("/api/hr/performance/reviews", {
           method: "POST",
@@ -274,12 +250,7 @@ function MetricAddDialog({
       <DialogContent className="max-w-2xl">
         <DialogHeader>
           <DialogTitle>
-            Add{" "}
-            {metric === "kpi"
-              ? "KPI Score"
-              : metric === "attendance"
-                ? "Attendance Score"
-                : metric.charAt(0).toUpperCase() + metric.slice(1)}
+            Add {metric === "kpi" ? "KPI Score" : metric.charAt(0).toUpperCase() + metric.slice(1)}
           </DialogTitle>
           <DialogDescription>
             Select employee and cycle first. Existing data auto-loads when available.
@@ -334,25 +305,6 @@ function MetricAddDialog({
             </div>
             <div className="space-y-2">
               <Label>KPI Score</Label>
-              <Input
-                type="number"
-                min="1"
-                max="100"
-                value={scoreValue}
-                onChange={(e) => setScoreValue(clampMetricValue(e.target.value))}
-              />
-            </div>
-          </div>
-        ) : null}
-
-        {metric === "attendance" ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Department</Label>
-              <Input value={department} disabled />
-            </div>
-            <div className="space-y-2">
-              <Label>Attendance Score</Label>
               <Input
                 type="number"
                 min="1"
@@ -437,6 +389,7 @@ export function PmsMetricTabsPage({
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null)
   const hasLoadedSnapshotRef = useRef(false)
+  const router = useRouter()
 
   useEffect(() => {
     let active = true
@@ -518,6 +471,13 @@ export function PmsMetricTabsPage({
 
   const tableFilters = useMemo<DataTableFilter<Record<string, unknown>>[]>(() => {
     const result: DataTableFilter<Record<string, unknown>>[] = []
+    result.push({
+      key: "cycle",
+      label: "Cycle",
+      options: (data?.cycles || []).map((cycle) => ({ value: cycle.name, label: cycle.name })),
+      placeholder: "All Cycles",
+      mode: "column",
+    })
     if (tab === "individual" || tab === "department") {
       result.push({
         key: "department",
@@ -546,6 +506,12 @@ export function PmsMetricTabsPage({
         {
           label: "Edit",
           onClick: (row) => {
+            if (metric === "attendance") {
+              const userId = asString(row.user_id)
+              const query = userId !== "-" ? `?employee=${encodeURIComponent(userId)}` : ""
+              router.push(`/admin/hr/attendance${query}`)
+              return
+            }
             setEditingRow(row)
             setIsModalOpen(true)
           },
@@ -553,7 +519,22 @@ export function PmsMetricTabsPage({
       ]
     }
     return undefined
-  }, [tab, metric])
+  }, [tab, metric, router])
+
+  const expandedRowsByGroup = useMemo(() => {
+    const individuals = (data?.rows.individual || []) as Record<string, unknown>[]
+    const byDepartment = new Map<string, Record<string, unknown>[]>()
+    const byCycle = new Map<string, Record<string, unknown>[]>()
+
+    for (const row of individuals) {
+      const department = asString(row.department)
+      const cycle = asString(row.cycle)
+      byDepartment.set(department, [...(byDepartment.get(department) || []), row])
+      byCycle.set(cycle, [...(byCycle.get(cycle) || []), row])
+    }
+
+    return { byDepartment, byCycle }
+  }, [data])
 
   // Stats
   const metricValues = rawRows
@@ -618,19 +599,6 @@ export function PmsMetricTabsPage({
       }
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          {/* Cycle selector lives in header since it triggers a data refetch */}
-          <Select value={cycleId} onValueChange={setCycleId}>
-            <SelectTrigger className="h-8 w-52 text-sm">
-              <SelectValue placeholder="Select cycle…" />
-            </SelectTrigger>
-            <SelectContent>
-              {(data?.cycles || []).map((cycle) => (
-                <SelectItem key={cycle.id} value={cycle.id}>
-                  {cycle.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           <Button
             variant="outline"
             onClick={() => setIsExportOpen(true)}
@@ -641,10 +609,12 @@ export function PmsMetricTabsPage({
             <Download className="h-4 w-4" />
             Export
           </Button>
-          <Button className="h-8 gap-2" size="sm" onClick={() => setIsModalOpen(true)}>
-            <Plus className="h-4 w-4" />
-            {metric === "kpi" ? "Add KPI Score" : metric === "attendance" ? "Add Attendance Score" : "Add Behaviour"}
-          </Button>
+          {metric !== "attendance" ? (
+            <Button className="h-8 gap-2" size="sm" onClick={() => setIsModalOpen(true)}>
+              <Plus className="h-4 w-4" />
+              {metric === "kpi" ? "Add KPI Score" : "Add Behaviour"}
+            </Button>
+          ) : null}
         </div>
       }
     >
@@ -666,21 +636,70 @@ export function PmsMetricTabsPage({
         emptyTitle={`No ${metric} records`}
         emptyDescription={`No ${metric} data found for the selected cycle and filters.`}
         minWidth="900px"
+        expandable={
+          tab === "individual"
+            ? undefined
+            : {
+                canExpand: (row) => {
+                  if (tab === "department") {
+                    const department = asString(row.department)
+                    return (expandedRowsByGroup.byDepartment.get(department) || []).length > 0
+                  }
+                  const cycle = asString(row.cycle)
+                  return (expandedRowsByGroup.byCycle.get(cycle) || []).length > 0
+                },
+                render: (row) => {
+                  const detailRows =
+                    tab === "department"
+                      ? expandedRowsByGroup.byDepartment.get(asString(row.department)) || []
+                      : expandedRowsByGroup.byCycle.get(asString(row.cycle)) || []
+                  return (
+                    <div className="space-y-2">
+                      <div className="text-muted-foreground text-xs">Underlying people records</div>
+                      <div className="overflow-x-auto rounded-md border">
+                        <table className="w-full min-w-[680px] text-sm">
+                          <thead className="bg-muted/60 text-muted-foreground">
+                            <tr>
+                              <th className="px-3 py-2 text-left">Employee</th>
+                              <th className="px-3 py-2 text-left">Department</th>
+                              <th className="px-3 py-2 text-left">Cycle</th>
+                              <th className="px-3 py-2 text-left">Value</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {detailRows.map((detail) => (
+                              <tr key={`${asString(detail.user_id)}-${asString(detail.cycle)}`} className="border-t">
+                                <td className="px-3 py-2">{asString(detail.employee)}</td>
+                                <td className="px-3 py-2">{asString(detail.department)}</td>
+                                <td className="px-3 py-2">{asString(detail.cycle)}</td>
+                                <td className="px-3 py-2">{asString(detail.metric_value)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )
+                },
+              }
+        }
       />
 
-      <MetricAddDialog
-        metric={metric}
-        open={isModalOpen}
-        onOpenChange={(open) => {
-          setIsModalOpen(open)
-          if (!open) setEditingRow(null)
-        }}
-        users={data?.users || []}
-        cycles={data?.cycles || []}
-        onSaved={() => setRefreshKey((v) => v + 1)}
-        initialUserId={asString(editingRow?.user_id) === "-" ? "" : asString(editingRow?.user_id)}
-        initialCycleId={cycleId}
-      />
+      {metric !== "attendance" ? (
+        <MetricAddDialog
+          metric={metric}
+          open={isModalOpen}
+          onOpenChange={(open) => {
+            setIsModalOpen(open)
+            if (!open) setEditingRow(null)
+          }}
+          users={data?.users || []}
+          cycles={data?.cycles || []}
+          onSaved={() => setRefreshKey((v) => v + 1)}
+          initialUserId={asString(editingRow?.user_id) === "-" ? "" : asString(editingRow?.user_id)}
+          initialCycleId={cycleId}
+        />
+      ) : null}
 
       <ExportOptionsDialog
         open={isExportOpen}
@@ -691,7 +710,7 @@ export function PmsMetricTabsPage({
           { id: "pdf", label: "PDF", icon: "pdf" },
         ]}
         onSelect={(id) => {
-          const filename = `pms-${metric}-${tab}-${new Date().toISOString().slice(0, 10)}`
+          const filename = `pms-${metric}-${tab}-${toLocalISODate()}`
           if (id === "excel") {
             void exportPmsRowsToExcel(exportRows, filename)
             return

@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { toLocalISODate } from "@/lib/utils/date"
+import { latenessDeduction } from "@/lib/hr/attendance-utils"
 
 type GoalScoreBreakdown = {
   goal_id: string
@@ -112,9 +114,9 @@ export async function computeIndividualPerformanceScore(
   const cycle = await getCycleWindow(supabase, params.cycleId)
   const { data: profile } = await supabase
     .from("profiles")
-    .select("department")
+    .select("department, attendance_exempt")
     .eq("id", params.userId)
-    .maybeSingle<{ department?: string | null }>()
+    .maybeSingle<{ department?: string | null; attendance_exempt?: boolean | null }>()
 
   const userDepartment = profile?.department || null
 
@@ -246,7 +248,7 @@ export async function computeIndividualPerformanceScore(
 
   let attendanceQuery = supabase
     .from("attendance_records")
-    .select("status, date, clock_in")
+    .select("status, date, clock_in, clock_out, waived")
     .eq("user_id", params.userId)
 
   if (cycle) {
@@ -254,7 +256,20 @@ export async function computeIndividualPerformanceScore(
     attendanceQuery = attendanceQuery.gte("date", cycle.start_date).lte("date", cycle.end_date)
   }
 
-  const [{ data: approvedLeaves }, { data: attendance }] = await Promise.all([leaveRequestQuery, attendanceQuery])
+  let exemptionQuery = supabase
+    .from("attendance_exempt_periods")
+    .select("start_date, end_date")
+    .eq("user_id", params.userId)
+
+  let holidayQuery = supabase.from("holiday_calendar").select("holiday_date")
+
+  if (cycle) {
+    exemptionQuery = exemptionQuery.lte("start_date", cycle.end_date).gte("end_date", cycle.start_date)
+    holidayQuery = holidayQuery.gte("holiday_date", cycle.start_date).lte("holiday_date", cycle.end_date)
+  }
+
+  const [{ data: approvedLeaves }, { data: attendance }, { data: exemptionPeriods }, { data: holidayRows }] =
+    await Promise.all([leaveRequestQuery, attendanceQuery, exemptionQuery, holidayQuery])
 
   const leaveDateSet = new Set<string>()
   if (approvedLeaves) {
@@ -264,13 +279,33 @@ export async function computeIndividualPerformanceScore(
       const leaveStart = new Date(Math.max(new Date(leave.start_date).getTime(), new Date(effectiveStart).getTime()))
       const leaveEnd = new Date(Math.min(new Date(leave.end_date).getTime(), new Date(effectiveEnd).getTime()))
       for (let d = new Date(leaveStart); d <= leaveEnd; d.setDate(d.getDate() + 1)) {
-        leaveDateSet.add(d.toISOString().slice(0, 10))
+        leaveDateSet.add(toLocalISODate(d))
       }
     }
   }
 
+  const exemptionDateSet = new Set<string>()
+  for (const period of exemptionPeriods || []) {
+    const start = cycle ? cycle.start_date : period.start_date
+    const end = cycle ? cycle.end_date : period.end_date
+    const periodStart = new Date(Math.max(new Date(period.start_date).getTime(), new Date(start).getTime()))
+    const periodEnd = new Date(Math.min(new Date(period.end_date).getTime(), new Date(end).getTime()))
+    for (let d = new Date(periodStart); d <= periodEnd; d.setDate(d.getDate() + 1)) {
+      exemptionDateSet.add(toLocalISODate(d))
+    }
+  }
+
+  const holidayDateSet = new Set((holidayRows || []).map((row) => row.holiday_date))
+
   if (attendance && attendance.length > 0) {
-    const scorableRecords = attendance.filter((row) => !leaveDateSet.has(String(row.date || "").slice(0, 10)))
+    const scorableRecords = attendance.filter((row) => {
+      const day = String(row.date || "").slice(0, 10)
+      if (!day) return false
+      if (holidayDateSet.has(day)) return false
+      if (leaveDateSet.has(day)) return false
+      if (Boolean(profile?.attendance_exempt) || exemptionDateSet.has(day)) return false
+      return true
+    })
 
     let creditSum = 0
     let latePenaltyTotalNgn = 0
@@ -281,7 +316,15 @@ export async function computeIndividualPerformanceScore(
     const firstPenaltyHourMinutes = 9 * 60
     const penaltyPerStepNgn = 1000
     for (const row of scorableRecords) {
-      const status = String(row.status || "absent").toLowerCase()
+      const status = row.waived
+        ? "waiver"
+        : !row.clock_in && !row.clock_out
+          ? "absent"
+          : row.clock_in && row.clock_out
+            ? latenessDeduction(row.clock_in) > 0
+              ? "late"
+              : "present"
+            : "incomplete"
       const baseCredit = ATTENDANCE_CREDIT[status] ?? 0
 
       let timelinessFactor = 1
@@ -305,9 +348,18 @@ export async function computeIndividualPerformanceScore(
 
       creditSum += baseCredit * timelinessFactor
     }
-    attendanceBreakdown.present = scorableRecords.filter((row) =>
-      ["present", "wfh", "remote"].includes(String(row.status || "").toLowerCase())
-    ).length
+    attendanceBreakdown.present = scorableRecords.filter((row) => {
+      const status = row.waived
+        ? "waiver"
+        : !row.clock_in && !row.clock_out
+          ? "absent"
+          : row.clock_in && row.clock_out
+            ? latenessDeduction(row.clock_in) > 0
+              ? "late"
+              : "present"
+            : "incomplete"
+      return status === "present"
+    }).length
     attendanceBreakdown.total = scorableRecords.length
     attendanceScore = scorableRecords.length > 0 ? roundScore((creditSum / scorableRecords.length) * 100) : null
     attendanceBreakdown.score = attendanceScore
@@ -382,11 +434,6 @@ export async function computeIndividualPerformanceScore(
     behaviourScore = managerBehaviourScore
   } else if (peerBehaviourScore !== null) {
     behaviourScore = peerBehaviourScore
-  }
-
-  if (attendanceScore === null && latestReview && typeof latestReview.attendance_score === "number") {
-    attendanceScore = roundScore(Number(latestReview.attendance_score) || 0)
-    attendanceBreakdown.score = attendanceScore
   }
 
   if (latestReview && typeof latestReview.kpi_score === "number") {

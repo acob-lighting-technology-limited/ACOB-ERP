@@ -1,4 +1,5 @@
 import type { LeaveBalance, LeaveRequest, LeaveType } from "@/app/(app)/leave/page"
+import { toLocalISODate } from "@/lib/utils/date"
 
 export type LeaveCalendarData = {
   blackout_months: number[]
@@ -116,8 +117,8 @@ export function addDays(startDate: string, days: number) {
   resume.setUTCDate(resume.getUTCDate() + 1)
 
   return {
-    endDate: end.toISOString().slice(0, 10),
-    resumeDate: resume.toISOString().slice(0, 10),
+    endDate: toLocalISODate(end),
+    resumeDate: toLocalISODate(resume),
   }
 }
 
