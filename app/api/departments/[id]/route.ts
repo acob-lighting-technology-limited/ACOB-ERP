@@ -17,6 +17,15 @@ const UpdateDepartmentSchema = z.object({
   name: z.string().trim().min(1, "Department name is required"),
   description: z.string().optional().nullable(),
   department_head_id: z.string().optional().nullable(),
+  department_code: z
+    .string()
+    .trim()
+    .toUpperCase()
+    .min(2, "Code must be at least 2 characters")
+    .max(10, "Code must be at most 10 characters")
+    .optional()
+    .nullable(),
+  is_executive_dept: z.boolean().optional(),
 })
 
 // Helper function to create Supabase client
@@ -115,7 +124,16 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
     }
 
-    const { name, description, department_head_id } = parsed.data
+    const { name, description, department_head_id, department_code, is_executive_dept } = parsed.data
+
+    // If this dept is being marked as the executive dept, clear the flag from all others first
+    if (is_executive_dept === true) {
+      await supabase
+        .from("departments")
+        .update({ is_executive_dept: false })
+        .neq("id", params.id)
+        .eq("is_executive_dept", true)
+    }
 
     const { data: department, error } = await supabase
       .from("departments")
@@ -123,6 +141,8 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
         name,
         description,
         department_head_id,
+        department_code: department_code ?? null,
+        ...(is_executive_dept !== undefined ? { is_executive_dept } : {}),
       })
       .eq("id", params.id)
       .select()
@@ -136,7 +156,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
         action: "update",
         entityType: "department",
         entityId: params.id,
-        newValues: { name, description, department_head_id },
+        newValues: { name, description, department_head_id, department_code, is_executive_dept },
         context: { actorId: user.id, source: "api", route: `/api/departments/${params.id}` },
       },
       { failOpen: true }

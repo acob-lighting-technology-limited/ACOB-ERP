@@ -63,13 +63,12 @@ export default async function AdminDashboardPage() {
   const scopedUserIds = profileIdsInScope ? profileIdsInScope.map((profileRow) => profileRow.id) : []
 
   const { data: profile } = await dataClient.from("profiles").select("*").eq("id", user?.id).single()
-  const canSeeAuditActivity =
-    ["developer", "super_admin"].includes(String(profile?.role || "").toLowerCase()) && scope?.scopeMode !== "lead"
+  const canSeeAuditActivity = Boolean(scope?.isAdminLike || scope?.isDepartmentLead)
 
   // Fetch stats
   const profilesQ = dataClient.from("profiles").select("*", { count: "exact", head: true })
   const assetsQ = dataClient.from("assets").select("*", { count: "exact", head: true }).is("deleted_at", null)
-  const tasksQ = dataClient.from("tasks").select("*", { count: "exact", head: true })
+  const tasksQ = dataClient.from("tasks").select("*", { count: "exact", head: true }).neq("category", "weekly_action")
   const docsQ = dataClient.from("user_documentation").select("*", { count: "exact", head: true })
   const feedbackQ = dataClient.from("feedback").select("*", { count: "exact", head: true })
 
@@ -109,27 +108,59 @@ export default async function AdminDashboardPage() {
 
   let filteredRawActivity: ActivityLogRow[] = []
   if (canSeeAuditActivity) {
-    let auditQuery = dataClient
-      .from("audit_logs")
-      .select(
-        "id, user_id, created_at, action, operation, entity_type, table_name, entity_id, department, metadata, changed_fields, new_values, old_values"
-      )
-      .order("created_at", { ascending: false })
-      .limit(20)
+    const activitySelect =
+      "id, user_id, created_at, action, operation, entity_type, table_name, entity_id, department, metadata, changed_fields, new_values, old_values"
+    let rawActivity: ActivityLogRow[] = []
+
     if (departmentScope) {
-      auditQuery =
-        queryDepartmentScope && queryDepartmentScope.length > 0
-          ? auditQuery.in("department", queryDepartmentScope)
-          : auditQuery.eq("id", "__none__")
+      if (queryDepartmentScope && queryDepartmentScope.length > 0) {
+        const [departmentActivity, userActivity] = await Promise.all([
+          dataClient
+            .from("audit_logs")
+            .select(activitySelect)
+            .in("department", queryDepartmentScope)
+            .order("created_at", { ascending: false })
+            .limit(20)
+            .returns<ActivityLogRow[]>(),
+          scopedUserIds.length > 0
+            ? dataClient
+                .from("audit_logs")
+                .select(activitySelect)
+                .in("user_id", scopedUserIds)
+                .order("created_at", { ascending: false })
+                .limit(20)
+                .returns<ActivityLogRow[]>()
+            : Promise.resolve({ data: [] as ActivityLogRow[], error: null }),
+        ])
+
+        if (departmentActivity.error) log.error("Recent activity department query failed", departmentActivity.error)
+        if (userActivity.error) log.error("Recent activity user query failed", userActivity.error)
+
+        const activityById = new Map<string, ActivityLogRow>()
+        for (const item of [...(departmentActivity.data || []), ...(userActivity.data || [])]) {
+          activityById.set(item.id, item)
+        }
+        rawActivity = Array.from(activityById.values()).sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        )
+      }
+    } else {
+      const { data, error: auditError } = await dataClient
+        .from("audit_logs")
+        .select(activitySelect)
+        .order("created_at", { ascending: false })
+        .limit(20)
+        .returns<ActivityLogRow[]>()
+      if (auditError) log.error("Recent activity query failed", auditError)
+      rawActivity = data || []
     }
-    const { data: rawActivity, error: auditError } = await auditQuery.returns<ActivityLogRow[]>()
-    if (auditError) log.error("Recent activity query failed", auditError)
-    filteredRawActivity = (rawActivity || [])
+
+    filteredRawActivity = rawActivity
       .filter(
         (item) =>
           !["sync", "migrate", "update_schema", "migration"].includes(normalizeToken(item.action || item.operation))
       )
-      .slice(0, 6)
+      .slice(0, 8)
   }
 
   const actorIds = Array.from(new Set(filteredRawActivity.map((item) => item.user_id).filter(Boolean)))
@@ -235,7 +266,7 @@ export default async function AdminDashboardPage() {
 
       {canSeeAuditActivity && (
         <Section title="Recent Activity" description="Latest cross-module changes recorded in the system.">
-          <RecentActivityFeed activity={recentActivity} />
+          <RecentActivityFeed activity={recentActivity} showViewAll={canAccessAction([], "/admin/audit-logs")} />
         </Section>
       )}
     </PageWrapper>

@@ -39,7 +39,7 @@ export async function exportAuditLogsToExcel(logs: AuditLog[]): Promise<void> {
     return
   }
   try {
-    const XLSX = await import("xlsx")
+    const XLSX = await import("@e965/xlsx")
     const { default: saveAs } = await import("file-saver")
 
     const dataToExport = buildExportRows(logs)

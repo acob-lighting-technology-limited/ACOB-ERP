@@ -85,7 +85,7 @@ export async function exportEmployeesToExcel(rows: Record<string, unknown>[], fi
       return
     }
 
-    const XLSX = await import("xlsx")
+    const XLSX = await import("@e965/xlsx")
     const { default: saveAs } = await import("file-saver")
 
     const ws = XLSX.utils.json_to_sheet(rows)

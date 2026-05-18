@@ -30,7 +30,7 @@ const MUTED = rgb(0.392, 0.455, 0.545)
 const BLUE = rgb(0.114, 0.416, 0.588)
 const RED = rgb(0.725, 0.11, 0.11)
 const DEFAULT_SENDER_EMAIL = Deno.env.get("NOTIFICATION_SENDER_EMAIL") || "notifications@acoblighting.com"
-const DEFAULT_SENDER = `ACOB Internal Systems <${DEFAULT_SENDER_EMAIL}>`
+const DEFAULT_SENDER = `ACOB Reporting System <${DEFAULT_SENDER_EMAIL}>`
 const MEETING_DOCS_BUCKET = "meeting_documents"
 // Anchor day is read from _shared/meeting-date.ts (populated by initOfficeYearAnchors).
 

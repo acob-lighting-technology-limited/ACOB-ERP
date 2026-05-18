@@ -76,7 +76,7 @@ export async function GET(_request: Request, props: { params: Promise<{ id: stri
     return new NextResponse(Buffer.from(await upstream.arrayBuffer()), {
       headers: {
         "Content-Type": attachment.mime_type || "application/octet-stream",
-        "Content-Disposition": `attachment; filename="${attachment.name}"`,
+        "Content-Disposition": `attachment; filename="${attachment.name.replace(/["\r\n\\]/g, "")}"`,
       },
     })
   } catch (error) {

@@ -1,11 +1,15 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { canAccessAdminSection, resolveAdminScope } from "@/lib/admin/rbac"
 import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
+import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 type LoginLogsClient = Awaited<ReturnType<typeof createClient>>
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const rl = await rateLimit(`admin-login-logs:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+  if (!rl.allowed) return NextResponse.json({ error: "Too many requests", code: "RATE_LIMITED" }, { status: 429 })
+
   const supabase = await createClient()
   const {
     data: { user },

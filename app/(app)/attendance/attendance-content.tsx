@@ -1,8 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { useToast } from "@/hooks/use-toast"
-import { Clock, Download, LogIn, LogOut, TrendingDown, UserCheck, AlertCircle, CalendarDays } from "lucide-react"
+import { Clock, Download, TrendingDown, UserCheck, AlertCircle, CalendarDays, Timer, CalendarX } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
@@ -12,10 +11,11 @@ import type { AttendanceRecord } from "./page"
 import { logger } from "@/lib/logger"
 import {
   ABSENT_DEDUCTION,
+  earlyDepartureDeduction,
   formatNaira,
   getWorkdaysInMonth,
   latenessDeduction,
-  monthBounds,
+  missedHours,
   toLocalISODate,
   toLocalYearMonth,
 } from "@/lib/hr/attendance-utils"
@@ -36,6 +36,7 @@ type AttendanceRow = AttendanceRecord & {
   calculatedTotalHours: number | null
   workHours: number | null
   overtimeHours: number | null
+  missedHoursValue: number | null
   normalizedStatus: "holiday" | "on_leave" | "exempted" | "waiver" | "present" | "late" | "incomplete" | "absent"
   deduction: number
 }
@@ -61,7 +62,7 @@ function calculateHourBreakdown(clockIn: string | null | undefined, clockOut: st
   const inMinutes = parseClockToMinutes(clockIn)
   const outMinutes = parseClockToMinutes(clockOut)
   if (inMinutes === null || outMinutes === null || outMinutes <= inMinutes) {
-    return { total: null, work: null, overtime: null }
+    return { total: null, work: null, overtime: null, missed: null }
   }
 
   const totalMinutes = outMinutes - inMinutes
@@ -71,11 +72,14 @@ function calculateHourBreakdown(clockIn: string | null | undefined, clockOut: st
   const overlapEnd = Math.min(outMinutes, workEnd)
   const workMinutes = Math.max(0, overlapEnd - overlapStart)
   const overtimeMinutes = Math.max(0, totalMinutes - workMinutes)
+  const lateMinutes = Math.max(0, inMinutes - workStart)
+  const earlyMinutes = Math.max(0, workEnd - outMinutes)
 
   return {
     total: minutesToHours(totalMinutes),
     work: minutesToHours(workMinutes),
     overtime: minutesToHours(overtimeMinutes),
+    missed: minutesToHours(lateMinutes + earlyMinutes),
   }
 }
 
@@ -83,8 +87,6 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(initialTodayRecord)
   const [recentRecords, setRecentRecords] = useState<AttendanceRecord[]>(initialRecentRecords)
   const [unifiedDays, setUnifiedDays] = useState<UnifiedDay[] | null>(null)
-  const [actionLoading, setActionLoading] = useState(false)
-  const { toast } = useToast()
 
   async function fetchAttendanceData() {
     try {
@@ -107,42 +109,6 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
     void fetchAttendanceData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  async function handleClockIn() {
-    setActionLoading(true)
-    try {
-      const response = await fetch("/api/hr/attendance/clock-in", { method: "POST" })
-      const data = await response.json()
-      if (response.ok) {
-        toast({ title: "Success", description: "Clocked in successfully" })
-        await fetchAttendanceData()
-      } else {
-        toast({ title: "Error", description: data.error || "Failed to clock in", variant: "destructive" })
-      }
-    } catch {
-      toast({ title: "Error", description: "An error occurred", variant: "destructive" })
-    } finally {
-      setActionLoading(false)
-    }
-  }
-
-  async function handleClockOut() {
-    setActionLoading(true)
-    try {
-      const response = await fetch("/api/hr/attendance/clock-out", { method: "POST" })
-      const data = await response.json()
-      if (response.ok) {
-        toast({ title: "Success", description: "Clocked out successfully" })
-        await fetchAttendanceData()
-      } else {
-        toast({ title: "Error", description: data.error || "Failed to clock out", variant: "destructive" })
-      }
-    } catch {
-      toast({ title: "Error", description: "An error occurred", variant: "destructive" })
-    } finally {
-      setActionLoading(false)
-    }
-  }
 
   const rows = useMemo<AttendanceRow[]>(() => {
     if (unifiedDays === null) {
@@ -176,6 +142,7 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
             calculatedTotalHours: null,
             workHours: null,
             overtimeHours: null,
+            missedHoursValue: null,
             normalizedStatus,
             deduction,
           } as AttendanceRow
@@ -194,6 +161,7 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
           calculatedTotalHours: breakdown.total,
           workHours: breakdown.work,
           overtimeHours: breakdown.overtime,
+          missedHoursValue: breakdown.missed,
           normalizedStatus,
           deduction:
             typeof unified?.deduction === "number" ? unified.deduction : deductionForRow(normalizedStatus, existing),
@@ -239,6 +207,20 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
         render: (row) => (row.workHours != null ? `${row.workHours.toFixed(2)} hrs` : "-"),
       },
       {
+        key: "missed_hours",
+        label: "Missed",
+        sortable: true,
+        accessor: (row) => row.missedHoursValue || 0,
+        render: (row) =>
+          row.missedHoursValue != null && row.missedHoursValue > 0 ? (
+            <span className="text-orange-500">{row.missedHoursValue.toFixed(2)} hrs</span>
+          ) : row.missedHoursValue != null ? (
+            "0.00 hrs"
+          ) : (
+            "-"
+          ),
+      },
+      {
         key: "overtime_hours",
         label: "Overtime",
         sortable: true,
@@ -275,10 +257,12 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
       {
         key: "status",
         label: "Status",
-        options: Array.from(new Set(rows.map((row) => row.status))).map((status) => ({
-          value: status || "absent",
-          label: status || "absent",
+        mode: "custom",
+        options: (Object.keys(ATTENDANCE_STATUS_LABELS) as Array<keyof typeof ATTENDANCE_STATUS_LABELS>).map((s) => ({
+          value: s,
+          label: ATTENDANCE_STATUS_LABELS[s],
         })),
+        filterFn: (row, selected) => selected.includes(row.normalizedStatus),
       },
       {
         key: "month",
@@ -300,6 +284,13 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
   const presentDays = rows.filter((row) => row.normalizedStatus === "present").length
   const lateDays = rows.filter((row) => row.normalizedStatus === "late").length
   const incompleteDays = rows.filter((row) => row.normalizedStatus === "incomplete").length
+  const totalHoursWorked = rows.reduce((sum, row) => sum + (row.calculatedTotalHours ?? row.total_hours ?? 0), 0)
+  const totalWorkHours = rows.reduce((sum, row) => sum + (row.workHours ?? 0), 0)
+  const totalOvertimeHours = rows.reduce((sum, row) => sum + (row.overtimeHours ?? 0), 0)
+  const totalMissedHours = rows.reduce(
+    (sum, row) => sum + (row.missedHoursValue ?? missedHours(row.clock_in, row.clock_out)),
+    0
+  )
 
   function exportCSV() {
     const headers = [
@@ -340,23 +331,10 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
       icon={Clock}
       backLink={{ href: "/profile", label: "Back to Dashboard" }}
       actions={
-        <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={exportCSV} size="sm">
-            <Download className="mr-2 h-4 w-4" />
-            Export
-          </Button>
-          {todayRecord && !todayRecord.clock_out ? (
-            <Button onClick={handleClockOut} disabled={actionLoading} className="gap-2">
-              <LogOut className="h-4 w-4" />
-              Clock Out
-            </Button>
-          ) : (
-            <Button onClick={handleClockIn} disabled={actionLoading} className="gap-2">
-              <LogIn className="h-4 w-4" />
-              Clock In
-            </Button>
-          )}
-        </div>
+        <Button variant="outline" onClick={exportCSV} size="sm">
+          <Download className="mr-2 h-4 w-4" />
+          Export
+        </Button>
       }
       stats={
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -375,13 +353,6 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
             iconColor="text-emerald-500"
           />
           <StatCard
-            title="Records (MTD)"
-            value={rows.length}
-            icon={CalendarDays}
-            iconBgColor="bg-amber-500/10"
-            iconColor="text-amber-500"
-          />
-          <StatCard
             title="Present Days"
             value={presentDays}
             icon={UserCheck}
@@ -389,11 +360,25 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
             iconColor="text-emerald-500"
           />
           <StatCard
-            title="Late + Incomplete"
-            value={`${lateDays + incompleteDays}`}
+            title="Late Days"
+            value={lateDays}
             icon={AlertCircle}
             iconBgColor="bg-yellow-500/10"
             iconColor="text-yellow-500"
+          />
+          <StatCard
+            title="Incomplete Days"
+            value={incompleteDays}
+            icon={AlertCircle}
+            iconBgColor="bg-cyan-500/10"
+            iconColor="text-cyan-500"
+          />
+          <StatCard
+            title="Absent Days"
+            value={rows.filter((row) => row.normalizedStatus === "absent").length}
+            icon={CalendarDays}
+            iconBgColor="bg-red-500/10"
+            iconColor="text-red-500"
           />
           <StatCard
             title="Total Deduction"
@@ -403,11 +388,32 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
             iconColor={totalDeduction > 0 ? "text-red-500" : "text-green-500"}
           />
           <StatCard
-            title="Absent Days"
-            value={rows.filter((row) => row.normalizedStatus === "absent").length}
+            title="Total Hours (MTD)"
+            value={`${totalHoursWorked.toFixed(1)} hrs`}
+            icon={Timer}
+            iconBgColor="bg-blue-500/10"
+            iconColor="text-blue-500"
+          />
+          <StatCard
+            title="Work Hours (MTD)"
+            value={`${totalWorkHours.toFixed(1)} hrs`}
             icon={Clock}
-            iconBgColor="bg-red-500/10"
-            iconColor="text-red-500"
+            iconBgColor="bg-violet-500/10"
+            iconColor="text-violet-500"
+          />
+          <StatCard
+            title="Hours Missed (MTD)"
+            value={`${totalMissedHours.toFixed(1)} hrs`}
+            icon={CalendarX}
+            iconBgColor={totalMissedHours > 0 ? "bg-orange-500/10" : "bg-green-500/10"}
+            iconColor={totalMissedHours > 0 ? "text-orange-500" : "text-green-500"}
+          />
+          <StatCard
+            title="Overtime (MTD)"
+            value={`${totalOvertimeHours.toFixed(1)} hrs`}
+            icon={TrendingDown}
+            iconBgColor={totalOvertimeHours > 0 ? "bg-amber-500/10" : "bg-muted/50"}
+            iconColor={totalOvertimeHours > 0 ? "text-amber-500" : "text-muted-foreground"}
           />
         </div>
       }
@@ -472,7 +478,8 @@ function normalizeStatus(record: AttendanceRecord | null): AttendanceRow["normal
 function deductionForRow(status: AttendanceRow["normalizedStatus"], row: AttendanceRecord | null): number {
   if (!row) return ABSENT_DEDUCTION
   if (status === "absent") return ABSENT_DEDUCTION
-  if (status === "present" || status === "late") return latenessDeduction(row.clock_in)
+  if (status === "present" || status === "late")
+    return latenessDeduction(row.clock_in) + earlyDepartureDeduction(row.clock_out)
   return 0
 }
 

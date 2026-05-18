@@ -160,9 +160,8 @@ export function WeeklyReportAdminDialog({
       }
 
       const { data } = await supabase
-        .from("tasks")
+        .from("action_items")
         .select("title, status")
-        .eq("category", "weekly_action")
         .eq("department", formData.department)
         .eq("week_number", formData.week_number)
         .eq("year", formData.year)

@@ -7,7 +7,7 @@ export type PmsExportRow = Record<string, string | number | null | undefined>
 
 export async function exportPmsRowsToExcel(rows: PmsExportRow[], filename: string) {
   try {
-    const XLSX = await import("xlsx")
+    const XLSX = await import("@e965/xlsx")
     const { default: saveAs } = await import("file-saver")
     const worksheet = XLSX.utils.json_to_sheet(rows)
     const workbook = XLSX.utils.book_new()

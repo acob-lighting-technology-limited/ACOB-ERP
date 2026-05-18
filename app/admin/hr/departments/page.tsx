@@ -21,7 +21,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { Building, Mail, Pencil, Plus, Users } from "lucide-react"
+import { AlertTriangle, Building, Mail, Pencil, Plus, Users } from "lucide-react"
 import { toast } from "sonner"
 import { StatCard } from "@/components/ui/stat-card"
 import { QUERY_KEYS } from "@/lib/query-keys"
@@ -40,6 +40,8 @@ interface Department {
   id: string
   name: string
   description: string | null
+  department_code: string | null
+  is_executive_dept: boolean
   is_active: boolean
   created_at: string
   updated_at: string
@@ -153,8 +155,12 @@ export default function DepartmentsPage() {
   const [formData, setFormData] = useState({
     name: "",
     description: "",
+    department_code: "",
+    is_executive_dept: false,
     is_active: true,
   })
+  const [originalCode, setOriginalCode] = useState<string | null>(null)
+  const [existingReferenceCount, setExistingReferenceCount] = useState<number>(0)
 
   const { data, isLoading, error } = useQuery({
     queryKey: QUERY_KEYS.adminDepartmentsPage(),
@@ -183,6 +189,8 @@ export default function DepartmentsPage() {
           .update({
             name: newName,
             description: formData.description || null,
+            department_code: formData.department_code.trim().toUpperCase() || null,
+            is_executive_dept: formData.is_executive_dept,
             is_active: formData.is_active,
             updated_at: new Date().toISOString(),
           })
@@ -199,6 +207,8 @@ export default function DepartmentsPage() {
         const { error: createError } = await supabase.from("departments").insert({
           name: formData.name,
           description: formData.description || null,
+          department_code: formData.department_code.trim().toUpperCase() || null,
+          is_executive_dept: formData.is_executive_dept,
           is_active: formData.is_active,
         })
 
@@ -208,7 +218,7 @@ export default function DepartmentsPage() {
 
       setIsDialogOpen(false)
       setEditingDepartment(null)
-      setFormData({ name: "", description: "", is_active: true })
+      setFormData({ name: "", description: "", department_code: "", is_executive_dept: false, is_active: true })
       void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminDepartmentsPage() })
     } catch (err: unknown) {
       log.error("Error saving department:", err)
@@ -217,19 +227,33 @@ export default function DepartmentsPage() {
     }
   }
 
-  function openEditDialog(department: Department) {
+  async function openEditDialog(department: Department) {
     if (!canManageDepartments) {
       toast.error("You can view departments but cannot edit them")
       return
     }
 
+    const code = department.department_code || null
+    setOriginalCode(code)
+    setExistingReferenceCount(0)
     setEditingDepartment(department)
     setFormData({
       name: department.name,
       description: department.description || "",
+      department_code: code || "",
+      is_executive_dept: department.is_executive_dept,
       is_active: department.is_active,
     })
     setIsDialogOpen(true)
+
+    if (code) {
+      const supabase = createClient()
+      const { count } = await supabase
+        .from("correspondence_records")
+        .select("id", { count: "exact", head: true })
+        .eq("department_code", code)
+      setExistingReferenceCount(count ?? 0)
+    }
   }
 
   function openCreateDialog() {
@@ -239,7 +263,9 @@ export default function DepartmentsPage() {
     }
 
     setEditingDepartment(null)
-    setFormData({ name: "", description: "", is_active: true })
+    setOriginalCode(null)
+    setExistingReferenceCount(0)
+    setFormData({ name: "", description: "", department_code: "", is_executive_dept: false, is_active: true })
     setIsDialogOpen(true)
   }
 
@@ -252,6 +278,20 @@ export default function DepartmentsPage() {
       render: (department) => <span className="font-medium">{department.name}</span>,
       resizable: true,
       initialWidth: 220,
+    },
+    {
+      key: "department_code",
+      label: "Code",
+      accessor: (department) => department.department_code || "",
+      render: (department) =>
+        department.department_code ? (
+          <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs font-semibold">
+            {department.department_code}
+          </code>
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        ),
+      initialWidth: 100,
     },
     {
       key: "description",
@@ -384,6 +424,46 @@ export default function DepartmentsPage() {
                     />
                   </div>
                   <div className="grid gap-2">
+                    <Label htmlFor="department_code">Department Code</Label>
+                    <Input
+                      id="department_code"
+                      value={formData.department_code}
+                      onChange={(event) =>
+                        setFormData({ ...formData, department_code: event.target.value.toUpperCase() })
+                      }
+                      placeholder="e.g. HR, IT, OPS"
+                      maxLength={10}
+                    />
+                    <p className="text-muted-foreground text-xs">
+                      2–10 characters. Used to generate correspondence reference numbers. Changing the department name
+                      does <strong>not</strong> affect this code or existing references.
+                    </p>
+                    {editingDepartment &&
+                      originalCode &&
+                      formData.department_code.trim().toUpperCase() !== originalCode && (
+                        <div className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                          <div className="space-y-1">
+                            <p className="font-semibold">Code change — reference counter will restart</p>
+                            <p>
+                              {existingReferenceCount > 0
+                                ? `${existingReferenceCount} existing reference${existingReferenceCount === 1 ? "" : "s"} use code `
+                                : "No existing references use code "}
+                              <code className="font-mono font-bold">{originalCode}</code>
+                              {existingReferenceCount > 0 ? " and will keep that code permanently." : "."}
+                            </p>
+                            <p>
+                              New references will use{" "}
+                              <code className="font-mono font-bold">
+                                {formData.department_code.trim().toUpperCase() || "…"}
+                              </code>{" "}
+                              and the sequence counter starts fresh at <code className="font-mono font-bold">001</code>.
+                            </p>
+                          </div>
+                        </div>
+                      )}
+                  </div>
+                  <div className="grid gap-2">
                     <Label htmlFor="description">Description</Label>
                     <Textarea
                       id="description"
@@ -399,6 +479,20 @@ export default function DepartmentsPage() {
                       id="is_active"
                       checked={formData.is_active}
                       onCheckedChange={(checked) => setFormData({ ...formData, is_active: checked })}
+                    />
+                  </div>
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="space-y-1">
+                      <Label htmlFor="is_executive_dept">Final Approver Department</Label>
+                      <p className="text-muted-foreground text-xs">
+                        This department&apos;s lead is the final approver on all correspondence. Only one department can
+                        hold this role — enabling it here will remove it from any other department.
+                      </p>
+                    </div>
+                    <Switch
+                      id="is_executive_dept"
+                      checked={formData.is_executive_dept}
+                      onCheckedChange={(checked) => setFormData({ ...formData, is_executive_dept: checked })}
                     />
                   </div>
                 </div>
@@ -453,7 +547,10 @@ export default function DepartmentsPage() {
         getRowId={(department) => department.id}
         searchPlaceholder="Search department name or description..."
         searchFn={(department, query) =>
-          [department.name, department.description || ""].join(" ").toLowerCase().includes(query)
+          [department.name, department.description || "", department.department_code || ""]
+            .join(" ")
+            .toLowerCase()
+            .includes(query)
         }
         isLoading={isLoading}
         error={error instanceof Error ? error.message : error ? String(error) : null}

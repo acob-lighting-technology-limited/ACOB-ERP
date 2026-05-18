@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { FileSpreadsheet, Loader2, Upload } from "lucide-react"
-import * as XLSX from "xlsx"
+import * as XLSX from "@e965/xlsx"
 import { createClient } from "@/lib/supabase/client"
 import { getCurrentOfficeWeek } from "@/lib/meeting-week"
 
@@ -78,8 +78,7 @@ export function ExcelImportDialog({ isOpen, onClose, onComplete }: ExcelImportDi
           return
         }
 
-        // Process and insert tasks
-        const tasksToInsert = jsonData.map((row) => {
+        const actionsToInsert = jsonData.map((row) => {
           // Helper to find column by multiple name variants
           const getCol = (names: string[]) => {
             const normalizedNames = names.map((n) => n.toLowerCase())
@@ -89,9 +88,6 @@ export function ExcelImportDialog({ isOpen, onClose, onComplete }: ExcelImportDi
 
           const title = getCol(["Action Description", "Action", "Description", "Task"]) || "Untitled Action"
           const dept = getCol(["Department", "Dept", "Unit"]) || "Unassigned"
-          const priorityRaw = String(getCol(["Priority", "Level"]) || "medium").toLowerCase()
-          const priority = ["low", "medium", "high", "urgent"].includes(priorityRaw) ? priorityRaw : "medium"
-
           return {
             title: String(title).substring(0, 255),
             description: String(getCol(["Detailed Description", "Notes", "Details"]) || "").substring(0, 1000) || null,
@@ -100,18 +96,14 @@ export function ExcelImportDialog({ isOpen, onClose, onComplete }: ExcelImportDi
             year: year,
             assigned_by: user.id,
             status: "pending",
-            source_type: "action_item",
-            category: "weekly_action",
-            assignment_type: "department",
-            priority: priority,
           }
         })
 
-        const { error } = await supabase.from("tasks").insert(tasksToInsert)
+        const { error } = await supabase.from("action_items").insert(actionsToInsert)
 
         if (error) throw error
 
-        toast.success(`Successfully imported ${tasksToInsert.length} actions`)
+        toast.success(`Successfully imported ${actionsToInsert.length} actions`)
         onComplete()
         onClose()
       } catch (error: unknown) {

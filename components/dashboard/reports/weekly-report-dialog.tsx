@@ -107,9 +107,8 @@ export function WeeklyReportDialog({ isOpen, onClose, onSuccess, initialData }: 
 
       // Meta checks
       const { data: nextActions } = await supabase
-        .from("tasks")
+        .from("action_items")
         .select("*")
-        .eq("category", "weekly_action")
         .eq("department", dept)
         .eq("week_number", week)
         .eq("year", year)

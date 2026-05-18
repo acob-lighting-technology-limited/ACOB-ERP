@@ -61,6 +61,7 @@ interface AttendanceReport {
   absent_days: number
   total_hours: number
   lateness_deduction: number
+  total_missed_hours?: number
   attendance_rate: number
   attendance_exempt?: boolean
   attendance_exempt_until?: string | null
@@ -163,11 +164,11 @@ function formatHours(hours: number | null) {
 }
 
 function getHourBreakdown(record: DayRecord | null) {
-  if (!record) return { total: null, work: null, overtime: null }
+  if (!record) return { total: null, work: null, overtime: null, missed: null }
   const inMin = parseTimeToMinutes(record.clock_in)
   const outMin = parseTimeToMinutes(record.clock_out)
   if (inMin === null || outMin === null || outMin <= inMin) {
-    return { total: null, work: null, overtime: null }
+    return { total: null, work: null, overtime: null, missed: null }
   }
   const total = (outMin - inMin) / 60
   const workStart = 8 * 60
@@ -176,7 +177,10 @@ function getHourBreakdown(record: DayRecord | null) {
   const overlapEnd = Math.min(outMin, workEnd)
   const work = Math.max(0, overlapEnd - overlapStart) / 60
   const overtime = Math.max(0, total - work)
-  return { total, work, overtime }
+  const late = Math.max(0, inMin - workStart)
+  const early = Math.max(0, workEnd - outMin)
+  const missed = (late + early) / 60
+  return { total, work, overtime, missed }
 }
 
 function labelSource(source: string | null | undefined) {
@@ -343,13 +347,14 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   return (
     <>
       <div className="space-y-1 py-2">
-        <div className="text-muted-foreground grid grid-cols-[220px_90px_70px_70px_80px_80px_90px_90px_120px_60px] items-center gap-3 px-2 text-[11px] font-semibold uppercase">
+        <div className="text-muted-foreground grid grid-cols-[220px_90px_70px_70px_80px_80px_80px_90px_90px_120px_60px] items-center gap-3 px-2 text-[11px] font-semibold uppercase">
           <span>Day</span>
           <span>Status</span>
           <span>In</span>
           <span>Out</span>
           <span>Total</span>
           <span>Work</span>
+          <span>Missed</span>
           <span>Overtime</span>
           <span>Deduction</span>
           <span>Source</span>
@@ -360,7 +365,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           return (
             <div
               key={day.date}
-              className="hover:bg-muted/30 grid grid-cols-[220px_90px_70px_70px_80px_80px_90px_90px_120px_60px] items-center gap-3 rounded px-2 py-1.5 text-sm"
+              className="hover:bg-muted/30 grid grid-cols-[220px_90px_70px_70px_80px_80px_80px_90px_90px_120px_60px] items-center gap-3 rounded px-2 py-1.5 text-sm"
             >
               <span className="text-xs font-medium">{day.dayName}</span>
               <div>
@@ -374,6 +379,11 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
               </span>
               <span className="text-xs">{formatHours(hours.total ?? day.record?.total_hours ?? null)}</span>
               <span className="text-xs">{formatHours(hours.work)}</span>
+              <span
+                className={`text-xs ${hours.missed !== null && hours.missed > 0 ? "text-orange-500" : "text-muted-foreground"}`}
+              >
+                {hours.missed !== null ? formatHours(hours.missed) : "—"}
+              </span>
               <span className="text-xs">{formatHours(hours.overtime)}</span>
               <span className={`text-xs font-medium ${day.deduction > 0 ? "text-red-600" : "text-muted-foreground"}`}>
                 {day.record?.waived ? "Waived" : day.deduction > 0 ? `-${formatNaira(day.deduction)}` : "₦0"}
@@ -754,6 +764,19 @@ export default function AttendanceReportsPage() {
       sortable: true,
       accessor: (r) => r.total_hours,
       render: (r) => r.total_hours.toFixed(1),
+      align: "center",
+    },
+    {
+      key: "total_missed_hours",
+      label: "Hrs Missed",
+      sortable: true,
+      accessor: (r) => r.total_missed_hours ?? 0,
+      render: (r) =>
+        (r.total_missed_hours ?? 0) > 0 ? (
+          <span className="text-orange-500">{(r.total_missed_hours ?? 0).toFixed(1)}h</span>
+        ) : (
+          <span className="text-muted-foreground text-xs">0h</span>
+        ),
       align: "center",
     },
     {

@@ -26,7 +26,7 @@ type SendEmailResult = {
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")
 const DEFAULT_SENDER_EMAIL = Deno.env.get("NOTIFICATION_SENDER_EMAIL") || "notifications@acoblighting.com"
-const DEFAULT_FROM = `ACOB Internal Systems <${DEFAULT_SENDER_EMAIL}>`
+const DEFAULT_FROM = `ACOB Notification System <${DEFAULT_SENDER_EMAIL}>`
 const RATE_LIMIT_INTERVAL_MS = 500
 const MAX_ATTEMPTS = 3
 let nextAvailableSendTime = 0

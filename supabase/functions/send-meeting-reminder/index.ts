@@ -30,7 +30,7 @@ type KnowledgePresenter = {
 
 const DEFAULT_TIME_ZONE = "Africa/Lagos"
 const DEFAULT_SENDER_EMAIL = Deno.env.get("NOTIFICATION_SENDER_EMAIL") || "notifications@acoblighting.com"
-const DEFAULT_SENDER = `ACOB Internal Systems <${DEFAULT_SENDER_EMAIL}>`
+const DEFAULT_SENDER = `ACOB Meeting System <${DEFAULT_SENDER_EMAIL}>`
 const MEETING_CONTACT_EMAIL = Deno.env.get("MEETING_CONTACT_EMAIL") || "e.rafiat@org.acoblighting.com"
 
 type ReminderRequestBody = {

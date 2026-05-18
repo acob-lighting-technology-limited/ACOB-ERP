@@ -1,4 +1,4 @@
-import { ABSENT_DEDUCTION, latenessDeduction } from "@/lib/hr/attendance-utils"
+import { ABSENT_DEDUCTION, latenessDeduction, earlyDepartureDeduction } from "@/lib/hr/attendance-utils"
 
 export type UnifiedAttendanceStatus =
   | "holiday"
@@ -65,8 +65,13 @@ export function deriveUnifiedAttendanceStatus(input: {
   return latenessDeduction(rec.clock_in) > 0 ? "late" : "present"
 }
 
-export function deductionForStatus(status: UnifiedAttendanceStatus, clockIn?: string | null): number {
+export function deductionForStatus(
+  status: UnifiedAttendanceStatus,
+  clockIn?: string | null,
+  clockOut?: string | null
+): number {
   if (status === "absent") return ABSENT_DEDUCTION
-  if (status === "late" || status === "present") return latenessDeduction(clockIn || null)
+  if (status === "late" || status === "present")
+    return latenessDeduction(clockIn || null) + earlyDepartureDeduction(clockOut || null)
   return 0
 }

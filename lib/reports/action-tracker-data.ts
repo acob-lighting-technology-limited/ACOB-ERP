@@ -104,24 +104,6 @@ export async function fetchActionTrackerItems(
   supabase: ActionTrackerClient,
   params: FetchActionTrackerItemsParams
 ): Promise<ActionTrackerItem[]> {
-  let tasksQuery = supabase
-    .from("tasks")
-    .select(
-      "id, title, description, status, priority, department, due_date, week_number, year, work_item_number, created_at"
-    )
-    .eq("category", "weekly_action")
-    .eq("week_number", params.week)
-    .eq("year", params.year)
-    .order("department", { ascending: true })
-    .order("created_at", { ascending: true })
-
-  tasksQuery = applyDepartmentScope(tasksQuery, params)
-  const { data: taskRows, error: taskError } = await tasksQuery.returns<ActionTrackerTaskRow[]>()
-  if (taskError) throw new Error(taskError.message)
-
-  const normalizedTasks = (taskRows || []).map(normalizeActionTrackerTaskRow)
-  if (normalizedTasks.length > 0) return normalizedTasks
-
   let legacyQuery = supabase
     .from("action_items")
     .select("id, title, department, description, status, week_number, year, original_week, created_at")

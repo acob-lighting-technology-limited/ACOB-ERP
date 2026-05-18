@@ -175,32 +175,38 @@ export async function appendCorrespondenceAuditLog(params: {
 export async function getDepartmentCodeByName(departmentName: string): Promise<string | null> {
   const requestedName = String(departmentName || "").trim()
   const normalizedRequested = normalizeDepartmentName(requestedName)
-  const codeOverrides: Record<string, string> = {
-    [normalizeDepartmentName("IT and Communications")]: "ICT",
-    [normalizeDepartmentName("Legal, Regulatory and Compliance")]: "RC",
-    [normalizeDepartmentName("Regulatory and Compliance")]: "RC",
-    [normalizeDepartmentName("Regulatory and Compilance")]: "RC",
-    [normalizeDepartmentName("Admin & HR")]: "HR",
-    [normalizeDepartmentName("Human Resources")]: "HR",
-  }
-
-  if (codeOverrides[normalizedRequested]) {
-    return codeOverrides[normalizedRequested]
-  }
 
   const supabase = await createClient()
   const dataClient = getServiceRoleClientOrFallback(supabase)
   const { data, error } = await dataClient
-    .from("correspondence_department_codes")
-    .select("department_name, department_code")
+    .from("departments")
+    .select("name, department_code")
     .eq("is_active", true)
+    .not("department_code", "is", null)
 
   if (error || !data) return null
-  const exact = data.find((item) => item.department_name === requestedName)
+
+  const exact = data.find((item) => item.name === requestedName)
   if (exact?.department_code) return exact.department_code
 
-  const normalizedMatch = data.find(
-    (item) => normalizeDepartmentName(String(item.department_name || "")) === normalizedRequested
-  )
+  const normalizedMatch = data.find((item) => normalizeDepartmentName(String(item.name || "")) === normalizedRequested)
   return normalizedMatch?.department_code || null
+}
+
+/**
+ * Returns the current name of the executive management department by looking up
+ * the department with code "EXEC" in the departments table. Falls back to the
+ * legacy string if no department with that code exists.
+ */
+export async function getExecutiveDepartmentName(): Promise<string> {
+  const supabase = await createClient()
+  const dataClient = getServiceRoleClientOrFallback(supabase)
+  const { data } = await dataClient
+    .from("departments")
+    .select("name")
+    .eq("is_executive_dept", true)
+    .eq("is_active", true)
+    .maybeSingle()
+
+  return data?.name ?? "Executive Management"
 }

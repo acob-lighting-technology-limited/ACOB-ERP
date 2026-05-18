@@ -99,7 +99,7 @@ export async function GET(request: Request) {
       return new NextResponse(arrayBuffer, {
         headers: {
           "Content-Type": contentType,
-          "Content-Disposition": `attachment; filename="${fileName.replace(/"/g, "")}"`,
+          "Content-Disposition": `attachment; filename="${fileName.replace(/["\r\n\\]/g, "")}"`,
           "Cache-Control": "no-store",
         },
       })

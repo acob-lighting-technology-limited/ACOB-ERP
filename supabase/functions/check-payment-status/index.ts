@@ -220,7 +220,7 @@ serve(async (req) => {
         })
 
         await sendEmail({
-          from: `ACOB Internal Systems <${NOTIFICATION_SENDER_EMAIL}>`,
+          from: `ACOB Payments System <${NOTIFICATION_SENDER_EMAIL}>`,
           to: recipientEmails,
           subject,
           html,

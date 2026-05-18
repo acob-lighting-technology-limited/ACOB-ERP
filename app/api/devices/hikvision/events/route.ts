@@ -25,7 +25,11 @@ export async function POST(request: NextRequest) {
   }
 
   const secret = process.env.HIKVISION_WEBHOOK_SECRET
-  const token = request.nextUrl.searchParams.get("token")
+  // Prefer Authorization header; fall back to query param for Hikvision hardware that can't send custom headers
+  const authHeader = request.headers.get("authorization")
+  const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null
+  const queryToken = request.nextUrl.searchParams.get("token")
+  const token = bearerToken ?? queryToken
   if (!secret || token !== secret) {
     log.warn("Invalid or missing webhook token")
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })

@@ -40,6 +40,7 @@ export interface CorrespondenceRecord {
   responsible_officer_id: string | null
   originator_id: string
   created_by_id: string | null
+  created_by_name: string | null
   assigned_department_name: string | null
   source_mode: SourceMode | null
   dispatch_method: DispatchMethod | null

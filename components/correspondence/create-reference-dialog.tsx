@@ -95,17 +95,21 @@ export function CreateReferenceDialog({
   useEffect(() => {
     if (!form.department_name) {
       setRequesters([])
+      set({ requester_id: "" })
       return
     }
     setRequestersLoading(true)
+    // Clear requester immediately when department changes
+    set({ requester_id: "" })
     fetch(`/api/correspondence/requesters?department_name=${encodeURIComponent(form.department_name)}`)
       .then((r) => r.json())
       .then((json) => {
         if (json.data) {
           const list = json.data as RequesterOption[]
           setRequesters(list)
-          const stillValid = list.some((r) => r.id === form.requester_id)
-          if (!stillValid) {
+          // Auto-select current user only if they belong to this department
+          const currentUserInDept = list.some((r) => r.id === currentUserId)
+          if (currentUserInDept) {
             set({ requester_id: currentUserId })
           }
         }
@@ -162,7 +166,7 @@ export function CreateReferenceDialog({
                   {
                     label: "Reference format",
                     value:
-                      "References follow the format ACOB/{DEPT}/{RECIPIENT}/{YEAR}/{NNN} — e.g. ACOB/MD/AEDC/2026/001. Adding a category inserts a code: ACOB/MD/AEDC/PROP/2026/001.",
+                      "References follow the format ACOB/{DEPT}/{RECIPIENT}/{YEAR}/{NNN} — e.g. ACOB/MD/AEDC/2026/001. Category is for classification only and does not appear in the reference number.",
                   },
                   {
                     label: "Requested by",
@@ -179,6 +183,56 @@ export function CreateReferenceDialog({
           </DialogDescription>
         </DialogHeader>
         <form className="grid gap-4 md:grid-cols-2" onSubmit={onSubmit}>
+          {/* Letter Type */}
+          <div className="space-y-2">
+            <Label>Letter Type</Label>
+            <Select value={form.letter_type || "external"} onValueChange={(value) => set({ letter_type: value })}>
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="external">External</SelectItem>
+                <SelectItem value="internal">Internal</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Category */}
+          <div className="space-y-2">
+            <Label>Category</Label>
+            <Select
+              value={form.category || ""}
+              onValueChange={(value) => set({ category: value, custom_category_name: "", custom_category_code: "" })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="None" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="">None</SelectItem>
+                {categories.map((cat) => (
+                  <SelectItem key={cat.id} value={cat.code}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
+                <SelectItem value={CUSTOM_CATEGORY_SENTINEL}>Other (custom)…</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {isCustomCategory && (
+            <div className="space-y-2 md:col-span-2">
+              <Label>
+                Custom Category Name <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                value={form.custom_category_name}
+                onChange={(e) => set({ custom_category_name: e.target.value })}
+                placeholder="e.g. Tendering"
+                required={isCustomCategory}
+              />
+            </div>
+          )}
+
           {/* Subject */}
           <div className="space-y-2 md:col-span-2">
             <Label>
@@ -248,7 +302,7 @@ export function CreateReferenceDialog({
             <div className="space-y-2">
               <Label>Requested by</Label>
               <Select
-                value={form.requester_id || currentUserId}
+                value={form.requester_id || ""}
                 onValueChange={handleRequesterChange}
                 disabled={!form.department_name || requestersLoading}
               >
@@ -256,13 +310,10 @@ export function CreateReferenceDialog({
                   <SelectValue placeholder={requestersLoading ? "Loading..." : "Select person"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {!requesters.some((r) => r.id === currentUserId) && (
-                    <SelectItem value={currentUserId}>{currentUserName} (you)</SelectItem>
-                  )}
                   {requesters.map((r) => (
                     <SelectItem key={r.id} value={r.id}>
                       {r.full_name}
-                      {r.id === currentUserId ? " (you)" : ""}
+                      {r.id === currentUserId ? " (You)" : ""}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -271,73 +322,6 @@ export function CreateReferenceDialog({
                 {!form.department_name ? "Select a department first." : "Person who is requesting the letter."}
               </p>
             </div>
-          )}
-
-          {/* Letter Type */}
-          <div className="space-y-2">
-            <Label>Letter Type</Label>
-            <Select value={form.letter_type || "external"} onValueChange={(value) => set({ letter_type: value })}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="external">External</SelectItem>
-                <SelectItem value="internal">Internal</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {/* Category */}
-          <div className="space-y-2">
-            <Label>Category</Label>
-            <Select
-              value={form.category || ""}
-              onValueChange={(value) => set({ category: value, custom_category_name: "", custom_category_code: "" })}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="None" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">None</SelectItem>
-                {categories.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.code}>
-                    {cat.name} ({cat.code})
-                  </SelectItem>
-                ))}
-                <SelectItem value={CUSTOM_CATEGORY_SENTINEL}>Other (custom)…</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {isCustomCategory && (
-            <>
-              <div className="space-y-2">
-                <Label>
-                  Custom Category Name <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  value={form.custom_category_name}
-                  onChange={(e) => set({ custom_category_name: e.target.value })}
-                  placeholder="e.g. Tendering"
-                  required={isCustomCategory}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>
-                  Custom Category Code <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  value={form.custom_category_code}
-                  onChange={(e) => handleCustomCategoryCodeInput(e.target.value)}
-                  placeholder="e.g. TEND"
-                  maxLength={10}
-                  required={isCustomCategory}
-                />
-                <p className="text-muted-foreground text-xs">
-                  2–10 characters, uppercase. Will be saved for everyone to use.
-                </p>
-              </div>
-            </>
           )}
 
           {/* Due Date */}

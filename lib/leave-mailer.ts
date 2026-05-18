@@ -1,4 +1,5 @@
-import { DEFAULT_NOTIFICATION_SENDER, sendNotificationEmail } from "@/lib/notifications/email-gateway"
+import { sendNotificationEmail } from "@/lib/notifications/email-gateway"
+import { ORG_PRIMARY_DOMAIN } from "@/lib/org-config"
 import { withSubjectPrefix } from "@/lib/notifications/subject-policy"
 
 export interface LeaveWorkflowEmailPayload {
@@ -29,7 +30,7 @@ export async function sendLeaveWorkflowEmail(payload: LeaveWorkflowEmailPayload)
   if (!recipients.length) return
 
   await sendNotificationEmail({
-    from: DEFAULT_NOTIFICATION_SENDER,
+    from: `ACOB HR System <notifications@${ORG_PRIMARY_DOMAIN}>`,
     to: recipients,
     subject: withSubjectPrefix("Leave", payload.subject),
     html: buildEmailHtml({ title: payload.title, message: payload.message, ctaPath: payload.ctaPath }),
