@@ -6,6 +6,7 @@ import {
   canAccessDepartment,
   getAuthContext,
   getDepartmentCodeByName,
+  getExecutiveDepartmentName,
   isAdminRole,
 } from "@/lib/correspondence/server"
 import { getRequestScope } from "@/lib/admin/api-scope"
@@ -17,8 +18,6 @@ import { getOneDriveService } from "@/lib/onedrive"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("correspondence-records")
-
-const EXEC_MANAGEMENT_DEPT = "Executive Management"
 
 type CorrespondenceListRecord = {
   department_name?: string | null
@@ -231,11 +230,13 @@ export async function POST(request: NextRequest) {
 
     // If entering on behalf of someone else, fetch their profile for sender_name
     const originatorId = parsed.data.originator_id || user.id
-    let senderName =
+    const creatorName =
       profile?.full_name ||
       [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim() ||
       user.email ||
       null
+
+    let senderName = creatorName
 
     if (originatorId !== user.id) {
       const { data: originatorProfile } = await supabase
@@ -271,6 +272,7 @@ export async function POST(request: NextRequest) {
           : {},
       status: "under_review",
       originator_id: originatorId,
+      created_by_name: creatorName,
       submitted_at: new Date().toISOString(),
       received_at: null,
     }
@@ -305,16 +307,16 @@ export async function POST(request: NextRequest) {
           )
         : null
 
+      const execMgmtDept = await getExecutiveDepartmentName()
+
       const execLead = (deptLeadCandidates || []).find(
-        (p) =>
-          p.id !== originatorId &&
-          (p.lead_departments?.includes(EXEC_MANAGEMENT_DEPT) || p.department === EXEC_MANAGEMENT_DEPT)
+        (p) => p.id !== originatorId && (p.lead_departments?.includes(execMgmtDept) || p.department === execMgmtDept)
       )
 
       const originatorIsExecLead =
         execLead?.id === originatorId ||
-        originatorProfile?.lead_departments?.includes(EXEC_MANAGEMENT_DEPT) ||
-        originatorProfile?.department === EXEC_MANAGEMENT_DEPT ||
+        originatorProfile?.lead_departments?.includes(execMgmtDept) ||
+        originatorProfile?.department === execMgmtDept ||
         originatorProfile?.designation?.toLowerCase().includes("managing director") ||
         originatorProfile?.designation?.toLowerCase() === "md"
 

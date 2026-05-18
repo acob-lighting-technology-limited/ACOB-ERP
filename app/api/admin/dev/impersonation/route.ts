@@ -50,7 +50,10 @@ function getCanonicalAppUrl(request: NextRequest): string {
   return "https://erp.acoblighting.com"
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const rl = await rateLimit(`admin-dev-impersonation-list:${getClientId(request)}`, { limit: 10, windowSec: 60 })
+  if (!rl.allowed) return NextResponse.json({ error: "Too many requests", code: "RATE_LIMITED" }, { status: 429 })
+
   const supabase = await createClient()
   const {
     data: { user },

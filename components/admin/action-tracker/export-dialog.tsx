@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { toast } from "sonner"
 import { Download, Loader2 } from "lucide-react"
-import * as XLSX from "xlsx"
+import * as XLSX from "@e965/xlsx"
 import { createClient } from "@/lib/supabase/client"
 import { getCurrentISOWeek } from "@/lib/utils"
 
@@ -39,7 +39,7 @@ export function ActionPointExportDialog({ isOpen, onClose, departments }: Export
     setIsExporting(true)
     try {
       const supabase = createClient()
-      let query = supabase.from("tasks").select("*").eq("category", "weekly_action").eq("year", year)
+      let query = supabase.from("action_items").select("*").eq("year", year)
 
       // Time range filtering
       if (period === "week") {

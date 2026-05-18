@@ -64,16 +64,12 @@ export async function POST(request: NextRequest) {
 
     const officeWeek = getCurrentOfficeWeek()
     const { data: item, error } = await supabase
-      .from("tasks")
+      .from("action_items")
       .insert({
         title: parsed.data.title,
         description: parsed.data.description || null,
         department: parsed.data.department,
         status: "not_started",
-        priority: "medium",
-        assignment_type: "department",
-        category: "weekly_action",
-        source_type: "action_item",
         week_number: parsed.data.week_number ?? officeWeek.week,
         year: parsed.data.year ?? officeWeek.year,
         assigned_by: user.id,
@@ -87,8 +83,8 @@ export async function POST(request: NextRequest) {
     await writeAuditLog(
       supabase,
       {
-        action: "task.create",
-        entityType: "task",
+        action: "action_item.create",
+        entityType: "action_item",
         entityId: item.id,
         newValues: { title: item.title, department: item.department },
         context: { actorId: user.id, source: "api", route: "/api/reports/action-tracker" },

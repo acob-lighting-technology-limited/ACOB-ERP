@@ -46,7 +46,7 @@ export function PortalReferenceGeneratorContent({
     : ""
 
   const [records, setRecords] = useState<CorrespondenceRecord[]>(initialRecords)
-  const [activeTab, setActiveTab] = useState<"internal" | "external">("internal")
+  const [activeTab, setActiveTab] = useState<"internal" | "external">("external")
   const [isSaving, setIsSaving] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -86,8 +86,8 @@ export function PortalReferenceGeneratorContent({
 
   const tabs: DataTableTab[] = useMemo(
     () => [
-      { key: "internal", label: `Internal (${stats.internal})` },
       { key: "external", label: `External (${stats.external})` },
+      { key: "internal", label: `Internal (${stats.internal})` },
     ],
     [stats.external, stats.internal]
   )
@@ -437,8 +437,13 @@ export function PortalReferenceGeneratorContent({
                 {row.recipient_code ? ` (${row.recipient_code})` : ""}
               </p>
               <p className="text-sm">
-                <span className="text-muted-foreground">Sender:</span> {row.sender_name || "-"}
+                <span className="text-muted-foreground">Requested by:</span> {row.sender_name || "-"}
               </p>
+              {row.created_by_name && row.created_by_name !== row.sender_name && (
+                <p className="text-sm">
+                  <span className="text-muted-foreground">Created by:</span> {row.created_by_name}
+                </p>
+              )}
               <p className="text-sm">
                 <span className="text-muted-foreground">Due Date:</span> {row.due_date || "-"}
               </p>

@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
         date,
         record: rec,
         status,
-        deduction: rec?.waived ? 0 : deductionForStatus(status, rec?.clock_in),
+        deduction: rec?.waived ? 0 : deductionForStatus(status, rec?.clock_in, rec?.clock_out),
       }
     })
 

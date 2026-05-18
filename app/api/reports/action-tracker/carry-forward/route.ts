@@ -86,17 +86,14 @@ export async function POST(request: NextRequest) {
       title: item.title,
       department: item.department,
       description: item.description || null,
-      priority: item.priority || "medium",
       status: "not_started",
-      assignment_type: "department",
-      category: "weekly_action",
-      source_type: "action_item",
       week_number: parsed.data.week_number,
       year: parsed.data.year,
+      original_week: item.original_week || previous.week,
       assigned_by: user.id,
     }))
 
-    const { data: newItems, error: insertError } = await supabase.from("tasks").insert(insertPayload).select("*")
+    const { data: newItems, error: insertError } = await supabase.from("action_items").insert(insertPayload).select("*")
 
     if (insertError) {
       return NextResponse.json({ error: insertError.message }, { status: 500 })
@@ -105,8 +102,8 @@ export async function POST(request: NextRequest) {
     await writeAuditLog(
       supabase,
       {
-        action: "task.carry_forward",
-        entityType: "task",
+        action: "action_item.carry_forward",
+        entityType: "action_item",
         entityId: String(parsed.data.week_number),
         newValues: { count: newItems?.length || 0, week_number: parsed.data.week_number, year: parsed.data.year },
         context: { actorId: user.id, source: "api", route: "/api/reports/action-tracker/carry-forward" },

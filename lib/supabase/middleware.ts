@@ -314,7 +314,7 @@ export async function updateSession(request: NextRequest) {
     if (!existingToken) {
       const token = randomHex(32)
       supabaseResponse.cookies.set("csrf_token", token, {
-        httpOnly: false,
+        httpOnly: false, // intentional: SPA reads this via document.cookie to set x-csrf-token header
         sameSite: "strict",
         secure: process.env.NODE_ENV === "production",
         path: "/",

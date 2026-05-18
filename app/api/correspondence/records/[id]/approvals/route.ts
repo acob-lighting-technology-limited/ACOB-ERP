@@ -6,8 +6,10 @@ import {
   canAccessDepartment,
   canAccessRecord,
   getAuthContext,
+  getExecutiveDepartmentName,
 } from "@/lib/correspondence/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
+import { sendCorrespondenceApprovalEmail } from "@/lib/correspondence/mailer"
 import { getRequestScope } from "@/lib/admin/api-scope"
 import { logger } from "@/lib/logger"
 import { normalizeDepartmentName } from "@/shared/departments"
@@ -80,10 +82,11 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       designation.includes("managing director") ||
       designation === "md"
 
+    const execMgmtDept = await getExecutiveDepartmentName()
     const isExecutiveLead =
       Boolean(profile.is_department_lead) &&
-      normalizeDepartmentName(approvalScopeDepartment) === normalizeDepartmentName("Executive Management") &&
-      canAccessDepartment(profile, "Executive Management")
+      normalizeDepartmentName(approvalScopeDepartment) === normalizeDepartmentName(execMgmtDept) &&
+      canAccessDepartment(profile, execMgmtDept)
 
     const isDepartmentLeadForRecord =
       Boolean(profile.is_department_lead) &&
@@ -187,6 +190,26 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         })
       } catch (notifyError) {
         log.error({ err: String(notifyError) }, "Correspondence approval notification error:")
+      }
+
+      try {
+        const { data: originatorProfile } = await dataClient
+          .from("profiles")
+          .select("company_email, additional_email")
+          .eq("id", record.originator_id)
+          .single()
+        const emails = [originatorProfile?.company_email, originatorProfile?.additional_email].filter(
+          Boolean
+        ) as string[]
+        const approverName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || "Administrator"
+        await sendCorrespondenceApprovalEmail({
+          to: emails,
+          referenceNumber: updatedRecord.reference_number,
+          subject: updatedRecord.subject,
+          approverName,
+        })
+      } catch (mailErr) {
+        log.error({ err: String(mailErr) }, "Correspondence approval email failed (bypass)")
       }
 
       return NextResponse.json({ data: { record: updatedRecord } })
@@ -375,6 +398,29 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       })
     } catch (notifyError) {
       log.error({ err: String(notifyError) }, "Correspondence approval notification error:")
+    }
+
+    if (nextRecordStatus === "approved") {
+      try {
+        const dataClient = getServiceRoleClientOrFallback(supabase)
+        const { data: originatorProfile } = await dataClient
+          .from("profiles")
+          .select("company_email, additional_email")
+          .eq("id", record.originator_id)
+          .single()
+        const emails = [originatorProfile?.company_email, originatorProfile?.additional_email].filter(
+          Boolean
+        ) as string[]
+        const approverName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || "Approver"
+        await sendCorrespondenceApprovalEmail({
+          to: emails,
+          referenceNumber: updatedRecord.reference_number,
+          subject: updatedRecord.subject,
+          approverName,
+        })
+      } catch (mailErr) {
+        log.error({ err: String(mailErr) }, "Correspondence approval email failed")
+      }
     }
 
     return NextResponse.json({ data: { record: updatedRecord, approval: targetApproval } })

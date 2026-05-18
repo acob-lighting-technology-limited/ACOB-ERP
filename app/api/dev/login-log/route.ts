@@ -16,10 +16,6 @@ export async function POST(request: NextRequest) {
       { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
       { status: 429 }
     )
-  if (process.env.NODE_ENV === "production") {
-    return NextResponse.json({ error: "Not available in production" }, { status: 404 })
-  }
-
   try {
     const supabase = await createClient()
     const {

@@ -6,14 +6,13 @@ import {
   appendCorrespondenceEvent,
   canAccessRecord,
   getAuthContext,
+  getExecutiveDepartmentName,
   isAdminRole,
 } from "@/lib/correspondence/server"
 import { getRequestScope } from "@/lib/admin/api-scope"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
-
-const EXEC_MANAGEMENT_DEPT = "Executive Management"
 
 const log = logger("correspondence-records")
 
@@ -206,17 +205,17 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
           )
         : null
 
+      const execMgmtDept = await getExecutiveDepartmentName()
+
       // Find exec management lead
       const execLead = (deptLeadCandidates || []).find(
-        (p) =>
-          p.id !== originatorId &&
-          (p.lead_departments?.includes(EXEC_MANAGEMENT_DEPT) || p.department === EXEC_MANAGEMENT_DEPT)
+        (p) => p.id !== originatorId && (p.lead_departments?.includes(execMgmtDept) || p.department === execMgmtDept)
       )
 
       const originatorIsExecLead =
         execLead?.id === originatorId ||
-        originatorProfile?.lead_departments?.includes(EXEC_MANAGEMENT_DEPT) ||
-        originatorProfile?.department === EXEC_MANAGEMENT_DEPT ||
+        originatorProfile?.lead_departments?.includes(execMgmtDept) ||
+        originatorProfile?.department === execMgmtDept ||
         originatorProfile?.designation?.toLowerCase().includes("managing director") ||
         originatorProfile?.designation?.toLowerCase() === "md"
 

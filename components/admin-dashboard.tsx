@@ -120,7 +120,7 @@ export function AdminDashboard({ users, currentUserId: _currentUserId, feedbackB
 
   const exportToXLSX = async () => {
     try {
-      const { utils, writeFile } = await import("xlsx")
+      const { utils, writeFile } = await import("@e965/xlsx")
       const worksheet = utils.json_to_sheet(
         filteredUsers.map((user) => ({
           "First Name": user.first_name,

@@ -5,6 +5,8 @@ import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-gu
 import { normalizeDepartmentName } from "@/shared/departments"
 import {
   latenessDeduction,
+  earlyDepartureDeduction,
+  missedHours,
   toLocalISODate,
   toLocalYearMonth,
   getWorkdaysInMonth,
@@ -227,6 +229,7 @@ export async function GET(request: NextRequest) {
         exempted_days = 0,
         total_hours = 0,
         lateness_deduction = 0,
+        total_missed_hours = 0,
         waived_days = 0
       let available_days = 0
 
@@ -253,15 +256,18 @@ export async function GET(request: NextRequest) {
           waived_days++
         } else if (derived === "present") {
           present_days++
-          lateness_deduction += latenessDeduction(rec.clock_in)
+          lateness_deduction += latenessDeduction(rec.clock_in) + earlyDepartureDeduction(rec.clock_out)
+          total_missed_hours += missedHours(rec.clock_in, rec.clock_out)
         } else if (derived === "late") {
           late_days++
-          lateness_deduction += latenessDeduction(rec.clock_in)
+          lateness_deduction += latenessDeduction(rec.clock_in) + earlyDepartureDeduction(rec.clock_out)
+          total_missed_hours += missedHours(rec.clock_in, rec.clock_out)
         } else if (derived === "incomplete") {
           incomplete_days++
         } else {
           absent_days++
           lateness_deduction += ABSENT_DEDUCTION
+          total_missed_hours += 9
         }
       }
 
@@ -280,6 +286,7 @@ export async function GET(request: NextRequest) {
         waived_days,
         total_hours,
         lateness_deduction,
+        total_missed_hours: Math.round(total_missed_hours * 10) / 10,
         attendance_rate:
           available_days - exempted_days > 0 ? Math.round((present_days / (available_days - exempted_days)) * 100) : 0,
         attendance_exempt: Boolean(profile.attendance_exempt),

@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowRight, ScrollText } from "lucide-react"
 import { EmptyState } from "@/components/ui/patterns"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import type { RecentActivityItem } from "./dashboard-types"
 
 const activityRouteMap: Record<string, string> = {
@@ -42,9 +43,10 @@ function formatDate(dateString: string): string {
 
 interface RecentActivityFeedProps {
   activity: RecentActivityItem[]
+  showViewAll?: boolean
 }
 
-export function RecentActivityFeed({ activity }: RecentActivityFeedProps) {
+export function RecentActivityFeed({ activity, showViewAll = true }: RecentActivityFeedProps) {
   return (
     <Card className="border">
       <CardHeader className="bg-muted/30 border-b px-4 py-3">
@@ -53,40 +55,56 @@ export function RecentActivityFeed({ activity }: RecentActivityFeedProps) {
             <ScrollText className="h-4 w-4" />
             Recent Activity
           </CardTitle>
-          <Link href="/admin/audit-logs">
-            <Badge variant="outline" className="hover:bg-accent cursor-pointer text-xs">
-              View All
-            </Badge>
-          </Link>
+          {showViewAll && (
+            <Link href="/admin/audit-logs">
+              <Badge variant="outline" className="hover:bg-accent cursor-pointer text-xs">
+                View All
+              </Badge>
+            </Link>
+          )}
         </div>
       </CardHeader>
       <CardContent className="p-3">
         {activity.length > 0 ? (
-          <div className="divide-y">
-            {activity.map((item) => (
-              <div key={item.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0 flex-1">
-                  <p className="text-foreground truncate text-sm font-medium">
-                    <span className="font-semibold">{item.actorName}</span> {item.actionLabel}
-                  </p>
-                  <div className="mt-1 flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="text-xs">
-                      {item.moduleLabel}
-                    </Badge>
-                    <span className="text-muted-foreground text-xs whitespace-nowrap">
+          <div className="max-h-[22rem] overflow-x-auto overflow-y-auto rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[50px]">S/N</TableHead>
+                  <TableHead>Activity</TableHead>
+                  <TableHead>Module</TableHead>
+                  <TableHead>When</TableHead>
+                  <TableHead className="text-right">Action</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {activity.map((item, index) => (
+                  <TableRow key={item.id}>
+                    <TableCell className="text-muted-foreground">{index + 1}</TableCell>
+                    <TableCell className="font-medium">
+                      <span className="font-semibold">{item.actorName}</span> {item.actionLabel}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="text-xs">
+                        {item.moduleLabel}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs sm:text-sm">
                       {formatDate(item.createdAt)}
-                    </span>
-                  </div>
-                </div>
-                <Link
-                  href={resolveActivityRoute(item.moduleKey)}
-                  className="text-primary hover:text-primary/80 inline-flex shrink-0 items-center gap-1 text-xs font-medium"
-                >
-                  Open
-                  <ArrowRight className="h-3.5 w-3.5" />
-                </Link>
-              </div>
-            ))}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Link
+                        href={resolveActivityRoute(item.moduleKey)}
+                        className="text-primary hover:text-primary/80 inline-flex items-center gap-1 text-xs font-medium"
+                      >
+                        Open
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
         ) : (
           <EmptyState

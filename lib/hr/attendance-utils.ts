@@ -19,6 +19,39 @@ export function latenessDeduction(clockIn: string | null | undefined): number {
   return (Math.floor(minutesSinceStart / 60) + 1) * 1000
 }
 
+/**
+ * Early departure deduction rules:
+ * - No grace period — leaving before 5:00pm triggers a deduction
+ * - Each hour bracket before 5:00pm → +₦1,000
+ * - 4:00–4:59 = ₦1,000 | 3:00–3:59 = ₦2,000 | 2:00–2:59 = ₦3,000 …
+ */
+export function earlyDepartureDeduction(clockOut: string | null | undefined): number {
+  if (!clockOut) return 0
+  const [h, m] = clockOut.split(":").map(Number)
+  if (isNaN(h) || isNaN(m)) return 0
+  const totalMinutes = h * 60 + m
+  const dayEnd = 17 * 60 // 5:00pm
+  if (totalMinutes >= dayEnd) return 0
+  const minutesBeforeEnd = dayEnd - totalMinutes
+  return Math.ceil(minutesBeforeEnd / 60) * 1000
+}
+
+/**
+ * Total hours missed during the standard work window (8:00am–5:00pm).
+ * Returns late arrival hours + early departure hours as a decimal.
+ */
+export function missedHours(clockIn: string | null | undefined, clockOut: string | null | undefined): number {
+  if (!clockIn || !clockOut) return 0
+  const [ih, im] = clockIn.split(":").map(Number)
+  const [oh, om] = clockOut.split(":").map(Number)
+  if (isNaN(ih) || isNaN(im) || isNaN(oh) || isNaN(om)) return 0
+  const inMin = ih * 60 + im
+  const outMin = oh * 60 + om
+  const late = Math.max(0, inMin - 8 * 60)
+  const early = Math.max(0, 17 * 60 - outMin)
+  return (late + early) / 60
+}
+
 /** Flat deduction applied to a fully absent day (no clock-in at all). */
 export const ABSENT_DEDUCTION = 10_000
 

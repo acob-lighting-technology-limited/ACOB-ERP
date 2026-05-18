@@ -1531,7 +1531,7 @@ export const exportActionPointToXLSX = async (
   inFlightActionPointFileExports.add(exportKey)
 
   try {
-    const XLSX = await import("xlsx")
+    const XLSX = await import("@e965/xlsx")
     const filteredActions = department
       ? actions.filter((item) => getDepartmentAliases(department).includes(normalizeDepartmentName(item.department)))
       : actions
@@ -1697,7 +1697,7 @@ export const exportToXLSX = async (report: WeeklyReport, meetingDate?: string) =
     }))
   }
 
-  const XLSX = await import("xlsx")
+  const XLSX = await import("@e965/xlsx")
   const rows = [
     ...buildSectionRows("Work Done", report.work_done || ""),
     ...buildSectionRows("Tasks for New Week", report.tasks_new_week || ""),
@@ -1754,7 +1754,7 @@ export const exportAllToXLSX = async (reports: WeeklyReport[], week: number, yea
     }))
   }
 
-  const XLSX = await import("xlsx")
+  const XLSX = await import("@e965/xlsx")
   const sortedReports = sortReportsByDepartment(reports)
   const rows = sortedReports.flatMap((report) => [
     ...buildSectionRows(report, "Work Done", report.work_done || ""),

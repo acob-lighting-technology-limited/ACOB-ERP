@@ -94,6 +94,10 @@ function dedupePdfExtension(fileName: string): string {
   return trimmed.toLowerCase().endsWith(".pdf.pdf") ? trimmed.slice(0, -4) : trimmed
 }
 
+function safeDispositionFilename(name: string): string {
+  return name.replace(/["\r\n\\]/g, "")
+}
+
 export async function GET(_request: Request, props: { params: Promise<{ id: string; documentId: string }> }) {
   const params = await props.params
   try {
@@ -142,7 +146,7 @@ export async function GET(_request: Request, props: { params: Promise<{ id: stri
       return new NextResponse(Buffer.from(await upstream.arrayBuffer()), {
         headers: {
           "Content-Type": mimeType,
-          "Content-Disposition": `attachment; filename="${fileName}"`,
+          "Content-Disposition": `attachment; filename="${safeDispositionFilename(fileName)}"`,
         },
       })
     }
@@ -166,7 +170,7 @@ export async function GET(_request: Request, props: { params: Promise<{ id: stri
     return new NextResponse(Buffer.from(await upstream.arrayBuffer()), {
       headers: {
         "Content-Type": mimeType,
-        "Content-Disposition": `attachment; filename="${fileName}"`,
+        "Content-Disposition": `attachment; filename="${safeDispositionFilename(fileName)}"`,
       },
     })
   } catch (error: unknown) {

@@ -171,7 +171,7 @@ export function buildAssetExportRows(
 /** Excel export — call with pre-built rows */
 export async function exportAssetsToExcel(rows: AssetExportRow[], filename?: string): Promise<void> {
   try {
-    const XLSX = await import("xlsx")
+    const XLSX = await import("@e965/xlsx")
     const { default: saveAs } = await import("file-saver")
 
     const ws = XLSX.utils.json_to_sheet(rows)
@@ -366,7 +366,7 @@ function buildEmployeeReportRows(input: EmployeeReportInput): {
 
 export async function exportEmployeeReportToExcel(input: EmployeeReportInput, filename?: string): Promise<void> {
   try {
-    const XLSX = await import("xlsx")
+    const XLSX = await import("@e965/xlsx")
     const { default: saveAs } = await import("file-saver")
 
     const { rows } = buildEmployeeReportRows(input)

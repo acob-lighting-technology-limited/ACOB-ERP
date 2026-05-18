@@ -54,12 +54,16 @@ async function getData() {
   const isDeptLead = Boolean(profile?.is_department_lead)
   const scopedRecords = records || []
 
-  const { data: departmentCodes } = await supabase
-    .from("correspondence_department_codes")
-    .select("department_name, department_code")
+  const { data: rawDepartments } = await supabase
+    .from("departments")
+    .select("name, department_code")
     .eq("is_active", true)
-    .order("department_name", { ascending: true })
-    .returns<DepartmentCodeOption[]>()
+    .not("department_code", "is", null)
+    .order("name", { ascending: true })
+
+  const departmentCodes: DepartmentCodeOption[] = (rawDepartments || [])
+    .filter((d): d is { name: string; department_code: string } => Boolean(d.department_code))
+    .map((d) => ({ department_name: d.name, department_code: d.department_code }))
 
   return {
     currentViewerRole: role,

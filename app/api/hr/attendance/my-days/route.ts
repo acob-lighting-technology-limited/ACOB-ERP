@@ -103,7 +103,12 @@ export async function GET(request: NextRequest) {
         isOnLeave: leaveDates.has(date),
         isExempted: Boolean(profile?.attendance_exempt) || exemptDates.has(date),
       })
-      return { date, record: rec, status, deduction: rec?.waived ? 0 : deductionForStatus(status, rec?.clock_in) }
+      return {
+        date,
+        record: rec,
+        status,
+        deduction: rec?.waived ? 0 : deductionForStatus(status, rec?.clock_in, rec?.clock_out),
+      }
     })
 
   return NextResponse.json({ data })

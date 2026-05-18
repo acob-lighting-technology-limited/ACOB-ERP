@@ -243,6 +243,8 @@ export type Database = {
           id: string
           name: string
           description: string | null
+          department_code: string | null
+          is_executive_dept: boolean
           is_active: boolean
           created_at: string
           updated_at: string
@@ -251,6 +253,8 @@ export type Database = {
           id?: string
           name: string
           description?: string | null
+          department_code?: string | null
+          is_executive_dept?: boolean
           is_active?: boolean
           created_at?: string
           updated_at?: string
@@ -258,6 +262,8 @@ export type Database = {
         Update: {
           name?: string
           description?: string | null
+          department_code?: string | null
+          is_executive_dept?: boolean
           is_active?: boolean
           updated_at?: string
         }

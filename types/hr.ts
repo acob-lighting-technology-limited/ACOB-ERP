@@ -84,6 +84,8 @@ export interface Department {
   id: string
   name: string
   description?: string
+  department_code?: string | null
+  is_executive_dept: boolean
   is_active: boolean
   created_at: string
   updated_at: string
