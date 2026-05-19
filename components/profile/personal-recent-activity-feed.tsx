@@ -66,7 +66,7 @@ export function PersonalRecentActivityFeed({ activity }: PersonalRecentActivityF
       </CardHeader>
       <CardContent className="p-3">
         {activity.length > 0 ? (
-          <div className="max-h-[22rem] overflow-x-auto overflow-y-auto rounded-lg border">
+          <div className="h-[22rem] overflow-x-auto overflow-y-auto rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow>

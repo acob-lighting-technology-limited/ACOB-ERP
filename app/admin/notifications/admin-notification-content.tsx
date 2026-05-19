@@ -25,7 +25,6 @@ import {
 } from "lucide-react"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "@/components/ui/data-table"
-import { StatCard } from "@/components/ui/stat-card"
 
 export interface DynamicNotification {
   id: string
@@ -56,6 +55,19 @@ const typeColors = {
   error: "bg-red-50/50 dark:bg-red-950/10",
 }
 
+const PRIORITY_BADGE_CLASS: Record<string, string> = {
+  urgent: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+  high: "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+  normal: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  low: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+}
+
+function getPriorityBadgeClass(priority: string | null | undefined): string {
+  return (
+    PRIORITY_BADGE_CLASS[String(priority || "").toLowerCase()] || "border-muted-foreground/30 text-muted-foreground"
+  )
+}
+
 interface AdminNotificationContentProps {
   initialNotifications: DynamicNotification[]
 }
@@ -65,10 +77,13 @@ export function AdminNotificationContent({ initialNotifications }: AdminNotifica
   const [notifications, setNotifications] = useState<DynamicNotification[]>(initialNotifications)
   const [isLoading, setIsLoading] = useState(false)
   const [activeTab, setActiveTab] = useState("all")
-  const [readIds, setReadIds] = useState<Set<string>>(new Set())
+  const [readIds, setReadIds] = useState<Set<string>>(
+    () => new Set(initialNotifications.filter((n) => n.read).map((n) => n.id))
+  )
 
   useEffect(() => {
     setNotifications(initialNotifications)
+    setReadIds(new Set(initialNotifications.filter((n) => n.read).map((n) => n.id)))
   }, [initialNotifications])
 
   const categoryCounts = useMemo(() => {
@@ -85,17 +100,20 @@ export function AdminNotificationContent({ initialNotifications }: AdminNotifica
     }
   }, [notifications, readIds])
 
-  const TABS: DataTableTab[] = [
-    { key: "all", label: "All", icon: Bell },
-    { key: "unread", label: "Unread", icon: Clock },
-    { key: "critical", label: "Critical", icon: AlertTriangle },
-    { key: "users", label: "Users", icon: User },
-    { key: "tasks", label: "Tasks", icon: Package },
-    { key: "payments", label: "Payments", icon: CreditCard },
-    { key: "leave", label: "Leave", icon: CalendarClock },
-    { key: "assets", label: "Assets", icon: Megaphone },
-    { key: "feedback", label: "Feedback", icon: Mail },
-  ]
+  const tabs: DataTableTab[] = useMemo(
+    () => [
+      { key: "all", label: `All(${categoryCounts.all})`, icon: Bell },
+      { key: "unread", label: `Unread(${categoryCounts.unread})`, icon: Clock },
+      { key: "critical", label: `Critical(${categoryCounts.critical})`, icon: AlertTriangle },
+      { key: "users", label: `Users(${categoryCounts.users})`, icon: User },
+      { key: "tasks", label: `Tasks(${categoryCounts.tasks})`, icon: Package },
+      { key: "payments", label: `Payments(${categoryCounts.payments})`, icon: CreditCard },
+      { key: "leave", label: `Leave(${categoryCounts.leave})`, icon: CalendarClock },
+      { key: "assets", label: `Assets(${categoryCounts.assets})`, icon: Megaphone },
+      { key: "feedback", label: `Feedback(${categoryCounts.feedback})`, icon: Mail },
+    ],
+    [categoryCounts]
+  )
 
   const filteredData = useMemo(() => {
     return notifications.filter((n) => {
@@ -120,6 +138,18 @@ export function AdminNotificationContent({ initialNotifications }: AdminNotifica
 
   const columns: DataTableColumn<DynamicNotification>[] = useMemo(
     () => [
+      {
+        key: "read",
+        label: "",
+        accessor: (n) => (readIds.has(n.id) ? "read" : "unread"),
+        width: "70px",
+        render: (n) =>
+          readIds.has(n.id) ? null : (
+            <Badge variant="default" className="capitalize">
+              New
+            </Badge>
+          ),
+      },
       {
         key: "type",
         label: "",
@@ -181,10 +211,7 @@ export function AdminNotificationContent({ initialNotifications }: AdminNotifica
         sortable: true,
         accessor: (n) => n.priority,
         render: (n) => (
-          <Badge
-            variant={n.priority === "urgent" ? "destructive" : n.priority === "high" ? "secondary" : "outline"}
-            className="capitalize"
-          >
+          <Badge variant="outline" className={cn("capitalize", getPriorityBadgeClass(n.priority))}>
             {n.priority}
           </Badge>
         ),
@@ -272,7 +299,7 @@ export function AdminNotificationContent({ initialNotifications }: AdminNotifica
       description="Administrative alerts and system notifications requiring attention."
       icon={Bell}
       backLink={{ href: "/admin", label: "Back to Dashboard" }}
-      tabs={TABS}
+      tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
       actions={
@@ -285,38 +312,6 @@ export function AdminNotificationContent({ initialNotifications }: AdminNotifica
             <CheckCheck className="mr-2 h-4 w-4" />
             Mark all read
           </Button>
-        </div>
-      }
-      stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard
-            title="Total Alerts"
-            value={categoryCounts.all}
-            icon={Bell}
-            iconBgColor="bg-blue-500/10"
-            iconColor="text-blue-500"
-          />
-          <StatCard
-            title="Unread"
-            value={categoryCounts.unread}
-            icon={Clock}
-            iconBgColor="bg-amber-500/10"
-            iconColor="text-amber-500"
-          />
-          <StatCard
-            title="Critical"
-            value={categoryCounts.critical}
-            icon={AlertTriangle}
-            iconBgColor="bg-red-500/10"
-            iconColor="text-red-500"
-          />
-          <StatCard
-            title="Success Rate"
-            value={Math.round(((categoryCounts.all - categoryCounts.critical) / (categoryCounts.all || 1)) * 100) + "%"}
-            icon={CheckCircle}
-            iconBgColor="bg-emerald-500/10"
-            iconColor="text-emerald-500"
-          />
         </div>
       }
     >
@@ -333,6 +328,7 @@ export function AdminNotificationContent({ initialNotifications }: AdminNotifica
         filters={filters}
         isLoading={isLoading}
         rowActions={rowActions}
+        pagination={{ pageSize: 50 }}
         viewToggle
         cardRenderer={(n) => {
           const Icon = typeIcons[n.type]
@@ -376,8 +372,8 @@ export function AdminNotificationContent({ initialNotifications }: AdminNotifica
                   </Badge>
                   {n.priority !== "normal" && (
                     <Badge
-                      variant={n.priority === "urgent" ? "destructive" : "secondary"}
-                      className="px-1.5 py-0 text-[10px]"
+                      variant="outline"
+                      className={cn("px-1.5 py-0 text-[10px]", getPriorityBadgeClass(n.priority))}
                     >
                       {n.priority}
                     </Badge>
