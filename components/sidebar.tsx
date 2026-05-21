@@ -482,7 +482,11 @@ export function Sidebar({ user, profile, canAccessAdmin }: SidebarProps) {
               </Button>
             </DropdownMenuTrigger>
           )}
-          <DropdownMenuContent align="end" side="top" className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-52">
+          <DropdownMenuContent
+            align="end"
+            side="top"
+            className="z-[70] w-[var(--radix-dropdown-menu-trigger-width)] min-w-52"
+          >
             <DropdownMenuItem asChild>
               <Link href="/profile" className="flex w-full items-center gap-2">
                 <User className="h-4 w-4" />

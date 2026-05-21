@@ -10,6 +10,7 @@ import {
   getExecutiveDepartmentName,
   isAdminRole,
 } from "@/lib/correspondence/server"
+import { sendCorrespondenceDecisionEmail } from "@/lib/correspondence/mailer"
 import { getRequestScope } from "@/lib/admin/api-scope"
 import { logger } from "@/lib/logger"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
@@ -36,16 +37,24 @@ type CorrespondenceLeadCandidate = {
 
 type CreatedCorrespondenceRecord = {
   id: string
-  reference_number: string
+  reference_number: string | null
+  company_code: string | null
+  department_code: string | null
   subject: string
+  category: string | null
+  letter_type: string | null
   status: string
   department_name: string | null
   assigned_department_name: string | null
   recipient_code: string | null
+  originator_id: string
+  submitted_at: string | null
+  created_at: string
   metadata: Record<string, unknown> | null
 }
 
 type CounterClient = Pick<SupabaseClient, "from">
+type RpcClient = Pick<SupabaseClient, "rpc">
 type CategoryCodeRow = { code: string }
 type ReferenceRow = { reference_number: string | null }
 type CounterRow = { last_number: number | null }
@@ -126,10 +135,10 @@ async function realignCorrespondenceCounter(params: {
   const departmentCode = params.departmentCode.trim().toUpperCase()
   const recipientCode = params.recipientCode.trim().toUpperCase()
   const categoryCode = await resolveCategoryCodeForReference(params.dataClient, params.categoryInput)
-  const counterKey = `outgoing:${departmentCode}:${recipientCode}:${categoryCode || ""}`
+  const counterKey = `outgoing:${recipientCode}:${departmentCode}:${categoryCode || ""}`
   const prefix = categoryCode
-    ? `ACOB/${departmentCode}/${recipientCode}/${categoryCode}/${params.referenceYear}/`
-    : `ACOB/${departmentCode}/${recipientCode}/${params.referenceYear}/`
+    ? `ACOB/${recipientCode}/${departmentCode}/${categoryCode}/${params.referenceYear}/`
+    : `ACOB/${recipientCode}/${departmentCode}/${params.referenceYear}/`
 
   const { data: references, error: refsError } = await params.dataClient
     .from("correspondence_records")
@@ -165,6 +174,58 @@ async function realignCorrespondenceCounter(params: {
     { onConflict: "counter_key,year" }
   )
   if (upsertError) throw upsertError
+}
+
+async function ensureReferenceNumberForApprovedRecord(params: {
+  rpcClient: RpcClient
+  dataClient: CounterClient
+  record: Pick<
+    CreatedCorrespondenceRecord,
+    | "reference_number"
+    | "department_code"
+    | "recipient_code"
+    | "category"
+    | "company_code"
+    | "submitted_at"
+    | "created_at"
+  >
+}): Promise<string> {
+  const currentReference = String(params.record.reference_number || "").trim()
+  if (currentReference) return currentReference
+
+  const departmentCode = String(params.record.department_code || "")
+    .trim()
+    .toUpperCase()
+  const recipientCode = String(params.record.recipient_code || "")
+    .trim()
+    .toUpperCase()
+
+  if (!departmentCode || !recipientCode) {
+    throw new Error("Missing department_code or recipient_code for correspondence approval numbering")
+  }
+
+  const categoryCode = await resolveCategoryCodeForReference(params.dataClient, params.record.category || null)
+
+  const yearSource = String(params.record.submitted_at || params.record.created_at || "")
+  const parsedYear = new Date(yearSource).getFullYear()
+  const referenceYear = Number.isFinite(parsedYear) ? parsedYear : new Date().getFullYear()
+
+  const { data: generatedReference, error: generateError } = await params.rpcClient.rpc(
+    "generate_correspondence_reference",
+    {
+      p_department_code: departmentCode,
+      p_recipient_code: recipientCode,
+      p_category_code: categoryCode,
+      p_company_code: params.record.company_code || "ACOB",
+      p_reference_year: referenceYear,
+    }
+  )
+
+  if (generateError || !generatedReference) {
+    throw generateError || new Error("Failed to generate correspondence reference")
+  }
+
+  return String(generatedReference)
 }
 
 const CreateCorrespondenceRecordSchema = z.object({
@@ -494,11 +555,23 @@ export async function POST(request: NextRequest) {
       const now = new Date().toISOString()
 
       if (originatorIsExecLead) {
-        await supabase
+        const finalReferenceNumber = await ensureReferenceNumberForApprovedRecord({
+          rpcClient: supabase,
+          dataClient,
+          record: created,
+        })
+
+        const { data: autoApprovedRecord, error: autoApproveError } = await supabase
           .from("correspondence_records")
-          .update({ status: "approved", approved_at: now })
+          .update({ status: "approved", approved_at: now, reference_number: finalReferenceNumber })
           .eq("id", String(created.id))
+          .select("*")
+          .single()
+        if (autoApproveError || !autoApprovedRecord) throw autoApproveError || new Error("Auto-approval failed")
+
         created.status = "approved"
+        created.reference_number = String(autoApprovedRecord.reference_number || finalReferenceNumber)
+
         if (execLead?.id) {
           await dataClient.from("correspondence_approvals").upsert(
             {
@@ -512,6 +585,48 @@ export async function POST(request: NextRequest) {
             },
             { onConflict: "correspondence_id,approval_stage" }
           )
+        }
+
+        try {
+          await supabase.rpc("create_notification", {
+            p_user_id: originatorId,
+            p_type: "approval_granted",
+            p_category: "approvals",
+            p_title: "Correspondence approved",
+            p_message: `${created.reference_number} was approved`,
+            p_priority: "normal",
+            p_link_url: "/correspondence",
+            p_actor_id: user.id,
+            p_entity_type: "correspondence_record",
+            p_entity_id: String(created.id),
+            p_rich_content: { decision: "approved", reference_number: created.reference_number },
+          })
+        } catch (notifyError) {
+          log.error({ err: String(notifyError), recordId: String(created.id) }, "Auto-approval notification failed")
+        }
+
+        try {
+          const { data: originatorContact } = await dataClient
+            .from("profiles")
+            .select("company_email, additional_email")
+            .eq("id", originatorId)
+            .single()
+
+          const emails = [originatorContact?.company_email, originatorContact?.additional_email].filter(
+            Boolean
+          ) as string[]
+
+          const approverName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || "Approver"
+          await sendCorrespondenceDecisionEmail({
+            to: emails,
+            referenceNumber: created.reference_number,
+            subject: created.subject,
+            approverName,
+            letterType: created.letter_type,
+            decision: "approved",
+          })
+        } catch (mailErr) {
+          log.error({ err: String(mailErr), recordId: String(created.id) }, "Auto-approval email failed")
         }
       } else if (originatorIsDeptLead) {
         if (execLead?.id) {
@@ -530,7 +645,7 @@ export async function POST(request: NextRequest) {
             p_type: "approval_request",
             p_category: "approvals",
             p_title: "Correspondence pending your approval",
-            p_message: `${String(created.reference_number || "")} - ${String(created.subject || "")}`,
+            p_message: `${String(created.reference_number || "Draft")} - ${String(created.subject || "")}`,
             p_priority: "normal",
             p_link_url: "/admin/correspondence",
             p_actor_id: user.id,
@@ -556,7 +671,7 @@ export async function POST(request: NextRequest) {
             p_type: "approval_request",
             p_category: "approvals",
             p_title: "Correspondence pending your approval",
-            p_message: `${String(created.reference_number || "")} - ${String(created.subject || "")}`,
+            p_message: `${String(created.reference_number || "Draft")} - ${String(created.subject || "")}`,
             p_priority: "normal",
             p_link_url: "/admin/correspondence",
             p_actor_id: user.id,
@@ -589,7 +704,7 @@ export async function POST(request: NextRequest) {
       if (attachments.length > 0) {
         const onedrive = getOneDriveService()
         if (onedrive.isEnabled()) {
-          const basePath = `/correspondence/${String(created.reference_number || "")}`
+          const basePath = `/correspondence/${String(created.reference_number || created.id)}`
           try {
             await onedrive.createFolder(basePath)
           } catch {
@@ -675,7 +790,7 @@ export async function POST(request: NextRequest) {
             p_type: "approval_request",
             p_category: "approvals",
             p_title: "New correspondence logged",
-            p_message: `${created.reference_number} - ${created.subject}`,
+            p_message: `${String(created.reference_number || "Draft")} - ${created.subject}`,
             p_priority: "normal",
             p_link_url: "/admin/correspondence",
             p_actor_id: user.id,

@@ -724,13 +724,13 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global" }: Admin
           <DropdownMenuContent
             align="end"
             side="top"
-            className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-52 border-[var(--admin-sidebar-border)] bg-[var(--admin-sidebar-bg)]"
+            className="z-[70] w-[var(--radix-dropdown-menu-trigger-width)] min-w-52 border-[var(--admin-sidebar-border)] bg-[var(--admin-sidebar-bg)]"
           >
             <DropdownMenuItem
               asChild
               className="cursor-pointer text-[var(--admin-sidebar-foreground)] focus:bg-[var(--admin-accent-soft)] focus:text-[var(--admin-primary)] data-[highlighted]:bg-[var(--admin-accent-soft)] data-[highlighted]:text-[var(--admin-primary)]"
             >
-              <Link href="/dashboard" className="flex w-full items-center gap-2">
+              <Link href="/profile" className="flex w-full items-center gap-2">
                 <User className="h-4 w-4" />
                 Go to Dashboard
               </Link>
