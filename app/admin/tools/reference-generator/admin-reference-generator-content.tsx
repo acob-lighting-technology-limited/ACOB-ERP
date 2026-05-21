@@ -98,6 +98,15 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
     }
   }, [globalCounts])
   const statusLabel = (status: string) => (status === "under_review" ? "Sent for review" : formatName(status))
+  const statusBadgeClass = (status: string) => {
+    if (status === "approved") return "bg-emerald-500/10 text-emerald-700 border-emerald-200"
+    if (status === "rejected") return "bg-red-500/10 text-red-700 border-red-200"
+    if (status === "returned_for_correction") return "bg-amber-500/10 text-amber-700 border-amber-200"
+    if (status === "under_review") return "bg-blue-500/10 text-blue-700 border-blue-200"
+    if (status === "draft") return "bg-slate-500/10 text-slate-700 border-slate-200"
+    if (status === "sent" || status === "filed") return "bg-violet-500/10 text-violet-700 border-violet-200"
+    return "bg-muted text-foreground border-border"
+  }
 
   useEffect(() => {
     async function loadRecords() {
@@ -192,7 +201,7 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
       label: "Status",
       sortable: true,
       accessor: (r) => r.status,
-      render: (r) => <Badge>{statusLabel(r.status)}</Badge>,
+      render: (r) => <Badge className={statusBadgeClass(r.status)}>{statusLabel(r.status)}</Badge>,
     },
     {
       key: "created_by",
