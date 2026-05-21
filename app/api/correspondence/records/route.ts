@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
+import type { SupabaseClient } from "@supabase/supabase-js"
 import {
   appendCorrespondenceAuditLog,
   appendCorrespondenceEvent,
@@ -44,6 +45,11 @@ type CreatedCorrespondenceRecord = {
   metadata: Record<string, unknown> | null
 }
 
+type CounterClient = Pick<SupabaseClient, "from">
+type CategoryCodeRow = { code: string }
+type ReferenceRow = { reference_number: string | null }
+type CounterRow = { last_number: number | null }
+
 function isDuplicateReferenceNumberError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false
   const maybeError = error as { code?: string; message?: string | null }
@@ -51,6 +57,114 @@ function isDuplicateReferenceNumberError(error: unknown): boolean {
     maybeError.code === "23505" &&
     (maybeError.message || "").toLowerCase().includes("correspondence_records_reference_number_key")
   )
+}
+
+function sanitizeCategoryCode(categoryInput: string | null | undefined): string | null {
+  if (!categoryInput) return null
+  const cleaned = categoryInput
+    .toUpperCase()
+    .replace(/[^A-Z0-9\-]/g, "")
+    .trim()
+  return cleaned || null
+}
+
+function extractTrailingRefNumber(referenceNumber: string, prefix: string): number {
+  if (!referenceNumber.startsWith(prefix)) return 0
+  const trailing = referenceNumber.slice(prefix.length).trim()
+  const numeric = Number.parseInt(trailing, 10)
+  return Number.isFinite(numeric) ? numeric : 0
+}
+
+async function resolveCategoryCodeForReference(
+  dataClient: CounterClient,
+  categoryInput: string | null | undefined
+): Promise<string | null> {
+  if (!categoryInput || !categoryInput.trim()) return null
+  const raw = categoryInput.trim()
+  const normalizedRaw = raw.toUpperCase()
+
+  const { data: byCode, error: byCodeError } = await dataClient
+    .from("correspondence_categories")
+    .select("code")
+    .ilike("code", normalizedRaw)
+    .limit(1)
+    .returns<CategoryCodeRow[]>()
+
+  if (byCodeError) {
+    log.warn(
+      { err: String(byCodeError), categoryInput: raw },
+      "Failed to resolve category code by code, using sanitized fallback"
+    )
+    return sanitizeCategoryCode(raw)
+  }
+  if (byCode?.[0]?.code) return byCode[0].code.trim().toUpperCase()
+
+  const { data: byName, error: byNameError } = await dataClient
+    .from("correspondence_categories")
+    .select("code")
+    .ilike("name", raw)
+    .limit(1)
+    .returns<CategoryCodeRow[]>()
+  if (byNameError) {
+    log.warn(
+      { err: String(byNameError), categoryInput: raw },
+      "Failed to resolve category code by name, using sanitized fallback"
+    )
+    return sanitizeCategoryCode(raw)
+  }
+
+  return byName?.[0]?.code?.trim()?.toUpperCase() || sanitizeCategoryCode(raw)
+}
+
+async function realignCorrespondenceCounter(params: {
+  dataClient: CounterClient
+  departmentCode: string
+  recipientCode: string
+  categoryInput?: string | null
+  referenceYear: number
+}): Promise<void> {
+  const departmentCode = params.departmentCode.trim().toUpperCase()
+  const recipientCode = params.recipientCode.trim().toUpperCase()
+  const categoryCode = await resolveCategoryCodeForReference(params.dataClient, params.categoryInput)
+  const counterKey = `outgoing:${departmentCode}:${recipientCode}:${categoryCode || ""}`
+  const prefix = categoryCode
+    ? `ACOB/${departmentCode}/${recipientCode}/${categoryCode}/${params.referenceYear}/`
+    : `ACOB/${departmentCode}/${recipientCode}/${params.referenceYear}/`
+
+  const { data: references, error: refsError } = await params.dataClient
+    .from("correspondence_records")
+    .select("reference_number")
+    .ilike("reference_number", `${prefix}%`)
+    .returns<ReferenceRow[]>()
+  if (refsError) throw refsError
+
+  const maxFromReferences = (references || []).reduce((maxValue, row) => {
+    const reference = row.reference_number || ""
+    return Math.max(maxValue, extractTrailingRefNumber(reference, prefix))
+  }, 0)
+
+  const { data: counterRow, error: counterError } = await params.dataClient
+    .from("correspondence_counters")
+    .select("last_number")
+    .eq("counter_key", counterKey)
+    .eq("year", params.referenceYear)
+    .maybeSingle()
+    .returns<CounterRow>()
+  if (counterError) throw counterError
+
+  const currentLast = Number(counterRow?.last_number || 0)
+  const alignedLast = Math.max(currentLast, maxFromReferences)
+
+  const { error: upsertError } = await params.dataClient.from("correspondence_counters").upsert(
+    {
+      counter_key: counterKey,
+      year: params.referenceYear,
+      last_number: alignedLast,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "counter_key,year" }
+  )
+  if (upsertError) throw upsertError
 }
 
 const CreateCorrespondenceRecordSchema = z.object({
@@ -297,6 +411,9 @@ export async function POST(request: NextRequest) {
       submitted_at: new Date().toISOString(),
       received_at: null,
     }
+    const submittedAtIso = String(insertPayload.submitted_at || new Date().toISOString())
+    const parsedReferenceYear = new Date(submittedAtIso).getFullYear()
+    const referenceYear = Number.isFinite(parsedReferenceYear) ? parsedReferenceYear : new Date().getFullYear()
 
     let created: CreatedCorrespondenceRecord | null = null
     let lastInsertError: unknown = null
@@ -317,6 +434,17 @@ export async function POST(request: NextRequest) {
         { attempt, err: String(error) },
         "Detected duplicate correspondence reference number during insert; retrying"
       )
+      try {
+        await realignCorrespondenceCounter({
+          dataClient,
+          departmentCode,
+          recipientCode: parsed.data.recipient_code,
+          categoryInput: parsed.data.category || null,
+          referenceYear,
+        })
+      } catch (realignError) {
+        log.error({ err: String(realignError), attempt }, "Failed to realign correspondence counter after duplicate")
+      }
     }
 
     if (!created) {

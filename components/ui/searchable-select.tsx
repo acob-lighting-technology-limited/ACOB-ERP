@@ -50,7 +50,7 @@ export function SearchableSelect({
   )
   const inputRef = React.useRef<HTMLInputElement>(null)
   const triggerRef = React.useRef<HTMLButtonElement>(null)
-  const [resolvedPortal, setResolvedPortal] = React.useState<boolean>(portal ?? true)
+  const [isInsideDialog, setIsInsideDialog] = React.useState(false)
 
   const filteredOptions = React.useMemo(() => {
     if (!searchQuery) return options
@@ -72,12 +72,13 @@ export function SearchableSelect({
   }, [open])
 
   React.useEffect(() => {
-    if (portal !== undefined) {
-      setResolvedPortal(portal)
-    } else {
-      setResolvedPortal(true)
-    }
-  }, [portal, open])
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const insideDialog = Boolean(trigger.closest("[role='dialog'], [data-radix-dialog-content]"))
+    setIsInsideDialog(insideDialog)
+  }, [open])
+
+  const resolvedPortal = portal ?? !isInsideDialog
 
   // Shared content component to avoid duplication
   const renderContent = () => (
@@ -102,7 +103,11 @@ export function SearchableSelect({
           />
         </div>
       </div>
-      <div className="max-h-[250px] overflow-y-auto p-1" onMouseDown={(e) => e.stopPropagation()}>
+      <div
+        className="max-h-[250px] overflow-y-auto overscroll-contain p-1"
+        onMouseDown={(e) => e.stopPropagation()}
+        onWheel={(e) => e.stopPropagation()}
+      >
         {filteredOptions.length > 0 ? (
           filteredOptions.map((option) => {
             const isSelected = option.value === value

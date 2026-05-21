@@ -100,8 +100,7 @@ export function CreateReferenceDialog({
     displayCode: dept.department_code,
   }))
   const mdDepartment = options.find((dept) => dept.department_code.toUpperCase() === "MD")
-  const selectedRecipientDepartment =
-    options.find((dept) => dept.department_name === form.recipient_department_name) || null
+  const selectedRequestDepartment = options.find((dept) => dept.department_name === form.department_name) || null
 
   const isCustomCategory = form.category === CUSTOM_CATEGORY_SENTINEL
 
@@ -119,23 +118,23 @@ export function CreateReferenceDialog({
 
   useEffect(() => {
     if (!isInternal) return
-    const nextDepartmentName = mdDepartment?.department_name || ""
-    const nextRecipientCode = selectedRecipientDepartment?.department_code || ""
-    const nextRecipientName = selectedRecipientDepartment?.department_name || ""
+    const nextRecipientDepartmentName = mdDepartment?.department_name || ""
+    const nextRecipientCode = mdDepartment?.department_code || ""
+    const nextRecipientName = mdDepartment?.department_name || ""
 
     if (
-      form.department_name !== nextDepartmentName ||
+      form.recipient_department_name !== nextRecipientDepartmentName ||
       form.recipient_code !== nextRecipientCode ||
       form.recipient_name !== nextRecipientName
     ) {
       set({
-        department_name: nextDepartmentName,
+        recipient_department_name: nextRecipientDepartmentName,
         recipient_code: nextRecipientCode,
         recipient_name: nextRecipientName,
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isInternal, mdDepartment?.department_name, selectedRecipientDepartment?.department_code])
+  }, [isInternal, mdDepartment?.department_name, mdDepartment?.department_code])
 
   useEffect(() => {
     if (!form.department_name || isEditMode) {
@@ -194,7 +193,7 @@ export function CreateReferenceDialog({
                   {
                     label: "Reference format",
                     value:
-                      "References follow ACOB/{REQUEST_DEPT}/{RECIPIENT_CODE}/{YEAR}/{NNN}. Internal uses recipient department code as recipient code.",
+                      "References follow ACOB/{RECIPIENT_DEPT}/{REQUEST_DEPT}/{YEAR}/{NNN}. Internal recipient department is locked from configured department codes.",
                   },
                   {
                     label: "Requested by",
@@ -284,32 +283,10 @@ export function CreateReferenceDialog({
               <Label>
                 Recipient Department <span className="text-destructive">*</span>
               </Label>
-              {isEditMode ? (
-                <div className="text-muted-foreground bg-muted/40 flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
-                  <Lock className="h-3 w-3 shrink-0" />
-                  {form.recipient_department_name || "—"}
-                </div>
-              ) : (
-                <Select
-                  value={form.recipient_department_name}
-                  onValueChange={(value) =>
-                    set({
-                      recipient_department_name: value,
-                    })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select recipient department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {options.map((dept) => (
-                      <SelectItem key={dept.department_name} value={dept.department_name}>
-                        {dept.displayName} ({dept.displayCode})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
+              <div className="text-muted-foreground bg-muted/40 flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                <Lock className="h-3 w-3 shrink-0" />
+                {form.recipient_department_name || "Executive Management"}
+              </div>
             </div>
           )}
 
@@ -341,10 +318,10 @@ export function CreateReferenceDialog({
           {/* Request Department */}
           <div className="space-y-2">
             <Label>Request Department {!isEditMode && <span className="text-destructive">*</span>}</Label>
-            {isEditMode || isInternal ? (
+            {isEditMode ? (
               <div className="text-muted-foreground bg-muted/40 flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
                 <Lock className="h-3 w-3 shrink-0" />
-                {form.department_name || (isInternal ? "Executive Management" : "—")}
+                {form.department_name || "—"}
               </div>
             ) : (
               <Select value={form.department_name} onValueChange={(value) => set({ department_name: value })}>
@@ -360,6 +337,15 @@ export function CreateReferenceDialog({
                 </SelectContent>
               </Select>
             )}
+          </div>
+
+          {/* Due Date */}
+          <div className="space-y-2">
+            <Label>Request Dept Code</Label>
+            <div className="text-muted-foreground bg-muted/40 flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+              <Lock className="h-3 w-3 shrink-0" />
+              {selectedRequestDepartment?.department_code || "—"}
+            </div>
           </div>
 
           {/* Due Date */}
