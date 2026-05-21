@@ -12,17 +12,18 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const departmentName = request.nextUrl.searchParams.get("department_name")
-    if (!departmentName || !departmentName.trim()) {
-      return NextResponse.json({ error: "department_name is required" }, { status: 400 })
+    const departmentName = request.nextUrl.searchParams.get("department_name")?.trim()
+    let query = supabase
+      .from("profiles")
+      .select("id, full_name, first_name, last_name")
+      .eq("employment_status", "active")
+      .order("full_name", { ascending: true })
+
+    if (departmentName) {
+      query = query.or(`department.eq.${departmentName},lead_departments.cs.{${departmentName}}`)
     }
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, full_name, first_name, last_name, email:id")
-      .eq("employment_status", "active")
-      .or(`department.eq.${departmentName.trim()},lead_departments.cs.{${departmentName.trim()}}`)
-      .order("full_name", { ascending: true })
+    const { data, error } = await query
 
     if (error) throw error
 

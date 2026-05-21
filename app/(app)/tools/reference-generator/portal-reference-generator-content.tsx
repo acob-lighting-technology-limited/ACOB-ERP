@@ -129,15 +129,12 @@ export function PortalReferenceGeneratorContent({
     event.preventDefault()
     const isInternal = (form.letter_type || "external") === "internal"
     const mdDepartment = departmentCodes.find((item) => item.department_code.toUpperCase() === "MD")
-    const selectedRecipientDepartment = departmentCodes.find(
-      (item) => item.department_name === form.recipient_department_name
-    )
 
     if (!form.subject.trim()) {
       toast.error("Subject is required")
       return
     }
-    if (!form.department_name && !isInternal) {
+    if (!form.department_name) {
       toast.error("Request Department is required")
       return
     }
@@ -145,16 +142,12 @@ export function PortalReferenceGeneratorContent({
       toast.error("Executive Management (MD) department is not configured")
       return
     }
-    if (isInternal && !selectedRecipientDepartment) {
-      toast.error("Recipient Department is required")
-      return
-    }
     if (!form.recipient_code.trim() && !isInternal) {
       toast.error("Recipient Code is required")
       return
     }
-    if (isInternal && !selectedRecipientDepartment?.department_code?.trim()) {
-      toast.error("Recipient department code is required")
+    if (isInternal && !mdDepartment?.department_code?.trim()) {
+      toast.error("Executive Management recipient department code is required")
       return
     }
     if (!form.due_date) {
@@ -183,17 +176,14 @@ export function PortalReferenceGeneratorContent({
 
       const metadata = form.metadata_text.trim() ? { notes: form.metadata_text.trim() } : null
       const formPayload = new FormData()
-      formPayload.append("department_name", isInternal ? mdDepartment?.department_name || "" : form.department_name)
+      formPayload.append("department_name", form.department_name)
       formPayload.append("letter_type", form.letter_type || "external")
       formPayload.append("category", categoryValue)
       formPayload.append("subject", form.subject)
-      formPayload.append(
-        "recipient_name",
-        isInternal ? selectedRecipientDepartment?.department_name || "" : form.recipient_name || ""
-      )
+      formPayload.append("recipient_name", isInternal ? mdDepartment?.department_name || "" : form.recipient_name || "")
       formPayload.append(
         "recipient_code",
-        (isInternal ? selectedRecipientDepartment?.department_code || "" : form.recipient_code).trim().toUpperCase()
+        (isInternal ? mdDepartment?.department_code || "" : form.recipient_code).trim().toUpperCase()
       )
       formPayload.append("originator_id", form.requester_id || currentViewerId)
       formPayload.append("action_required", String(form.action_required))

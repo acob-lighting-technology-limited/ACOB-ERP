@@ -25,6 +25,11 @@ type WeeklyReportPayload = {
   status?: string
 }
 
+type ActionItemSyncRow = {
+  id: string
+  status: string | null
+}
+
 const SaveWeeklyReportSchema = z.object({
   id: z.string().optional(),
   department: z.string().trim().min(1, "Required: Department and Work Done"),
@@ -66,6 +71,13 @@ async function canMutateWeek(supabase: ReportsClient, week: number, year: number
 
   if (error) throw new Error(error.message)
   return Boolean(data)
+}
+
+function parseTasksNewWeekLines(tasksNewWeek: string): string[] {
+  return tasksNewWeek
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:\d+[.)]\s*|[-*]\s*)/, "").trim())
+    .filter(Boolean)
 }
 
 export async function PATCH(request: Request) {
@@ -287,6 +299,50 @@ export async function PATCH(request: Request) {
         "Weekly report database write failed"
       )
       return NextResponse.json({ error: saveError.message }, { status: 500 })
+    }
+
+    // Keep action_items aligned with weekly_reports.tasks_new_week.
+    // Do not overwrite items already being worked on/completed.
+    try {
+      const reportId = String(saved?.id || "")
+      if (reportId) {
+        const { data: existingRows, error: existingError } = await dataClient
+          .from("action_items")
+          .select("id, status")
+          .eq("report_id", reportId)
+          .returns<ActionItemSyncRow[]>()
+
+        if (existingError) {
+          throw existingError
+        }
+
+        const hasActiveItems = (existingRows || []).some(
+          (row) => row.status !== "pending" && row.status !== "not_started"
+        )
+
+        if (!hasActiveItems) {
+          await dataClient.from("action_items").delete().eq("report_id", reportId)
+
+          const parsedTitles = parseTasksNewWeekLines(tasksNewWeek)
+          if (parsedTitles.length > 0 && status === "submitted") {
+            const actionItemPayload = parsedTitles.map((title) => ({
+              title,
+              department,
+              status: "pending",
+              week_number: weekNumber,
+              year: yearNumber,
+              assigned_by: user.id,
+              report_id: reportId,
+            }))
+            const { error: insertActionItemsError } = await dataClient.from("action_items").insert(actionItemPayload)
+            if (insertActionItemsError) {
+              throw insertActionItemsError
+            }
+          }
+        }
+      }
+    } catch (syncError) {
+      log.error({ err: String(syncError), reportId: saved?.id }, "Weekly report action item sync failed")
     }
 
     log.info({ savedId: saved?.id, payload }, "Weekly report saved successfully")

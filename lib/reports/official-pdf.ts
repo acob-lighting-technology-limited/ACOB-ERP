@@ -15,6 +15,11 @@ const log = logger("reports-official-pdf")
 export type OfficialReportExportType = "weekly_report" | "action_point"
 type ReportsPdfClient = Pick<SupabaseClient, "from" | "rpc">
 type TimestampedRow = { updated_at?: string | null; created_at?: string | null }
+type WeeklyReportTaskSourceRow = {
+  id: string
+  department: string | null
+  tasks_new_week: string | null
+}
 
 function getNewestIsoTimestamp(rows: TimestampedRow[]): string | null {
   let newestTime = Number.NEGATIVE_INFINITY
@@ -32,6 +37,13 @@ function getNewestIsoTimestamp(rows: TimestampedRow[]): string | null {
   }
 
   return newestIso
+}
+
+function parseTasksNewWeekLines(tasksNewWeek: string): string[] {
+  return tasksNewWeek
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*(?:\d+[.)]\s*|[-*]\s*)/, "").trim())
+    .filter(Boolean)
 }
 
 export async function fetchActionPointRows(supabase: ReportsPdfClient, week: number, year: number) {
@@ -91,28 +103,26 @@ export async function resolveOfficialReportSourceUpdatedAt(
     return getNewestIsoTimestamp(reportsResult.data ?? [])
   }
 
-  const tasksResult = await supabase
-    .from("tasks")
-    .select("updated_at, created_at")
-    .eq("category", "weekly_action")
-    .eq("week_number", week)
-    .eq("year", year)
-    .returns<TimestampedRow[]>()
-
-  if (tasksResult.error) throw new Error(tasksResult.error.message)
-
-  const taskTimestamp = getNewestIsoTimestamp(tasksResult.data ?? [])
-  if (taskTimestamp) return taskTimestamp
-
-  const legacyResult = await supabase
+  const actionItemsResult = await supabase
     .from("action_items")
     .select("updated_at, created_at")
     .eq("week_number", week)
     .eq("year", year)
     .returns<TimestampedRow[]>()
 
-  if (legacyResult.error) throw new Error(legacyResult.error.message)
-  return getNewestIsoTimestamp(legacyResult.data ?? [])
+  if (actionItemsResult.error) throw new Error(actionItemsResult.error.message)
+  const actionItemsTimestamp = getNewestIsoTimestamp(actionItemsResult.data ?? [])
+  if (actionItemsTimestamp) return actionItemsTimestamp
+
+  const weeklyReportsResult = await supabase
+    .from("weekly_reports")
+    .select("updated_at, created_at")
+    .eq("week_number", week)
+    .eq("year", year)
+    .eq("status", "submitted")
+    .returns<TimestampedRow[]>()
+  if (weeklyReportsResult.error) throw new Error(weeklyReportsResult.error.message)
+  return getNewestIsoTimestamp(weeklyReportsResult.data ?? [])
 }
 
 export async function buildOfficialReportPdf(
@@ -147,7 +157,33 @@ export async function buildOfficialReportPdf(
 
     pdfBytes = await buildWeeklyReportPDF(reports, week, year, meetingDateLabel, coverLogoBytes, headerLogoBytes)
   } else {
-    const actions = await fetchActionPointRows(supabase, week, year)
+    let actions = await fetchActionPointRows(supabase, week, year)
+    if (actions.length === 0) {
+      const weeklyReportTasksResult = await supabase
+        .from("weekly_reports")
+        .select("id, department, tasks_new_week")
+        .eq("week_number", week)
+        .eq("year", year)
+        .eq("status", "submitted")
+        .returns<WeeklyReportTaskSourceRow[]>()
+
+      if (weeklyReportTasksResult.error) throw new Error(weeklyReportTasksResult.error.message)
+
+      const derivedActions = (weeklyReportTasksResult.data ?? []).flatMap((report) => {
+        const lines = parseTasksNewWeekLines(report.tasks_new_week || "")
+        return lines.map((title, index) => ({
+          id: `${report.id}:${index + 1}`,
+          title,
+          department: report.department || "",
+          status: "pending",
+          week_number: week,
+          year,
+        }))
+      })
+
+      actions = derivedActions
+    }
+
     if (actions.length === 0) {
       throw new Error(`No action points found for W${week}/${year}`)
     }
