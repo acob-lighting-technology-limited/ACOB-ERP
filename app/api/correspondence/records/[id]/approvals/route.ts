@@ -177,8 +177,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       try {
         await supabase.rpc("create_notification", {
           p_user_id: record.originator_id,
-          p_type: "approval",
-          p_category: "operations",
+          p_type: "approval_granted",
+          p_category: "approvals",
           p_title: "Correspondence approved",
           p_message: `${record.reference_number} was approved`,
           p_priority: "normal",
@@ -385,8 +385,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     try {
       await supabase.rpc("create_notification", {
         p_user_id: record.originator_id,
-        p_type: decision === "approved" ? "approval" : "warning",
-        p_category: "operations",
+        p_type: decision === "approved" ? "approval_granted" : decision === "rejected" ? "approval_rejected" : "system",
+        p_category: "approvals",
         p_title: `Correspondence ${decision}`,
         p_message: `${record.reference_number} was marked ${decision}`,
         p_priority: decision === "rejected" ? "high" : "normal",

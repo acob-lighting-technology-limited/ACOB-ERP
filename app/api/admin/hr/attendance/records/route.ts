@@ -5,7 +5,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { writeAuditLog } from "@/lib/audit/write-audit"
-import { latenessDeduction } from "@/lib/hr/attendance-utils"
+import { isLate } from "@/lib/hr/attendance-utils"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { DB_WRITABLE_STATUSES } from "@/lib/hr/attendance-status"
 
@@ -58,7 +58,9 @@ export async function GET(request: NextRequest) {
 
     let attendanceQuery = dataClient
       .from("attendance_records")
-      .select("id, user_id, date, clock_in, clock_out, total_hours, status, source, waived, waiver_reason, updated_at")
+      .select(
+        "id, user_id, date, clock_in, clock_out, total_hours, status, source, waived, waiver_reason, updated_at, selfie_url, selfie_out_url, face_match_confidence, face_verified, location_verified, latitude, longitude, site_id"
+      )
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
       .limit(500)
@@ -115,6 +117,14 @@ export async function GET(request: NextRequest) {
         waived: r.waived,
         waiver_reason: r.waiver_reason,
         updated_at: r.updated_at,
+        selfie_url: r.selfie_url ?? null,
+        selfie_out_url: r.selfie_out_url ?? null,
+        face_match_confidence: r.face_match_confidence ?? null,
+        face_verified: r.face_verified ?? null,
+        location_verified: r.location_verified ?? null,
+        latitude: r.latitude ?? null,
+        longitude: r.longitude ?? null,
+        site_id: r.site_id ?? null,
       }
     })
 
@@ -176,7 +186,7 @@ export async function POST(request: NextRequest) {
       } else if (clock_in && !clock_out) {
         status = "incomplete"
       } else if (clock_in && clock_out) {
-        status = latenessDeduction(clock_in) > 0 ? "late" : "present"
+        status = isLate(clock_in) ? "late" : "present"
       } else {
         status = "incomplete"
       }

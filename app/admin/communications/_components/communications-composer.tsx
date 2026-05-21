@@ -31,9 +31,11 @@ type Employee = {
   department: string | null
   designation: string | null
   employment_status: string | null
+  is_department_lead: boolean | null
+  gender: string | null
 }
 
-type RecipientMode = "all" | "select" | "manual" | "all_plus"
+type RecipientMode = "all" | "select" | "manual" | "all_plus" | "leads_only" | "males_only" | "females_only"
 type ReminderType = "meeting" | "knowledge_sharing" | "admin_broadcast"
 type SendTiming = "now" | "scheduled" | "recurring"
 type BroadcastAttachmentPayload = {
@@ -416,6 +418,24 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
     const emailSet = new Set<string>()
     if (recipientMode === "all" || recipientMode === "all_plus") {
       employees.forEach((e) => {
+        if (e.company_email) emailSet.add(e.company_email.toLowerCase())
+        if (e.additional_email) emailSet.add(e.additional_email.toLowerCase())
+      })
+    } else if (recipientMode === "leads_only") {
+      employees.forEach((e) => {
+        if (!e.is_department_lead) return
+        if (e.company_email) emailSet.add(e.company_email.toLowerCase())
+        if (e.additional_email) emailSet.add(e.additional_email.toLowerCase())
+      })
+    } else if (recipientMode === "males_only") {
+      employees.forEach((e) => {
+        if (String(e.gender || "").toLowerCase() !== "male") return
+        if (e.company_email) emailSet.add(e.company_email.toLowerCase())
+        if (e.additional_email) emailSet.add(e.additional_email.toLowerCase())
+      })
+    } else if (recipientMode === "females_only") {
+      employees.forEach((e) => {
+        if (String(e.gender || "").toLowerCase() !== "female") return
         if (e.company_email) emailSet.add(e.company_email.toLowerCase())
         if (e.additional_email) emailSet.add(e.additional_email.toLowerCase())
       })

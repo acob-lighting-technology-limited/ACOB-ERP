@@ -276,6 +276,7 @@ export function AdminAssetsContent({
   const [assetTypes, setAssetTypes] =
     useState<{ label: string; code: string; requiresSerialModel: boolean }[]>(ASSET_TYPES)
   const [batchQuantity, setBatchQuantity] = useState(1)
+  const [filteredAssetsForExport, setFilteredAssetsForExport] = useState<Asset[]>([])
 
   interface AssetFormState {
     asset_type: string
@@ -1136,7 +1137,7 @@ export function AdminAssetsContent({
   }
 
   const handleExportConfirm = async () => {
-    const exportableAssets = assets.filter((a) => !a.deleted_at)
+    const exportableAssets = filteredAssetsForExport
     const rows = buildAssetExportRows(
       exportableAssets,
       { selectedColumns, employees, getDepartmentForOffice },
@@ -1190,6 +1191,10 @@ export function AdminAssetsContent({
       )
     })
   }, [assets, employees, userProfile, scopedDepartments, scopedOffices])
+
+  useEffect(() => {
+    setFilteredAssetsForExport(scopedAssets)
+  }, [scopedAssets])
 
   const stats = {
     total: assets.filter((d) => !d.deleted_at).length,
@@ -1500,6 +1505,7 @@ export function AdminAssetsContent({
         data={scopedAssets}
         columns={assetColumns}
         filters={assetFilters}
+        onProcessedDataChange={setFilteredAssetsForExport}
         getRowId={(asset) => asset.id}
         searchPlaceholder="Search asset code, type, model, assignee, office, or creator..."
         searchFn={(asset, query) =>

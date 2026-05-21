@@ -17,6 +17,18 @@ const DEPARTMENT_ALIASES: Partial<Record<CanonicalDepartment, readonly string[]>
   "Operations and Maintenance": ["Operations"],
 } as const
 
+const DEPARTMENT_SHORT_CODES: Record<CanonicalDepartment, string> = {
+  Accounts: "ACC",
+  "Business, Growth and Innovation": "BGI",
+  "Executive Management": "EXM",
+  "IT and Communications": "ITC",
+  "Admin & HR": "AHR",
+  "Legal, Regulatory and Compliance": "LRC",
+  "Operations and Maintenance": "OPM",
+  Project: "PRJ",
+  Technical: "TECH",
+} as const
+
 function comparableDepartmentValue(value: string): string {
   return String(value || "")
     .trim()
@@ -52,6 +64,11 @@ export function getDepartmentAliases(value: string): string[] {
 
 export function getCanonicalDepartmentOrder(): string[] {
   return [...CANONICAL_DEPARTMENT_ORDER]
+}
+
+export function getDepartmentShortCode(value: string): string {
+  const canonical = normalizeDepartmentName(value) as CanonicalDepartment
+  return DEPARTMENT_SHORT_CODES[canonical] ?? normalizeDepartmentName(value)
 }
 
 export function getDepartmentSortIndex(value: string): number {

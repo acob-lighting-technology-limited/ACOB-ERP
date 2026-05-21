@@ -4,7 +4,7 @@ import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { toLocalISODate } from "@/lib/utils/date"
-import { latenessDeduction } from "@/lib/hr/attendance-utils"
+import { isLate } from "@/lib/hr/attendance-utils"
 
 const log = logger("hr-attendance-clock-out")
 
@@ -53,7 +53,7 @@ export async function PATCH(_request: NextRequest) {
     const breakDuration = record.break_duration || 0
     const workHours = totalHours - breakDuration / 60
 
-    const status = latenessDeduction(record.clock_in) > 0 ? "late" : "present"
+    const status = isLate(record.clock_in) ? "late" : "present"
 
     // Update attendance record
     const { data: updatedRecord, error } = await supabase

@@ -409,3 +409,66 @@ table or filter bar. Use `ExportOptionsDialog` from
 - ❌ Fewer than 2 filter options on any table page
 - ❌ A table page without stats cards
 - ❌ A table page without `DataTablePage` as the root wrapper
+
+---
+
+## Notification System
+
+Every feature that produces events the user should see must write to the `notifications` table via the `create_notification` RPC. Omitting this causes silent failures — always wire it up alongside the feature.
+
+### How to call
+
+Use the Supabase client (user context is fine — the function is `SECURITY DEFINER`):
+
+```ts
+try {
+  await supabase.rpc("create_notification", {
+    p_user_id: targetUserId,      // who sees this notification
+    p_type: "approval_granted",   // must be in the allowed list below
+    p_category: "approvals",      // must match a UI tab key — see table below
+    p_title: "...",
+    p_message: "...",
+    p_priority: "normal",         // low | normal | high | urgent
+    p_link_url: "/your-feature",  // page the user navigates to
+    p_actor_id: actorId,          // who triggered it (optional)
+    p_entity_type: "my_record",   // for grouping/dedup (optional)
+    p_entity_id: record.id,       // (optional)
+  })
+} catch (err) {
+  log.error({ err: String(err) }, "notification failed")
+}
+```
+
+Always wrap in `try/catch`. Notification failure must never crash the parent operation.
+
+### Allowed `p_type` values
+
+`task_assigned` | `task_updated` | `task_completed` | `mention` | `feedback` |
+`asset_assigned` | `asset_transfer_outgoing` | `asset_transfer_incoming` | `asset_returned` |
+`asset_status_alert` | `asset_status_fixed` | `system_restored` |
+`approval_request` | `approval_granted` | `approval_rejected` | `announcement` | `system`
+
+### Allowed `p_category` values and their UI tabs
+
+| `p_category` | Tab shown in `/notifications` |
+|---|---|
+| `approvals` | Approvals |
+| `tasks` | Tasks |
+| `assets` | Assets |
+| `feedback` | Feedback |
+| `mentions` | Mentions |
+| `meetings` | Meetings |
+| `communications` | Communications |
+| `reports` | Reports |
+| `system` | All only (no dedicated tab) |
+
+### Adding a new category
+
+If your feature needs a category not in the table above, you **must** also:
+
+1. Add a tab entry to `app/(app)/notifications/notification-content.tsx` — both the `tabs` array and the `counts` object.
+2. Add a row to `notification_delivery_policies` in a new migration (update the `CHECK` constraint first if it restricts `notification_key`).
+
+### `admin/notifications` is a separate system
+
+`app/admin/notifications/page.tsx` is a real-time aggregation dashboard that queries operational tables dynamically. It does **not** read from the `notifications` table. Do not conflate the two.

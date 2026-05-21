@@ -8,7 +8,6 @@ import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "@/components/ui/data-table"
-import { StatCard } from "@/components/ui/stat-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -64,6 +63,19 @@ const TYPE_CARD_BG: Record<string, string> = {
   approval_granted: "bg-emerald-50/50 dark:bg-emerald-950/10",
   system: "bg-slate-50/50 dark:bg-slate-950/10",
   announcement: "bg-red-50/50 dark:bg-red-950/10",
+}
+
+const PRIORITY_BADGE_CLASS: Record<string, string> = {
+  urgent: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+  high: "border-orange-500/40 bg-orange-500/10 text-orange-700 dark:text-orange-300",
+  normal: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
+  low: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+}
+
+function getPriorityBadgeClass(priority: string | null | undefined): string {
+  return (
+    PRIORITY_BADGE_CLASS[String(priority || "").toLowerCase()] || "border-muted-foreground/30 text-muted-foreground"
+  )
 }
 
 interface NotificationContentProps {
@@ -222,6 +234,7 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
       all: notifications.length,
       unread: notifications.filter((n) => !n.read).length,
       critical: notifications.filter((n) => n.priority === "high" || n.priority === "urgent").length,
+      approvals: notifications.filter((n) => n.category === "approvals").length,
       tasks: notifications.filter((n) => n.category === "tasks").length,
       assets: notifications.filter((n) => n.category === "assets").length,
       feedback: notifications.filter((n) => n.category === "feedback").length,
@@ -234,18 +247,19 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
 
   const tabs: DataTableTab[] = useMemo(
     () => [
-      { key: "all", label: "All", icon: Bell },
-      { key: "unread", label: "Unread", icon: Clock },
-      { key: "critical", label: "Critical", icon: AlertTriangle },
-      { key: "tasks", label: "Tasks", icon: User },
-      { key: "meetings", label: "Meetings", icon: Calendar },
-      { key: "communications", label: "Communications", icon: Mail },
-      { key: "reports", label: "Reports", icon: FileBarChart },
-      { key: "assets", label: "Assets", icon: Package },
-      { key: "feedback", label: "Feedback", icon: Mail },
-      { key: "mentions", label: "Mentions", icon: MessageSquare },
+      { key: "all", label: `All(${counts.all})`, icon: Bell },
+      { key: "unread", label: `Unread(${counts.unread})`, icon: Clock },
+      { key: "critical", label: `Critical(${counts.critical})`, icon: AlertTriangle },
+      { key: "approvals", label: `Approvals(${counts.approvals})`, icon: CheckCircle },
+      { key: "tasks", label: `Tasks(${counts.tasks})`, icon: User },
+      { key: "meetings", label: `Meetings(${counts.meetings})`, icon: Calendar },
+      { key: "communications", label: `Communications(${counts.communications})`, icon: Mail },
+      { key: "reports", label: `Reports(${counts.reports})`, icon: FileBarChart },
+      { key: "assets", label: `Assets(${counts.assets})`, icon: Package },
+      { key: "feedback", label: `Feedback(${counts.feedback})`, icon: Mail },
+      { key: "mentions", label: `Mentions(${counts.mentions})`, icon: MessageSquare },
     ],
-    []
+    [counts]
   )
 
   const filteredData = useMemo(() => {
@@ -264,11 +278,12 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
         label: "",
         accessor: (n) => (n.read ? "read" : "unread"),
         width: "70px",
-        render: (n) => (
-          <Badge variant={n.read ? "outline" : "default"} className="capitalize">
-            {n.read ? "Read" : "New"}
-          </Badge>
-        ),
+        render: (n) =>
+          n.read ? null : (
+            <Badge variant="default" className="capitalize">
+              New
+            </Badge>
+          ),
       },
       {
         key: "title",
@@ -301,10 +316,7 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
         sortable: true,
         accessor: (n) => n.priority,
         render: (n) => (
-          <Badge
-            variant={n.priority === "urgent" ? "destructive" : n.priority === "high" ? "secondary" : "outline"}
-            className="capitalize"
-          >
+          <Badge variant="outline" className={cn("capitalize", getPriorityBadgeClass(n.priority))}>
             {n.priority}
           </Badge>
         ),
@@ -422,52 +434,6 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
           </Button>
         </div>
       }
-      stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <StatCard
-            title="Total Alerts"
-            value={counts.all}
-            icon={Bell}
-            iconBgColor="bg-blue-500/10"
-            iconColor="text-blue-500"
-          />
-          <StatCard
-            title="Unread"
-            value={counts.unread}
-            icon={Clock}
-            iconBgColor="bg-amber-500/10"
-            iconColor="text-amber-500"
-          />
-          <StatCard
-            title="Critical"
-            value={counts.critical}
-            icon={AlertTriangle}
-            iconBgColor="bg-red-500/10"
-            iconColor="text-red-500"
-          />
-          <StatCard
-            title="Task Alerts"
-            value={counts.tasks}
-            icon={User}
-            iconBgColor="bg-violet-500/10"
-            iconColor="text-violet-500"
-          />
-          <StatCard
-            title="Meeting Alerts"
-            value={counts.meetings}
-            icon={Calendar}
-            iconBgColor="bg-emerald-500/10"
-            iconColor="text-emerald-500"
-          />
-          <StatCard
-            title="Report Alerts"
-            value={counts.reports}
-            icon={FileBarChart}
-            iconBgColor="bg-blue-500/10"
-            iconColor="text-blue-500"
-          />
-        </div>
-      }
     >
       <DataTable<Notification>
         data={filteredData}
@@ -478,6 +444,7 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
         filters={filters}
         isLoading={isLoading}
         rowActions={rowActions}
+        pagination={{ pageSize: 50 }}
         viewToggle
         cardRenderer={(n) => {
           const iconKey = n.type as NotificationType

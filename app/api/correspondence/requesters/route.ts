@@ -20,6 +20,7 @@ export async function GET(request: NextRequest) {
     const { data, error } = await supabase
       .from("profiles")
       .select("id, full_name, first_name, last_name, email:id")
+      .eq("employment_status", "active")
       .or(`department.eq.${departmentName.trim()},lead_departments.cs.{${departmentName.trim()}}`)
       .order("full_name", { ascending: true })
 

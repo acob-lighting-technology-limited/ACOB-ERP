@@ -52,3 +52,12 @@ export function getNextWeekParams(w: number, y: number) {
   if (w >= weeksInYear) return { week: 1, year: y + 1 }
   return { week: w + 1, year: y }
 }
+
+export function getInitials(email?: string, firstName?: string, lastName?: string): string {
+  if (firstName && lastName) return (firstName[0] + lastName[0]).toUpperCase()
+  if (firstName) return firstName[0].toUpperCase()
+  if (!email) return "U"
+  const parts = email.split("@")[0].split(".")
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return email.substring(0, 2).toUpperCase()
+}

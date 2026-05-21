@@ -361,8 +361,8 @@ export async function POST(request: NextRequest) {
           )
           await supabase.rpc("create_notification", {
             p_user_id: execLead.id,
-            p_type: "task_assigned",
-            p_category: "operations",
+            p_type: "approval_request",
+            p_category: "approvals",
             p_title: "Correspondence pending your approval",
             p_message: `${created.reference_number} - ${created.subject}`,
             p_priority: "normal",
@@ -387,8 +387,8 @@ export async function POST(request: NextRequest) {
           )
           await supabase.rpc("create_notification", {
             p_user_id: deptLead.id,
-            p_type: "task_assigned",
-            p_category: "operations",
+            p_type: "approval_request",
+            p_category: "approvals",
             p_title: "Correspondence pending your approval",
             p_message: `${created.reference_number} - ${created.subject}`,
             p_priority: "normal",
@@ -503,8 +503,8 @@ export async function POST(request: NextRequest) {
         if (targetLead?.id) {
           await supabase.rpc("create_notification", {
             p_user_id: targetLead.id,
-            p_type: "task_assigned",
-            p_category: "operations",
+            p_type: "approval_request",
+            p_category: "approvals",
             p_title: "New correspondence logged",
             p_message: `${created.reference_number} - ${created.subject}`,
             p_priority: "normal",

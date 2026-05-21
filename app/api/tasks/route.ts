@@ -136,6 +136,26 @@ export async function POST(request: NextRequest) {
       { failOpen: true }
     )
 
+    if (task.assignment_type === "individual" && task.assigned_to && task.assigned_to !== user.id) {
+      try {
+        const notifyPriority = task.priority === "urgent" ? "urgent" : task.priority === "high" ? "high" : "normal"
+        await supabase.rpc("create_notification", {
+          p_user_id: task.assigned_to,
+          p_type: "task_assigned",
+          p_category: "tasks",
+          p_title: "New task assigned to you",
+          p_message: task.title,
+          p_priority: notifyPriority,
+          p_link_url: "/tasks",
+          p_actor_id: user.id,
+          p_entity_type: "task",
+          p_entity_id: task.id,
+        })
+      } catch (notifyErr) {
+        log.error({ err: String(notifyErr) }, "Task assignment notification failed")
+      }
+    }
+
     return NextResponse.json({ data: task }, { status: 201 })
   } catch (error) {
     log.error({ err: String(error) }, "Unhandled error in tasks POST")

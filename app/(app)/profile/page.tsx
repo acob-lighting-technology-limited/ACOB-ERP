@@ -442,7 +442,7 @@ async function getProfileData() {
     )
     .eq("user_id", userId)
     .order("created_at", { ascending: false })
-    .limit(12)
+    .limit(50)
     .returns<ActivityLogRow[]>()
 
   const filteredRawActivity = (rawActivity || [])
@@ -450,7 +450,7 @@ async function getProfileData() {
       (item) =>
         !["sync", "migrate", "update_schema", "migration"].includes(normalizeToken(item.action || item.operation))
     )
-    .slice(0, 8)
+    .slice(0, 50)
 
   const actorMap = new Map<string, { first_name?: string; last_name?: string; company_email?: string }>([
     [

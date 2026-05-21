@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getWorkdaysInMonth, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
-import { deductionForStatus, deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 
 type AttendanceRow = {
   id: string
@@ -103,12 +103,7 @@ export async function GET(request: NextRequest) {
         isOnLeave: leaveDates.has(date),
         isExempted: Boolean(profile?.attendance_exempt) || exemptDates.has(date),
       })
-      return {
-        date,
-        record: rec,
-        status,
-        deduction: rec?.waived ? 0 : deductionForStatus(status, rec?.clock_in, rec?.clock_out),
-      }
+      return { date, record: rec, status }
     })
 
   return NextResponse.json({ data })

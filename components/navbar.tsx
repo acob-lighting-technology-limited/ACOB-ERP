@@ -33,7 +33,7 @@ import Image from "next/image"
 import { useSidebarSafe } from "@/components/sidebar-context"
 import { useTheme } from "next-themes"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
-import { cn } from "@/lib/utils"
+import { cn, getInitials } from "@/lib/utils"
 import { getSeasonalLogoPaths, isTemporary2026LogoPeriod } from "@/lib/seasonal-branding"
 
 interface NavbarProps {
@@ -137,25 +137,6 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
     await supabase.auth.signOut()
     toast.success("Logged out successfully")
     router.push("/auth/login")
-  }
-
-  const getInitials = (email?: string, firstName?: string, lastName?: string): string => {
-    if (firstName || lastName) {
-      return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase() || "U"
-    }
-
-    if (!email) return "U"
-
-    const localPart = email.split("@")[0] // Get part before @
-    const parts = localPart.split(".") // Split by dot
-
-    if (parts.length >= 2) {
-      // Get first letter of first part and first letter of second part
-      return (parts[0][0] + parts[1][0]).toUpperCase()
-    }
-
-    // Fallback: just use first two letters
-    return localPart.substring(0, 2).toUpperCase()
   }
 
   const accountMenu = (

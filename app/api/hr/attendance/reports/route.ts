@@ -4,13 +4,12 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
 import { normalizeDepartmentName } from "@/shared/departments"
 import {
-  latenessDeduction,
-  earlyDepartureDeduction,
+  isLate,
   missedHours,
+  dayCredit,
   toLocalISODate,
   toLocalYearMonth,
   getWorkdaysInMonth,
-  ABSENT_DEDUCTION,
 } from "@/lib/hr/attendance-utils"
 import { logger } from "@/lib/logger"
 
@@ -53,14 +52,18 @@ type ExemptPeriodRow = {
 }
 
 function deriveStatusFromTimes(
-  rec: AttendanceRow | undefined
-): "waiver" | "present" | "late" | "incomplete" | "absent" {
+  rec: AttendanceRow | undefined,
+  recordDate?: string
+): "waiver" | "present" | "late" | "incomplete" | "half_day" | "absent" {
   if (!rec) return "absent"
   if (rec.waived) return "waiver"
   if (!rec.clock_in && !rec.clock_out) return "absent"
-  if (rec.clock_in && !rec.clock_out) return "incomplete"
+  if (rec.clock_in && !rec.clock_out) {
+    const today = new Date().toISOString().slice(0, 10)
+    return recordDate && recordDate < today ? "half_day" : "incomplete"
+  }
   if (!rec.clock_in && rec.clock_out) return "incomplete"
-  return latenessDeduction(rec.clock_in) > 0 ? "late" : "present"
+  return isLate(rec.clock_in) ? "late" : "present"
 }
 
 export async function GET(request: NextRequest) {
@@ -100,6 +103,7 @@ export async function GET(request: NextRequest) {
       const profileQuery = dataClient
         .from("profiles")
         .select("id, first_name, last_name, employee_number, department, attendance_exempt, attendance_exempt_until")
+        .eq("employment_status", "active")
       const { data, error } = await profileQuery.returns<ProfileRow[]>()
       if (!error && data) {
         allProfiles = data
@@ -108,6 +112,7 @@ export async function GET(request: NextRequest) {
         const { data: fallbackData, error: fallbackError } = await dataClient
           .from("profiles")
           .select("id, first_name, last_name, employee_number, department, attendance_exempt")
+          .eq("employment_status", "active")
           .returns<ProfileRow[]>()
         if (!fallbackError) {
           allProfiles = fallbackData || []
@@ -115,6 +120,7 @@ export async function GET(request: NextRequest) {
           const { data: legacyData, error: legacyError } = await dataClient
             .from("profiles")
             .select("id, first_name, last_name, department, attendance_exempt")
+            .eq("employment_status", "active")
             .returns<ProfileRow[]>()
           if (legacyError) {
             return NextResponse.json({ error: legacyError.message }, { status: 500 })
@@ -228,48 +234,65 @@ export async function GET(request: NextRequest) {
         absent_days = 0,
         exempted_days = 0,
         total_hours = 0,
-        lateness_deduction = 0,
         total_missed_hours = 0,
-        waived_days = 0
+        waived_days = 0,
+        half_day_days = 0,
+        leave_days = 0,
+        holiday_days = 0,
+        attendance_credits = 0
       let available_days = 0
 
       for (const workday of periodWorkdays) {
-        if (holidaySet.has(workday)) continue
-        if (onLeaveSet.has(`${profile.id}:${workday}`)) continue
+        if (holidaySet.has(workday)) {
+          holiday_days++
+          attendance_credits += 1.0
+          continue
+        }
+        if (onLeaveSet.has(`${profile.id}:${workday}`)) {
+          leave_days++
+          attendance_credits += 1.0
+          continue
+        }
         available_days++
         const isExempted = Boolean(profile.attendance_exempt) || exemptPeriodSet.has(`${profile.id}:${workday}`)
         if (isExempted) {
           exempted_days++
+          attendance_credits += 1.0
           continue
         }
 
         const rec = empRecords.get(workday)
-        const derived = deriveStatusFromTimes(rec)
+        const derived = deriveStatusFromTimes(rec, workday)
         if (!rec) {
           absent_days++
-          lateness_deduction += ABSENT_DEDUCTION
+          total_missed_hours += 9
           continue
         }
 
-        total_hours += Number(rec.total_hours ?? 0)
         if (derived === "waiver") {
           waived_days++
-        } else if (derived === "present") {
-          present_days++
-          lateness_deduction += latenessDeduction(rec.clock_in) + earlyDepartureDeduction(rec.clock_out)
+          attendance_credits += 1.0
+        } else if (derived === "present" || derived === "late") {
+          derived === "late" ? late_days++ : present_days++
+          attendance_credits += dayCredit(derived, rec.clock_in, rec.clock_out)
+          total_hours += Number(rec.total_hours ?? 0)
           total_missed_hours += missedHours(rec.clock_in, rec.clock_out)
-        } else if (derived === "late") {
-          late_days++
-          lateness_deduction += latenessDeduction(rec.clock_in) + earlyDepartureDeduction(rec.clock_out)
-          total_missed_hours += missedHours(rec.clock_in, rec.clock_out)
+        } else if (derived === "half_day") {
+          half_day_days++
+          attendance_credits += 0.5
+          total_hours += 4.5
+          total_missed_hours += 4.5
         } else if (derived === "incomplete") {
           incomplete_days++
         } else {
           absent_days++
-          lateness_deduction += ABSENT_DEDUCTION
           total_missed_hours += 9
         }
       }
+
+      const total_working_days = available_days + leave_days + holiday_days
+      const attendance_rate =
+        total_working_days > 0 ? Math.round((attendance_credits / total_working_days) * 10000) / 100 : 0
 
       const name = `${String(profile.first_name || "").trim()} ${String(profile.last_name || "").trim()}`.trim()
       return {
@@ -277,18 +300,20 @@ export async function GET(request: NextRequest) {
         employee_no: String(profile.employee_number || "").trim(),
         user_name: name,
         department: String(profile.department || "N/A"),
-        total_days: available_days,
+        total_days: total_working_days,
         present_days,
         late_days,
         incomplete_days,
+        half_day_days,
         exempted_days,
         absent_days,
         waived_days,
+        leave_days,
+        holiday_days,
+        attendance_credits: Math.round(attendance_credits * 100) / 100,
         total_hours,
-        lateness_deduction,
         total_missed_hours: Math.round(total_missed_hours * 10) / 10,
-        attendance_rate:
-          available_days - exempted_days > 0 ? Math.round((present_days / (available_days - exempted_days)) * 100) : 0,
+        attendance_rate,
         attendance_exempt: Boolean(profile.attendance_exempt),
       }
     })

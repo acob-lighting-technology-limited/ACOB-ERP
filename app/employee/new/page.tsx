@@ -26,6 +26,8 @@ const formSchema = z.object({
   first_name: z.string().min(2, "First name must be at least 2 characters"),
   last_name: z.string().min(2, "Last name must be at least 2 characters"),
   other_names: z.string().optional(),
+  gender: z.enum(["male", "female"], { message: "Gender is required" }),
+  date_of_birth: z.string().optional(),
   department: z.string().optional(),
   other_department: z.string().optional(),
   designation: z.string().min(2, "Designation is required"),
@@ -69,6 +71,7 @@ export default function EmployeeOnboardingForm() {
     resolver: zodResolver(formSchema),
     defaultValues: {
       other_names: "",
+      gender: undefined,
       additional_phone_number: "",
       other_department: "",
       office_location: "",
@@ -79,6 +82,7 @@ export default function EmployeeOnboardingForm() {
   const firstName = watch("first_name")
   const lastName = watch("last_name")
   const selectedDepartment = watch("department")
+  const selectedGender = watch("gender")
   const selectedOfficeLocation = watch("office_location")
   const watchedValues = watch()
 
@@ -92,6 +96,8 @@ export default function EmployeeOnboardingForm() {
         first_name: parsed.first_name || "",
         last_name: parsed.last_name || "",
         other_names: parsed.other_names || "",
+        gender: (parsed.gender as "male" | "female" | undefined) || undefined,
+        date_of_birth: parsed.date_of_birth || "",
         department: parsed.department || "",
         other_department: parsed.other_department || "",
         designation: parsed.designation || "",
@@ -139,6 +145,8 @@ export default function EmployeeOnboardingForm() {
         first_name: data.first_name,
         last_name: data.last_name,
         other_names: data.other_names || null,
+        gender: data.gender,
+        date_of_birth: data.date_of_birth || null,
         department: actualDepartment,
         designation: data.designation,
         company_email: companyEmail,
@@ -273,6 +281,40 @@ export default function EmployeeOnboardingForm() {
                 <div className="space-y-2">
                   <label className="text-foreground text-sm font-medium">Other Names (Optional)</label>
                   <Input className="h-11" placeholder="Middle name" {...register("other_names")} />
+                </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-foreground text-sm font-medium">
+                      Gender <span className="text-destructive">*</span>
+                    </label>
+                    <Select
+                      onValueChange={(val) => setValue("gender", val as "male" | "female")}
+                      value={selectedGender}
+                    >
+                      <SelectTrigger className="h-11">
+                        <SelectValue placeholder="Select Gender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {errors.gender && <p className="text-destructive mt-1 text-sm">{errors.gender.message}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-foreground text-sm font-medium">
+                      Date of Birth <span className="text-muted-foreground text-xs">(optional)</span>
+                    </label>
+                    <Input
+                      className="h-11"
+                      type="date"
+                      max={new Date().toISOString().split("T")[0]}
+                      {...register("date_of_birth")}
+                    />
+                    {errors.date_of_birth && (
+                      <p className="text-destructive mt-1 text-sm">{errors.date_of_birth.message}</p>
+                    )}
+                  </div>
                 </div>
               </div>
 

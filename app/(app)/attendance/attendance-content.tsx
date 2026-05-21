@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { Clock, Download, TrendingDown, UserCheck, AlertCircle, CalendarDays, Timer, CalendarX } from "lucide-react"
+import { Clock, Download, UserCheck, AlertCircle, MapPin, BarChart3 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
@@ -9,16 +9,8 @@ import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-tabl
 import { StatCard } from "@/components/ui/stat-card"
 import type { AttendanceRecord } from "./page"
 import { logger } from "@/lib/logger"
-import {
-  ABSENT_DEDUCTION,
-  earlyDepartureDeduction,
-  formatNaira,
-  getWorkdaysInMonth,
-  latenessDeduction,
-  missedHours,
-  toLocalISODate,
-  toLocalYearMonth,
-} from "@/lib/hr/attendance-utils"
+import { RemoteCheckinModal } from "@/components/attendance/remote-checkin-modal"
+import { dayCredit, isLate, getWorkdaysInMonth, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
 import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
 
 const log = logger("dashboard-attendance-attendance-content")
@@ -26,6 +18,7 @@ const log = logger("dashboard-attendance-attendance-content")
 interface AttendanceContentProps {
   initialTodayRecord: AttendanceRecord | null
   initialRecentRecords: AttendanceRecord[]
+  remoteCheckinEnabled?: boolean
 }
 
 type AttendanceRow = AttendanceRecord & {
@@ -37,14 +30,22 @@ type AttendanceRow = AttendanceRecord & {
   workHours: number | null
   overtimeHours: number | null
   missedHoursValue: number | null
-  normalizedStatus: "holiday" | "on_leave" | "exempted" | "waiver" | "present" | "late" | "incomplete" | "absent"
-  deduction: number
+  normalizedStatus:
+    | "holiday"
+    | "on_leave"
+    | "exempted"
+    | "waiver"
+    | "present"
+    | "late"
+    | "incomplete"
+    | "half_day"
+    | "absent"
 }
 type UnifiedDay = {
   date: string
   record: AttendanceRecord | null
   status: AttendanceRow["normalizedStatus"]
-  deduction: number
+  deduction?: number
 }
 
 function parseClockToMinutes(value: string | null | undefined): number | null {
@@ -83,10 +84,20 @@ function calculateHourBreakdown(clockIn: string | null | undefined, clockOut: st
   }
 }
 
-export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: AttendanceContentProps) {
+function isCoveredStatus(status: AttendanceRow["normalizedStatus"]) {
+  return status === "waiver" || status === "exempted" || status === "on_leave" || status === "holiday"
+}
+
+export function AttendanceContent({
+  initialTodayRecord,
+  initialRecentRecords,
+  remoteCheckinEnabled = false,
+}: AttendanceContentProps) {
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(initialTodayRecord)
   const [recentRecords, setRecentRecords] = useState<AttendanceRecord[]>(initialRecentRecords)
   const [unifiedDays, setUnifiedDays] = useState<UnifiedDay[] | null>(null)
+  const [remoteModalOpen, setRemoteModalOpen] = useState(false)
+  const [remoteMode, setRemoteMode] = useState<"clock-in" | "clock-out">("clock-in")
 
   async function fetchAttendanceData() {
     try {
@@ -127,7 +138,6 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
         const date = new Date(workday)
         if (!existing) {
           const normalizedStatus = unified?.status || "absent"
-          const deduction = typeof unified?.deduction === "number" ? unified.deduction : ABSENT_DEDUCTION
           return {
             id: `missing-${workday}`,
             date: workday,
@@ -144,12 +154,13 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
             overtimeHours: null,
             missedHoursValue: null,
             normalizedStatus,
-            deduction,
           } as AttendanceRow
         }
 
-        const breakdown = calculateHourBreakdown(existing.clock_in, existing.clock_out)
-        const normalizedStatus = unified?.status || normalizeStatus(existing)
+        const normalizedStatus = unified?.status || normalizeStatus(existing, workday)
+        const breakdown = isCoveredStatus(normalizedStatus)
+          ? { total: null, work: null, overtime: null, missed: null }
+          : calculateHourBreakdown(existing.clock_in, existing.clock_out)
 
         return {
           ...existing,
@@ -163,8 +174,6 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
           overtimeHours: breakdown.overtime,
           missedHoursValue: breakdown.missed,
           normalizedStatus,
-          deduction:
-            typeof unified?.deduction === "number" ? unified.deduction : deductionForRow(normalizedStatus, existing),
         } as AttendanceRow
       })
       .sort((a, b) => b.date.localeCompare(a.date))
@@ -234,20 +243,6 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
         accessor: (row) => row.normalizedStatus,
         render: (row) => <StatusBadge status={row.normalizedStatus} />,
       },
-      {
-        key: "deduction",
-        label: "Deduction",
-        sortable: true,
-        accessor: (row) => row.deduction || 0,
-        render: (row) =>
-          row.normalizedStatus === "waiver" ? (
-            <span className="text-muted-foreground text-xs">Waived</span>
-          ) : row.deduction > 0 ? (
-            <span className="font-medium text-red-600">-{formatNaira(row.deduction)}</span>
-          ) : (
-            <span className="text-muted-foreground text-xs">₦0</span>
-          ),
-      },
     ],
     []
   )
@@ -278,32 +273,28 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
     [rows]
   )
 
+  const todayIso = toLocalISODate()
   const todayHours = todayRecord?.total_hours ? `${todayRecord.total_hours.toFixed(2)} hrs` : "-"
-  const todayStatus = todayRecord ? normalizeStatus(todayRecord) : "absent"
-  const totalDeduction = rows.reduce((sum, row) => sum + row.deduction, 0)
-  const presentDays = rows.filter((row) => row.normalizedStatus === "present").length
-  const lateDays = rows.filter((row) => row.normalizedStatus === "late").length
-  const incompleteDays = rows.filter((row) => row.normalizedStatus === "incomplete").length
-  const totalHoursWorked = rows.reduce((sum, row) => sum + (row.calculatedTotalHours ?? row.total_hours ?? 0), 0)
-  const totalWorkHours = rows.reduce((sum, row) => sum + (row.workHours ?? 0), 0)
-  const totalOvertimeHours = rows.reduce((sum, row) => sum + (row.overtimeHours ?? 0), 0)
-  const totalMissedHours = rows.reduce(
-    (sum, row) => sum + (row.missedHoursValue ?? missedHours(row.clock_in, row.clock_out)),
-    0
-  )
+  const todayStatus = todayRecord ? normalizeStatus(todayRecord, todayIso) : "absent"
+  const scorableRows = rows.filter((row) => {
+    if (isCoveredStatus(row.normalizedStatus)) return false
+    if (row.normalizedStatus === "incomplete" && row.date === todayIso) return false
+    return true
+  })
+  const attendanceRate = useMemo(() => {
+    let credits = 0
+    for (const row of scorableRows) {
+      credits += dayCredit(row.normalizedStatus, row.clock_in, row.clock_out)
+    }
+    return scorableRows.length > 0 ? Math.round((credits / scorableRows.length) * 100) : 0
+  }, [scorableRows])
+  const absentRate = useMemo(() => {
+    const absentDays = scorableRows.filter((row) => row.normalizedStatus === "absent").length
+    return scorableRows.length > 0 ? Math.round((absentDays / scorableRows.length) * 100) : 0
+  }, [scorableRows])
 
   function exportCSV() {
-    const headers = [
-      "Date",
-      "Day",
-      "Clock In",
-      "Clock Out",
-      "Total Hours",
-      "Work Hour",
-      "Overtime",
-      "Status",
-      "Deduction (₦)",
-    ]
+    const headers = ["Date", "Day", "Clock In", "Clock Out", "Total Hours", "Work Hour", "Overtime", "Status"]
     const csvRows = rows.map((row) => [
       row.dateLabel,
       row.dayLabel,
@@ -313,7 +304,6 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
       row.workHours != null ? row.workHours.toFixed(2) : "-",
       row.overtimeHours != null ? row.overtimeHours.toFixed(2) : "-",
       row.normalizedStatus,
-      row.normalizedStatus === "waiver" ? 0 : row.deduction,
     ])
     const csv = [headers, ...csvRows].map((row) => row.join(",")).join("\n")
     const blob = new Blob([csv], { type: "text/csv" })
@@ -325,162 +315,150 @@ export function AttendanceContent({ initialTodayRecord, initialRecentRecords }: 
   }
 
   return (
-    <DataTablePage
-      title="Attendance"
-      description="Track your work hours and attendance records."
-      icon={Clock}
-      backLink={{ href: "/profile", label: "Back to Dashboard" }}
-      actions={
-        <Button variant="outline" onClick={exportCSV} size="sm">
-          <Download className="mr-2 h-4 w-4" />
-          Export
-        </Button>
-      }
-      stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <StatCard
-            title="Today Status"
-            value={todayStatus}
-            icon={UserCheck}
-            iconBgColor="bg-blue-500/10"
-            iconColor="text-blue-500"
-          />
-          <StatCard
-            title="Today Hours"
-            value={todayHours}
-            icon={Clock}
-            iconBgColor="bg-emerald-500/10"
-            iconColor="text-emerald-500"
-          />
-          <StatCard
-            title="Present Days"
-            value={presentDays}
-            icon={UserCheck}
-            iconBgColor="bg-emerald-500/10"
-            iconColor="text-emerald-500"
-          />
-          <StatCard
-            title="Late Days"
-            value={lateDays}
-            icon={AlertCircle}
-            iconBgColor="bg-yellow-500/10"
-            iconColor="text-yellow-500"
-          />
-          <StatCard
-            title="Incomplete Days"
-            value={incompleteDays}
-            icon={AlertCircle}
-            iconBgColor="bg-cyan-500/10"
-            iconColor="text-cyan-500"
-          />
-          <StatCard
-            title="Absent Days"
-            value={rows.filter((row) => row.normalizedStatus === "absent").length}
-            icon={CalendarDays}
-            iconBgColor="bg-red-500/10"
-            iconColor="text-red-500"
-          />
-          <StatCard
-            title="Total Deduction"
-            value={formatNaira(totalDeduction)}
-            icon={TrendingDown}
-            iconBgColor={totalDeduction > 0 ? "bg-red-500/10" : "bg-green-500/10"}
-            iconColor={totalDeduction > 0 ? "text-red-500" : "text-green-500"}
-          />
-          <StatCard
-            title="Total Hours (MTD)"
-            value={`${totalHoursWorked.toFixed(1)} hrs`}
-            icon={Timer}
-            iconBgColor="bg-blue-500/10"
-            iconColor="text-blue-500"
-          />
-          <StatCard
-            title="Work Hours (MTD)"
-            value={`${totalWorkHours.toFixed(1)} hrs`}
-            icon={Clock}
-            iconBgColor="bg-violet-500/10"
-            iconColor="text-violet-500"
-          />
-          <StatCard
-            title="Hours Missed (MTD)"
-            value={`${totalMissedHours.toFixed(1)} hrs`}
-            icon={CalendarX}
-            iconBgColor={totalMissedHours > 0 ? "bg-orange-500/10" : "bg-green-500/10"}
-            iconColor={totalMissedHours > 0 ? "text-orange-500" : "text-green-500"}
-          />
-          <StatCard
-            title="Overtime (MTD)"
-            value={`${totalOvertimeHours.toFixed(1)} hrs`}
-            icon={TrendingDown}
-            iconBgColor={totalOvertimeHours > 0 ? "bg-amber-500/10" : "bg-muted/50"}
-            iconColor={totalOvertimeHours > 0 ? "text-amber-500" : "text-muted-foreground"}
-          />
-        </div>
-      }
-    >
-      <DataTable<AttendanceRow>
-        data={rows}
-        columns={columns}
-        filters={filters}
-        getRowId={(row) => row.id}
-        searchPlaceholder="Search date, clock period, or status..."
-        searchFn={(row, query) =>
-          `${row.dayLabel} ${row.dateLabel} ${row.periodLabel} ${row.status}`.toLowerCase().includes(query)
+    <>
+      <DataTablePage
+        title="Attendance"
+        description="Track your work hours and attendance records."
+        icon={Clock}
+        backLink={{ href: "/profile", label: "Back to Dashboard" }}
+        actions={
+          <div className="flex items-center gap-2">
+            {remoteCheckinEnabled && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  // Determine mode: if clocked in today but no clock-out → clock-out; else → clock-in
+                  const mode = todayRecord?.clock_in && !todayRecord?.clock_out ? "clock-out" : "clock-in"
+                  setRemoteMode(mode)
+                  setRemoteModalOpen(true)
+                }}
+              >
+                <MapPin className="mr-2 h-4 w-4" />
+                Remote {todayRecord?.clock_in && !todayRecord?.clock_out ? "Clock Out" : "Clock In"}
+              </Button>
+            )}
+            <Button variant="outline" onClick={exportCSV} size="sm">
+              <Download className="mr-2 h-4 w-4" />
+              Export
+            </Button>
+          </div>
         }
-        isLoading={unifiedDays === null}
-        emptyTitle={unifiedDays === null ? "Loading attendance..." : "No attendance records"}
-        emptyDescription={unifiedDays === null ? "Fetching your attendance status..." : "No records are available yet."}
-        emptyIcon={Clock}
-        skeletonRows={6}
-        expandable={{
-          render: (row) => (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">Day</p>
-                <p className="font-medium">{row.dayLabel}</p>
+        stats={
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard
+              title="Today Status"
+              value={todayStatus}
+              icon={UserCheck}
+              iconBgColor="bg-blue-500/10"
+              iconColor="text-blue-500"
+            />
+            <StatCard
+              title="Today Hours"
+              value={todayHours}
+              icon={Clock}
+              iconBgColor="bg-emerald-500/10"
+              iconColor="text-emerald-500"
+            />
+            <StatCard
+              title="Attendance Rate"
+              value={`${attendanceRate}%`}
+              icon={BarChart3}
+              iconBgColor={
+                attendanceRate >= 80 ? "bg-emerald-500/10" : attendanceRate >= 60 ? "bg-yellow-500/10" : "bg-red-500/10"
+              }
+              iconColor={
+                attendanceRate >= 80 ? "text-emerald-500" : attendanceRate >= 60 ? "text-yellow-500" : "text-red-500"
+              }
+            />
+            <StatCard
+              title="Absent Rate"
+              value={`${absentRate}%`}
+              icon={AlertCircle}
+              iconBgColor={
+                absentRate <= 10 ? "bg-emerald-500/10" : absentRate <= 25 ? "bg-yellow-500/10" : "bg-red-500/10"
+              }
+              iconColor={absentRate <= 10 ? "text-emerald-500" : absentRate <= 25 ? "text-yellow-500" : "text-red-500"}
+            />
+          </div>
+        }
+      >
+        <DataTable<AttendanceRow>
+          data={rows}
+          columns={columns}
+          filters={filters}
+          getRowId={(row) => row.id}
+          searchPlaceholder="Search date, clock period, or status..."
+          searchFn={(row, query) =>
+            `${row.dayLabel} ${row.dateLabel} ${row.periodLabel} ${row.status}`.toLowerCase().includes(query)
+          }
+          isLoading={unifiedDays === null}
+          emptyTitle={unifiedDays === null ? "Loading attendance..." : "No attendance records"}
+          emptyDescription={
+            unifiedDays === null ? "Fetching your attendance status..." : "No records are available yet."
+          }
+          emptyIcon={Clock}
+          skeletonRows={6}
+          expandable={{
+            render: (row) => (
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <div>
+                  <p className="text-muted-foreground text-xs uppercase">Day</p>
+                  <p className="font-medium">{row.dayLabel}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs uppercase">Date</p>
+                  <p className="font-medium">{row.dateLabel}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs uppercase">Clock In</p>
+                  <p className="font-medium">{row.clock_in || "-"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs uppercase">Clock Out</p>
+                  <p className="font-medium">{row.clock_out || "-"}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">Date</p>
-                <p className="font-medium">{row.dateLabel}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">Clock In</p>
-                <p className="font-medium">{row.clock_in || "-"}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">Clock Out</p>
-                <p className="font-medium">{row.clock_out || "-"}</p>
-              </div>
-            </div>
-          ),
-        }}
-        urlSync
-      />
-    </DataTablePage>
+            ),
+          }}
+          urlSync
+        />
+      </DataTablePage>
+
+      {remoteCheckinEnabled && (
+        <RemoteCheckinModal
+          open={remoteModalOpen}
+          mode={remoteMode}
+          onClose={() => setRemoteModalOpen(false)}
+          onSuccess={() => {
+            setRemoteModalOpen(false)
+            void fetchAttendanceData()
+          }}
+        />
+      )}
+    </>
   )
 }
-function normalizeStatus(record: AttendanceRecord | null): AttendanceRow["normalizedStatus"] {
+function normalizeStatus(record: AttendanceRecord | null, recordDate?: string): AttendanceRow["normalizedStatus"] {
   if (!record) return "absent"
   const value = String(record.status || "").toLowerCase()
   if (value === "holiday") return "holiday"
   if (value === "on_leave" || value === "leave") return "on_leave"
   if (value === "exempted" || value === "exempt") return "exempted"
   if (value === "waiver" || value === "waived" || record.waived) return "waiver"
+  if (value === "half_day") return "half_day"
   if (value === "present") return "present"
   if (value === "late") return "late"
   if (value === "incomplete") return "incomplete"
   if (value === "absent") return "absent"
   if (!record.clock_in && !record.clock_out) return "absent"
-  if (!record.clock_in || !record.clock_out) return "incomplete"
-  return latenessDeduction(record.clock_in) > 0 ? "late" : "present"
-}
-
-function deductionForRow(status: AttendanceRow["normalizedStatus"], row: AttendanceRecord | null): number {
-  if (!row) return ABSENT_DEDUCTION
-  if (status === "absent") return ABSENT_DEDUCTION
-  if (status === "present" || status === "late")
-    return latenessDeduction(row.clock_in) + earlyDepartureDeduction(row.clock_out)
-  return 0
+  if (record.clock_in && !record.clock_out) {
+    const today = new Date().toISOString().slice(0, 10)
+    const date = recordDate ?? (record as { date?: string }).date
+    return date && date < today ? "half_day" : "incomplete"
+  }
+  if (!record.clock_in) return "incomplete"
+  return isLate(record.clock_in) ? "late" : "present"
 }
 
 function StatusBadge({ status }: { status: AttendanceRow["normalizedStatus"] }) {
