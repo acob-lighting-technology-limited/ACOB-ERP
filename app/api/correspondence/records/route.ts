@@ -36,7 +36,7 @@ type CorrespondenceLeadCandidate = {
 
 type CreatedCorrespondenceRecord = {
   id: string
-  reference_number: string
+  reference_number: string | null
   subject: string
   status: string
   department_name: string | null
@@ -530,7 +530,7 @@ export async function POST(request: NextRequest) {
             p_type: "approval_request",
             p_category: "approvals",
             p_title: "Correspondence pending your approval",
-            p_message: `${String(created.reference_number || "")} - ${String(created.subject || "")}`,
+            p_message: `${String(created.reference_number || "Draft")} - ${String(created.subject || "")}`,
             p_priority: "normal",
             p_link_url: "/admin/correspondence",
             p_actor_id: user.id,
@@ -556,7 +556,7 @@ export async function POST(request: NextRequest) {
             p_type: "approval_request",
             p_category: "approvals",
             p_title: "Correspondence pending your approval",
-            p_message: `${String(created.reference_number || "")} - ${String(created.subject || "")}`,
+            p_message: `${String(created.reference_number || "Draft")} - ${String(created.subject || "")}`,
             p_priority: "normal",
             p_link_url: "/admin/correspondence",
             p_actor_id: user.id,
@@ -589,7 +589,7 @@ export async function POST(request: NextRequest) {
       if (attachments.length > 0) {
         const onedrive = getOneDriveService()
         if (onedrive.isEnabled()) {
-          const basePath = `/correspondence/${String(created.reference_number || "")}`
+          const basePath = `/correspondence/${String(created.reference_number || created.id)}`
           try {
             await onedrive.createFolder(basePath)
           } catch {
@@ -675,7 +675,7 @@ export async function POST(request: NextRequest) {
             p_type: "approval_request",
             p_category: "approvals",
             p_title: "New correspondence logged",
-            p_message: `${created.reference_number} - ${created.subject}`,
+            p_message: `${String(created.reference_number || "Draft")} - ${created.subject}`,
             p_priority: "normal",
             p_link_url: "/admin/correspondence",
             p_actor_id: user.id,

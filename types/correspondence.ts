@@ -24,7 +24,7 @@ export type LetterCategory = string
 
 export interface CorrespondenceRecord {
   id: string
-  reference_number: string
+  reference_number: string | null
   company_code: string
   department_name: string | null
   department_code: string | null
