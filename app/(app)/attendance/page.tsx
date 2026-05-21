@@ -29,30 +29,30 @@ async function getAttendanceData() {
 
   const today = toLocalISODate()
 
-  // Fetch today's record
-  const { data: todayData } = await supabase
-    .from("attendance_records")
-    .select("*")
-    .eq("user_id", user.id)
-    .eq("date", today)
-    .single()
-
-  // Fetch month-to-date records (1st -> today)
-  const monthStart = new Date()
-  monthStart.setDate(1)
-  const monthStartIso = toLocalISODate(monthStart)
-
-  const { data: recentData } = await supabase
-    .from("attendance_records")
-    .select("*")
-    .eq("user_id", user.id)
-    .gte("date", monthStartIso)
-    .lte("date", today)
-    .order("date", { ascending: false })
+  // Fetch today's record + profile remote check-in eligibility in parallel
+  const [{ data: todayData }, { data: recentData }, { data: profileData }] = await Promise.all([
+    supabase.from("attendance_records").select("*").eq("user_id", user.id).eq("date", today).maybeSingle(),
+    supabase
+      .from("attendance_records")
+      .select("*")
+      .eq("user_id", user.id)
+      .gte(
+        "date",
+        (() => {
+          const d = new Date()
+          d.setDate(1)
+          return toLocalISODate(d)
+        })()
+      )
+      .lte("date", today)
+      .order("date", { ascending: false }),
+    supabase.from("profiles").select("remote_checkin_enabled").eq("id", user.id).maybeSingle(),
+  ])
 
   return {
     todayRecord: todayData as AttendanceRecord | null,
     recentRecords: (recentData || []) as AttendanceRecord[],
+    remoteCheckinEnabled: Boolean(profileData?.remote_checkin_enabled),
   }
 }
 
@@ -66,12 +66,14 @@ export default async function AttendancePage() {
   const attendanceData = data as {
     todayRecord: AttendanceRecord | null
     recentRecords: AttendanceRecord[]
+    remoteCheckinEnabled: boolean
   }
 
   return (
     <AttendanceContent
       initialTodayRecord={attendanceData.todayRecord}
       initialRecentRecords={attendanceData.recentRecords}
+      remoteCheckinEnabled={attendanceData.remoteCheckinEnabled}
     />
   )
 }

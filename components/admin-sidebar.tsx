@@ -7,6 +7,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
+  ChevronsUpDown,
   ChevronRight,
   LayoutDashboard,
   Package,
@@ -14,6 +15,7 @@ import {
   FileText,
   ScrollText,
   LogOut,
+  Settings,
   CreditCard,
   Calendar,
   Target,
@@ -24,6 +26,7 @@ import {
   ShieldAlert,
   ShieldEllipsis,
   FlaskConical,
+  User,
 } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
@@ -41,6 +44,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { UserRole } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
 import { motion } from "framer-motion"
@@ -359,6 +363,7 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global" }: Admin
 
   const [openSections, setOpenSections] = useState<Set<string>>(new Set())
   const [openSubSections, setOpenSubSections] = useState<Set<string>>(new Set())
+  const [departmentCode, setDepartmentCode] = useState<string | null>(null)
 
   const toggleSection = (href: string) => {
     setOpenSections((prev) => {
@@ -468,63 +473,49 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global" }: Admin
   const isLead = Boolean(
     profile?.is_department_lead || (profile?.lead_departments && profile.lead_departments.length > 0)
   )
-  const isLeadMode = adminScopeMode === "lead"
+  useEffect(() => {
+    let cancelled = false
+    const departmentName = profile?.department ? normalizeDepartmentName(profile.department) : ""
+    if (!departmentName) {
+      setDepartmentCode(null)
+      return
+    }
+
+    async function loadDepartmentCode() {
+      try {
+        const response = await fetch("/api/departments", { cache: "no-store" })
+        if (!response.ok) return
+        const payload = (await response.json().catch(() => null)) as {
+          data?: Array<{ name?: string | null; department_code?: string | null }>
+        } | null
+        const rows = payload?.data || []
+        const match = rows.find((row) => normalizeDepartmentName(String(row.name || "")) === departmentName)
+        if (!cancelled) setDepartmentCode(match?.department_code || null)
+      } catch {
+        if (!cancelled) setDepartmentCode(null)
+      }
+    }
+
+    void loadDepartmentCode()
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.department])
+
+  const accountName =
+    profile?.first_name && profile?.last_name
+      ? `${formatName(profile.first_name)} ${formatName(profile.last_name)}`
+      : user?.email?.split("@")[0] || "Account"
+  const accountDepartment = profile?.department
+    ? `${departmentCode || formatName(profile.department)}${isLead ? " (Lead)" : ""}`
+    : null
+  const accountRole = profile?.role ? getRoleDisplayName(profile.role) : null
 
   const sidebarJSX = (
     <>
       {/* Empty space for logo (moved to navbar) */}
       <div className={cn("transition-[padding] duration-300 ease-in-out", isCollapsed ? "px-2 py-2" : "px-3 py-2")}>
         {/* Logo space maintained but empty */}
-      </div>
-
-      {/* Admin Badge & User Profile - Fixed height container */}
-      <div
-        className={cn(
-          "flex min-h-[80px] flex-col border-b py-2.5 transition-[padding,margin] duration-300 ease-in-out",
-          isCollapsed ? "mx-0 items-center px-0" : "px-3"
-        )}
-      >
-        {/* User Profile - Fixed height container */}
-        <div
-          className={cn(
-            "flex shrink-0 items-center transition-[gap] duration-300 ease-in-out",
-            isCollapsed ? "justify-center" : "gap-2.5"
-          )}
-        >
-          <Avatar className={cn("ring-primary/10 shrink-0 ring-2", "h-9 w-9")}>
-            <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
-              {getInitials(user?.email, profile?.first_name, profile?.last_name)}
-            </AvatarFallback>
-          </Avatar>
-          <div
-            className={cn(
-              "min-w-0 flex-1 overflow-hidden transition-[max-width,opacity] duration-300 ease-in-out",
-              isCollapsed ? "max-w-0 opacity-0" : "max-w-full opacity-100"
-            )}
-          >
-            <p className="text-foreground truncate text-sm font-semibold whitespace-nowrap">
-              {profile?.first_name && profile?.last_name
-                ? `${formatName(profile.first_name)} ${formatName(profile.last_name)}`
-                : user?.email?.split("@")[0]}
-            </p>
-            <p className="text-muted-foreground truncate text-xs whitespace-nowrap">
-              {`${profile?.department || "Employee"}${isLead ? " (Lead)" : ""}`}
-            </p>
-            {profile?.role && (
-              <Badge
-                variant="outline"
-                className={cn("mt-0.5 text-xs whitespace-nowrap", getRoleBadgeColor(profile.role))}
-              >
-                {getRoleDisplayName(profile.role)}
-              </Badge>
-            )}
-          </div>
-        </div>
-        {isCollapsed && isLeadMode && (
-          <Badge variant="outline" className="mt-1 border-amber-300 bg-amber-500/10 px-1 text-[10px] text-amber-700">
-            LF
-          </Badge>
-        )}
       </div>
 
       {/* Navigation */}
@@ -691,55 +682,76 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global" }: Admin
         ))}
       </nav>
 
-      {/* Back to Dashboard & Logout */}
-      <div className="space-y-1.5 border-t px-2.5 py-2.5">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Link href="/profile" className="block">
-              <Button
-                variant="outline"
-                className={cn(
-                  "text-muted-foreground min-h-[36px] w-full text-sm transition-[padding,gap,background-color,color] duration-300 ease-in-out hover:bg-[var(--admin-accent-soft)] hover:text-[var(--admin-primary)]",
-                  isCollapsed ? "justify-center px-2.5" : "justify-start gap-2.5"
-                )}
-              >
-                <LayoutDashboard className="h-4 w-4 shrink-0" />
-                <span
+      <div className="border-t px-2.5 py-2.5">
+        <DropdownMenu>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
                   className={cn(
-                    "overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-300 ease-in-out",
-                    isCollapsed ? "max-w-0 opacity-0" : "max-w-full opacity-100"
+                    "text-muted-foreground min-h-[52px] w-full text-sm transition-[padding,gap,background-color,color] duration-300 ease-in-out hover:bg-[var(--admin-accent-soft)] hover:text-[var(--admin-primary)]",
+                    isCollapsed ? "justify-center px-2.5" : "justify-between px-3"
                   )}
                 >
-                  Back to Dashboard
-                </span>
-              </Button>
-            </Link>
-          </TooltipTrigger>
-          {isCollapsed && <TooltipContent side="right">Back to Dashboard</TooltipContent>}
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn(
-                "text-muted-foreground min-h-[36px] w-full text-sm transition-[padding,gap,background-color,color] duration-300 ease-in-out hover:bg-[var(--admin-accent-soft)] hover:text-[var(--admin-primary)]",
-                isCollapsed ? "justify-center px-2.5" : "justify-start gap-2.5"
-              )}
-              onClick={() => setShowLogoutConfirm(true)}
+                  <div className={cn("flex items-center", isCollapsed ? "" : "gap-2.5")}>
+                    <Avatar className="ring-primary/10 h-7 w-7 shrink-0 ring-2">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+                        {getInitials(user?.email, profile?.first_name, profile?.last_name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div
+                      className={cn(
+                        "min-w-0 overflow-hidden transition-[max-width,opacity] duration-300 ease-in-out",
+                        isCollapsed ? "max-w-0 opacity-0" : "max-w-full opacity-100"
+                      )}
+                    >
+                      <p className="truncate text-left text-sm font-medium">{accountName}</p>
+                      {(accountDepartment || accountRole) && (
+                        <p className="truncate text-left text-xs opacity-75">
+                          {[accountDepartment, accountRole].filter(Boolean).join(" • ")}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {!isCollapsed && <ChevronsUpDown className="h-4 w-4 shrink-0" />}
+                </Button>
+              </DropdownMenuTrigger>
+            </TooltipTrigger>
+            {isCollapsed && <TooltipContent side="right">Account</TooltipContent>}
+          </Tooltip>
+          <DropdownMenuContent
+            align="end"
+            side="top"
+            className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-52 border-[var(--admin-sidebar-border)] bg-[var(--admin-sidebar-bg)]"
+          >
+            <DropdownMenuItem
+              asChild
+              className="cursor-pointer text-[var(--admin-sidebar-foreground)] focus:bg-[var(--admin-accent-soft)] focus:text-[var(--admin-primary)] data-[highlighted]:bg-[var(--admin-accent-soft)] data-[highlighted]:text-[var(--admin-primary)]"
             >
-              <LogOut className="h-4 w-4 shrink-0" />
-              <span
-                className={cn(
-                  "overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-300 ease-in-out",
-                  isCollapsed ? "max-w-0 opacity-0" : "max-w-full opacity-100"
-                )}
-              >
-                Logout
-              </span>
-            </Button>
-          </TooltipTrigger>
-          {isCollapsed && <TooltipContent side="right">Logout</TooltipContent>}
-        </Tooltip>
+              <Link href="/dashboard" className="flex w-full items-center gap-2">
+                <User className="h-4 w-4" />
+                Go to Dashboard
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              asChild
+              className="cursor-pointer text-[var(--admin-sidebar-foreground)] focus:bg-[var(--admin-accent-soft)] focus:text-[var(--admin-primary)] data-[highlighted]:bg-[var(--admin-accent-soft)] data-[highlighted]:text-[var(--admin-primary)]"
+            >
+              <Link href="/admin/settings" className="flex w-full items-center gap-2">
+                <Settings className="h-4 w-4" />
+                Settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              onClick={() => setShowLogoutConfirm(true)}
+              className="flex cursor-pointer items-center gap-2 text-[var(--admin-sidebar-foreground)] focus:bg-[var(--admin-accent-soft)] focus:text-[var(--admin-primary)] data-[highlighted]:bg-[var(--admin-accent-soft)] data-[highlighted]:text-[var(--admin-primary)]"
+            >
+              <LogOut className="h-4 w-4" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </>
   )

@@ -42,6 +42,7 @@ export async function GET() {
     let query = supabase
       .from("profiles")
       .select("id, first_name, last_name, department, department_id")
+      .eq("employment_status", "active")
       .order("first_name", { ascending: true })
 
     if (scopedDepts !== null) {

@@ -4,7 +4,7 @@ import { z } from "zod"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
-import { latenessDeduction } from "@/lib/hr/attendance-utils"
+import { isLate } from "@/lib/hr/attendance-utils"
 
 const log = logger("hikvision-events")
 
@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
   const action: "in" | "out" = !existing?.clock_in ? "in" : "out"
 
   if (action === "in") {
-    const status = latenessDeduction(time) > 0 ? "late" : "present"
+    const status = isLate(time) ? "late" : "present"
     const { error } = await supabase
       .from("attendance_records")
       .upsert(

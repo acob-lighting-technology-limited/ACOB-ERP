@@ -25,6 +25,7 @@ export type Database = {
           bank_account_number: string | null
           bank_account_name: string | null
           date_of_birth: string | null
+          birthday: string | null // MM-DD, populated from HR tracker; used for automated birthday emails
           employment_date: string | null
           is_admin: boolean
           role: Database["public"]["Enums"]["user_role"]
@@ -67,6 +68,7 @@ export type Database = {
           bank_account_number?: string | null
           bank_account_name?: string | null
           date_of_birth?: string | null
+          birthday?: string | null
           employment_date?: string | null
           is_admin?: boolean
           role?: Database["public"]["Enums"]["user_role"]
@@ -102,6 +104,7 @@ export type Database = {
           bank_account_number?: string | null
           bank_account_name?: string | null
           date_of_birth?: string | null
+          birthday?: string | null
           employment_date?: string | null
           is_admin?: boolean
           role?: Database["public"]["Enums"]["user_role"]

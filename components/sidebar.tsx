@@ -8,6 +8,7 @@ import {
   Award,
   Calendar,
   Car,
+  ChevronsUpDown,
   ChevronRight,
   ClipboardList,
   Clock,
@@ -18,15 +19,16 @@ import {
   LayoutDashboard,
   LogOut,
   Package,
+  Settings,
   ShieldCheck,
+  User,
   Wrench,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn, formatName, getInitials } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
-import { getRoleBadgeColor, getRoleDisplayName } from "@/lib/permissions"
+import { getRoleDisplayName } from "@/lib/permissions"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -39,7 +41,9 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { UserRole } from "@/types/database"
+import { normalizeDepartmentName } from "@/shared/departments"
 import { useSidebar } from "./sidebar-context"
 
 interface SidebarProps {
@@ -103,7 +107,6 @@ const navigation: NavItemDef[] = [
     href: "/tools",
     icon: Wrench,
     children: [
-      { name: "Reference Generator", href: "/tools/reference-generator" },
       { name: "Signature", href: "/tools/signature" },
       { name: "Signature Anniversary", href: "/tools/signature-anniversary" },
       { name: "Job Description", href: "/tools/job-description" },
@@ -142,6 +145,7 @@ export function Sidebar({ user, profile, canAccessAdmin }: SidebarProps) {
   const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false)
+  const [departmentCode, setDepartmentCode] = useState<string | null>(null)
   const { isCollapsed } = useSidebar()
 
   useEffect(() => {
@@ -221,58 +225,52 @@ export function Sidebar({ user, profile, canAccessAdmin }: SidebarProps) {
     profile?.is_department_lead || (profile?.lead_departments && profile.lead_departments.length > 0)
   )
 
+  useEffect(() => {
+    let cancelled = false
+    const departmentName = profile?.department ? normalizeDepartmentName(profile.department) : ""
+    if (!departmentName) {
+      setDepartmentCode(null)
+      return
+    }
+
+    async function loadDepartmentCode() {
+      try {
+        const response = await fetch("/api/departments", { cache: "no-store" })
+        if (!response.ok) return
+        const payload = (await response.json().catch(() => null)) as {
+          data?: Array<{ name?: string | null; department_code?: string | null }>
+        } | null
+        const rows = payload?.data || []
+        const match = rows.find((row) => normalizeDepartmentName(String(row.name || "")) === departmentName)
+        if (!cancelled) setDepartmentCode(match?.department_code || null)
+      } catch {
+        if (!cancelled) setDepartmentCode(null)
+      }
+    }
+
+    void loadDepartmentCode()
+    return () => {
+      cancelled = true
+    }
+  }, [profile?.department])
+
+  const accountName =
+    profile?.first_name && profile?.last_name
+      ? `${formatName(profile.first_name)} ${formatName(profile.last_name)}`
+      : user?.email?.split("@")[0] || "Account"
+  const accountDepartment = profile?.department
+    ? `${departmentCode || formatName(profile.department)}${isLead ? " (Lead)" : ""}`
+    : null
+  const accountRole = profile?.role ? getRoleDisplayName(profile.role) : null
+
   const labelCls = cn(
-    "overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-300 ease-in-out",
+    "min-w-0 overflow-hidden transition-[max-width,opacity] duration-300 ease-in-out",
     isCollapsed ? "max-w-0 opacity-0" : "max-w-full opacity-100"
   )
 
   const sidebarJSX = (
     <>
       <div className={cn("transition-[padding] duration-300 ease-in-out", isCollapsed ? "px-2 py-2" : "px-3 py-2")} />
-
-      {/* User profile */}
-      <div
-        className={cn(
-          "flex min-h-[80px] flex-col border-b py-2.5 transition-[padding,margin] duration-300 ease-in-out",
-          isCollapsed ? "mx-0 items-center px-0" : "px-3"
-        )}
-      >
-        <div
-          className={cn(
-            "flex shrink-0 items-center transition-[gap] duration-300 ease-in-out",
-            isCollapsed ? "justify-center" : "gap-2.5"
-          )}
-        >
-          <Avatar className="ring-primary/10 h-9 w-9 shrink-0 ring-2">
-            <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
-              {getInitials(user?.email, profile?.first_name, profile?.last_name)}
-            </AvatarFallback>
-          </Avatar>
-          <div
-            className={cn(
-              "min-w-0 flex-1 overflow-hidden transition-[max-width,opacity] duration-300 ease-in-out",
-              isCollapsed ? "max-w-0 opacity-0" : "max-w-full opacity-100"
-            )}
-          >
-            <p className="text-foreground truncate text-sm font-semibold whitespace-nowrap">
-              {profile?.first_name && profile?.last_name
-                ? `${formatName(profile.first_name)} ${formatName(profile.last_name)}`
-                : user?.email?.split("@")[0]}
-            </p>
-            <p className="text-muted-foreground truncate text-xs whitespace-nowrap">
-              {`${profile?.department || "Employee"}${isLead ? " (Lead)" : ""}`}
-            </p>
-            {profile?.role && (
-              <Badge
-                variant="outline"
-                className={cn("mt-0.5 text-xs whitespace-nowrap", getRoleBadgeColor(profile.role))}
-              >
-                {getRoleDisplayName(profile.role)}
-              </Badge>
-            )}
-          </div>
-        </div>
-      </div>
 
       <nav className="scrollbar-custom flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3">
         {[...navigation, null, ...hrNavigation].map((item, idx) => {
@@ -434,42 +432,66 @@ export function Sidebar({ user, profile, canAccessAdmin }: SidebarProps) {
         })}
       </nav>
 
-      <div className="space-y-1.5 border-t px-2.5 py-2.5">
-        {canAccessAdmin && (
+      <div className="border-t px-2.5 py-2.5">
+        <DropdownMenu>
           <Tooltip>
             <TooltipTrigger asChild>
-              <Link href="/admin" className="block">
+              <DropdownMenuTrigger asChild>
                 <Button
                   variant="outline"
                   className={cn(
-                    "text-muted-foreground hover:text-foreground min-h-[36px] w-full text-sm transition-[padding,gap] duration-300 ease-in-out",
-                    isCollapsed ? "justify-center px-2.5" : "justify-start gap-2.5"
+                    "text-muted-foreground hover:text-foreground min-h-[52px] w-full text-sm transition-[padding,gap] duration-300 ease-in-out",
+                    isCollapsed ? "justify-center px-2.5" : "justify-between px-3"
                   )}
                 >
-                  <ShieldCheck className="h-4 w-4 shrink-0" />
-                  <span className={labelCls}>Go to Admin</span>
+                  <div className={cn("flex items-center", isCollapsed ? "" : "gap-2.5")}>
+                    <Avatar className="ring-primary/10 h-7 w-7 shrink-0 ring-2">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+                        {getInitials(user?.email, profile?.first_name, profile?.last_name)}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className={labelCls}>
+                      <p className="truncate text-left text-sm font-medium">{accountName}</p>
+                      {(accountDepartment || accountRole) && (
+                        <p className="truncate text-left text-xs opacity-75">
+                          {[accountDepartment, accountRole].filter(Boolean).join(" • ")}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  {!isCollapsed && <ChevronsUpDown className="h-4 w-4 shrink-0" />}
                 </Button>
-              </Link>
+              </DropdownMenuTrigger>
             </TooltipTrigger>
-            {isCollapsed && <TooltipContent side="right">Go to Admin</TooltipContent>}
+            {isCollapsed && <TooltipContent side="right">Account</TooltipContent>}
           </Tooltip>
-        )}
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant="outline"
-              className={cn(
-                "text-muted-foreground hover:text-foreground min-h-[36px] w-full text-sm transition-[padding,gap] duration-300 ease-in-out",
-                isCollapsed ? "justify-center px-2.5" : "justify-start gap-2.5"
-              )}
-              onClick={() => setShowLogoutConfirm(true)}
-            >
-              <LogOut className="h-4 w-4 shrink-0" />
-              <span className={labelCls}>Logout</span>
-            </Button>
-          </TooltipTrigger>
-          {isCollapsed && <TooltipContent side="right">Logout</TooltipContent>}
-        </Tooltip>
+          <DropdownMenuContent align="end" side="top" className="w-[var(--radix-dropdown-menu-trigger-width)] min-w-52">
+            <DropdownMenuItem asChild>
+              <Link href="/profile" className="flex w-full items-center gap-2">
+                <User className="h-4 w-4" />
+                Profile
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/settings" className="flex w-full items-center gap-2">
+                <Settings className="h-4 w-4" />
+                Settings
+              </Link>
+            </DropdownMenuItem>
+            {canAccessAdmin && (
+              <DropdownMenuItem asChild>
+                <Link href="/admin" className="flex w-full items-center gap-2">
+                  <ShieldCheck className="h-4 w-4" />
+                  Go to Admin
+                </Link>
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => setShowLogoutConfirm(true)} className="flex items-center gap-2">
+              <LogOut className="h-4 w-4" />
+              Logout
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </>
   )

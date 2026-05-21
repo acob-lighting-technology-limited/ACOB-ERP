@@ -25,7 +25,6 @@ import {
   FileText,
   Users,
   Clock,
-  TrendingDown,
   AlertCircle,
   Pencil,
   Info,
@@ -34,15 +33,7 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
-import {
-  latenessDeduction,
-  formatNaira,
-  getWorkdaysInMonth,
-  monthBounds,
-  toLocalISODate,
-  toLocalYearMonth,
-  ABSENT_DEDUCTION,
-} from "@/lib/hr/attendance-utils"
+import { getWorkdaysInMonth, monthBounds, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
 import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
 
 const log = logger("hr-attendance-reports")
@@ -56,11 +47,14 @@ interface AttendanceReport {
   present_days: number
   late_days: number
   incomplete_days?: number
+  half_day_days?: number
   exempted_days?: number
   waived_days: number
   absent_days: number
+  leave_days?: number
+  holiday_days?: number
+  attendance_credits?: number
   total_hours: number
-  lateness_deduction: number
   total_missed_hours?: number
   attendance_rate: number
   attendance_exempt?: boolean
@@ -87,6 +81,7 @@ type DayStatus =
   | "late"
   | "absent"
   | "incomplete"
+  | "half_day"
   | "waiver"
   | "exempted"
   | "on_leave"
@@ -99,7 +94,6 @@ interface CalendarDay {
   record: DayRecord | null
   isOnLeave: boolean
   status: DayStatus
-  deduction: number
 }
 
 type EditHistoryItem = {
@@ -126,7 +120,6 @@ type UnifiedDayPayload = {
     date: string
     record: DayRecord | null
     status: DayStatus
-    deduction: number
   }>
 }
 
@@ -163,8 +156,22 @@ function formatHours(hours: number | null) {
   return `${hours.toFixed(1)}h`
 }
 
-function getHourBreakdown(record: DayRecord | null) {
-  if (!record) return { total: null, work: null, overtime: null, missed: null }
+function getHourBreakdown(record: DayRecord | null, status?: string) {
+  const covered = status === "waiver" || status === "on_leave" || status === "holiday" || status === "exempted"
+  if (covered) {
+    const inMin = parseTimeToMinutes(record?.clock_in)
+    const outMin = parseTimeToMinutes(record?.clock_out)
+    const total = inMin !== null && outMin !== null && outMin > inMin ? (outMin - inMin) / 60 : null
+    return { total, work: null, overtime: null, missed: null }
+  }
+  if (!record || (!record.clock_in && !record.clock_out)) {
+    if (status === "absent") return { total: null, work: null, overtime: null, missed: 9 }
+    return { total: null, work: null, overtime: null, missed: null }
+  }
+  if (record.clock_in && !record.clock_out) {
+    if (status === "half_day") return { total: null, work: 4.5, overtime: null, missed: 4.5 }
+    return { total: null, work: null, overtime: null, missed: null }
+  }
   const inMin = parseTimeToMinutes(record.clock_in)
   const outMin = parseTimeToMinutes(record.clock_out)
   if (inMin === null || outMin === null || outMin <= inMin) {
@@ -173,13 +180,10 @@ function getHourBreakdown(record: DayRecord | null) {
   const total = (outMin - inMin) / 60
   const workStart = 8 * 60
   const workEnd = 17 * 60
-  const overlapStart = Math.max(inMin, workStart)
-  const overlapEnd = Math.min(outMin, workEnd)
-  const work = Math.max(0, overlapEnd - overlapStart) / 60
+  const workMinutes = Math.max(0, Math.min(outMin, workEnd) - Math.max(inMin, workStart))
+  const work = workMinutes / 60
   const overtime = Math.max(0, total - work)
-  const late = Math.max(0, inMin - workStart)
-  const early = Math.max(0, workEnd - outMin)
-  const missed = (late + early) / 60
+  const missed = Math.max(0, 9 - work)
   return { total, work, overtime, missed }
 }
 
@@ -220,7 +224,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyItems, setHistoryItems] = useState<EditHistoryItem[]>([])
-  const [historyTarget, setHistoryTarget] = useState<{ date: string; id: string } | null>(null)
+  const [historyTarget, setHistoryTarget] = useState<{ date: string; id: string | null } | null>(null)
 
   function loadDays() {
     void (async () => {
@@ -238,7 +242,6 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           record: row.record,
           isOnLeave: row.status === "on_leave",
           status: row.status,
-          deduction: row.deduction,
         }))
 
         setDays(calDays)
@@ -313,9 +316,12 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   }
 
   async function openHistory(day: CalendarDay) {
-    if (!day.record) return
-    setHistoryTarget({ date: day.date, id: day.record.id })
+    setHistoryTarget({ date: day.date, id: day.record?.id ?? null })
     setHistoryOpen(true)
+    if (!day.record) {
+      setHistoryItems([])
+      return
+    }
     setHistoryLoading(true)
     try {
       const res = await fetch(`/api/admin/hr/attendance/records/${day.record.id}/history`, { cache: "no-store" })
@@ -342,12 +348,16 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   const hasAnyTime = hasClockIn || hasClockOut
   const hasPartialTime = hasClockIn !== hasClockOut
   const invalidTimeRange = Boolean(editForm.clock_in && editForm.clock_out && editForm.clock_out < editForm.clock_in)
-  const cannotSave = saving || invalidTimeRange || !hasAnyTime || hasPartialTime
+  const cannotSave =
+    saving ||
+    invalidTimeRange ||
+    (editForm.waived && !editForm.waiver_reason.trim()) ||
+    (!editForm.waived && (!hasAnyTime || hasPartialTime))
 
   return (
     <>
       <div className="space-y-1 py-2">
-        <div className="text-muted-foreground grid grid-cols-[220px_90px_70px_70px_80px_80px_80px_90px_90px_120px_60px] items-center gap-3 px-2 text-[11px] font-semibold uppercase">
+        <div className="text-muted-foreground grid grid-cols-[220px_90px_70px_70px_80px_80px_80px_90px_120px_60px] items-center gap-3 px-2 text-[11px] font-semibold uppercase">
           <span>Day</span>
           <span>Status</span>
           <span>In</span>
@@ -356,16 +366,15 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           <span>Work</span>
           <span>Missed</span>
           <span>Overtime</span>
-          <span>Deduction</span>
           <span>Source</span>
           <span></span>
         </div>
         {visibleDays.map((day) => {
-          const hours = getHourBreakdown(day.record)
+          const hours = getHourBreakdown(day.record, day.status)
           return (
             <div
               key={day.date}
-              className="hover:bg-muted/30 grid grid-cols-[220px_90px_70px_70px_80px_80px_80px_90px_90px_120px_60px] items-center gap-3 rounded px-2 py-1.5 text-sm"
+              className="hover:bg-muted/30 grid grid-cols-[220px_90px_70px_70px_80px_80px_80px_90px_120px_60px] items-center gap-3 rounded px-2 py-1.5 text-sm"
             >
               <span className="text-xs font-medium">{day.dayName}</span>
               <div>
@@ -385,23 +394,18 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
                 {hours.missed !== null ? formatHours(hours.missed) : "—"}
               </span>
               <span className="text-xs">{formatHours(hours.overtime)}</span>
-              <span className={`text-xs font-medium ${day.deduction > 0 ? "text-red-600" : "text-muted-foreground"}`}>
-                {day.record?.waived ? "Waived" : day.deduction > 0 ? `-${formatNaira(day.deduction)}` : "₦0"}
-              </span>
               <span className="text-xs">{labelSource(day.record?.source)}</span>
-              {!day.isOnLeave && (
-                <div className="flex items-center justify-end gap-1">
-                  {day.record ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="h-6 w-6 p-0"
-                      onClick={() => openHistory(day)}
-                      title="View edit history"
-                    >
-                      <Info className="h-3.5 w-3.5" />
-                    </Button>
-                  ) : null}
+              <div className="flex items-center justify-end gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 w-6 p-0"
+                  onClick={() => openHistory(day)}
+                  title="View edit history"
+                >
+                  <Info className="h-3.5 w-3.5" />
+                </Button>
+                {!day.isOnLeave && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -410,8 +414,8 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
                   >
                     <Pencil className="h-3 w-3" />
                   </Button>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )
         })}
@@ -457,7 +461,9 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
             </div>
             {editForm.waived && (
               <div className="space-y-2">
-                <Label>Reason (optional)</Label>
+                <Label>
+                  Reason <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   placeholder="e.g. Permit granted, client visit"
                   value={editForm.waiver_reason}
@@ -642,11 +648,15 @@ export default function AttendanceReportsPage() {
       "Late",
       "Incomplete",
       "Exempted",
+      "Half Day",
+      "Leave",
+      "Holiday",
       "Waiver",
       "Absent",
       "Total Hours",
+      "Hrs Missed",
+      "Credit",
       "Attendance Rate",
-      "Lateness Deduction (₦)",
     ]
     const rows = reports.map((r) => [
       r.user_name,
@@ -656,11 +666,15 @@ export default function AttendanceReportsPage() {
       r.late_days,
       r.incomplete_days || 0,
       r.exempted_days || 0,
+      r.half_day_days ?? 0,
+      r.leave_days ?? 0,
+      r.holiday_days ?? 0,
       r.waived_days,
       r.absent_days,
       r.total_hours.toFixed(1),
+      (r.total_missed_hours ?? 0).toFixed(1),
+      `${(r.attendance_credits ?? 0).toFixed(2)} / ${r.total_days}`,
       `${r.attendance_rate}%`,
-      r.lateness_deduction,
     ])
     const csv = [headers, ...rows].map((row) => row.join(",")).join("\n")
     const blob = new Blob([csv], { type: "text/csv" })
@@ -673,18 +687,16 @@ export default function AttendanceReportsPage() {
 
   const departmentOptions = useMemo(() => departments.map((d) => ({ value: d, label: d })), [departments])
 
-  const stats = {
-    employees: reports.length,
-    present: reports.reduce((a, r) => a + r.present_days, 0),
-    late: reports.reduce((a, r) => a + r.late_days, 0),
-    incomplete: reports.reduce((a, r) => a + (r.incomplete_days || 0), 0),
-    exempted: reports.reduce((a, r) => a + (r.exempted_days || 0), 0),
-    waiver: reports.reduce((a, r) => a + r.waived_days, 0),
-    absent: reports.reduce((a, r) => a + r.absent_days, 0),
-    totalDeduction: reports.reduce((a, r) => a + r.lateness_deduction, 0),
-    averageRate:
-      reports.length > 0 ? `${Math.round(reports.reduce((s, r) => s + r.attendance_rate, 0) / reports.length)}%` : "—",
-  }
+  const stats = useMemo(() => {
+    const totalCredits = reports.reduce((a, r) => a + (r.attendance_credits ?? r.present_days), 0)
+    const totalWorkDays = reports.reduce((a, r) => a + r.total_days, 0)
+    const totalAbsent = reports.reduce((a, r) => a + r.absent_days, 0)
+    return {
+      employees: reports.length,
+      attendanceRate: totalWorkDays > 0 ? `${((totalCredits / totalWorkDays) * 100).toFixed(2)}%` : "—",
+      absentRate: totalWorkDays > 0 ? `${((totalAbsent / totalWorkDays) * 100).toFixed(2)}%` : "—",
+    }
+  }, [reports])
 
   const columns: DataTableColumn<AttendanceReport>[] = [
     {
@@ -743,6 +755,30 @@ export default function AttendanceReportsPage() {
       align: "center",
     },
     {
+      key: "half_day_days",
+      label: "Half Day",
+      sortable: true,
+      accessor: (r) => r.half_day_days ?? 0,
+      render: (r) => <span className="text-orange-600">{r.half_day_days ?? 0}</span>,
+      align: "center",
+    },
+    {
+      key: "leave_days",
+      label: "Leave",
+      sortable: true,
+      accessor: (r) => r.leave_days ?? 0,
+      render: (r) => <span className="text-purple-600">{r.leave_days ?? 0}</span>,
+      align: "center",
+    },
+    {
+      key: "holiday_days",
+      label: "Holiday",
+      sortable: true,
+      accessor: (r) => r.holiday_days ?? 0,
+      render: (r) => <span className="text-sky-600">{r.holiday_days ?? 0}</span>,
+      align: "center",
+    },
+    {
       key: "waived_days",
       label: "Waiver",
       sortable: true,
@@ -780,16 +816,30 @@ export default function AttendanceReportsPage() {
       align: "center",
     },
     {
-      key: "lateness_deduction",
-      label: "Deduction",
+      key: "attendance_credits",
+      label: "Credit",
       sortable: true,
-      accessor: (r) => r.lateness_deduction,
-      render: (r) =>
-        r.lateness_deduction > 0 ? (
-          <span className="font-medium text-red-600">-{formatNaira(r.lateness_deduction)}</span>
-        ) : (
-          <span className="text-muted-foreground text-xs">₦0</span>
-        ),
+      accessor: (r) => r.attendance_credits ?? 0,
+      render: (r) => {
+        const credit = r.attendance_credits ?? 0
+        const total = r.total_days
+        return (
+          <span className="text-xs">
+            <span
+              className={
+                credit / total >= 0.8
+                  ? "font-medium text-emerald-600"
+                  : credit / total >= 0.6
+                    ? "text-yellow-600"
+                    : "font-medium text-red-600"
+              }
+            >
+              {credit.toFixed(2)}
+            </span>
+            <span className="text-muted-foreground"> / {total}</span>
+          </span>
+        )
+      },
       align: "center",
     },
     {
@@ -799,7 +849,7 @@ export default function AttendanceReportsPage() {
       accessor: (r) => r.attendance_rate,
       render: (r) => (
         <Badge variant={r.attendance_rate >= 80 ? "default" : r.attendance_rate >= 60 ? "secondary" : "destructive"}>
-          {r.attendance_rate}%
+          {r.attendance_rate.toFixed(2)}%
         </Badge>
       ),
     },
@@ -899,7 +949,7 @@ export default function AttendanceReportsPage() {
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatCard
             title="Employees"
             value={stats.employees}
@@ -908,60 +958,18 @@ export default function AttendanceReportsPage() {
             iconColor="text-blue-500"
           />
           <StatCard
-            title="Present Days"
-            value={stats.present}
-            icon={FileText}
-            iconBgColor="bg-emerald-500/10"
-            iconColor="text-emerald-500"
-          />
-          <StatCard
-            title="Absent Days"
-            value={stats.absent}
-            icon={AlertCircle}
-            iconBgColor="bg-red-500/10"
-            iconColor="text-red-500"
-          />
-          <StatCard
-            title="Late Days"
-            value={stats.late}
-            icon={Clock}
-            iconBgColor="bg-yellow-500/10"
-            iconColor="text-yellow-500"
-          />
-          <StatCard
-            title="Incomplete Days"
-            value={stats.incomplete}
-            icon={Clock}
-            iconBgColor="bg-cyan-500/10"
-            iconColor="text-cyan-500"
-          />
-          <StatCard
-            title="Exempted Days"
-            value={stats.exempted}
-            icon={Users}
-            iconBgColor="bg-violet-500/10"
-            iconColor="text-violet-500"
-          />
-          <StatCard
-            title="Waiver Days"
-            value={stats.waiver}
-            icon={Users}
-            iconBgColor="bg-blue-500/10"
-            iconColor="text-blue-500"
-          />
-          <StatCard
-            title="Average Rate"
-            value={stats.averageRate}
+            title="Attendance Rate"
+            value={stats.attendanceRate}
             icon={BarChart3}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
           />
           <StatCard
-            title="Total Deductions"
-            value={formatNaira(stats.totalDeduction)}
-            icon={TrendingDown}
-            iconBgColor={stats.totalDeduction > 0 ? "bg-red-500/10" : "bg-green-500/10"}
-            iconColor={stats.totalDeduction > 0 ? "text-red-500" : "text-green-500"}
+            title="Absent Rate"
+            value={stats.absentRate}
+            icon={AlertCircle}
+            iconBgColor="bg-red-500/10"
+            iconColor="text-red-500"
           />
         </div>
       }
@@ -1371,17 +1379,20 @@ export default function AttendanceReportsPage() {
                 <Input type="date" value={holidayDate} onChange={(e) => setHolidayDate(e.target.value)} />
               </div>
               <div className="space-y-2">
-                <Label>Name (optional)</Label>
+                <Label>
+                  Name <span className="text-destructive">*</span>
+                </Label>
                 <Input
                   value={holidayName}
                   onChange={(e) => setHolidayName(e.target.value)}
                   placeholder="e.g. Workers Day"
+                  required
                 />
               </div>
             </div>
             <Button
               type="button"
-              disabled={!holidayDate || holidaySaving}
+              disabled={!holidayDate || !holidayName.trim() || holidaySaving}
               onClick={async () => {
                 setHolidaySaving(true)
                 const response = await fetch("/api/admin/hr/attendance/holidays", {

@@ -16,7 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatCard } from "@/components/ui/stat-card"
-import { Clock, Calendar, Pencil, AlertCircle, Download } from "lucide-react"
+import { Clock, Calendar, Pencil, AlertCircle, Download, MapPin, Camera, ShieldCheck, ShieldX } from "lucide-react"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
@@ -36,6 +36,15 @@ interface AttendanceRecord {
   total_hours: number | null
   status: string
   source: string | null
+  // Remote check-in fields
+  selfie_url?: string | null
+  selfie_out_url?: string | null
+  face_match_confidence?: number | null
+  face_verified?: boolean | null
+  location_verified?: boolean | null
+  latitude?: number | null
+  longitude?: number | null
+  site_id?: string | null
 }
 
 function formatDate(dateString: string) {
@@ -76,6 +85,7 @@ export default function AdminAttendanceRecordsPage() {
   const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null)
   const [editForm, setEditForm] = useState({ clock_in: "", clock_out: "" })
   const [saving, setSaving] = useState(false)
+  const [evidenceRecord, setEvidenceRecord] = useState<AttendanceRecord | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -228,9 +238,29 @@ export default function AdminAttendanceRecordsPage() {
       label: "Source",
       accessor: (r) => r.source ?? "",
       render: (r) => (
-        <Badge className={r.source === "hikvision" ? "bg-blue-100 text-blue-800" : "bg-gray-100 text-gray-800"}>
-          {r.source === "hikvision" ? "Device" : "Manual"}
-        </Badge>
+        <div className="flex flex-col gap-1">
+          <Badge
+            className={
+              r.source === "remote_web"
+                ? "gap-1 bg-purple-100 text-purple-800"
+                : r.source === "hikvision"
+                  ? "bg-blue-100 text-blue-800"
+                  : "bg-gray-100 text-gray-800"
+            }
+          >
+            {r.source === "remote_web" && <Camera className="h-3 w-3" />}
+            {r.source === "remote_web" ? "Remote" : r.source === "hikvision" ? "Device" : "Manual"}
+          </Badge>
+          {r.source === "remote_web" && r.face_verified === false && (
+            <Badge className="gap-1 bg-amber-100 text-xs text-amber-800">
+              <ShieldX className="h-3 w-3" />
+              Review
+            </Badge>
+          )}
+          {r.source === "remote_web" && r.location_verified === false && (
+            <Badge className="bg-amber-100 text-xs text-amber-800">Loc unverified</Badge>
+          )}
+        </div>
       ),
     },
     {
@@ -238,9 +268,16 @@ export default function AdminAttendanceRecordsPage() {
       label: "",
       accessor: () => "",
       render: (r) => (
-        <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>
-          <Pencil className="h-3 w-3" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {r.source === "remote_web" && (
+            <Button variant="ghost" size="sm" onClick={() => setEvidenceRecord(r)} title="View Evidence">
+              <Camera className="h-3 w-3" />
+            </Button>
+          )}
+          <Button variant="ghost" size="sm" onClick={() => openEdit(r)}>
+            <Pencil className="h-3 w-3" />
+          </Button>
+        </div>
       ),
       align: "center",
     },
@@ -264,6 +301,7 @@ export default function AdminAttendanceRecordsPage() {
       options: [
         { value: "hikvision", label: "Device" },
         { value: "manual", label: "Manual" },
+        { value: "remote_web", label: "Remote" },
       ],
       placeholder: "All Sources",
     },
@@ -345,6 +383,105 @@ export default function AdminAttendanceRecordsPage() {
           setExportOpen(false)
         }}
       />
+
+      {/* Evidence Dialog — for remote_web records */}
+      <Dialog open={!!evidenceRecord} onOpenChange={(open) => !open && setEvidenceRecord(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Camera className="h-5 w-5" />
+              Remote Check-In Evidence
+            </DialogTitle>
+            <DialogDescription>
+              {evidenceRecord && `${evidenceRecord.user_name} — ${formatDate(evidenceRecord.date)}`}
+            </DialogDescription>
+          </DialogHeader>
+
+          {evidenceRecord && (
+            <div className="space-y-4">
+              {/* Selfie thumbnails */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">Clock-In Selfie</p>
+                  {evidenceRecord.selfie_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={evidenceRecord.selfie_url}
+                      alt="Clock-in selfie"
+                      className="h-40 w-full rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="text-muted-foreground flex h-40 items-center justify-center rounded-lg border text-xs">
+                      No photo
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <p className="text-muted-foreground mb-1 text-xs font-medium uppercase">Clock-Out Selfie</p>
+                  {evidenceRecord.selfie_out_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={evidenceRecord.selfie_out_url}
+                      alt="Clock-out selfie"
+                      className="h-40 w-full rounded-lg object-cover"
+                    />
+                  ) : (
+                    <div className="text-muted-foreground flex h-40 items-center justify-center rounded-lg border text-xs">
+                      No photo
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Face match score */}
+              <div className="flex items-center gap-3 rounded-xl border p-3">
+                {evidenceRecord.face_verified ? (
+                  <ShieldCheck className="h-5 w-5 shrink-0 text-green-600" />
+                ) : (
+                  <ShieldX className="h-5 w-5 shrink-0 text-amber-500" />
+                )}
+                <div>
+                  <p className="text-sm font-medium">
+                    Face Match:{" "}
+                    {evidenceRecord.face_match_confidence != null
+                      ? `${Math.round(evidenceRecord.face_match_confidence * 100)}%`
+                      : "N/A"}
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    {evidenceRecord.face_verified ? "Auto-approved (≥80%)" : "Flagged for review (<80%)"}
+                  </p>
+                </div>
+              </div>
+
+              {/* GPS location */}
+              <div className="flex items-start gap-3 rounded-xl border p-3">
+                <MapPin
+                  className={`mt-0.5 h-5 w-5 shrink-0 ${evidenceRecord.location_verified ? "text-green-600" : "text-amber-500"}`}
+                />
+                <div>
+                  <p className="text-sm font-medium">
+                    {evidenceRecord.location_verified ? "Location Verified" : "Location Not Matched"}
+                  </p>
+                  {evidenceRecord.latitude != null && evidenceRecord.longitude != null ? (
+                    <p className="text-muted-foreground font-mono text-xs">
+                      {Number(evidenceRecord.latitude).toFixed(5)}, {Number(evidenceRecord.longitude).toFixed(5)}
+                    </p>
+                  ) : (
+                    <p className="text-muted-foreground text-xs">No GPS coordinates</p>
+                  )}
+                  {!evidenceRecord.location_verified && (
+                    <p className="mt-0.5 text-xs text-amber-700">Outside all registered sites</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setEvidenceRecord(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!editRecord} onOpenChange={(open) => !open && setEditRecord(null)}>
         <DialogContent className="max-w-sm">

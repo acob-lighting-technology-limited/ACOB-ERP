@@ -1,4 +1,4 @@
-import { ABSENT_DEDUCTION, latenessDeduction, earlyDepartureDeduction } from "@/lib/hr/attendance-utils"
+import { isLate } from "@/lib/hr/attendance-utils"
 
 export type UnifiedAttendanceStatus =
   | "holiday"
@@ -7,6 +7,7 @@ export type UnifiedAttendanceStatus =
   | "present"
   | "late"
   | "incomplete"
+  | "half_day"
   | "absent"
   | "on_leave"
 
@@ -15,6 +16,7 @@ export const ATTENDANCE_STATUS_COLORS: Record<UnifiedAttendanceStatus, string> =
   present: "bg-green-100 text-green-800",
   late: "bg-yellow-100 text-yellow-800",
   incomplete: "bg-cyan-100 text-cyan-800",
+  half_day: "bg-orange-100 text-orange-800",
   absent: "bg-red-100 text-red-800",
   waiver: "bg-blue-100 text-blue-700",
   exempted: "bg-violet-100 text-violet-700",
@@ -27,6 +29,7 @@ export const ATTENDANCE_STATUS_LABELS: Record<UnifiedAttendanceStatus, string> =
   present: "Present",
   late: "Late",
   incomplete: "Incomplete",
+  half_day: "Half Day",
   absent: "Absent",
   waiver: "Waiver",
   exempted: "Exempted",
@@ -53,6 +56,7 @@ export function deriveUnifiedAttendanceStatus(input: {
   isHoliday?: boolean
   isOnLeave?: boolean
   isExempted?: boolean
+  recordDate?: string
 }): UnifiedAttendanceStatus {
   if (input.isHoliday) return "holiday"
   if (input.isOnLeave) return "on_leave"
@@ -61,17 +65,10 @@ export function deriveUnifiedAttendanceStatus(input: {
   if (!rec) return "absent"
   if (rec.waived) return "waiver"
   if (!rec.clock_in && !rec.clock_out) return "absent"
-  if (!rec.clock_in || !rec.clock_out) return "incomplete"
-  return latenessDeduction(rec.clock_in) > 0 ? "late" : "present"
-}
-
-export function deductionForStatus(
-  status: UnifiedAttendanceStatus,
-  clockIn?: string | null,
-  clockOut?: string | null
-): number {
-  if (status === "absent") return ABSENT_DEDUCTION
-  if (status === "late" || status === "present")
-    return latenessDeduction(clockIn || null) + earlyDepartureDeduction(clockOut || null)
-  return 0
+  if (rec.clock_in && !rec.clock_out) {
+    const today = new Date().toISOString().slice(0, 10)
+    return input.recordDate && input.recordDate < today ? "half_day" : "incomplete"
+  }
+  if (!rec.clock_in) return "incomplete"
+  return isLate(rec.clock_in) ? "late" : "present"
 }

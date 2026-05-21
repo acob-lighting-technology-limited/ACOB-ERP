@@ -5,7 +5,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
-import { latenessDeduction } from "@/lib/hr/attendance-utils"
+import { isLate } from "@/lib/hr/attendance-utils"
 import { DB_WRITABLE_STATUSES } from "@/lib/hr/attendance-status"
 
 const log = logger("admin-hr-attendance-record-patch")
@@ -85,7 +85,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       } else if (clockIn && !clockOut) {
         updates.status = "incomplete"
       } else if (clockIn && clockOut) {
-        updates.status = latenessDeduction(clockIn) > 0 ? "late" : "present"
+        updates.status = isLate(clockIn) ? "late" : "present"
       }
     } else if (parsed.data.waived === false) {
       if (!clockIn && !clockOut) {
@@ -93,7 +93,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       } else if (clockIn && !clockOut) {
         updates.status = "incomplete"
       } else if (clockIn && clockOut) {
-        updates.status = latenessDeduction(clockIn) > 0 ? "late" : "present"
+        updates.status = isLate(clockIn) ? "late" : "present"
       }
     }
 

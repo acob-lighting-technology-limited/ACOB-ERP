@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
-import { Users, UserPlus, Mail, Plus, Search, X } from "lucide-react"
+import { Users, UserPlus, Mail, Plus, Search, X, UserCheck } from "lucide-react"
 
 type Employee = {
   id: string
@@ -13,9 +13,11 @@ type Employee = {
   additional_email: string | null
   department: string | null
   employment_status: string | null
+  is_department_lead: boolean | null
+  gender: string | null
 }
 
-type RecipientMode = "all" | "select" | "manual" | "all_plus"
+type RecipientMode = "all" | "select" | "manual" | "all_plus" | "leads_only" | "males_only" | "females_only"
 
 interface RecipientSelectorProps {
   employees: Employee[]
@@ -58,6 +60,9 @@ export function RecipientSelector({
       <div className="flex flex-wrap gap-2">
         {[
           { value: "all", label: "All Employees", icon: Users },
+          { value: "leads_only", label: "Leads Only", icon: UserCheck },
+          { value: "males_only", label: "Males Only", icon: Users },
+          { value: "females_only", label: "Females Only", icon: Users },
           { value: "select", label: "Select Specific", icon: UserPlus },
           { value: "manual", label: "Enter Manually", icon: Mail },
           { value: "all_plus", label: "All + Add More", icon: Plus },
@@ -179,6 +184,15 @@ export function RecipientSelector({
         <p className="text-muted-foreground text-sm">
           The reminder will be sent to all <strong>{employees.length}</strong> active employees.
         </p>
+      )}
+      {recipientMode === "leads_only" && (
+        <p className="text-muted-foreground text-sm">The reminder will be sent to all department leads.</p>
+      )}
+      {recipientMode === "males_only" && (
+        <p className="text-muted-foreground text-sm">The reminder will be sent to all male employees.</p>
+      )}
+      {recipientMode === "females_only" && (
+        <p className="text-muted-foreground text-sm">The reminder will be sent to all female employees.</p>
       )}
     </div>
   )

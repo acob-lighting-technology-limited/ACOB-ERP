@@ -9,15 +9,9 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Clock, Calendar, TrendingDown, Download } from "lucide-react"
+import { Clock, Calendar, Download, BarChart3 } from "lucide-react"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import {
-  latenessDeduction,
-  formatNaira,
-  monthBounds,
-  toLocalYearMonth,
-  ABSENT_DEDUCTION,
-} from "@/lib/hr/attendance-utils"
+import { dayCredit, monthBounds, toLocalYearMonth } from "@/lib/hr/attendance-utils"
 import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
 
 interface AttendanceRecord {
@@ -45,26 +39,16 @@ function formatTime(t: string | null) {
   return t.substring(0, 5)
 }
 
-function recordDeduction(record: AttendanceRecord): number {
-  if (record.waived) return 0
-  if (record.status === "absent") return ABSENT_DEDUCTION
-  return latenessDeduction(record.clock_in)
-}
-
 function downloadCSV(records: AttendanceRecord[], yearMonth: string) {
-  const headers = ["Date", "Day", "Clock In", "Clock Out", "Hours", "Status", "Deduction (₦)"]
-  const rows = records.map((r) => {
-    const d = recordDeduction(r)
-    return [
-      formatDate(r.date),
-      formatDay(r.date),
-      formatTime(r.clock_in),
-      formatTime(r.clock_out),
-      r.total_hours?.toFixed(2) ?? "-",
-      r.status,
-      r.waived ? "Waived" : d.toFixed(2),
-    ]
-  })
+  const headers = ["Date", "Day", "Clock In", "Clock Out", "Hours", "Status"]
+  const rows = records.map((r) => [
+    formatDate(r.date),
+    formatDay(r.date),
+    formatTime(r.clock_in),
+    formatTime(r.clock_out),
+    r.total_hours?.toFixed(2) ?? "-",
+    r.status,
+  ])
   const csv = [headers, ...rows].map((row) => row.map((v) => `"${v}"`).join(",")).join("\n")
   const blob = new Blob([csv], { type: "text/csv" })
   const url = URL.createObjectURL(blob)
@@ -91,7 +75,13 @@ export default function AttendanceRecordsPage() {
 
   const totalHours = records.reduce((s, r) => s + (r.total_hours ?? 0), 0)
   const presentDays = records.filter((r) => r.status === "present" || r.status === "late").length
-  const totalDeduction = records.reduce((s, r) => s + recordDeduction(r), 0)
+  const attendanceRate = (() => {
+    let credits = 0
+    for (const r of records) {
+      credits += dayCredit(r.status, r.clock_in, r.clock_out)
+    }
+    return records.length > 0 ? Math.round((credits / records.length) * 100) : 0
+  })()
 
   const columns: DataTableColumn<AttendanceRecord>[] = [
     {
@@ -155,19 +145,6 @@ export default function AttendanceRecordsPage() {
         </Badge>
       ),
     },
-    {
-      key: "deduction",
-      label: "Deduction",
-      sortable: true,
-      accessor: (r) => recordDeduction(r),
-      render: (r) => {
-        const d = recordDeduction(r)
-        if (r.waived) return <span className="text-xs font-medium text-blue-600">Waived</span>
-        if (d > 0) return <span className="text-xs font-medium text-red-600">-{formatNaira(d)}</span>
-        return <span className="text-muted-foreground text-xs">₦0</span>
-      },
-      align: "right",
-    },
   ]
 
   const tableFilters: DataTableFilter<AttendanceRecord>[] = [
@@ -179,6 +156,7 @@ export default function AttendanceRecordsPage() {
         { value: "late", label: "Late" },
         { value: "absent", label: "Absent" },
         { value: "incomplete", label: "Incomplete" },
+        { value: "half_day", label: "Half Day" },
         { value: "waiver", label: "Waiver" },
       ],
       placeholder: "All Statuses",
@@ -186,37 +164,34 @@ export default function AttendanceRecordsPage() {
   ]
 
   const expandable: ExpandableConfig<AttendanceRecord> = {
-    render: (r) => {
-      const d = recordDeduction(r)
-      return (
-        <div className="bg-muted/30 grid grid-cols-2 gap-4 border-t px-4 py-3 text-sm sm:grid-cols-4">
-          <div>
-            <div className="text-muted-foreground mb-1 text-xs">Clock In</div>
-            <div className="flex items-center gap-1 font-medium">
-              <Clock className="h-3 w-3 text-green-600" />
-              {formatTime(r.clock_in)}
-            </div>
-          </div>
-          <div>
-            <div className="text-muted-foreground mb-1 text-xs">Clock Out</div>
-            <div className="flex items-center gap-1 font-medium">
-              <Clock className="h-3 w-3 text-red-500" />
-              {formatTime(r.clock_out)}
-            </div>
-          </div>
-          <div>
-            <div className="text-muted-foreground mb-1 text-xs">Hours Worked</div>
-            <div className="font-medium">{r.total_hours?.toFixed(2) ?? "-"} hrs</div>
-          </div>
-          <div>
-            <div className="text-muted-foreground mb-1 text-xs">Lateness Deduction</div>
-            <div className={d > 0 ? "font-medium text-red-600" : "font-medium text-green-600"}>
-              {r.waived ? `Waived${r.waiver_reason ? ` — ${r.waiver_reason}` : ""}` : `-${formatNaira(d)}`}
-            </div>
+    render: (r) => (
+      <div className="bg-muted/30 grid grid-cols-2 gap-4 border-t px-4 py-3 text-sm sm:grid-cols-4">
+        <div>
+          <div className="text-muted-foreground mb-1 text-xs">Clock In</div>
+          <div className="flex items-center gap-1 font-medium">
+            <Clock className="h-3 w-3 text-green-600" />
+            {formatTime(r.clock_in)}
           </div>
         </div>
-      )
-    },
+        <div>
+          <div className="text-muted-foreground mb-1 text-xs">Clock Out</div>
+          <div className="flex items-center gap-1 font-medium">
+            <Clock className="h-3 w-3 text-red-500" />
+            {formatTime(r.clock_out)}
+          </div>
+        </div>
+        <div>
+          <div className="text-muted-foreground mb-1 text-xs">Hours Worked</div>
+          <div className="font-medium">{r.total_hours?.toFixed(2) ?? "-"} hrs</div>
+        </div>
+        {r.waiver_reason && (
+          <div>
+            <div className="text-muted-foreground mb-1 text-xs">Waiver Reason</div>
+            <div className="font-medium">{r.waiver_reason}</div>
+          </div>
+        )}
+      </div>
+    ),
   }
 
   return (
@@ -237,16 +212,19 @@ export default function AttendanceRecordsPage() {
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <StatCard title="Days Recorded" value={records.length} icon={Calendar} />
           <StatCard title="Days Present" value={presentDays} icon={Calendar} />
-          <StatCard title="Hours Worked" value={`${totalHours.toFixed(1)}h`} icon={Clock} />
           <StatCard
-            title="Total Deduction"
-            value={formatNaira(totalDeduction)}
-            icon={TrendingDown}
-            iconBgColor={totalDeduction > 0 ? "bg-red-500/10" : "bg-green-500/10"}
-            iconColor={totalDeduction > 0 ? "text-red-500" : "text-green-500"}
+            title="Attendance Rate"
+            value={`${attendanceRate}%`}
+            icon={BarChart3}
+            iconBgColor={
+              attendanceRate >= 80 ? "bg-emerald-500/10" : attendanceRate >= 60 ? "bg-yellow-500/10" : "bg-red-500/10"
+            }
+            iconColor={
+              attendanceRate >= 80 ? "text-emerald-500" : attendanceRate >= 60 ? "text-yellow-500" : "text-red-500"
+            }
           />
         </div>
       }

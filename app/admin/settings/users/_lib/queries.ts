@@ -53,6 +53,7 @@ export async function fetchAllUsersForPicker(): Promise<User[]> {
   const { data } = await supabase
     .from("profiles")
     .select("id, company_email, first_name, last_name, role, department, employment_status, created_at")
+    .eq("employment_status", "active")
     .order("first_name")
 
   if (!data) return []

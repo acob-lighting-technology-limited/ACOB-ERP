@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { toLocalISODate } from "@/lib/utils/date"
-import { latenessDeduction } from "@/lib/hr/attendance-utils"
+import { isLate } from "@/lib/hr/attendance-utils"
 
 type GoalScoreBreakdown = {
   goal_id: string
@@ -321,7 +321,7 @@ export async function computeIndividualPerformanceScore(
         : !row.clock_in && !row.clock_out
           ? "absent"
           : row.clock_in && row.clock_out
-            ? latenessDeduction(row.clock_in) > 0
+            ? isLate(row.clock_in)
               ? "late"
               : "present"
             : "incomplete"
@@ -354,7 +354,7 @@ export async function computeIndividualPerformanceScore(
         : !row.clock_in && !row.clock_out
           ? "absent"
           : row.clock_in && row.clock_out
-            ? latenessDeduction(row.clock_in) > 0
+            ? isLate(row.clock_in)
               ? "late"
               : "present"
             : "incomplete"

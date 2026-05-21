@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { getWorkdaysInMonth, toLocalISODate } from "@/lib/hr/attendance-utils"
-import { deductionForStatus, deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
 
 type AttendanceRow = {
@@ -110,13 +110,9 @@ export async function GET(request: NextRequest) {
         isHoliday: holidayDates.has(date),
         isOnLeave: leaveDates.has(date),
         isExempted: exemptHint || Boolean(profile?.attendance_exempt) || exemptDates.has(date),
+        recordDate: date,
       })
-      return {
-        date,
-        record: rec,
-        status,
-        deduction: rec?.waived ? 0 : deductionForStatus(status, rec?.clock_in, rec?.clock_out),
-      }
+      return { date, record: rec, status }
     })
 
   return NextResponse.json({ data: rows })
