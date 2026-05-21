@@ -46,7 +46,7 @@ export function PortalReferenceGeneratorContent({
     : ""
 
   const [records, setRecords] = useState<CorrespondenceRecord[]>(initialRecords)
-  const [activeTab, setActiveTab] = useState<"internal" | "external">("external")
+  const [activeTab, setActiveTab] = useState<"all" | "internal" | "external">("all")
   const [isSaving, setIsSaving] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -54,6 +54,7 @@ export function PortalReferenceGeneratorContent({
 
   const emptyForm: CreateReferenceForm = {
     department_name: initialDepartment,
+    recipient_department_name: "",
     letter_type: "external",
     category: "",
     custom_category_name: "",
@@ -86,17 +87,15 @@ export function PortalReferenceGeneratorContent({
 
   const tabs: DataTableTab[] = useMemo(
     () => [
+      { key: "all", label: `All (${stats.total})` },
       { key: "external", label: `External (${stats.external})` },
       { key: "internal", label: `Internal (${stats.internal})` },
     ],
-    [stats.external, stats.internal]
+    [stats.external, stats.internal, stats.total]
   )
 
   const filteredRecords = useMemo(
-    () =>
-      records.filter((record) =>
-        activeTab === "internal" ? record.letter_type === "internal" : record.letter_type === "external"
-      ),
+    () => records.filter((record) => (activeTab === "all" ? true : record.letter_type === activeTab)),
     [records, activeTab]
   )
 
@@ -119,16 +118,34 @@ export function PortalReferenceGeneratorContent({
 
   async function createRecord(event: React.FormEvent) {
     event.preventDefault()
+    const isInternal = (form.letter_type || "external") === "internal"
+    const mdDepartment = departmentCodes.find((item) => item.department_code.toUpperCase() === "MD")
+    const selectedRecipientDepartment = departmentCodes.find(
+      (item) => item.department_name === form.recipient_department_name
+    )
+
     if (!form.subject.trim()) {
       toast.error("Subject is required")
       return
     }
-    if (!form.department_name) {
-      toast.error("Department is required")
+    if (!form.department_name && !isInternal) {
+      toast.error("Request Department is required")
       return
     }
-    if (!form.recipient_code.trim()) {
+    if (isInternal && !mdDepartment) {
+      toast.error("Executive Management (MD) department is not configured")
+      return
+    }
+    if (isInternal && !selectedRecipientDepartment) {
+      toast.error("Recipient Department is required")
+      return
+    }
+    if (!form.recipient_code.trim() && !isInternal) {
       toast.error("Recipient Code is required")
+      return
+    }
+    if (isInternal && !selectedRecipientDepartment?.department_code?.trim()) {
+      toast.error("Recipient department code is required")
       return
     }
     if (!form.due_date) {
@@ -157,12 +174,18 @@ export function PortalReferenceGeneratorContent({
 
       const metadata = form.metadata_text.trim() ? { notes: form.metadata_text.trim() } : null
       const formPayload = new FormData()
-      formPayload.append("department_name", form.department_name)
+      formPayload.append("department_name", isInternal ? mdDepartment?.department_name || "" : form.department_name)
       formPayload.append("letter_type", form.letter_type || "external")
       formPayload.append("category", categoryValue)
       formPayload.append("subject", form.subject)
-      formPayload.append("recipient_name", form.recipient_name || "")
-      formPayload.append("recipient_code", form.recipient_code.trim().toUpperCase())
+      formPayload.append(
+        "recipient_name",
+        isInternal ? selectedRecipientDepartment?.department_name || "" : form.recipient_name || ""
+      )
+      formPayload.append(
+        "recipient_code",
+        (isInternal ? selectedRecipientDepartment?.department_code || "" : form.recipient_code).trim().toUpperCase()
+      )
       formPayload.append("originator_id", form.requester_id || currentViewerId)
       formPayload.append("action_required", String(form.action_required))
       formPayload.append("due_date", form.due_date)
@@ -192,6 +215,7 @@ export function PortalReferenceGeneratorContent({
       custom_category_name: "",
       custom_category_code: "",
       subject: row.subject,
+      recipient_department_name: row.letter_type === "internal" ? row.recipient_name || "" : "",
       recipient_name: row.recipient_name || "",
       recipient_code: row.recipient_code || "",
       requester_id: row.originator_id || currentViewerId,
@@ -340,7 +364,7 @@ export function PortalReferenceGeneratorContent({
       backLink={{ href: "/profile", label: "Back to Home" }}
       tabs={tabs}
       activeTab={activeTab}
-      onTabChange={(tab) => setActiveTab(tab as "internal" | "external")}
+      onTabChange={(tab) => setActiveTab(tab as "all" | "internal" | "external")}
       actions={
         <>
           <CreateReferenceDialog
@@ -367,7 +391,6 @@ export function PortalReferenceGeneratorContent({
             isSaving={isSaving}
             departmentCodes={departmentCodes}
             currentUserId={currentViewerId}
-            currentUserName={currentViewerName}
           />
         </>
       }

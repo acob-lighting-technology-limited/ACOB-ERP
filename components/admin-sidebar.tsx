@@ -236,19 +236,6 @@ const adminNavigation: NavItem[] = [
     href: "/admin/assets",
     icon: Package,
     roles: ["developer", "super_admin", "admin"],
-    children: [
-      { name: "Issues", href: "/admin/assets/issues" },
-      {
-        name: "Inventory",
-        href: "/admin/inventory",
-        children: [
-          { name: "Products", href: "/admin/inventory/products" },
-          { name: "Categories", href: "/admin/inventory/categories" },
-          { name: "Warehouses", href: "/admin/inventory/warehouses" },
-          { name: "Movements", href: "/admin/inventory/movements" },
-        ],
-      },
-    ],
   },
   {
     section: "operations",
@@ -684,42 +671,56 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global" }: Admin
 
       <div className="border-t px-2.5 py-2.5">
         <DropdownMenu>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  variant="outline"
-                  className={cn(
-                    "text-muted-foreground min-h-[52px] w-full text-sm transition-[padding,gap,background-color,color] duration-300 ease-in-out hover:bg-[var(--admin-accent-soft)] hover:text-[var(--admin-primary)]",
-                    isCollapsed ? "justify-center px-2.5" : "justify-between px-3"
-                  )}
-                >
-                  <div className={cn("flex items-center", isCollapsed ? "" : "gap-2.5")}>
-                    <Avatar className="ring-primary/10 h-7 w-7 shrink-0 ring-2">
-                      <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
-                        {getInitials(user?.email, profile?.first_name, profile?.last_name)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div
-                      className={cn(
-                        "min-w-0 overflow-hidden transition-[max-width,opacity] duration-300 ease-in-out",
-                        isCollapsed ? "max-w-0 opacity-0" : "max-w-full opacity-100"
-                      )}
-                    >
-                      <p className="truncate text-left text-sm font-medium">{accountName}</p>
-                      {(accountDepartment || accountRole) && (
-                        <p className="truncate text-left text-xs opacity-75">
-                          {[accountDepartment, accountRole].filter(Boolean).join(" • ")}
-                        </p>
-                      )}
+          {isCollapsed ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="text-muted-foreground min-h-[52px] w-full justify-center px-2.5 text-sm transition-[padding,gap,background-color,color] duration-300 ease-in-out hover:bg-[var(--admin-accent-soft)] hover:text-[var(--admin-primary)]"
+                  >
+                    <div className="flex items-center">
+                      <Avatar className="ring-primary/10 h-7 w-7 shrink-0 ring-2">
+                        <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+                          {getInitials(user?.email, profile?.first_name, profile?.last_name)}
+                        </AvatarFallback>
+                      </Avatar>
                     </div>
+                  </Button>
+                </DropdownMenuTrigger>
+              </TooltipTrigger>
+              <TooltipContent side="right">Account</TooltipContent>
+            </Tooltip>
+          ) : (
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                className="text-muted-foreground min-h-[52px] w-full justify-between px-3 text-sm transition-[padding,gap,background-color,color] duration-300 ease-in-out hover:bg-[var(--admin-accent-soft)] hover:text-[var(--admin-primary)]"
+              >
+                <div className="flex items-center gap-2.5">
+                  <Avatar className="ring-primary/10 h-7 w-7 shrink-0 ring-2">
+                    <AvatarFallback className="bg-primary text-primary-foreground text-xs font-semibold">
+                      {getInitials(user?.email, profile?.first_name, profile?.last_name)}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div
+                    className={cn(
+                      "min-w-0 overflow-hidden transition-[max-width,opacity] duration-300 ease-in-out",
+                      "max-w-full opacity-100"
+                    )}
+                  >
+                    <p className="truncate text-left text-sm font-medium">{accountName}</p>
+                    {(accountDepartment || accountRole) && (
+                      <p className="truncate text-left text-xs opacity-75">
+                        {[accountDepartment, accountRole].filter(Boolean).join(" • ")}
+                      </p>
+                    )}
                   </div>
-                  {!isCollapsed && <ChevronsUpDown className="h-4 w-4 shrink-0" />}
-                </Button>
-              </DropdownMenuTrigger>
-            </TooltipTrigger>
-            {isCollapsed && <TooltipContent side="right">Account</TooltipContent>}
-          </Tooltip>
+                </div>
+                <ChevronsUpDown className="h-4 w-4 shrink-0" />
+              </Button>
+            </DropdownMenuTrigger>
+          )}
           <DropdownMenuContent
             align="end"
             side="top"
