@@ -57,8 +57,10 @@ async function resolveCategoryCodeForReference(
   return null
 }
 
+type AnySupabaseClient = Pick<Awaited<ReturnType<typeof getAuthContext>>["supabase"], "from" | "rpc">
+
 async function ensureReferenceNumberOnFinalApproval(params: {
-  supabase: Awaited<ReturnType<typeof getAuthContext>>["supabase"]
+  dataClient: AnySupabaseClient
   record: Record<string, unknown>
 }): Promise<string> {
   const currentReference = String(params.record.reference_number || "").trim()
@@ -76,14 +78,14 @@ async function ensureReferenceNumberOnFinalApproval(params: {
   }
 
   const categoryCode = await resolveCategoryCodeForReference(
-    params.supabase,
+    params.dataClient as Awaited<ReturnType<typeof getAuthContext>>["supabase"],
     (params.record.category as string | null | undefined) || null
   )
   const yearSource = String(params.record.submitted_at || params.record.created_at || "")
   const parsedYear = new Date(yearSource).getFullYear()
   const referenceYear = Number.isFinite(parsedYear) ? parsedYear : new Date().getFullYear()
 
-  const { data: generatedReference, error: generateError } = await params.supabase.rpc(
+  const { data: generatedReference, error: generateError } = await params.dataClient.rpc(
     "generate_correspondence_reference",
     {
       p_department_code: departmentCode,
@@ -182,9 +184,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       (a) => a.approval_stage === STAGE_EXEC || a.approval_stage === STAGE_EXEC_LEGACY
     )
 
+    const dataClient = getServiceRoleClientOrFallback(supabase)
+
     // ── Super admin / developer bypass ─────────────────────────────────────────
     if (canBypassChain && decision === "approved") {
-      const dataClient = getServiceRoleClientOrFallback(supabase)
       const pendingStages = [
         { key: STAGE_DEPT, existing: deptApproval },
         { key: STAGE_EXEC, existing: execApproval },
@@ -214,15 +217,15 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         }
       }
 
-      const finalReferenceNumber = await ensureReferenceNumberOnFinalApproval({ supabase, record })
-      const { data: updatedRecord, error: recordUpdateError } = await supabase
+      const finalReferenceNumber = await ensureReferenceNumberOnFinalApproval({ dataClient, record })
+      const { data: updatedRecord, error: recordUpdateError } = await dataClient
         .from("correspondence_records")
         .update({ status: "approved", approved_at: now, reference_number: finalReferenceNumber })
         .eq("id", record.id)
         .select("*")
         .single()
 
-      if (recordUpdateError) throw recordUpdateError
+      if (recordUpdateError || !updatedRecord) throw recordUpdateError || new Error("Approval update returned no data")
 
       await appendCorrespondenceEvent({
         correspondenceId: record.id,
@@ -271,17 +274,25 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         const emails = [originatorProfile?.company_email, originatorProfile?.additional_email].filter(
           Boolean
         ) as string[]
-        const approverName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || "Administrator"
-        await sendCorrespondenceDecisionEmail({
-          to: emails,
-          referenceNumber: updatedRecord.reference_number,
-          subject: updatedRecord.subject,
-          approverName,
-          letterType: updatedRecord.letter_type,
-          decision: "approved",
-        })
+        if (emails.length === 0) {
+          log.warn({ recordId: record.id }, "Bypass approval: no email address found for originator, skipping email")
+        } else {
+          const approverName =
+            [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || "Administrator"
+          await sendCorrespondenceDecisionEmail({
+            to: emails,
+            referenceNumber: updatedRecord.reference_number,
+            subject: updatedRecord.subject,
+            approverName,
+            letterType: updatedRecord.letter_type,
+            decision: "approved",
+          })
+        }
       } catch (mailErr) {
-        log.error({ err: String(mailErr) }, "Correspondence approval email failed (bypass)")
+        log.error(
+          { err: String(mailErr), recordId: record.id, ref: updatedRecord?.reference_number },
+          "Correspondence approval email failed (bypass)"
+        )
       }
 
       return NextResponse.json({ data: { record: updatedRecord } })
@@ -422,9 +433,9 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     }
 
     const finalReferenceNumber =
-      nextRecordStatus === "approved" ? await ensureReferenceNumberOnFinalApproval({ supabase, record }) : null
+      nextRecordStatus === "approved" ? await ensureReferenceNumberOnFinalApproval({ dataClient, record }) : null
 
-    const { data: updatedRecord, error: recordUpdateError } = await supabase
+    const { data: updatedRecord, error: recordUpdateError } = await dataClient
       .from("correspondence_records")
       .update({
         status: nextRecordStatus,
@@ -435,7 +446,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       .select("*")
       .single()
 
-    if (recordUpdateError) throw recordUpdateError
+    if (recordUpdateError || !updatedRecord) throw recordUpdateError || new Error("Approval update returned no data")
 
     await appendCorrespondenceEvent({
       correspondenceId: record.id,
@@ -488,7 +499,6 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       nextRecordStatus === "returned_for_correction"
     ) {
       try {
-        const dataClient = getServiceRoleClientOrFallback(supabase)
         const { data: originatorProfile } = await dataClient
           .from("profiles")
           .select("company_email, additional_email")
@@ -497,17 +507,24 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         const emails = [originatorProfile?.company_email, originatorProfile?.additional_email].filter(
           Boolean
         ) as string[]
-        const approverName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || "Approver"
-        await sendCorrespondenceDecisionEmail({
-          to: emails,
-          referenceNumber: updatedRecord.reference_number,
-          subject: updatedRecord.subject,
-          approverName,
-          letterType: updatedRecord.letter_type,
-          decision: nextRecordStatus,
-        })
+        if (emails.length === 0) {
+          log.warn({ recordId: record.id }, "Approval decision: no email address found for originator, skipping email")
+        } else {
+          const approverName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || "Approver"
+          await sendCorrespondenceDecisionEmail({
+            to: emails,
+            referenceNumber: updatedRecord.reference_number,
+            subject: updatedRecord.subject,
+            approverName,
+            letterType: updatedRecord.letter_type,
+            decision: nextRecordStatus,
+          })
+        }
       } catch (mailErr) {
-        log.error({ err: String(mailErr) }, "Correspondence decision email failed")
+        log.error(
+          { err: String(mailErr), recordId: record.id, ref: updatedRecord?.reference_number },
+          "Correspondence decision email failed"
+        )
       }
     }
 

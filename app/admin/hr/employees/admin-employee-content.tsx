@@ -448,6 +448,17 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     return getAssignableRolesForActor(userProfile.role) as UserRole[]
   }
 
+  const handleCopyEmail = useCallback(async (email: string) => {
+    const value = email.trim()
+    if (!value) return
+    try {
+      await navigator.clipboard.writeText(value)
+      toast.success("Email copied")
+    } catch (_error: unknown) {
+      toast.error("Failed to copy email")
+    }
+  }, [])
+
   const columns: DataTableColumn<Employee>[] = useMemo(
     () => [
       {
@@ -489,9 +500,26 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         initialWidth: 220,
         accessor: (r) => r.company_email,
         render: (r) => (
-          <div className="text-muted-foreground flex items-center gap-1.5 text-sm">
-            <Mail className="h-3.5 w-3.5 shrink-0" />
-            <span className="max-w-[180px] truncate">{r.company_email}</span>
+          <div className="flex flex-col gap-1 text-sm">
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-left"
+              onClick={() => void handleCopyEmail(r.company_email)}
+              title="Click to copy email"
+            >
+              <Mail className="h-3.5 w-3.5 shrink-0" />
+              <span className="max-w-[180px] truncate">{r.company_email}</span>
+            </button>
+            {r.additional_email && (
+              <button
+                type="button"
+                className="text-muted-foreground/80 hover:text-foreground ml-5 max-w-[180px] truncate text-left text-xs"
+                onClick={() => void handleCopyEmail(r.additional_email || "")}
+                title="Click to copy additional email"
+              >
+                {r.additional_email}
+              </button>
+            )}
           </div>
         ),
       },
@@ -516,8 +544,38 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         accessor: (r) => r.employment_status || "active",
         render: (r) => <EmployeeStatusBadge status={r.employment_status || "active"} size="sm" />,
       },
+      {
+        key: "actions",
+        label: "Action",
+        render: (r) => (
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => void handleViewEmployeeDetails(r)}
+              title="View Profile"
+            >
+              <Eye className="h-4 w-4" />
+            </Button>
+            {canManageUsers && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => void handleEditEmployee(r)}
+                title="Edit Employee"
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        ),
+      },
     ],
-    []
+    [canManageUsers, handleCopyEmail, handleEditEmployee]
   )
 
   const departments = useMemo(
@@ -657,19 +715,6 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           `${r.first_name} ${r.last_name} ${r.company_email} ${r.designation}`.toLowerCase().includes(q)
         }
         filters={filters}
-        rowActions={[
-          {
-            label: "View Profile",
-            icon: Eye,
-            onClick: handleViewEmployeeDetails,
-          },
-          {
-            label: "Edit Employee",
-            icon: Pencil,
-            onClick: handleEditEmployee,
-            hidden: () => !canManageUsers,
-          },
-        ]}
         expandable={{
           render: (r) => (
             <div className="animate-in fade-in slide-in-from-top-2 grid grid-cols-1 gap-6 p-6 md:grid-cols-3">
@@ -755,8 +800,27 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
               <div className="text-muted-foreground space-y-1.5 pt-2 text-xs">
                 <div className="flex items-center gap-2">
                   <Mail className="h-3.5 w-3.5" />
-                  <span className="truncate">{r.company_email}</span>
+                  <button
+                    type="button"
+                    className="hover:text-foreground truncate text-left"
+                    onClick={() => void handleCopyEmail(r.company_email)}
+                    title="Click to copy email"
+                  >
+                    {r.company_email}
+                  </button>
                 </div>
+                {r.additional_email && (
+                  <div className="ml-[22px]">
+                    <button
+                      type="button"
+                      className="hover:text-foreground truncate text-left text-[11px]"
+                      onClick={() => void handleCopyEmail(r.additional_email || "")}
+                      title="Click to copy additional email"
+                    >
+                      {r.additional_email}
+                    </button>
+                  </div>
+                )}
                 {r.phone_number && (
                   <div className="flex items-center gap-2">
                     <Phone className="h-3.5 w-3.5" />
