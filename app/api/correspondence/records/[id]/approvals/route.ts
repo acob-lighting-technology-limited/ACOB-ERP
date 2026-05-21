@@ -207,6 +207,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
           referenceNumber: updatedRecord.reference_number,
           subject: updatedRecord.subject,
           approverName,
+          letterType: updatedRecord.letter_type,
         })
       } catch (mailErr) {
         log.error({ err: String(mailErr) }, "Correspondence approval email failed (bypass)")
@@ -417,6 +418,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
           referenceNumber: updatedRecord.reference_number,
           subject: updatedRecord.subject,
           approverName,
+          letterType: updatedRecord.letter_type,
         })
       } catch (mailErr) {
         log.error({ err: String(mailErr) }, "Correspondence approval email failed")

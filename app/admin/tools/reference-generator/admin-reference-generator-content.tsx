@@ -26,12 +26,12 @@ function getErrorMessage(error: unknown, fallback: string) {
 export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenceGeneratorContentProps) {
   const [records, setRecords] = useState<CorrespondenceRecord[]>(initialRecords)
   const [loadingRecordId, setLoadingRecordId] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<string>("all")
-  const [activeTab, setActiveTab] = useState("all")
+  const [activeTab, setActiveTab] = useState<"all" | "external" | "internal">("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(initialRecords.length)
   const [isLoading, setIsLoading] = useState(false)
+  const [tabCounts, setTabCounts] = useState({ all: initialRecords.length, external: 0, internal: 0 })
   const [globalCounts, setGlobalCounts] = useState({ total: 0, underReview: 0, approved: 0, rejected: 0 })
 
   const [decisionPrompt, setDecisionPrompt] = useState<{
@@ -40,6 +40,27 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
   } | null>(null)
 
   useEffect(() => {
+    async function fetchTabCounts() {
+      try {
+        const [all, external, internal] = await Promise.all([
+          fetch("/api/correspondence/records?page=1&limit=1", { cache: "no-store" }).then((r) => r.json()),
+          fetch("/api/correspondence/records?page=1&limit=1&letter_type=external", { cache: "no-store" }).then((r) =>
+            r.json()
+          ),
+          fetch("/api/correspondence/records?page=1&limit=1&letter_type=internal", { cache: "no-store" }).then((r) =>
+            r.json()
+          ),
+        ])
+        setTabCounts({
+          all: Number(all.total || 0),
+          external: Number(external.total || 0),
+          internal: Number(internal.total || 0),
+        })
+      } catch (err) {
+        log.error("Failed to fetch tab counts", err)
+      }
+    }
+
     async function fetchGlobalCounts() {
       try {
         const [all, underReview, approved, rejected] = await Promise.all([
@@ -64,6 +85,7 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
         log.error("Failed to fetch global counts", err)
       }
     }
+    void fetchTabCounts()
     void fetchGlobalCounts()
   }, [])
 
@@ -85,7 +107,7 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
           page: String(page),
           limit: "50",
         })
-        if (statusFilter !== "all") params.set("status", statusFilter)
+        if (activeTab !== "all") params.set("letter_type", activeTab)
         if (searchQuery.trim()) params.set("search", searchQuery.trim())
 
         const res = await fetch(`/api/correspondence/records?${params.toString()}`, { cache: "no-store" })
@@ -100,7 +122,7 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
     }
 
     void loadRecords()
-  }, [page, searchQuery, statusFilter])
+  }, [page, searchQuery, activeTab])
 
   async function decide(recordId: string, decision: "approved" | "rejected" | "returned_for_correction") {
     setDecisionPrompt({ recordId, decision })
@@ -191,10 +213,9 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
   ]
 
   const tabs: DataTableTab[] = [
-    { key: "all", label: "All" },
-    { key: "under_review", label: "Under Review" },
-    { key: "approved", label: "Approved" },
-    { key: "rejected", label: "Rejected" },
+    { key: "all", label: `All (${tabCounts.all})` },
+    { key: "external", label: `External (${tabCounts.external})` },
+    { key: "internal", label: `Internal (${tabCounts.internal})` },
   ]
 
   const filters: DataTableFilter<CorrespondenceRecord>[] = [
@@ -246,11 +267,8 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={(tab) => {
-        setActiveTab(tab)
-        if (tab === "all") setStatusFilter("all")
-        if (tab === "under_review") setStatusFilter("under_review")
-        if (tab === "approved") setStatusFilter("approved")
-        if (tab === "rejected") setStatusFilter("rejected")
+        setActiveTab(tab as "all" | "external" | "internal")
+        setPage(1)
       }}
       stats={
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -301,14 +319,6 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
         totalRows={total}
         onPageChange={setPage}
         onSearchChange={setSearchQuery}
-        onFilterChange={(f: Record<string, string[]>) => {
-          if (activeTab !== "all") return
-          if (f.status && f.status.length > 0) {
-            setStatusFilter(f.status[0])
-          } else {
-            setStatusFilter("all")
-          }
-        }}
         rowActions={[
           {
             label: "Approve",

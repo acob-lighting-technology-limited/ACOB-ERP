@@ -6,6 +6,7 @@ export interface CorrespondenceApprovalEmailPayload {
   referenceNumber: string
   subject: string
   approverName: string
+  letterType?: string | null
   ctaPath?: string
 }
 
@@ -23,6 +24,7 @@ function buildHtml(payload: Omit<CorrespondenceApprovalEmailPayload, "to">) {
   const ref = escapeHtml(payload.referenceNumber)
   const subj = escapeHtml(payload.subject)
   const approver = escapeHtml(payload.approverName)
+  const typeLabel = (payload.letterType || "external").toLowerCase() === "internal" ? "Internal" : "External"
 
   return (
     "<!DOCTYPE html>" +
@@ -53,10 +55,14 @@ function buildHtml(payload: Omit<CorrespondenceApprovalEmailPayload, "to">) {
     '<img src="https://erp.acoblighting.com/images/acob-logo-dark.png" height="65" alt="ACOB Lighting">' +
     "</td></tr></table>" +
     '<div class="wrapper">' +
-    '<div class="title">Correspondence Approved</div>' +
+    '<div class="title">' +
+    typeLabel +
+    " Correspondence Approved</div>" +
     '<p class="text">Your correspondence has been reviewed and <strong>approved</strong> by <strong>' +
     approver +
-    "</strong>. It is now ready to proceed.</p>" +
+    "</strong>. Your <strong>" +
+    typeLabel.toLowerCase() +
+    "</strong> correspondence is now ready to proceed.</p>" +
     '<div class="card">' +
     '<div class="card-header">Reference Details</div>' +
     '<div class="card-row"><div class="card-label">Reference Number</div>' +
@@ -91,10 +97,11 @@ function buildHtml(payload: Omit<CorrespondenceApprovalEmailPayload, "to">) {
 export async function sendCorrespondenceApprovalEmail(payload: CorrespondenceApprovalEmailPayload) {
   const recipients = Array.from(new Set(payload.to.map((e) => e.trim().toLowerCase()).filter(Boolean)))
   if (!recipients.length) return
+  const typeLabel = (payload.letterType || "external").toLowerCase() === "internal" ? "Internal" : "External"
   await sendNotificationEmail({
     from: `ACOB Correspondence System <notifications@${ORG_PRIMARY_DOMAIN}>`,
     to: recipients,
-    subject: `Correspondence Approved: ${payload.referenceNumber}`,
+    subject: `${typeLabel} Correspondence Approved: ${payload.referenceNumber}`,
     html: buildHtml(payload),
   })
 }

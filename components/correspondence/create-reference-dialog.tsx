@@ -35,6 +35,7 @@ interface RequesterOption {
 
 export interface CreateReferenceForm {
   department_name: string
+  recipient_department_name: string
   letter_type: string
   category: string
   custom_category_name: string
@@ -58,7 +59,7 @@ interface CreateReferenceDialogProps {
   isSaving: boolean
   departmentCodes: DepartmentCodeOption[]
   currentUserId: string
-  currentUserName: string
+  currentUserName?: string
   mode?: "create" | "edit"
 }
 
@@ -78,6 +79,7 @@ export function CreateReferenceDialog({
 }: CreateReferenceDialogProps) {
   const isEditMode = mode === "edit"
   const set = (patch: Partial<CreateReferenceForm>) => onFormChange({ ...form, ...patch })
+  const isInternal = (form.letter_type || "external") === "internal"
 
   const [categories, setCategories] = useState<CategoryOption[]>([])
   const [requesters, setRequesters] = useState<RequesterOption[]>([])
@@ -92,44 +94,16 @@ export function CreateReferenceDialog({
       .catch(() => {})
   }, [])
 
-  useEffect(() => {
-    if (!form.department_name) {
-      setRequesters([])
-      set({ requester_id: "" })
-      return
-    }
-    setRequestersLoading(true)
-    // Clear requester immediately when department changes
-    set({ requester_id: "" })
-    fetch(`/api/correspondence/requesters?department_name=${encodeURIComponent(form.department_name)}`)
-      .then((r) => r.json())
-      .then((json) => {
-        if (json.data) {
-          const list = json.data as RequesterOption[]
-          setRequesters(list)
-          // Auto-select current user only if they belong to this department
-          const currentUserInDept = list.some((r) => r.id === currentUserId)
-          if (currentUserInDept) {
-            set({ requester_id: currentUserId })
-          }
-        }
-      })
-      .catch(() => {})
-      .finally(() => setRequestersLoading(false))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.department_name])
-
   const options = departmentCodes.map((dept) => ({
     ...dept,
     displayName: dept.department_name,
     displayCode: dept.department_code,
   }))
+  const mdDepartment = options.find((dept) => dept.department_code.toUpperCase() === "MD")
+  const selectedRecipientDepartment =
+    options.find((dept) => dept.department_name === form.recipient_department_name) || null
 
   const isCustomCategory = form.category === CUSTOM_CATEGORY_SENTINEL
-
-  const handleRequesterChange = (requesterId: string) => {
-    set({ requester_id: requesterId })
-  }
 
   const handleRecipientCodeInput = (value: string) => {
     set({ recipient_code: value.toUpperCase().replace(/[^A-Z0-9\-]/g, "") })
@@ -138,6 +112,60 @@ export function CreateReferenceDialog({
   const handleCustomCategoryCodeInput = (value: string) => {
     set({ custom_category_code: value.toUpperCase().replace(/[^A-Z0-9\-]/g, "") })
   }
+
+  const handleRequesterChange = (requesterId: string) => {
+    set({ requester_id: requesterId })
+  }
+
+  useEffect(() => {
+    if (!isInternal) return
+    const nextDepartmentName = mdDepartment?.department_name || ""
+    const nextRecipientCode = selectedRecipientDepartment?.department_code || ""
+    const nextRecipientName = selectedRecipientDepartment?.department_name || ""
+
+    if (
+      form.department_name !== nextDepartmentName ||
+      form.recipient_code !== nextRecipientCode ||
+      form.recipient_name !== nextRecipientName
+    ) {
+      set({
+        department_name: nextDepartmentName,
+        recipient_code: nextRecipientCode,
+        recipient_name: nextRecipientName,
+      })
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInternal, mdDepartment?.department_name, selectedRecipientDepartment?.department_code])
+
+  useEffect(() => {
+    if (!form.department_name || isEditMode) {
+      setRequesters([])
+      return
+    }
+
+    setRequestersLoading(true)
+    fetch(`/api/correspondence/requesters?department_name=${encodeURIComponent(form.department_name)}`)
+      .then((r) => r.json())
+      .then((json) => {
+        const list = (json.data || []) as RequesterOption[]
+        const hasCurrentUser = list.some((row) => row.id === currentUserId)
+        const merged = hasCurrentUser
+          ? list
+          : [{ id: currentUserId, full_name: currentUserName || "Current user" }, ...list]
+        setRequesters(merged)
+        if (!form.requester_id) {
+          set({ requester_id: currentUserId })
+        }
+      })
+      .catch(() => {
+        setRequesters([{ id: currentUserId, full_name: currentUserName || "Current user" }])
+        if (!form.requester_id) {
+          set({ requester_id: currentUserId })
+        }
+      })
+      .finally(() => setRequestersLoading(false))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.department_name, isEditMode, currentUserId, currentUserName])
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -166,11 +194,11 @@ export function CreateReferenceDialog({
                   {
                     label: "Reference format",
                     value:
-                      "References follow the format ACOB/{DEPT}/{RECIPIENT}/{YEAR}/{NNN} — e.g. ACOB/MD/AEDC/2026/001. Category is for classification only and does not appear in the reference number.",
+                      "References follow ACOB/{REQUEST_DEPT}/{RECIPIENT_CODE}/{YEAR}/{NNN}. Internal uses recipient department code as recipient code.",
                   },
                   {
                     label: "Requested by",
-                    value: "Select the department first, then pick the person who is requesting the letter.",
+                    value: "Defaults to your account, but can be changed before submit.",
                   },
                 ]}
               />
@@ -242,22 +270,59 @@ export function CreateReferenceDialog({
           </div>
 
           {/* Recipient Name */}
-          <div className="space-y-2">
-            <Label>Recipient Name</Label>
-            <Input
-              value={form.recipient_name}
-              onChange={(e) => set({ recipient_name: e.target.value })}
-              placeholder="e.g. Abuja Electricity Distribution Company"
-            />
-          </div>
+          {!isInternal ? (
+            <div className="space-y-2">
+              <Label>Recipient Name</Label>
+              <Input
+                value={form.recipient_name}
+                onChange={(e) => set({ recipient_name: e.target.value })}
+                placeholder="e.g. Abuja Electricity Distribution Company"
+              />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label>
+                Recipient Department <span className="text-destructive">*</span>
+              </Label>
+              {isEditMode ? (
+                <div className="text-muted-foreground bg-muted/40 flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
+                  <Lock className="h-3 w-3 shrink-0" />
+                  {form.recipient_department_name || "—"}
+                </div>
+              ) : (
+                <Select
+                  value={form.recipient_department_name}
+                  onValueChange={(value) =>
+                    set({
+                      recipient_department_name: value,
+                    })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select recipient department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {options.map((dept) => (
+                      <SelectItem key={dept.department_name} value={dept.department_name}>
+                        {dept.displayName} ({dept.displayCode})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          )}
 
           {/* Recipient Code */}
           <div className="space-y-2">
-            <Label>Recipient Code {!isEditMode && <span className="text-destructive">*</span>}</Label>
-            {isEditMode ? (
+            <Label>
+              {isInternal ? "Recipient Dept Code" : "Recipient Code"}{" "}
+              {!isEditMode && <span className="text-destructive">*</span>}
+            </Label>
+            {isEditMode || isInternal ? (
               <div className="text-muted-foreground bg-muted/40 flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
                 <Lock className="h-3 w-3 shrink-0" />
-                {form.recipient_code}
+                {form.recipient_code || "—"}
               </div>
             ) : (
               <>
@@ -273,13 +338,13 @@ export function CreateReferenceDialog({
             )}
           </div>
 
-          {/* Department */}
+          {/* Request Department */}
           <div className="space-y-2">
-            <Label>Department {!isEditMode && <span className="text-destructive">*</span>}</Label>
-            {isEditMode ? (
+            <Label>Request Department {!isEditMode && <span className="text-destructive">*</span>}</Label>
+            {isEditMode || isInternal ? (
               <div className="text-muted-foreground bg-muted/40 flex items-center gap-2 rounded-md border px-3 py-2 text-sm">
                 <Lock className="h-3 w-3 shrink-0" />
-                {form.department_name}
+                {form.department_name || (isInternal ? "Executive Management" : "—")}
               </div>
             ) : (
               <Select value={form.department_name} onValueChange={(value) => set({ department_name: value })}>
@@ -297,17 +362,25 @@ export function CreateReferenceDialog({
             )}
           </div>
 
-          {/* Requested by — create mode only */}
+          {/* Due Date */}
+          <div className="space-y-2">
+            <Label>
+              Due Date <span className="text-destructive">*</span>
+            </Label>
+            <Input type="date" value={form.due_date} onChange={(e) => set({ due_date: e.target.value })} required />
+          </div>
+
+          {/* Requested by */}
           {!isEditMode && (
             <div className="space-y-2">
               <Label>Requested by</Label>
               <Select
-                value={form.requester_id || ""}
+                value={form.requester_id || currentUserId}
                 onValueChange={handleRequesterChange}
                 disabled={!form.department_name || requestersLoading}
               >
                 <SelectTrigger>
-                  <SelectValue placeholder={requestersLoading ? "Loading..." : "Select person"} />
+                  <SelectValue placeholder={requestersLoading ? "Loading..." : "Select requester"} />
                 </SelectTrigger>
                 <SelectContent>
                   {requesters.map((r) => (
@@ -318,19 +391,8 @@ export function CreateReferenceDialog({
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-muted-foreground text-xs">
-                {!form.department_name ? "Select a department first." : "Person who is requesting the letter."}
-              </p>
             </div>
           )}
-
-          {/* Due Date */}
-          <div className="space-y-2">
-            <Label>
-              Due Date <span className="text-destructive">*</span>
-            </Label>
-            <Input type="date" value={form.due_date} onChange={(e) => set({ due_date: e.target.value })} required />
-          </div>
 
           {/* Notes */}
           <div className="space-y-2 md:col-span-2">
