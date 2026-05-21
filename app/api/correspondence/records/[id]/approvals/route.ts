@@ -9,7 +9,7 @@ import {
   getExecutiveDepartmentName,
 } from "@/lib/correspondence/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
-import { sendCorrespondenceApprovalEmail } from "@/lib/correspondence/mailer"
+import { sendCorrespondenceDecisionEmail } from "@/lib/correspondence/mailer"
 import { getRequestScope } from "@/lib/admin/api-scope"
 import { logger } from "@/lib/logger"
 import { normalizeDepartmentName } from "@/shared/departments"
@@ -202,12 +202,13 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
           Boolean
         ) as string[]
         const approverName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || "Administrator"
-        await sendCorrespondenceApprovalEmail({
+        await sendCorrespondenceDecisionEmail({
           to: emails,
           referenceNumber: updatedRecord.reference_number,
           subject: updatedRecord.subject,
           approverName,
           letterType: updatedRecord.letter_type,
+          decision: "approved",
         })
       } catch (mailErr) {
         log.error({ err: String(mailErr) }, "Correspondence approval email failed (bypass)")
@@ -401,7 +402,11 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       log.error({ err: String(notifyError) }, "Correspondence approval notification error:")
     }
 
-    if (nextRecordStatus === "approved") {
+    if (
+      nextRecordStatus === "approved" ||
+      nextRecordStatus === "rejected" ||
+      nextRecordStatus === "returned_for_correction"
+    ) {
       try {
         const dataClient = getServiceRoleClientOrFallback(supabase)
         const { data: originatorProfile } = await dataClient
@@ -413,15 +418,16 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
           Boolean
         ) as string[]
         const approverName = [profile.first_name, profile.last_name].filter(Boolean).join(" ").trim() || "Approver"
-        await sendCorrespondenceApprovalEmail({
+        await sendCorrespondenceDecisionEmail({
           to: emails,
           referenceNumber: updatedRecord.reference_number,
           subject: updatedRecord.subject,
           approverName,
           letterType: updatedRecord.letter_type,
+          decision: nextRecordStatus,
         })
       } catch (mailErr) {
-        log.error({ err: String(mailErr) }, "Correspondence approval email failed")
+        log.error({ err: String(mailErr) }, "Correspondence decision email failed")
       }
     }
 

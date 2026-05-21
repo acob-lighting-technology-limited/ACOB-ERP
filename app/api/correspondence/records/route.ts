@@ -18,6 +18,7 @@ import { getOneDriveService } from "@/lib/onedrive"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("correspondence-records")
+const MAX_REFERENCE_INSERT_RETRIES = 3
 
 type CorrespondenceListRecord = {
   department_name?: string | null
@@ -30,6 +31,26 @@ type CorrespondenceLeadCandidate = {
   lead_departments?: string[] | null
   department?: string | null
   is_department_lead?: boolean | null
+}
+
+type CreatedCorrespondenceRecord = {
+  id: string
+  reference_number: string
+  subject: string
+  status: string
+  department_name: string | null
+  assigned_department_name: string | null
+  recipient_code: string | null
+  metadata: Record<string, unknown> | null
+}
+
+function isDuplicateReferenceNumberError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false
+  const maybeError = error as { code?: string; message?: string | null }
+  return (
+    maybeError.code === "23505" &&
+    (maybeError.message || "").toLowerCase().includes("correspondence_records_reference_number_key")
+  )
 }
 
 const CreateCorrespondenceRecordSchema = z.object({
@@ -277,13 +298,30 @@ export async function POST(request: NextRequest) {
       received_at: null,
     }
 
-    const { data: created, error } = await supabase
-      .from("correspondence_records")
-      .insert(insertPayload)
-      .select("*")
-      .single()
+    let created: CreatedCorrespondenceRecord | null = null
+    let lastInsertError: unknown = null
+    for (let attempt = 1; attempt <= MAX_REFERENCE_INSERT_RETRIES; attempt += 1) {
+      const { data, error } = await supabase.from("correspondence_records").insert(insertPayload).select("*").single()
 
-    if (error) throw error
+      if (!error && data) {
+        created = data as CreatedCorrespondenceRecord
+        break
+      }
+
+      lastInsertError = error
+      if (!isDuplicateReferenceNumberError(error) || attempt === MAX_REFERENCE_INSERT_RETRIES) {
+        throw error
+      }
+
+      log.warn(
+        { attempt, err: String(error) },
+        "Detected duplicate correspondence reference number during insert; retrying"
+      )
+    }
+
+    if (!created) {
+      throw lastInsertError || new Error("Failed to create correspondence record")
+    }
 
     // Initialize approval chain immediately (record goes straight to under_review)
     try {
@@ -293,7 +331,7 @@ export async function POST(request: NextRequest) {
         .eq("id", originatorId)
         .single()
 
-      const originatorDept = originatorProfile?.department || created.department_name
+      const originatorDept = originatorProfile?.department || String(created.department_name || "")
 
       const { data: deptLeadCandidates } = await dataClient
         .from("profiles")
@@ -331,12 +369,12 @@ export async function POST(request: NextRequest) {
         await supabase
           .from("correspondence_records")
           .update({ status: "approved", approved_at: now })
-          .eq("id", created.id)
+          .eq("id", String(created.id))
         created.status = "approved"
         if (execLead?.id) {
           await dataClient.from("correspondence_approvals").upsert(
             {
-              correspondence_id: created.id,
+              correspondence_id: String(created.id),
               approval_stage: "exec_review",
               approver_id: execLead.id,
               status: "approved",
@@ -351,7 +389,7 @@ export async function POST(request: NextRequest) {
         if (execLead?.id) {
           await dataClient.from("correspondence_approvals").upsert(
             {
-              correspondence_id: created.id,
+              correspondence_id: String(created.id),
               approval_stage: "exec_review",
               approver_id: execLead.id,
               status: "pending",
@@ -364,12 +402,12 @@ export async function POST(request: NextRequest) {
             p_type: "approval_request",
             p_category: "approvals",
             p_title: "Correspondence pending your approval",
-            p_message: `${created.reference_number} - ${created.subject}`,
+            p_message: `${String(created.reference_number || "")} - ${String(created.subject || "")}`,
             p_priority: "normal",
             p_link_url: "/admin/correspondence",
             p_actor_id: user.id,
             p_entity_type: "correspondence_record",
-            p_entity_id: created.id,
+            p_entity_id: String(created.id),
             p_rich_content: { stage: "exec_review" },
           })
         }
@@ -377,7 +415,7 @@ export async function POST(request: NextRequest) {
         if (deptLead?.id) {
           await dataClient.from("correspondence_approvals").upsert(
             {
-              correspondence_id: created.id,
+              correspondence_id: String(created.id),
               approval_stage: "dept_review",
               approver_id: deptLead.id,
               status: "pending",
@@ -390,19 +428,19 @@ export async function POST(request: NextRequest) {
             p_type: "approval_request",
             p_category: "approvals",
             p_title: "Correspondence pending your approval",
-            p_message: `${created.reference_number} - ${created.subject}`,
+            p_message: `${String(created.reference_number || "")} - ${String(created.subject || "")}`,
             p_priority: "normal",
             p_link_url: "/admin/correspondence",
             p_actor_id: user.id,
             p_entity_type: "correspondence_record",
-            p_entity_id: created.id,
+            p_entity_id: String(created.id),
             p_rich_content: { stage: "dept_review" },
           })
         }
         if (execLead?.id) {
           await dataClient.from("correspondence_approvals").upsert(
             {
-              correspondence_id: created.id,
+              correspondence_id: String(created.id),
               approval_stage: "exec_review",
               approver_id: execLead.id,
               status: "pending",
@@ -413,14 +451,17 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (chainError) {
-      log.error({ err: String(chainError), recordId: created.id }, "Approval chain setup failed on create")
+      log.error(
+        { err: String(chainError), recordId: String(created.id || "") },
+        "Approval chain setup failed on create"
+      )
     }
 
     try {
       if (attachments.length > 0) {
         const onedrive = getOneDriveService()
         if (onedrive.isEnabled()) {
-          const basePath = `/correspondence/${created.reference_number}`
+          const basePath = `/correspondence/${String(created.reference_number || "")}`
           try {
             await onedrive.createFolder(basePath)
           } catch {
@@ -451,12 +492,12 @@ export async function POST(request: NextRequest) {
                 attachments: uploadedFiles,
               },
             })
-            .eq("id", created.id)
+            .eq("id", String(created.id))
         }
       }
 
       await appendCorrespondenceEvent({
-        correspondenceId: created.id,
+        correspondenceId: String(created.id),
         actorId: user.id,
         eventType: "correspondence_created",
         newStatus: created.status,

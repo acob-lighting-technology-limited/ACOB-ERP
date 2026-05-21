@@ -30,7 +30,7 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
-const EDITABLE_STATUSES = ["under_review", "returned_for_correction", "rejected"]
+const EDITABLE_STATUSES = ["under_review", "returned_for_correction"]
 
 export function PortalReferenceGeneratorContent({
   currentViewerName,
@@ -40,6 +40,15 @@ export function PortalReferenceGeneratorContent({
   departmentCodes,
 }: PortalReferenceGeneratorContentProps) {
   const statusLabel = (status: string) => (status === "under_review" ? "Sent for review" : formatName(status))
+  const statusBadgeClass = (status: string) => {
+    if (status === "approved") return "bg-emerald-500/10 text-emerald-700 border-emerald-200"
+    if (status === "rejected") return "bg-red-500/10 text-red-700 border-red-200"
+    if (status === "returned_for_correction") return "bg-amber-500/10 text-amber-700 border-amber-200"
+    if (status === "under_review") return "bg-blue-500/10 text-blue-700 border-blue-200"
+    if (status === "draft") return "bg-slate-500/10 text-slate-700 border-slate-200"
+    if (status === "sent" || status === "filed") return "bg-violet-500/10 text-violet-700 border-violet-200"
+    return "bg-muted text-foreground border-border"
+  }
 
   const initialDepartment = departmentCodes.some((item) => item.department_name === currentViewerDepartment)
     ? currentViewerDepartment
@@ -241,7 +250,7 @@ export function PortalReferenceGeneratorContent({
 
     setIsSaving(true)
     try {
-      const isResubmit = editingRecord.status === "rejected"
+      const isResubmit = editingRecord.status === "returned_for_correction"
       const metadata = editForm.metadata_text.trim() ? { notes: editForm.metadata_text.trim() } : {}
       const body: Record<string, unknown> = {
         subject: editForm.subject.trim(),
@@ -319,7 +328,7 @@ export function PortalReferenceGeneratorContent({
         label: "Status",
         sortable: true,
         accessor: (row) => row.status,
-        render: (row) => <Badge>{statusLabel(row.status)}</Badge>,
+        render: (row) => <Badge className={statusBadgeClass(row.status)}>{statusLabel(row.status)}</Badge>,
       },
       {
         key: "subject",
@@ -473,9 +482,9 @@ export function PortalReferenceGeneratorContent({
               <p className="text-sm">
                 <span className="text-muted-foreground">Action Required:</span> {row.action_required ? "Yes" : "No"}
               </p>
-              {row.status === "rejected" && (
-                <p className="text-destructive text-sm md:col-span-2">
-                  <span className="font-medium">Rejected</span> — you can edit and resubmit, or delete this record.
+              {row.status === "returned_for_correction" && (
+                <p className="text-sm text-amber-700 md:col-span-2">
+                  <span className="font-medium">Returned for correction</span> — you can edit and resubmit this record.
                 </p>
               )}
             </div>
