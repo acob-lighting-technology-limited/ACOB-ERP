@@ -105,6 +105,7 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
         sortable: true,
         accessor: (row) => row.category || "-",
         render: (row) => <span>{row.category || "-"}</span>,
+        hideOnMobile: true,
       },
       {
         key: "status",
@@ -119,6 +120,7 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
         sortable: true,
         accessor: (row) => row.updated_at,
         render: (row) => <span className="text-muted-foreground text-xs">{formatDate(row.updated_at)}</span>,
+        hideOnMobile: true,
       },
     ],
     []

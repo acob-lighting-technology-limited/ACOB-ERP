@@ -36,8 +36,8 @@ const statusConfig: Record<
     bgColor: "bg-amber-100 dark:bg-amber-900/50 border-amber-200 dark:border-amber-800",
     icon: AlertTriangle,
   },
-  separated: {
-    label: "Separated",
+  exited: {
+    label: "Exited",
     variant: "destructive",
     color: "text-red-700 dark:text-red-400",
     bgColor: "bg-red-100 dark:bg-red-900/50 border-red-200 dark:border-red-800",

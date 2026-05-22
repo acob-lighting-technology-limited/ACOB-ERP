@@ -205,12 +205,12 @@ export async function updateSession(request: NextRequest) {
           return NextResponse.redirect(url)
         }
 
-        // Handle separated employees - sign out and redirect to login with error
-        if (status === "separated") {
+        // Handle exited employees - sign out and redirect to login with error
+        if (status === "exited") {
           // Clear session cookies and redirect to login
           const url = request.nextUrl.clone()
           url.pathname = "/auth/login"
-          url.searchParams.set("error", "account_separated")
+          url.searchParams.set("error", "account_exited")
 
           // Sign out the user
           await supabase.auth.signOut()
@@ -266,12 +266,12 @@ export async function updateSession(request: NextRequest) {
         return NextResponse.redirect(url)
       }
 
-      // Handle separated employees - sign out and redirect to login with error
-      if (status === "separated") {
+      // Handle exited employees - sign out and redirect to login with error
+      if (status === "exited") {
         // Clear session cookies and redirect to login
         const url = request.nextUrl.clone()
         url.pathname = "/auth/login"
-        url.searchParams.set("error", "account_separated")
+        url.searchParams.set("error", "account_exited")
 
         // Sign out the user
         await supabase.auth.signOut()

@@ -58,7 +58,7 @@ export interface EmployeeStatusChange {
   new_status: EmploymentStatus
   reason?: string
   suspension_end_date?: string // For suspended status
-  separation_date?: string // For separated status
+  separation_date?: string // For exited status
 }
 
 export interface EmployeeFormData {

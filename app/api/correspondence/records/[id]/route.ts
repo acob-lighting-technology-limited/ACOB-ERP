@@ -75,6 +75,7 @@ async function ensureReferenceNumberOnApproval(params: {
     {
       p_department_code: departmentCode,
       p_recipient_code: recipientCode,
+      p_letter_type: String(params.record.letter_type || "external"),
       p_category_code: categoryCode,
       p_company_code: String(params.record.company_code || "ACOB"),
       p_reference_year: referenceYear,

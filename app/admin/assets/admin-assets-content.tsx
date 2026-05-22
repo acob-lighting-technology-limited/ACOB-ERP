@@ -1277,6 +1277,7 @@ export function AdminAssetsContent({
       sortable: true,
       accessor: (asset) => asset.acquisition_year,
       align: "center",
+      hideOnMobile: true,
     },
     {
       key: "status",
@@ -1325,6 +1326,7 @@ export function AdminAssetsContent({
         </Badge>
       ),
       align: "center",
+      hideOnMobile: true,
     },
   ]
 
@@ -1591,7 +1593,6 @@ export function AdminAssetsContent({
         emptyDescription="Add the first asset to start tracking inventory, assignments, and maintenance issues."
         emptyIcon={Package}
         skeletonRows={8}
-        minWidth="1280px"
       />
       {/* asset Dialog */}
       <AssetFormDialog

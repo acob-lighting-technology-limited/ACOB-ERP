@@ -77,6 +77,7 @@ export function ProfileContent({
     <div className="container mx-auto max-w-full space-y-6 p-4 md:p-6 lg:p-8">
       <ProfileHero profile={profile} onEdit={() => setIsEditOpen(true)} />
       <ContactInfoCard profile={profile} />
+      <PersonalRecentActivityFeed activity={recentActivity} />
       <ActivityTabs
         tasks={tasks}
         assets={assets}
@@ -88,7 +89,6 @@ export function ProfileContent({
         leave={leave}
         attendance={attendance}
       />
-      <PersonalRecentActivityFeed activity={recentActivity} />
       <ProfileEditDialog open={isEditOpen} onOpenChange={setIsEditOpen} profile={profile} />
     </div>
   )

@@ -191,6 +191,7 @@ export default function CategoriesPage() {
         accessor: (category) => category.description || "",
         resizable: true,
         initialWidth: 280,
+        hideOnMobile: true,
         render: (category) => (
           <span className="text-muted-foreground line-clamp-2 text-sm">{category.description || "No description"}</span>
         ),

@@ -134,6 +134,7 @@ export default function RemoteAccessPage() {
       label: "Department",
       sortable: true,
       accessor: (e) => e.department,
+      hideOnMobile: true,
       render: (e) => <span className="text-sm">{e.department || "—"}</span>,
     },
     {
@@ -179,6 +180,7 @@ export default function RemoteAccessPage() {
       label: "Last Remote Check-In",
       sortable: true,
       accessor: (e) => e.last_remote_checkin ?? "",
+      hideOnMobile: true,
       render: (e) => (
         <span className={`text-sm ${!e.last_remote_checkin ? "text-muted-foreground" : ""}`}>
           {formatDate(e.last_remote_checkin)}

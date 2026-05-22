@@ -96,18 +96,21 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
         r.reviewer_id === currentUserId
           ? "You (Self)"
           : `${r.reviewer?.first_name || ""} ${r.reviewer?.last_name || ""}`.trim(),
+      hideOnMobile: true,
     },
     {
       key: "kpi",
       label: "KPI",
       accessor: (r) => normalizeMetric(r.kpi_score) ?? 0,
       render: (r) => <span>{formatMetric(r.kpi_score)}</span>,
+      hideOnMobile: true,
     },
     {
       key: "cbt",
       label: "CBT",
       accessor: (r) => normalizeMetric(r.cbt_score) ?? 0,
       render: (r) => <span>{formatMetric(r.cbt_score)}</span>,
+      hideOnMobile: true,
     },
     {
       key: "final",

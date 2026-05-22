@@ -298,41 +298,35 @@ export default function LoginPage() {
       <div className="w-full max-w-6xl">
         <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_420px] xl:gap-8">
           <Card className="border-2 shadow-xl">
-            <CardHeader className="space-y-4 pb-6">
-              <div className="mb-2 flex justify-center lg:hidden">
+            <CardHeader className="pb-4">
+              <div className="mb-4 flex justify-center lg:hidden">
                 <Image src={logoSrc} alt="ACOB Lighting" width={220} height={56} priority className="h-14 w-auto" />
               </div>
-              <div className="space-y-2">
-                <h1 className="text-3xl font-bold tracking-tight lg:text-4xl">Welcome Back</h1>
-                <p className="text-muted-foreground text-sm lg:text-base">Access your ACOB workspace securely.</p>
-              </div>
-              <CardTitle className="text-xl font-semibold lg:text-2xl">
-                {step === "credentials" ? "Sign In" : "Verify Your Code"}
+              <CardTitle className="text-2xl font-bold tracking-tight lg:text-3xl">
+                {step === "credentials" ? "Welcome back" : "Check your email"}
               </CardTitle>
-              <CardDescription className="text-sm lg:text-base">
-                {step === "credentials"
-                  ? "Choose your sign-in method to continue."
-                  : `Enter the 6-digit code sent to ${email}`}
+              <CardDescription className="text-sm">
+                {step === "credentials" ? "Sign in to your ACOB workspace." : `We sent a 6-digit code to ${email}`}
               </CardDescription>
             </CardHeader>
             <CardContent className="pb-8">
               {step === "credentials" ? (
-                <div className="space-y-4">
+                <div className="space-y-5">
                   {/* Login Method Tabs */}
-                  <div className="bg-muted flex gap-2 rounded-lg p-1.5">
+                  <div className="bg-muted grid grid-cols-2 gap-1 rounded-lg p-1">
                     <button
                       type="button"
                       onClick={() => {
                         setLoginMethod("password")
                         setError(null)
                       }}
-                      className={`flex flex-1 items-center justify-center gap-2 rounded-md px-6 py-3 text-sm font-semibold transition-all ${
+                      className={`flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all ${
                         loginMethod === "password"
-                          ? "bg-background ring-primary/20 shadow-md ring-2"
-                          : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      <KeyRound className="h-4 w-4" />
+                      <KeyRound className="h-3.5 w-3.5" />
                       Password
                     </button>
                     <button
@@ -341,13 +335,13 @@ export default function LoginPage() {
                         setLoginMethod("otp")
                         setError(null)
                       }}
-                      className={`flex flex-1 items-center justify-center gap-2 rounded-md px-6 py-3 text-sm font-semibold transition-all ${
+                      className={`flex items-center justify-center gap-2 rounded-md px-4 py-2.5 text-sm font-medium transition-all ${
                         loginMethod === "otp"
-                          ? "bg-background ring-primary/20 shadow-md ring-2"
-                          : "text-muted-foreground hover:text-foreground hover:bg-background/50"
+                          ? "bg-background text-foreground shadow-sm"
+                          : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      <Mail className="h-4 w-4" />
+                      <Mail className="h-3.5 w-3.5" />
                       One-Time Code
                     </button>
                   </div>
@@ -457,20 +451,15 @@ export default function LoginPage() {
                   )}
 
                   {/* First Time Setup Link */}
-                  <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-center dark:border-blue-900 dark:bg-blue-950/30">
-                    <p className="text-sm text-blue-800 dark:text-blue-200">
-                      <span className="font-semibold">First time logging in?</span>{" "}
-                      <Link
-                        href="/auth/setup-account"
-                        className="font-bold text-blue-600 underline underline-offset-4 hover:text-blue-700 dark:text-blue-400"
-                      >
-                        Set up your account here →
-                      </Link>
-                    </p>
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      Enter your company email to receive a link to create your password
-                    </p>
-                  </div>
+                  <p className="text-muted-foreground text-center text-sm">
+                    First time?{" "}
+                    <Link
+                      href="/auth/setup-account"
+                      className="text-primary font-medium underline-offset-4 hover:underline"
+                    >
+                      Set up your account
+                    </Link>
+                  </p>
                 </div>
               ) : (
                 /* OTP Verification Form */

@@ -312,6 +312,7 @@ export function PortalReferenceGeneratorContent({
         label: "Department",
         sortable: true,
         accessor: (row) => row.department_name || row.assigned_department_name || "-",
+        hideOnMobile: true,
       },
       {
         key: "status",

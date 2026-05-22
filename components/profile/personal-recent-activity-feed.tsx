@@ -1,9 +1,10 @@
+"use client"
+
 import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowRight, ScrollText } from "lucide-react"
 import { EmptyState } from "@/components/ui/patterns"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 export interface PersonalRecentActivityItem {
   id: string
@@ -42,12 +43,17 @@ function resolveActivityRoute(moduleKey: string): string {
 }
 
 function formatDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  const d = new Date(dateString)
+  const now = new Date()
+  const diff = now.getTime() - d.getTime()
+  const mins = Math.floor(diff / 60000)
+  const hours = Math.floor(diff / 3600000)
+  const days = Math.floor(diff / 86400000)
+  if (mins < 1) return "just now"
+  if (mins < 60) return `${mins}m ago`
+  if (hours < 24) return `${hours}h ago`
+  if (days < 7) return `${days}d ago`
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
 }
 
 interface PersonalRecentActivityFeedProps {
@@ -56,62 +62,47 @@ interface PersonalRecentActivityFeedProps {
 
 export function PersonalRecentActivityFeed({ activity }: PersonalRecentActivityFeedProps) {
   return (
-    <Card className="border">
-      <CardHeader className="bg-muted/30 border-b px-4 py-3">
-        <CardTitle className="flex items-center gap-2 text-sm md:text-base">
-          <ScrollText className="h-4 w-4" />
-          Recent Activity
-        </CardTitle>
-        <p className="text-muted-foreground text-xs sm:text-sm">Latest cross-module changes recorded in the system.</p>
+    <Card>
+      <CardHeader className="px-4 py-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-sm">
+            <ScrollText className="text-muted-foreground h-4 w-4" />
+            Recent Activity
+          </CardTitle>
+          {activity.length > 0 && <span className="text-muted-foreground text-xs">{activity.length} entries</span>}
+        </div>
       </CardHeader>
-      <CardContent className="p-3">
+      <CardContent className="p-0">
         {activity.length > 0 ? (
-          <div className="h-[22rem] overflow-x-auto overflow-y-auto rounded-lg border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[50px]">S/N</TableHead>
-                  <TableHead>Activity</TableHead>
-                  <TableHead>Module</TableHead>
-                  <TableHead>When</TableHead>
-                  <TableHead className="text-right">Action</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {activity.map((item, index) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                    <TableCell className="font-medium">
-                      <span className="font-semibold">{item.actorName}</span> {item.actionLabel}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className="text-xs">
+          <ul className="max-h-72 divide-y overflow-y-auto">
+            {activity.map((item) => (
+              <li key={item.id}>
+                <Link
+                  href={resolveActivityRoute(item.moduleKey)}
+                  className="hover:bg-muted/50 flex items-center gap-3 px-4 py-2.5 transition-colors"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm leading-snug">
+                      <span className="text-muted-foreground">{item.actionLabel}</span>
+                    </p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <Badge variant="secondary" className="px-1.5 py-0 text-[10px]">
                         {item.moduleLabel}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-xs sm:text-sm">
-                      {formatDate(item.createdAt)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <Link
-                        href={resolveActivityRoute(item.moduleKey)}
-                        className="text-primary hover:text-primary/80 inline-flex items-center gap-1 text-xs font-medium"
-                      >
-                        Open
-                        <ArrowRight className="h-3.5 w-3.5" />
-                      </Link>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                      <span className="text-muted-foreground text-[10px]">{formatDate(item.createdAt)}</span>
+                    </div>
+                  </div>
+                  <ArrowRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                </Link>
+              </li>
+            ))}
+          </ul>
         ) : (
           <EmptyState
             title="No recent activity yet"
             description="Your latest actions across modules will appear here."
             icon={ScrollText}
-            className="border-0 p-4"
+            className="border-0 py-8"
           />
         )}
       </CardContent>

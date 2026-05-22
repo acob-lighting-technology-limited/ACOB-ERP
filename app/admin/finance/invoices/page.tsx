@@ -179,6 +179,7 @@ export default function InvoicesPage() {
         key: "issue_date",
         label: "Issue Date",
         sortable: true,
+        hideOnMobile: true,
         accessor: (invoice) => invoice.issue_date,
         render: (invoice) => formatDate(invoice.issue_date),
       },
@@ -186,6 +187,7 @@ export default function InvoicesPage() {
         key: "due_date",
         label: "Due Date",
         sortable: true,
+        hideOnMobile: true,
         accessor: (invoice) => invoice.due_date,
         render: (invoice) => (
           <div className="space-y-1">

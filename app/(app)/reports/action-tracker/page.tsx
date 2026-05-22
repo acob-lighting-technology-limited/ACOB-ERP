@@ -262,6 +262,7 @@ export default function ActionTrackerPortal() {
         key: "point_breakdown",
         label: "Breakdown",
         sortable: true,
+        hideOnMobile: true,
         accessor: (row) =>
           `${row.notStartedPoints}/${row.inProgressPoints}/${row.pendingPoints}/${row.completedPoints}`,
         render: (row) => (

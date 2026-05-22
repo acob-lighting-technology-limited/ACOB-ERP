@@ -459,6 +459,7 @@ export function PaymentsTable({
       key: "dateSortValue",
       label: "Date / Next Due",
       sortable: true,
+      hideOnMobile: true,
       accessor: (row) => row.dateSortValue,
       render: (row) => row.dateLabel,
     },

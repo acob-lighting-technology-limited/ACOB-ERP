@@ -309,6 +309,7 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
             {n.category}
           </Badge>
         ),
+        hideOnMobile: true,
       },
       {
         key: "priority",
@@ -320,6 +321,7 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
             {n.priority}
           </Badge>
         ),
+        hideOnMobile: true,
       },
       {
         key: "timestamp",
@@ -329,6 +331,7 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
         render: (n) => (
           <span className="text-muted-foreground text-xs whitespace-nowrap">{formatRelativeTime(n.created_at)}</span>
         ),
+        hideOnMobile: true,
       },
     ],
     []

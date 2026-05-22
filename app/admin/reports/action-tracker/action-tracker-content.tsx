@@ -353,6 +353,7 @@ export function ActionTrackerContent({
             NS: {row.notStartedPoints} | IP: {row.inProgressPoints} | P: {row.pendingPoints} | C: {row.completedPoints}
           </span>
         ),
+        hideOnMobile: true,
       },
     ],
     []

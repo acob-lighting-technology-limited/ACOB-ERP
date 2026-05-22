@@ -160,6 +160,7 @@ export function DevImpersonationContent() {
         label: "Department",
         accessor: (row) => row.department,
         sortable: true,
+        hideOnMobile: true,
       },
       {
         key: "role",

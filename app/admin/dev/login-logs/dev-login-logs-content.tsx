@@ -122,6 +122,7 @@ export function DevLoginLogsContent() {
         accessor: (row) => row.login_at,
         resizable: true,
         initialWidth: 220,
+        hideOnMobile: true,
         render: (row) => new Date(row.login_at).toLocaleString(),
       },
       {
@@ -147,12 +148,14 @@ export function DevLoginLogsContent() {
         key: "ip_address",
         label: "IP Address",
         accessor: (row) => row.ip_address || "",
+        hideOnMobile: true,
         render: (row) => row.ip_address || "-",
       },
       {
         key: "auth_method",
         label: "Method",
         accessor: (row) => row.auth_method || "unknown",
+        hideOnMobile: true,
         render: (row) => row.auth_method || "unknown",
       },
     ],

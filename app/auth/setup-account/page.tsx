@@ -235,47 +235,32 @@ function SetupAccountContent() {
       <div className="w-full max-w-6xl">
         <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_420px] xl:gap-8">
           <Card className="border-2 shadow-xl">
-            <CardHeader className="space-y-4 pb-6">
-              <div className="mb-2 flex justify-center lg:hidden">
+            <CardHeader className="pb-4">
+              <div className="mb-4 flex justify-center lg:hidden">
                 <Image src={logoSrc} alt="ACOB Lighting" width={220} height={56} priority className="h-14 w-auto" />
               </div>
-              <div className="space-y-2">
-                <h1 className="text-3xl font-bold tracking-tight lg:text-4xl">Set Up Your Account</h1>
-                <p className="text-muted-foreground text-sm lg:text-base">
-                  Create secure access to your ACOB workspace.
-                </p>
-              </div>
-              {(isSuccess || token || isRecoveryMode || emailSent) && (
-                <>
-                  <CardTitle className="flex items-center gap-2 text-xl font-semibold lg:text-2xl">
-                    {isSuccess ? (
-                      <>
-                        <CheckCircle className="h-6 w-6 text-green-600" />
-                        Activation Complete
-                      </>
-                    ) : token || isRecoveryMode ? (
-                      <>
-                        <Lock className="text-primary h-6 w-6" />
-                        {isRecoveryMode ? "Reset Your Password" : "Create Your Password"}
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="h-6 w-6 text-green-600" />
-                        Check Your Email
-                      </>
-                    )}
-                  </CardTitle>
-                  <CardDescription className="text-sm lg:text-base">
-                    {isSuccess
-                      ? "Your account is now active"
-                      : token || isRecoveryMode
-                        ? isRecoveryMode
-                          ? "Enter a new password to continue."
-                          : "Create a secure password to activate your account."
-                        : "We sent a setup link to your email."}
-                  </CardDescription>
-                </>
-              )}
+              <CardTitle className="text-2xl font-bold tracking-tight lg:text-3xl">
+                {isSuccess
+                  ? "Account activated"
+                  : token || isRecoveryMode
+                    ? isRecoveryMode
+                      ? "Reset your password"
+                      : "Create your password"
+                    : emailSent
+                      ? "Check your email"
+                      : "Set up your account"}
+              </CardTitle>
+              <CardDescription className="text-sm">
+                {isSuccess
+                  ? "Your account is now active. Redirecting to login..."
+                  : token || isRecoveryMode
+                    ? isRecoveryMode
+                      ? "Enter a new password to continue."
+                      : "Create a secure password to activate your account."
+                    : emailSent
+                      ? `We sent a setup link to ${email}`
+                      : "Enter your company email to get started."}
+              </CardDescription>
             </CardHeader>
             <CardContent className="pb-8">
               {isSuccess ? (
@@ -429,11 +414,7 @@ function SetupAccountContent() {
               ) : (
                 <form onSubmit={handleSetupAccount}>
                   <div className="flex flex-col gap-5">
-                    <FormFieldGroup
-                      label="Company Email"
-                      description="Use the email address your administrator registered you with"
-                      className="grid gap-3"
-                    >
+                    <FormFieldGroup label="Company Email" className="grid gap-3">
                       <Input
                         id="email"
                         type="email"
@@ -460,15 +441,12 @@ function SetupAccountContent() {
                   </div>
                 </form>
               )}
-              <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-center dark:border-blue-900 dark:bg-blue-950/20">
-                <p className="text-sm text-blue-900 dark:text-blue-100">
-                  <span className="font-medium">Already have a password?</span>{" "}
-                  <Link href="/auth/login" className="font-semibold underline underline-offset-4">
-                    Go to login
-                  </Link>
-                  .
-                </p>
-              </div>
+              <p className="text-muted-foreground mt-4 text-center text-sm">
+                Already have a password?{" "}
+                <Link href="/auth/login" className="text-primary font-medium underline-offset-4 hover:underline">
+                  Sign in
+                </Link>
+              </p>
             </CardContent>
           </Card>
 

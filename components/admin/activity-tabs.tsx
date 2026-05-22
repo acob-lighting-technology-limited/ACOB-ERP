@@ -6,18 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import {
-  Calendar,
-  CheckSquare,
-  Clock,
-  CreditCard,
-  FileText,
-  LifeBuoy,
-  Mail,
-  MessageSquare,
-  Package,
-} from "lucide-react"
+import { ArrowRight } from "lucide-react"
 
 export interface AdminAssetActivityRow {
   id: string
@@ -123,7 +112,7 @@ interface AdminActivityTabsProps {
   attendance: AdminAttendanceActivityRow[]
 }
 
-function getStatusColor(status: string | null): string {
+function statusColor(status: string | null): string {
   switch (status?.toLowerCase()) {
     case "completed":
     case "resolved":
@@ -150,7 +139,7 @@ function getStatusColor(status: string | null): string {
   }
 }
 
-function getPriorityColor(priority: string | null): string {
+function priorityColor(priority: string | null): string {
   switch (priority?.toLowerCase()) {
     case "urgent":
       return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
@@ -166,22 +155,27 @@ function getPriorityColor(priority: string | null): string {
   }
 }
 
-function formatDate(dateString: string | null): string {
-  if (!dateString) return "-"
-  return new Date(dateString).toLocaleDateString()
+function shortDate(dateString: string | null): string {
+  if (!dateString) return "—"
+  return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })
 }
 
-function formatTime(timeString: string | null): string {
-  if (!timeString) return "-"
-  return timeString.slice(0, 5)
-}
-
-function EmptyTab({ icon: Icon, message }: { icon: typeof Package; message: string }) {
+function EmptyTab({ label }: { label: string }) {
   return (
-    <div className="bg-muted/30 rounded-lg border py-12 text-center">
-      <Icon className="text-muted-foreground/50 mx-auto mb-3 h-10 w-10" />
-      <p className="text-muted-foreground">{message}</p>
+    <div className="py-10 text-center">
+      <p className="text-muted-foreground text-sm">No {label} found</p>
     </div>
+  )
+}
+
+function ItemRow({ href, children }: { href: string; children: React.ReactNode }) {
+  return (
+    <li className="hover:bg-muted/40 transition-colors">
+      <Link href={href} className="flex items-center gap-3 px-4 py-3">
+        <div className="min-w-0 flex-1">{children}</div>
+        <ArrowRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+      </Link>
+    </li>
   )
 }
 
@@ -197,468 +191,268 @@ export function AdminActivityTabs({
   attendance,
 }: AdminActivityTabsProps) {
   const [activeTab, setActiveTab] = useState("assets")
-  const tableContainerClass = "max-h-[20rem] overflow-y-auto overflow-x-auto rounded-lg border"
 
   const viewAllMeta = useMemo(() => {
-    switch (activeTab) {
-      case "tasks":
-        return { href: "/admin/tasks", label: "View all tasks" }
-      case "documentation":
-        return { href: "/admin/documentation", label: "View all docs" }
-      case "feedback":
-        return { href: "/admin/feedback", label: "View all feedback" }
-      case "correspondence":
-        return { href: "/admin/correspondence", label: "View all correspondence" }
-      case "helpdesk":
-        return { href: "/admin/help-desk", label: "View all help desk tickets" }
-      case "payments":
-        return { href: "/admin/finance/payments", label: "View all payments" }
-      case "leave":
-        return { href: "/admin/hr/leave", label: "View all leave records" }
-      case "attendance":
-        return { href: "/admin/hr/attendance", label: "View all attendance records" }
-      case "assets":
-      default:
-        return { href: "/admin/assets", label: "View all assets" }
+    const map: Record<string, { href: string; label: string }> = {
+      tasks: { href: "/admin/tasks", label: "View all tasks" },
+      documentation: { href: "/admin/documentation", label: "View all docs" },
+      feedback: { href: "/admin/feedback", label: "View all feedback" },
+      correspondence: { href: "/admin/correspondence", label: "View all correspondence" },
+      helpdesk: { href: "/admin/help-desk", label: "View all tickets" },
+      payments: { href: "/admin/finance/payments", label: "View all payments" },
+      leave: { href: "/admin/hr/leave", label: "View all leave" },
+      attendance: { href: "/admin/hr/attendance", label: "View all attendance" },
+      assets: { href: "/admin/assets", label: "View all assets" },
     }
+    return map[activeTab] ?? map.assets
   }, [activeTab])
+
+  const listClass = "max-h-72 divide-y overflow-y-auto"
 
   return (
     <Card>
-      <CardHeader className="pb-4">
-        <CardTitle className="text-base">Activity Tab</CardTitle>
+      <CardHeader className="px-4 py-3">
+        <CardTitle className="text-sm">Activity</CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="p-0">
         <Tabs defaultValue="assets" value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="mb-4 inline-flex h-auto w-full max-w-full justify-start overflow-x-auto p-1 whitespace-nowrap">
-            <TabsTrigger value="assets" className="shrink-0 gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
-              <Package className="h-4 w-4" />
-              <span className="hidden sm:inline">Assets</span>
-              <span>({assets.length})</span>
-            </TabsTrigger>
-            <TabsTrigger value="tasks" className="shrink-0 gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
-              <CheckSquare className="h-4 w-4" />
-              <span className="hidden sm:inline">Tasks</span>
-              <span>({tasks.length})</span>
-            </TabsTrigger>
-            <TabsTrigger value="documentation" className="shrink-0 gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
-              <FileText className="h-4 w-4" />
-              <span className="hidden sm:inline">Documentation</span>
-              <span>({documentation.length})</span>
-            </TabsTrigger>
-            <TabsTrigger value="feedback" className="shrink-0 gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
-              <MessageSquare className="h-4 w-4" />
-              <span className="hidden sm:inline">Feedback</span>
-              <span>({feedback.length})</span>
-            </TabsTrigger>
-            <TabsTrigger value="correspondence" className="shrink-0 gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
-              <Mail className="h-4 w-4" />
-              <span>Correspondence ({correspondence.length})</span>
-            </TabsTrigger>
-            <TabsTrigger value="helpdesk" className="shrink-0 gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
-              <LifeBuoy className="h-4 w-4" />
-              <span>Help Desk ({helpDesk.length})</span>
-            </TabsTrigger>
-            <TabsTrigger value="payments" className="shrink-0 gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
-              <CreditCard className="h-4 w-4" />
-              <span>Payments ({payments.length})</span>
-            </TabsTrigger>
-            <TabsTrigger value="leave" className="shrink-0 gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
-              <Calendar className="h-4 w-4" />
-              <span>Leave ({leave.length})</span>
-            </TabsTrigger>
-            <TabsTrigger value="attendance" className="shrink-0 gap-1 px-2 text-xs sm:gap-1.5 sm:px-3 sm:text-sm">
-              <Clock className="h-4 w-4" />
-              <span>Attendance ({attendance.length})</span>
-            </TabsTrigger>
-          </TabsList>
+          <div className="border-b px-2">
+            <TabsList className="h-auto w-full justify-start gap-0 overflow-x-auto rounded-none bg-transparent p-0">
+              {[
+                { value: "assets", label: "Assets", count: assets.length },
+                { value: "tasks", label: "Tasks", count: tasks.length },
+                { value: "documentation", label: "Docs", count: documentation.length },
+                { value: "feedback", label: "Feedback", count: feedback.length },
+                { value: "correspondence", label: "Mail", count: correspondence.length },
+                { value: "helpdesk", label: "Tickets", count: helpDesk.length },
+                { value: "payments", label: "Payments", count: payments.length },
+                { value: "leave", label: "Leave", count: leave.length },
+                { value: "attendance", label: "Attendance", count: attendance.length },
+              ].map(({ value, label, count }) => (
+                <TabsTrigger
+                  key={value}
+                  value={value}
+                  className="data-[state=active]:border-primary data-[state=active]:text-foreground text-muted-foreground relative flex shrink-0 items-center gap-1 rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 text-xs font-medium transition-none data-[state=active]:shadow-none"
+                >
+                  {label}
+                  <span className="text-muted-foreground text-[10px] tabular-nums">({count})</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </div>
 
-          <TabsContent value="assets">
+          {/* Assets */}
+          <TabsContent value="assets" className="m-0">
             {assets.length > 0 ? (
-              <div className={tableContainerClass}>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]">S/N</TableHead>
-                      <TableHead>Asset Type</TableHead>
-                      <TableHead>Code</TableHead>
-                      <TableHead>Assignment</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {assets.map((asset, index) => (
-                      <TableRow key={asset.id}>
-                        <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                        <TableCell className="font-medium">
-                          {asset.asset_type || asset.asset_model || "Asset"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="font-mono text-xs">
-                            {asset.unique_code || "-"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {asset.department || asset.office_location || asset.assignment_type || "-"}
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(asset.status)}>{asset.status || "unknown"}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Link href="/admin/assets" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-                            View
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <ul className={listClass}>
+                {assets.map((a) => (
+                  <ItemRow key={a.id} href="/admin/assets">
+                    <p className="truncate text-sm font-medium">
+                      {a.asset_type}
+                      {a.asset_model ? ` — ${a.asset_model}` : ""}
+                    </p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <span className="text-muted-foreground font-mono text-[10px]">{a.unique_code || "—"}</span>
+                      {a.department && <span className="text-muted-foreground text-[10px]">{a.department}</span>}
+                      <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(a.status)}`}>{a.status}</Badge>
+                    </div>
+                  </ItemRow>
+                ))}
+              </ul>
             ) : (
-              <EmptyTab icon={Package} message="No assets found" />
+              <EmptyTab label="assets" />
             )}
           </TabsContent>
 
-          <TabsContent value="tasks">
+          {/* Tasks */}
+          <TabsContent value="tasks" className="m-0">
             {tasks.length > 0 ? (
-              <div className={tableContainerClass}>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]">S/N</TableHead>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Priority</TableHead>
-                      <TableHead>Due Date</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {tasks.map((task, index) => (
-                      <TableRow key={task.id}>
-                        <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                        <TableCell className="font-medium">{task.title}</TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(task.status)}>{task.status || "unknown"}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getPriorityColor(task.priority)}>{task.priority || "normal"}</Badge>
-                        </TableCell>
-                        <TableCell>{formatDate(task.due_date)}</TableCell>
-                        <TableCell className="text-right">
-                          <Link href="/admin/tasks" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-                            View
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <ul className={listClass}>
+                {tasks.map((t) => (
+                  <ItemRow key={t.id} href="/admin/tasks">
+                    <p className="truncate text-sm font-medium">{t.title}</p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(t.status)}`}>{t.status}</Badge>
+                      <Badge className={`px-1.5 py-0 text-[10px] ${priorityColor(t.priority)}`}>{t.priority}</Badge>
+                      {t.due_date && <span className="text-muted-foreground text-[10px]">{shortDate(t.due_date)}</span>}
+                      {t.department && <span className="text-muted-foreground text-[10px]">{t.department}</span>}
+                    </div>
+                  </ItemRow>
+                ))}
+              </ul>
             ) : (
-              <EmptyTab icon={CheckSquare} message="No tasks found" />
+              <EmptyTab label="tasks" />
             )}
           </TabsContent>
 
-          <TabsContent value="documentation">
+          {/* Documentation */}
+          <TabsContent value="documentation" className="m-0">
             {documentation.length > 0 ? (
-              <div className={tableContainerClass}>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]">S/N</TableHead>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {documentation.map((doc, index) => (
-                      <TableRow key={doc.id}>
-                        <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                        <TableCell className="font-medium">{doc.title}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{doc.category || "N/A"}</Badge>
-                        </TableCell>
-                        <TableCell>{formatDate(doc.created_at)}</TableCell>
-                        <TableCell className="text-right">
-                          <Link
-                            href="/admin/documentation"
-                            className={buttonVariants({ variant: "ghost", size: "sm" })}
-                          >
-                            View
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <ul className={listClass}>
+                {documentation.map((d) => (
+                  <ItemRow key={d.id} href="/admin/documentation">
+                    <p className="truncate text-sm font-medium">{d.title}</p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      {d.category && (
+                        <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                          {d.category}
+                        </Badge>
+                      )}
+                      <span className="text-muted-foreground text-[10px]">{shortDate(d.created_at)}</span>
+                    </div>
+                  </ItemRow>
+                ))}
+              </ul>
             ) : (
-              <EmptyTab icon={FileText} message="No documentation found" />
+              <EmptyTab label="documentation" />
             )}
           </TabsContent>
 
-          <TabsContent value="feedback">
+          {/* Feedback */}
+          <TabsContent value="feedback" className="m-0">
             {feedback.length > 0 ? (
-              <div className={tableContainerClass}>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]">S/N</TableHead>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {feedback.map((item, index) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                        <TableCell className="font-medium">{item.title}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{item.feedback_type}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(item.status)}>{item.status || "unknown"}</Badge>
-                        </TableCell>
-                        <TableCell>{formatDate(item.created_at)}</TableCell>
-                        <TableCell className="text-right">
-                          <Link href="/admin/feedback" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-                            View
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <ul className={listClass}>
+                {feedback.map((f) => (
+                  <ItemRow key={f.id} href="/admin/feedback">
+                    <p className="truncate text-sm font-medium">{f.title}</p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                        {f.feedback_type}
+                      </Badge>
+                      <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(f.status)}`}>{f.status}</Badge>
+                    </div>
+                  </ItemRow>
+                ))}
+              </ul>
             ) : (
-              <EmptyTab icon={MessageSquare} message="No feedback found" />
+              <EmptyTab label="feedback" />
             )}
           </TabsContent>
 
-          <TabsContent value="correspondence">
+          {/* Correspondence */}
+          <TabsContent value="correspondence" className="m-0">
             {correspondence.length > 0 ? (
-              <div className={tableContainerClass}>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]">S/N</TableHead>
-                      <TableHead>Reference</TableHead>
-                      <TableHead>Subject</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Created</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {correspondence.map((item, index) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                        <TableCell className="font-medium">{item.reference_number}</TableCell>
-                        <TableCell>{item.subject}</TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(item.status)}>{item.status || "unknown"}</Badge>
-                        </TableCell>
-                        <TableCell>{formatDate(item.created_at)}</TableCell>
-                        <TableCell className="text-right">
-                          <Link
-                            href="/admin/correspondence"
-                            className={buttonVariants({ variant: "ghost", size: "sm" })}
-                          >
-                            View
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <ul className={listClass}>
+                {correspondence.map((c) => (
+                  <ItemRow key={c.id} href="/admin/correspondence">
+                    <p className="truncate text-sm font-medium">{c.subject}</p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <span className="text-muted-foreground font-mono text-[10px]">{c.reference_number}</span>
+                      <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(c.status)}`}>{c.status}</Badge>
+                    </div>
+                  </ItemRow>
+                ))}
+              </ul>
             ) : (
-              <EmptyTab icon={Mail} message="No correspondence records yet" />
+              <EmptyTab label="correspondence records" />
             )}
           </TabsContent>
 
-          <TabsContent value="helpdesk">
+          {/* Help Desk */}
+          <TabsContent value="helpdesk" className="m-0">
             {helpDesk.length > 0 ? (
-              <div className={tableContainerClass}>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]">S/N</TableHead>
-                      <TableHead>Ticket</TableHead>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Priority</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {helpDesk.map((item, index) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                        <TableCell className="font-medium">{item.ticket_number}</TableCell>
-                        <TableCell>{item.title}</TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(item.status)}>{item.status || "unknown"}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getPriorityColor(item.priority)}>{item.priority || "normal"}</Badge>
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Link href="/admin/help-desk" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-                            View
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <ul className={listClass}>
+                {helpDesk.map((h) => (
+                  <ItemRow key={h.id} href="/admin/help-desk">
+                    <p className="truncate text-sm font-medium">{h.title}</p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <span className="text-muted-foreground font-mono text-[10px]">{h.ticket_number}</span>
+                      <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(h.status)}`}>{h.status}</Badge>
+                      <Badge className={`px-1.5 py-0 text-[10px] ${priorityColor(h.priority)}`}>{h.priority}</Badge>
+                    </div>
+                  </ItemRow>
+                ))}
+              </ul>
             ) : (
-              <EmptyTab icon={LifeBuoy} message="No help desk tickets found" />
+              <EmptyTab label="help desk tickets" />
             )}
           </TabsContent>
 
-          <TabsContent value="payments">
+          {/* Payments */}
+          <TabsContent value="payments" className="m-0">
             {payments.length > 0 ? (
-              <div className={tableContainerClass}>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]">S/N</TableHead>
-                      <TableHead>Title</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payments.map((item, index) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                        <TableCell className="font-medium">{item.title}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{item.payment_type}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(item.status)}>{item.status || "unknown"}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          {item.amount != null
-                            ? `${item.currency || "NGN"} ${Number(item.amount).toLocaleString()}`
-                            : "-"}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <Link
-                            href="/admin/finance/payments"
-                            className={buttonVariants({ variant: "ghost", size: "sm" })}
-                          >
-                            View
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <ul className={listClass}>
+                {payments.map((p) => (
+                  <ItemRow key={p.id} href="/admin/finance/payments">
+                    <p className="truncate text-sm font-medium">{p.title}</p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+                        {p.payment_type}
+                      </Badge>
+                      <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(p.status)}`}>{p.status}</Badge>
+                      {p.amount != null && (
+                        <span className="text-muted-foreground text-[10px]">
+                          {p.currency || "NGN"} {Number(p.amount).toLocaleString()}
+                        </span>
+                      )}
+                    </div>
+                  </ItemRow>
+                ))}
+              </ul>
             ) : (
-              <EmptyTab icon={CreditCard} message="No payment records found" />
+              <EmptyTab label="payments" />
             )}
           </TabsContent>
 
-          <TabsContent value="leave">
+          {/* Leave */}
+          <TabsContent value="leave" className="m-0">
             {leave.length > 0 ? (
-              <div className={tableContainerClass}>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]">S/N</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Start</TableHead>
-                      <TableHead>End</TableHead>
-                      <TableHead>Days</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {leave.map((item, index) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                        <TableCell className="font-medium">{item.request_kind || "standard"}</TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(item.status)}>{item.status || "unknown"}</Badge>
-                        </TableCell>
-                        <TableCell>{formatDate(item.start_date)}</TableCell>
-                        <TableCell>{formatDate(item.end_date)}</TableCell>
-                        <TableCell>{item.days_count ?? "-"}</TableCell>
-                        <TableCell className="text-right">
-                          <Link href="/admin/hr/leave" className={buttonVariants({ variant: "ghost", size: "sm" })}>
-                            View
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <ul className={listClass}>
+                {leave.map((l) => (
+                  <ItemRow key={l.id} href="/admin/hr/leave">
+                    <p className="truncate text-sm font-medium">{l.request_kind || "Standard leave"}</p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(l.status)}`}>{l.status}</Badge>
+                      <span className="text-muted-foreground text-[10px]">
+                        {shortDate(l.start_date)} – {shortDate(l.end_date)}
+                      </span>
+                      {l.days_count != null && (
+                        <span className="text-muted-foreground text-[10px]">{l.days_count}d</span>
+                      )}
+                    </div>
+                  </ItemRow>
+                ))}
+              </ul>
             ) : (
-              <EmptyTab icon={Calendar} message="No leave records found" />
+              <EmptyTab label="leave records" />
             )}
           </TabsContent>
 
-          <TabsContent value="attendance">
+          {/* Attendance */}
+          <TabsContent value="attendance" className="m-0">
             {attendance.length > 0 ? (
-              <div className={tableContainerClass}>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]">S/N</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Clock In</TableHead>
-                      <TableHead>Clock Out</TableHead>
-                      <TableHead className="text-right">Action</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {attendance.map((item, index) => (
-                      <TableRow key={item.id}>
-                        <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                        <TableCell>{formatDate(item.date)}</TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(item.status)}>{item.status || "unknown"}</Badge>
-                        </TableCell>
-                        <TableCell>{formatTime(item.clock_in)}</TableCell>
-                        <TableCell>{formatTime(item.clock_out)}</TableCell>
-                        <TableCell className="text-right">
-                          <Link
-                            href="/admin/hr/attendance"
-                            className={buttonVariants({ variant: "ghost", size: "sm" })}
-                          >
-                            View
-                          </Link>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+              <ul className={listClass}>
+                {attendance.map((a) => (
+                  <ItemRow key={a.id} href="/admin/hr/attendance">
+                    <p className="text-sm font-medium">{shortDate(a.date)}</p>
+                    <div className="mt-0.5 flex items-center gap-1.5">
+                      <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(a.status)}`}>{a.status}</Badge>
+                      {a.clock_in && (
+                        <span className="text-muted-foreground text-[10px]">
+                          In {new Date(a.clock_in).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      )}
+                      {a.clock_out && (
+                        <span className="text-muted-foreground text-[10px]">
+                          Out {new Date(a.clock_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      )}
+                    </div>
+                  </ItemRow>
+                ))}
+              </ul>
             ) : (
-              <EmptyTab icon={Clock} message="No attendance records found" />
+              <EmptyTab label="attendance records" />
             )}
           </TabsContent>
         </Tabs>
-        <div className="mt-4 flex justify-start">
-          <Link href={viewAllMeta.href} className={buttonVariants({ variant: "outline", size: "sm" })}>
-            {viewAllMeta.label}
+
+        <div className="border-t px-4 py-2.5">
+          <Link
+            href={viewAllMeta.href}
+            className={buttonVariants({ variant: "ghost", size: "sm" }) + " h-7 px-2 text-xs"}
+          >
+            {viewAllMeta.label} →
           </Link>
         </div>
       </CardContent>

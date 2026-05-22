@@ -234,6 +234,7 @@ export default function AdminFleetPage() {
         key: "timeframe",
         label: "Timeframe",
         accessor: (r) => r.start_at,
+        hideOnMobile: true,
         render: (r) => (
           <div className="text-xs">
             <p>{formatDateTime(r.start_at)}</p>
@@ -245,6 +246,7 @@ export default function AdminFleetPage() {
         key: "reason",
         label: "Reason",
         accessor: (r) => r.reason,
+        hideOnMobile: true,
         render: (r) => <span className="max-w-[200px] truncate text-xs">{r.reason}</span>,
       },
       {
@@ -272,6 +274,7 @@ export default function AdminFleetPage() {
         label: "Attachments",
         align: "center",
         accessor: (r) => String(r.attachment_count || 0),
+        hideOnMobile: true,
         render: (r) => (
           <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
             <Paperclip className="h-3 w-3" />
@@ -283,6 +286,7 @@ export default function AdminFleetPage() {
         key: "reviewer",
         label: "Approver",
         accessor: (r) => r.reviewer?.full_name || "-",
+        hideOnMobile: true,
         render: (r) => <span className="text-xs">{r.reviewer?.full_name || "-"}</span>,
       },
     ],

@@ -96,12 +96,14 @@ export function GoalsContent({
         label: "Department",
         sortable: true,
         accessor: (row) => row.department || "-",
+        hideOnMobile: true,
       },
       {
         key: "cycle",
         label: "Cycle",
         sortable: true,
         accessor: (row) => row.cycleLabel,
+        hideOnMobile: true,
       },
       {
         key: "priority",
@@ -109,6 +111,7 @@ export function GoalsContent({
         sortable: true,
         accessor: (row) => row.priority,
         render: (row) => <span className="capitalize">{row.priority}</span>,
+        hideOnMobile: true,
       },
       {
         key: "status",
@@ -130,6 +133,7 @@ export function GoalsContent({
         sortable: true,
         accessor: (row) => row.due_date || "",
         render: (row) => (row.due_date ? new Date(row.due_date).toLocaleDateString("en-GB") : "-"),
+        hideOnMobile: true,
       },
     ],
     []

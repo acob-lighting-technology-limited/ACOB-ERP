@@ -192,6 +192,7 @@ export default function AdminAttendanceRecordsPage() {
       key: "clock_in",
       label: "Clock In",
       accessor: (r) => r.clock_in ?? "",
+      hideOnMobile: true,
       render: (r) => (
         <span className="flex items-center gap-1">
           <Clock className="h-3 w-3 text-green-600" />
@@ -204,6 +205,7 @@ export default function AdminAttendanceRecordsPage() {
       key: "clock_out",
       label: "Clock Out",
       accessor: (r) => r.clock_out ?? "",
+      hideOnMobile: true,
       render: (r) =>
         r.clock_out ? (
           <span className="flex items-center gap-1">
@@ -225,6 +227,7 @@ export default function AdminAttendanceRecordsPage() {
       accessor: (r) => r.total_hours ?? 0,
       render: (r) => (r.total_hours != null ? `${r.total_hours.toFixed(1)}h` : "-"),
       align: "center",
+      hideOnMobile: true,
     },
     {
       key: "status",
@@ -237,6 +240,7 @@ export default function AdminAttendanceRecordsPage() {
       key: "source",
       label: "Source",
       accessor: (r) => r.source ?? "",
+      hideOnMobile: true,
       render: (r) => (
         <div className="flex flex-col gap-1">
           <Badge
@@ -370,7 +374,6 @@ export default function AdminAttendanceRecordsPage() {
           emptyDescription="Adjust the date range and try again."
           emptyIcon={Calendar}
           skeletonRows={8}
-          minWidth="900px"
         />
       </DataTablePage>
 

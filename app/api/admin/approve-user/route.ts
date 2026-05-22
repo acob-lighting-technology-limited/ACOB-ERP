@@ -20,6 +20,9 @@ const ApproveUserSchema = z.object({
   pendingUserId: z.string().trim().min(1, "Missing pendingUserId"),
   employeeId: z.string().trim().optional(),
   hireDate: z.string().trim().nullable().optional(),
+  // When false (default for UI), skip auto-sending emails and return the built preview so the
+  // frontend can ask the admin whether to send before dispatching.
+  sendEmails: z.boolean().optional().default(false),
 })
 
 export async function POST(req: Request) {
@@ -124,7 +127,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
     }
 
-    const { pendingUserId, employeeId: manualEmployeeId, hireDate } = parsed.data
+    const { pendingUserId, employeeId: manualEmployeeId, hireDate, sendEmails } = parsed.data
 
     // 1. Fetch Pending User Details
     const { data: pendingUser, error: fetchError } = await supabaseAdmin
@@ -250,7 +253,7 @@ export async function POST(req: Request) {
         .update({
           company_email: archivedEmail,
           personal_email: null,
-          employment_status: "separated",
+          employment_status: "exited",
           termination_reason: "orphaned_profile_recovery",
           updated_at: new Date().toISOString(),
         })
@@ -398,69 +401,71 @@ export async function POST(req: Request) {
       throw new Error(`Profile creation failed: ${approvalError.message}`)
     }
 
-    // 6. Send Welcome Email
-    try {
-      const onboardingMailEnabled = await isSystemNotificationChannelEnabled(supabaseAdmin, "onboarding", "email")
-      if (onboardingMailEnabled) {
-        const result = await sendNotificationEmailWithRetry({
-          to: emailPreview.welcome.recipients,
-          subject: emailPreview.welcome.subject,
-          html: emailPreview.welcome.html,
-        })
-
-        if (!result.sent) {
-          emailWarnings.push({
-            audience: "employee",
-            reason: result.reason,
-            recipients: emailPreview.welcome.recipients,
+    if (sendEmails) {
+      // 6. Send Welcome Email
+      try {
+        const onboardingMailEnabled = await isSystemNotificationChannelEnabled(supabaseAdmin, "onboarding", "email")
+        if (onboardingMailEnabled) {
+          const result = await sendNotificationEmailWithRetry({
+            to: emailPreview.welcome.recipients,
+            subject: emailPreview.welcome.subject,
+            html: emailPreview.welcome.html,
           })
-          log.error(
-            { reason: result.reason, recipients: emailPreview.welcome.recipients },
-            "Welcome email was not sent"
-          )
-        }
-      }
-    } catch (emailError) {
-      emailWarnings.push({
-        audience: "employee",
-        reason: emailError instanceof Error ? emailError.message : String(emailError),
-        recipients: emailPreview.welcome.recipients,
-      })
-      log.error({ err: String(emailError) }, "Failed to send welcome email")
-    }
 
-    // 7. Send Internal Confirmation Email to Department Leads
-    try {
-      const onboardingMailEnabled = await isSystemNotificationChannelEnabled(supabaseAdmin, "onboarding", "email")
-      if (onboardingMailEnabled && emailPreview.internal.recipients.length > 0) {
-        const result = await sendNotificationEmailsIndividuallyWithRetry({
-          to: emailPreview.internal.recipients,
-          subject: emailPreview.internal.subject,
-          html: emailPreview.internal.html,
+          if (!result.sent) {
+            emailWarnings.push({
+              audience: "employee",
+              reason: result.reason,
+              recipients: emailPreview.welcome.recipients,
+            })
+            log.error(
+              { reason: result.reason, recipients: emailPreview.welcome.recipients },
+              "Welcome email was not sent"
+            )
+          }
+        }
+      } catch (emailError) {
+        emailWarnings.push({
+          audience: "employee",
+          reason: emailError instanceof Error ? emailError.message : String(emailError),
+          recipients: emailPreview.welcome.recipients,
         })
-
-        if (!result.sent) {
-          const failureSummary = result.failedRecipients
-            .map((failure) => `${failure.recipient}: ${failure.reason}`)
-            .join("; ")
-          emailWarnings.push({
-            audience: "management",
-            reason: failureSummary || "failed to send to one or more recipients",
-            recipients: result.failedRecipients.map((failure) => failure.recipient),
-          })
-          log.error(
-            { failedRecipients: result.failedRecipients, deliveredRecipients: result.deliveredRecipients },
-            "Internal onboarding email failed for one or more recipients"
-          )
-        }
+        log.error({ err: String(emailError) }, "Failed to send welcome email")
       }
-    } catch (emailError) {
-      emailWarnings.push({
-        audience: "management",
-        reason: emailError instanceof Error ? emailError.message : String(emailError),
-        recipients: emailPreview.internal.recipients,
-      })
-      log.error({ err: String(emailError) }, "Failed to send stakeholder notification emails")
+
+      // 7. Send Internal Confirmation Email to Department Leads
+      try {
+        const onboardingMailEnabled = await isSystemNotificationChannelEnabled(supabaseAdmin, "onboarding", "email")
+        if (onboardingMailEnabled && emailPreview.internal.recipients.length > 0) {
+          const result = await sendNotificationEmailsIndividuallyWithRetry({
+            to: emailPreview.internal.recipients,
+            subject: emailPreview.internal.subject,
+            html: emailPreview.internal.html,
+          })
+
+          if (!result.sent) {
+            const failureSummary = result.failedRecipients
+              .map((failure) => `${failure.recipient}: ${failure.reason}`)
+              .join("; ")
+            emailWarnings.push({
+              audience: "management",
+              reason: failureSummary || "failed to send to one or more recipients",
+              recipients: result.failedRecipients.map((failure) => failure.recipient),
+            })
+            log.error(
+              { failedRecipients: result.failedRecipients, deliveredRecipients: result.deliveredRecipients },
+              "Internal onboarding email failed for one or more recipients"
+            )
+          }
+        }
+      } catch (emailError) {
+        emailWarnings.push({
+          audience: "management",
+          reason: emailError instanceof Error ? emailError.message : String(emailError),
+          recipients: emailPreview.internal.recipients,
+        })
+        log.error({ err: String(emailError) }, "Failed to send stakeholder notification emails")
+      }
     }
 
     // Sync employment_status into JWT metadata so middleware doesn't need a DB query.
@@ -497,7 +502,19 @@ export async function POST(req: Request) {
       { failOpen: true }
     )
 
-    return NextResponse.json({ success: true, employeeId, emailWarnings })
+    return NextResponse.json({
+      success: true,
+      employeeId,
+      profileId: authUserId,
+      emailWarnings,
+      // Returned when sendEmails=false so the frontend can prompt before dispatching.
+      pendingEmailPreview: sendEmails
+        ? null
+        : {
+            welcome: emailPreview.welcome,
+            internal: emailPreview.internal,
+          },
+    })
   } catch (error: unknown) {
     log.error({ err: String(error) }, "Approval process failed")
     // Redact internal error details from the client while still surfacing known actionable failures.

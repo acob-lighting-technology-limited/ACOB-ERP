@@ -458,14 +458,24 @@ export function PmsMetricTabsPage({
     [rawRows, columnKeys]
   )
 
+  const MOBILE_HIDDEN_COLS = new Set([
+    "cycle",
+    "department",
+    "employee_count",
+    "submitted_count",
+    "departments_counted",
+  ])
+
   const tableColumns = useMemo<DataTableColumn<Record<string, unknown>>[]>(
     () =>
-      columnKeys.map((col) => ({
+      columnKeys.map((col, index) => ({
         key: col,
         label: col.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
         sortable: true,
         accessor: (row) => asString(row[col]),
+        hideOnMobile: index >= 2 || MOBILE_HIDDEN_COLS.has(col),
       })),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [columnKeys]
   )
 
@@ -635,7 +645,6 @@ export function PmsMetricTabsPage({
         emptyIcon={Icon}
         emptyTitle={`No ${metric} records`}
         emptyDescription={`No ${metric} data found for the selected cycle and filters.`}
-        minWidth="900px"
         expandable={
           tab === "individual"
             ? undefined

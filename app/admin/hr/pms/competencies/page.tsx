@@ -316,6 +316,7 @@ export default function AdminCompetenciesPage() {
         render: (competency) => <code className="bg-muted rounded px-1.5 py-0.5 text-xs">{competency.key}</code>,
         resizable: true,
         initialWidth: 180,
+        hideOnMobile: true,
       },
       {
         key: "category",
@@ -332,6 +333,7 @@ export default function AdminCompetenciesPage() {
         sortable: true,
         accessor: (competency) => competency.sort_order,
         align: "center",
+        hideOnMobile: true,
       },
       {
         key: "status",
@@ -493,7 +495,6 @@ export default function AdminCompetenciesPage() {
         emptyDescription="Add the first competency to start scoring reviews consistently."
         emptyIcon={BookOpen}
         skeletonRows={6}
-        minWidth="920px"
       />
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>

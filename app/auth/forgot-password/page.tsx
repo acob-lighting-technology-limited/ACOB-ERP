@@ -57,26 +57,19 @@ export default function ForgotPasswordPage() {
   return (
     <div className="from-background via-background to-muted/20 flex min-h-screen w-full items-center justify-center bg-gradient-to-br p-4 md:p-6">
       <div className="w-full max-w-lg">
-        <div className="flex flex-col gap-8">
-          {/* Header Section */}
-          <div className="space-y-4 text-center">
-            <div className="mx-auto flex h-20 items-center justify-center">
-              <Image src={logoSrc} alt="ACOB Lighting" width={240} height={62} priority className="h-14 w-auto" />
-            </div>
-            <h1 className="text-4xl font-bold tracking-tight">Forgot Password</h1>
-            <p className="text-muted-foreground text-lg">Enter your email to receive a password reset link</p>
-          </div>
-
+        <div className="flex flex-col gap-6">
           <Card className="border-2 shadow-xl">
-            <CardHeader className="space-y-3 pb-6">
-              <CardTitle className="flex items-center gap-2 text-2xl font-semibold">
-                <Mail className="text-primary h-6 w-6" />
-                Reset Your Password
+            <CardHeader className="pb-4">
+              <div className="mb-4 flex justify-center">
+                <Image src={logoSrc} alt="ACOB Lighting" width={220} height={56} priority className="h-14 w-auto" />
+              </div>
+              <CardTitle className="text-2xl font-bold tracking-tight">
+                {emailSent ? "Check your email" : "Forgot password?"}
               </CardTitle>
-              <CardDescription className="text-base">
+              <CardDescription className="text-sm">
                 {emailSent
-                  ? "We've sent you a password reset link"
-                  : "We'll send you instructions to reset your password"}
+                  ? "We've sent a password reset link to your inbox"
+                  : "Enter your company email and we'll send you a reset link"}
               </CardDescription>
             </CardHeader>
             <CardContent className="pb-8">
@@ -139,29 +132,9 @@ export default function ForgotPasswordPage() {
             </CardContent>
           </Card>
 
-          {/* Help Text */}
-          <Card className="border bg-blue-50 dark:bg-blue-950/20">
-            <CardContent className="p-4">
-              <div className="flex gap-3">
-                <div className="mt-0.5 text-blue-600 dark:text-blue-400">
-                  <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path
-                      fillRule="evenodd"
-                      d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
-                </div>
-                <div className="text-sm text-blue-900 dark:text-blue-100">
-                  <p className="mb-1 font-medium">Need help?</p>
-                  <p>
-                    If you&apos;re having trouble resetting your password, please contact your system administrator or
-                    IT support.
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+          <p className="text-muted-foreground text-center text-xs">
+            Having trouble? Contact your system administrator or IT support.
+          </p>
         </div>
       </div>
     </div>

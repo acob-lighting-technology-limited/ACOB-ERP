@@ -516,12 +516,14 @@ export default function AdminPmsReviewsPage() {
         label: "Quarter",
         sortable: true,
         accessor: (r) => r.cycle?.name ?? "",
+        hideOnMobile: true,
       },
       {
         key: "kpi",
         label: "KPI",
         accessor: (r) => formatMetric(r.kpi_score),
         align: "center",
+        hideOnMobile: true,
       },
       {
         key: "cbt",
@@ -578,13 +580,14 @@ export default function AdminPmsReviewsPage() {
         accessor: (r) => r.department,
         render: (r) => <span className="font-medium">{r.department}</span>,
       },
-      { key: "cycle", label: "Quarter", sortable: true, accessor: (r) => r.cycle },
+      { key: "cycle", label: "Quarter", sortable: true, accessor: (r) => r.cycle, hideOnMobile: true },
       {
         key: "reviews",
         label: "Reviews",
         align: "center",
         accessor: (r) => String(r.reviews),
         render: (r) => <span className="font-medium">{r.reviews}</span>,
+        hideOnMobile: true,
       },
       {
         key: "submitted",
@@ -627,13 +630,14 @@ export default function AdminPmsReviewsPage() {
         accessor: (r) => r.cycle,
         render: (r) => <span className="font-medium">{r.cycle}</span>,
       },
-      { key: "review_type", label: "Review Type", accessor: (r) => r.review_type },
+      { key: "review_type", label: "Review Type", accessor: (r) => r.review_type, hideOnMobile: true },
       {
         key: "reviews",
         label: "Employees",
         align: "center",
         accessor: (r) => String(r.reviews),
         render: (r) => <span className="font-medium">{r.reviews}</span>,
+        hideOnMobile: true,
       },
       {
         key: "submitted",
@@ -652,8 +656,15 @@ export default function AdminPmsReviewsPage() {
             </div>
           )
         },
+        hideOnMobile: true,
       },
-      { key: "departments", label: "Depts", align: "center", accessor: (r) => String(r.departments) },
+      {
+        key: "departments",
+        label: "Depts",
+        align: "center",
+        accessor: (r) => String(r.departments),
+        hideOnMobile: true,
+      },
       {
         key: "completed",
         label: "Completed",
@@ -864,7 +875,6 @@ export default function AdminPmsReviewsPage() {
           isLoading={isInitialLoading}
           error={error}
           onRetry={() => void loadReviews()}
-          minWidth="1100px"
           expandable={{
             render: (row) => <ReviewExpandedDetail row={row} />,
           }}
@@ -903,7 +913,6 @@ export default function AdminPmsReviewsPage() {
           isLoading={isInitialLoading}
           error={error}
           onRetry={() => void loadReviews()}
-          minWidth="1100px"
           expandable={{
             render: (row) => (
               <div className="grid grid-cols-2 gap-6 text-sm sm:grid-cols-4">
@@ -947,7 +956,6 @@ export default function AdminPmsReviewsPage() {
           isLoading={isInitialLoading}
           error={error}
           onRetry={() => void loadReviews()}
-          minWidth="900px"
           expandable={{
             render: (row) => (
               <div className="grid grid-cols-2 gap-6 text-sm sm:grid-cols-4">

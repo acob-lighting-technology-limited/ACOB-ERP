@@ -497,6 +497,10 @@ export default async function AdminDashboardPage() {
         </div>
       </Section>
 
+      {canSeeAuditActivity && (
+        <RecentActivityFeed activity={recentActivity} showViewAll={canAccessAction([], "/admin/audit-logs")} />
+      )}
+
       <AdminActivityTabs
         assets={assetsActivity.data || []}
         tasks={tasksActivity.data || []}
@@ -508,10 +512,6 @@ export default async function AdminDashboardPage() {
         leave={leaveActivity.data || []}
         attendance={attendanceActivity.data || []}
       />
-
-      {canSeeAuditActivity && (
-        <RecentActivityFeed activity={recentActivity} showViewAll={canAccessAction([], "/admin/audit-logs")} />
-      )}
     </PageWrapper>
   )
 }

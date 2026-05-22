@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -12,13 +13,10 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { EmployeeStatusBadge } from "@/components/hr/employee-status-badge"
@@ -27,22 +25,7 @@ import { SignatureCreator } from "@/components/signature-creator"
 import { ASSET_TYPE_MAP } from "@/lib/asset-types"
 import { formatName } from "@/lib/utils"
 import { format, differenceInDays } from "date-fns"
-import {
-  Edit,
-  Mail,
-  Phone,
-  Building2,
-  MapPin,
-  Shield,
-  FileSignature,
-  ChevronDown,
-  ChevronUp,
-  CheckCircle2,
-  Calendar,
-  Clock,
-  User as UserIcon,
-  UserCircle,
-} from "lucide-react"
+import { Edit, FileSignature, ChevronDown, ChevronUp, UserCircle, ArrowRight } from "lucide-react"
 import type { UserRole, EmploymentStatus } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
 import { useDepartments } from "@/hooks/use-departments"
@@ -100,6 +83,45 @@ interface EmployeeViewModalProps {
   getAvailableRoles: () => UserRole[]
 }
 
+// ─── Compact profile info row ────────────────────────────────────────────────
+function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start py-2">
+      <dt className="text-muted-foreground w-36 shrink-0 border-r pt-px pr-3 text-xs">{label}</dt>
+      <dd className="min-w-0 flex-1 pl-3 text-sm font-medium">{children}</dd>
+    </div>
+  )
+}
+
+// ─── Compact item row for assets / tasks / docs ───────────────────────────────
+function ItemRow({ children }: { children: React.ReactNode }) {
+  return (
+    <li className="flex items-center gap-3 border-b py-2.5 last:border-0">
+      <div className="min-w-0 flex-1">{children}</div>
+      <ArrowRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+    </li>
+  )
+}
+
+function statusColor(status: string | null | undefined): string {
+  switch (status?.toLowerCase()) {
+    case "assigned":
+    case "active":
+    case "resolved":
+    case "completed":
+    case "approved":
+      return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+    case "in_progress":
+    case "under_review":
+      return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
+    case "pending":
+    case "open":
+      return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+    default:
+      return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400"
+  }
+}
+
 export function EmployeeViewModal({
   isOpen,
   onOpenChange,
@@ -125,6 +147,7 @@ export function EmployeeViewModal({
   const { departments: DEPARTMENTS } = useDepartments()
   const { officeLocations } = useOfficeLocations()
   const supabase = createClient()
+  const [innerTab, setInnerTab] = useState<"assets" | "tasks" | "docs">("assets")
 
   const viewEmployeeProfile = employee
   const displayedLeadDepartments =
@@ -132,11 +155,15 @@ export function EmployeeViewModal({
       ? [viewEmployeeProfile.department]
       : viewEmployeeProfile?.lead_departments || []
 
+  const isMainView = modalViewMode === "profile" || modalViewMode === "employment" || modalViewMode === "signature"
+  const isSubView = modalViewMode === "edit" || modalViewMode === "status"
+
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[92vh] max-h-[92vh] max-w-7xl flex-col gap-0 overflow-hidden p-0">
-        <DialogHeader className="border-b px-5 py-4 sm:px-6">
-          <DialogTitle className="flex flex-wrap items-center gap-2">
+      <DialogContent className="flex h-[92vh] max-h-[92vh] max-w-4xl flex-col gap-0 overflow-hidden p-0">
+        {/* ── Header ── */}
+        <DialogHeader className="border-b px-5 py-3 sm:px-6">
+          <DialogTitle className="flex flex-wrap items-center gap-2 text-base">
             <span>
               {modalViewMode === "edit"
                 ? "Edit Employee Profile"
@@ -157,7 +184,7 @@ export function EmployeeViewModal({
               <EmployeeStatusBadge status={(viewEmployeeProfile.employment_status as EmploymentStatus) || "active"} />
             )}
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             {modalViewMode === "edit"
               ? "Update role, department, permissions, and profile information."
               : modalViewMode === "signature"
@@ -167,440 +194,315 @@ export function EmployeeViewModal({
                   : "Review profile, assets, tasks, and employment details."}
           </DialogDescription>
         </DialogHeader>
-        <div className="min-h-0 flex-1 overflow-hidden px-5 py-4 sm:px-6">
-          {/* Loading skeleton — shown while the profile fetch is in flight */}
+
+        {/* ── Tab nav (main views only) ── */}
+        {viewEmployeeProfile && isMainView && (
+          <div className="border-b px-5 sm:px-6">
+            <div className="flex gap-0">
+              {[
+                { mode: "profile" as const, label: "Overview" },
+                { mode: "signature" as const, label: "Signature" },
+                { mode: "employment" as const, label: "Employment" },
+              ].map(({ mode, label }) => (
+                <button
+                  key={mode}
+                  onClick={() => {
+                    if (mode === "signature" && viewEmployeeProfile) {
+                      onSignature(viewEmployeeProfile)
+                    } else {
+                      setModalViewMode(mode)
+                    }
+                  }}
+                  className={`border-b-2 px-4 py-2.5 text-xs font-medium transition-none ${
+                    modalViewMode === mode
+                      ? "border-primary text-foreground"
+                      : "text-muted-foreground hover:text-foreground border-transparent"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Scrollable content ── */}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {/* Loading skeleton */}
           {!viewEmployeeProfile && (
-            <div className="space-y-4 py-2">
+            <div className="space-y-4 p-5 sm:p-6">
               <div className="bg-muted h-6 w-2/5 animate-pulse rounded" />
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {[...Array(6)].map((_, i) => (
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {[...Array(4)].map((_, i) => (
                   <div key={i} className="space-y-2">
                     <div className="bg-muted h-3 w-1/3 animate-pulse rounded" />
                     <div className="bg-muted h-5 w-full animate-pulse rounded" />
                   </div>
                 ))}
               </div>
-              <div className="bg-muted h-4 w-1/4 animate-pulse rounded" />
-              <div className="bg-muted h-20 w-full animate-pulse rounded" />
             </div>
           )}
+
+          {/* ── Overview ── */}
           {viewEmployeeProfile && modalViewMode === "profile" && (
-            <ScrollArea className="h-full pr-4">
-              <div className="space-y-4">
-                {/* Profile Information */}
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <UserIcon className="h-5 w-5" />
-                      Profile Information
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-12 w-12">
-                          <AvatarFallback className="bg-primary text-primary-foreground">
-                            {formatName(viewEmployeeProfile.first_name)?.[0]}
-                            {formatName(viewEmployeeProfile.last_name)?.[0]}
-                          </AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <p className="text-muted-foreground text-sm">Full Name</p>
-                          <p className="font-medium">
-                            {formatName(viewEmployeeProfile.first_name)} {formatName(viewEmployeeProfile.last_name)}
-                          </p>
-                          {viewEmployeeProfile.other_names && (
-                            <p className="text-muted-foreground text-xs">({viewEmployeeProfile.other_names})</p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <Mail className="text-muted-foreground h-5 w-5" />
-                        <div>
-                          <p className="text-muted-foreground text-sm">Email</p>
-                          <p className="font-medium">{viewEmployeeProfile.company_email}</p>
-                          {viewEmployeeProfile.additional_email && (
-                            <p className="text-muted-foreground text-xs">{viewEmployeeProfile.additional_email}</p>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <Building2 className="text-muted-foreground h-5 w-5" />
-                        <div>
-                          <p className="text-muted-foreground text-sm">Department</p>
-                          <p className="font-medium">{viewEmployeeProfile.department || "N/A"}</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <Shield className="text-muted-foreground h-5 w-5" />
-                        <div>
-                          <p className="text-muted-foreground text-sm">Role</p>
-                          <div className="mt-1 flex gap-2">
-                            <Badge className={getRoleBadgeColor(viewEmployeeProfile.role as UserRole)}>
-                              {getRoleDisplayName(viewEmployeeProfile.role as UserRole)}
-                            </Badge>
-                            {viewEmployeeProfile.is_department_lead && displayedLeadDepartments.length > 0 && (
-                              <Badge variant="outline">
-                                Leading {displayedLeadDepartments.length} Dept
-                                {displayedLeadDepartments.length > 1 ? "s" : ""}
-                              </Badge>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <UserIcon className="text-muted-foreground h-5 w-5" />
-                        <div>
-                          <p className="text-muted-foreground text-sm">Designation</p>
-                          <p className="font-medium">{viewEmployeeProfile.designation || "N/A"}</p>
-                        </div>
-                      </div>
-
-                      {viewEmployeeProfile.phone_number && (
-                        <div className="flex items-center gap-3">
-                          <Phone className="text-muted-foreground h-5 w-5" />
-                          <div>
-                            <p className="text-muted-foreground text-sm">Phone</p>
-                            <p className="font-medium">{viewEmployeeProfile.phone_number}</p>
-                            {viewEmployeeProfile.additional_phone && (
-                              <p className="text-muted-foreground text-xs">{viewEmployeeProfile.additional_phone}</p>
-                            )}
-                          </div>
-                        </div>
+            <ScrollArea className="h-full">
+              <div className="space-y-5 px-5 py-4 sm:px-6">
+                {/* Profile info — compact dl */}
+                <div className="rounded-lg border">
+                  <div className="flex items-center gap-3 border-b px-4 py-3">
+                    <Avatar className="h-10 w-10 shrink-0">
+                      <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
+                        {formatName(viewEmployeeProfile.first_name)?.[0]}
+                        {formatName(viewEmployeeProfile.last_name)?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold">
+                        {formatName(viewEmployeeProfile.first_name)} {formatName(viewEmployeeProfile.last_name)}
+                      </p>
+                      {viewEmployeeProfile.designation && (
+                        <p className="text-muted-foreground truncate text-xs">{viewEmployeeProfile.designation}</p>
                       )}
-
-                      {viewEmployeeProfile.residential_address && (
-                        <div className="flex items-center gap-3">
-                          <MapPin className="text-muted-foreground h-5 w-5" />
-                          <div>
-                            <p className="text-muted-foreground text-sm">Address</p>
-                            <p className="font-medium">{viewEmployeeProfile.residential_address}</p>
-                          </div>
-                        </div>
-                      )}
-
-                      {viewEmployeeProfile.office_location && (
-                        <div className="flex items-center gap-3">
-                          <MapPin className="text-muted-foreground h-5 w-5" />
-                          <div>
-                            <p className="text-muted-foreground text-sm">Office Location</p>
-                            <p className="font-medium">{viewEmployeeProfile.office_location}</p>
-                          </div>
-                        </div>
-                      )}
-
-                      {displayedLeadDepartments.length > 0 && (
-                        <div className="flex items-center gap-3">
-                          <Building2 className="text-muted-foreground h-5 w-5" />
-                          <div>
-                            <p className="text-muted-foreground text-sm">Leading Departments</p>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {displayedLeadDepartments.map((dept: string) => (
-                                <Badge key={dept} variant="outline">
-                                  {dept}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="flex items-center gap-3">
-                        <Calendar className="text-muted-foreground h-5 w-5" />
-                        <div>
-                          <p className="text-muted-foreground text-sm">Hire Date</p>
-                          <p className="font-medium">
-                            {viewEmployeeProfile.employment_date
-                              ? format(new Date(viewEmployeeProfile.employment_date), "PPP")
-                              : "Not recorded"}
-                          </p>
-                        </div>
-                      </div>
-
-                      {viewEmployeeProfile.employment_date && (
-                        <>
-                          <div className="flex items-center gap-3">
-                            <CheckCircle2 className="text-muted-foreground h-5 w-5" />
-                            <div>
-                              <p className="text-muted-foreground text-sm">Joined ACOB</p>
-                              <p className="font-medium">
-                                {format(new Date(viewEmployeeProfile.employment_date), "MMM d, yyyy")}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-3">
-                            <Clock className="text-muted-foreground h-5 w-5" />
-                            <div>
-                              <p className="text-muted-foreground text-sm">Days at ACOB</p>
-                              <p className="font-medium text-blue-600 dark:text-blue-400">
-                                {differenceInDays(new Date(), new Date(viewEmployeeProfile.employment_date))} Days
-                              </p>
-                            </div>
-                          </div>
-                        </>
-                      )}
-
-                      <div className="flex items-center gap-3">
-                        <Calendar className="text-muted-foreground h-5 w-5" />
-                        <div>
-                          <p className="text-muted-foreground text-sm">Account Created</p>
-                          <p className="font-medium">{format(new Date(viewEmployeeProfile.created_at), "PPP")}</p>
-                        </div>
-                      </div>
                     </div>
-                  </CardContent>
-                </Card>
+                  </div>
+                  <dl className="divide-y px-4">
+                    {viewEmployeeProfile.company_email && (
+                      <InfoRow label="Email">
+                        <span className="text-xs break-all sm:text-sm">{viewEmployeeProfile.company_email}</span>
+                      </InfoRow>
+                    )}
+                    {viewEmployeeProfile.department && (
+                      <InfoRow label="Department">{viewEmployeeProfile.department}</InfoRow>
+                    )}
+                    <InfoRow label="Role">
+                      <div className="flex flex-wrap gap-1.5">
+                        <Badge className={getRoleBadgeColor(viewEmployeeProfile.role as UserRole)}>
+                          {getRoleDisplayName(viewEmployeeProfile.role as UserRole)}
+                        </Badge>
+                        {viewEmployeeProfile.is_department_lead && displayedLeadDepartments.length > 0 && (
+                          <Badge variant="outline">
+                            Leading {displayedLeadDepartments.length} Dept
+                            {displayedLeadDepartments.length > 1 ? "s" : ""}
+                          </Badge>
+                        )}
+                      </div>
+                    </InfoRow>
+                    {viewEmployeeProfile.phone_number && (
+                      <InfoRow label="Phone">{viewEmployeeProfile.phone_number}</InfoRow>
+                    )}
+                    {viewEmployeeProfile.office_location && (
+                      <InfoRow label="Office">{viewEmployeeProfile.office_location}</InfoRow>
+                    )}
+                    {viewEmployeeProfile.residential_address && (
+                      <InfoRow label="Address">
+                        <span className="text-xs">{viewEmployeeProfile.residential_address}</span>
+                      </InfoRow>
+                    )}
+                    {displayedLeadDepartments.length > 0 && (
+                      <InfoRow label="Leading">
+                        <div className="flex flex-wrap gap-1">
+                          {displayedLeadDepartments.map((dept: string) => (
+                            <Badge key={dept} variant="outline" className="text-xs">
+                              {dept}
+                            </Badge>
+                          ))}
+                        </div>
+                      </InfoRow>
+                    )}
+                    <InfoRow label="Hire Date">
+                      {viewEmployeeProfile.employment_date
+                        ? format(new Date(viewEmployeeProfile.employment_date), "PPP")
+                        : "Not recorded"}
+                    </InfoRow>
+                    {viewEmployeeProfile.employment_date && (
+                      <InfoRow label="Tenure">
+                        {differenceInDays(new Date(), new Date(viewEmployeeProfile.employment_date))} days
+                      </InfoRow>
+                    )}
+                    <InfoRow label="Account Created">{format(new Date(viewEmployeeProfile.created_at), "PPP")}</InfoRow>
+                  </dl>
+                </div>
 
-                {/* Related Data Tabs */}
-                <Tabs defaultValue="assets" className="space-y-4">
-                  <TabsList>
-                    <TabsTrigger value="assets">Assets ({viewEmployeeData.assets.length})</TabsTrigger>
-                    <TabsTrigger value="tasks">Tasks ({viewEmployeeData.tasks.length})</TabsTrigger>
-                    <TabsTrigger value="documentation">
-                      Documentation ({viewEmployeeData.documentation.length})
-                    </TabsTrigger>
-                  </TabsList>
+                {/* Assets / Tasks / Docs — compact tabs */}
+                <div className="rounded-lg border">
+                  {/* Tab bar */}
+                  <div className="flex gap-0 border-b px-2">
+                    {(
+                      [
+                        { key: "assets", label: "Assets", count: viewEmployeeData.assets.length },
+                        { key: "tasks", label: "Tasks", count: viewEmployeeData.tasks.length },
+                        { key: "docs", label: "Docs", count: viewEmployeeData.documentation.length },
+                      ] as const
+                    ).map(({ key, label, count }) => (
+                      <button
+                        key={key}
+                        onClick={() => setInnerTab(key)}
+                        className={`border-b-2 px-3 py-2 text-xs font-medium transition-none ${
+                          innerTab === key
+                            ? "border-primary text-foreground"
+                            : "text-muted-foreground hover:text-foreground border-transparent"
+                        }`}
+                        style={{ marginBottom: "-1px" }}
+                      >
+                        {label} <span className="text-[10px] tabular-nums">({count})</span>
+                      </button>
+                    ))}
+                  </div>
 
-                  <TabsContent value="assets">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Assigned Assets</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        {viewEmployeeData.assets.length > 0 ? (
-                          <div className="overflow-x-auto">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="w-14">S/N</TableHead>
-                                  <TableHead>Type</TableHead>
-                                  <TableHead>Assignment</TableHead>
-                                  <TableHead>Unique Code</TableHead>
-                                  <TableHead>Model</TableHead>
-                                  <TableHead>Serial Number</TableHead>
-                                  <TableHead>Status</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {viewEmployeeData.assets.map((assignment, index: number) => {
-                                  const asset = assignment.Asset
-                                  const assetTypeLabel = asset?.asset_type
-                                    ? ASSET_TYPE_MAP[asset.asset_type]?.label || asset.asset_type
-                                    : "Unknown"
-                                  const isOfficeAssignment = assignment.assignmentType === "office"
+                  {/* Assets panel */}
+                  {innerTab === "assets" &&
+                    (viewEmployeeData.assets.length > 0 ? (
+                      <ul className="max-h-60 divide-y overflow-y-auto px-4">
+                        {viewEmployeeData.assets.map((assignment) => {
+                          const asset = assignment.Asset
+                          const typeLabel = asset?.asset_type
+                            ? ASSET_TYPE_MAP[asset.asset_type]?.label || asset.asset_type
+                            : "Unknown"
+                          const isOffice = assignment.assignmentType === "office"
+                          return (
+                            <ItemRow key={assignment.id}>
+                              <p className="truncate text-sm font-medium">{typeLabel}</p>
+                              <div className="mt-0.5 flex items-center gap-1.5">
+                                <span className="text-muted-foreground font-mono text-[10px]">
+                                  {asset?.unique_code || "—"}
+                                </span>
+                                <Badge
+                                  variant="outline"
+                                  className={`px-1.5 py-0 text-[10px] ${isOffice ? "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300" : "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300"}`}
+                                >
+                                  {isOffice ? `Office: ${assignment.officeLocation || "Office"}` : "Personal"}
+                                </Badge>
+                                <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(asset?.status)}`}>
+                                  {asset?.status || "unknown"}
+                                </Badge>
+                              </div>
+                            </ItemRow>
+                          )
+                        })}
+                      </ul>
+                    ) : (
+                      <p className="text-muted-foreground px-4 py-6 text-center text-sm">No assets assigned</p>
+                    ))}
 
-                                  return (
-                                    <TableRow key={assignment.id}>
-                                      <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                                      <TableCell className="font-medium">{assetTypeLabel}</TableCell>
-                                      <TableCell>
-                                        {isOfficeAssignment ? (
-                                          <Badge
-                                            variant="outline"
-                                            className="bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300"
-                                          >
-                                            Office:{" "}
-                                            {assignment.officeLocation ||
-                                              viewEmployeeProfile?.office_location ||
-                                              "Office"}
-                                          </Badge>
-                                        ) : (
-                                          <Badge
-                                            variant="outline"
-                                            className="bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300"
-                                          >
-                                            Personal
-                                          </Badge>
-                                        )}
-                                      </TableCell>
-                                      <TableCell className="font-mono">{asset?.unique_code || "-"}</TableCell>
-                                      <TableCell>{asset?.asset_model || "-"}</TableCell>
-                                      <TableCell className="font-mono">{asset?.serial_number || "-"}</TableCell>
-                                      <TableCell>
-                                        <Badge variant={asset?.status === "assigned" ? "default" : "secondary"}>
-                                          {asset?.status || "unknown"}
-                                        </Badge>
-                                      </TableCell>
-                                    </TableRow>
-                                  )
+                  {/* Tasks panel */}
+                  {innerTab === "tasks" &&
+                    (viewEmployeeData.tasks.length > 0 ? (
+                      <ul className="max-h-60 divide-y overflow-y-auto px-4">
+                        {viewEmployeeData.tasks.map((task) => (
+                          <ItemRow key={task.id}>
+                            <p className="truncate text-sm font-medium">{task.title || "Untitled task"}</p>
+                            <div className="mt-0.5 flex items-center gap-1.5">
+                              <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(task.status)}`}>
+                                {task.status?.replace(/_/g, " ") || "unknown"}
+                              </Badge>
+                              {task.created_at && (
+                                <span className="text-muted-foreground text-[10px]">
+                                  {new Date(task.created_at).toLocaleDateString("en-GB", {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  })}
+                                </span>
+                              )}
+                            </div>
+                          </ItemRow>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-muted-foreground px-4 py-6 text-center text-sm">No tasks assigned</p>
+                    ))}
+
+                  {/* Docs panel */}
+                  {innerTab === "docs" &&
+                    (viewEmployeeData.documentation.length > 0 ? (
+                      <ul className="max-h-60 divide-y overflow-y-auto px-4">
+                        {viewEmployeeData.documentation.map((doc) => (
+                          <ItemRow key={doc.id}>
+                            <p className="truncate text-sm font-medium">{doc.title || "Untitled document"}</p>
+                            {doc.created_at && (
+                              <p className="text-muted-foreground mt-0.5 text-[10px]">
+                                {new Date(doc.created_at).toLocaleDateString("en-GB", {
+                                  day: "numeric",
+                                  month: "short",
+                                  year: "numeric",
                                 })}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        ) : (
-                          <p className="text-muted-foreground text-sm">No assets assigned</p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-
-                  <TabsContent value="tasks">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Assigned Tasks</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        {viewEmployeeData.tasks.length > 0 ? (
-                          <div className="overflow-x-auto">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="w-14">S/N</TableHead>
-                                  <TableHead>Title</TableHead>
-                                  <TableHead>Status</TableHead>
-                                  <TableHead>Created</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {viewEmployeeData.tasks.map((task, index: number) => (
-                                  <TableRow key={task.id}>
-                                    <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                                    <TableCell className="font-medium">{task.title || "Untitled Task"}</TableCell>
-                                    <TableCell>
-                                      <Badge variant="outline">{task.status || "unknown"}</Badge>
-                                    </TableCell>
-                                    <TableCell>
-                                      {task.created_at ? new Date(task.created_at).toLocaleDateString() : "—"}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        ) : (
-                          <p className="text-muted-foreground text-sm">No tasks assigned</p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-
-                  <TabsContent value="documentation">
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Documentation</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        {viewEmployeeData.documentation.length > 0 ? (
-                          <div className="overflow-x-auto">
-                            <Table>
-                              <TableHeader>
-                                <TableRow>
-                                  <TableHead className="w-14">S/N</TableHead>
-                                  <TableHead>Title</TableHead>
-                                  <TableHead>Created</TableHead>
-                                </TableRow>
-                              </TableHeader>
-                              <TableBody>
-                                {viewEmployeeData.documentation.map((doc, index: number) => (
-                                  <TableRow key={doc.id}>
-                                    <TableCell className="text-muted-foreground">{index + 1}</TableCell>
-                                    <TableCell className="font-medium">{doc.title || "Untitled"}</TableCell>
-                                    <TableCell>
-                                      {doc.created_at ? new Date(doc.created_at).toLocaleDateString() : "—"}
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </div>
-                        ) : (
-                          <p className="text-muted-foreground text-sm">No documentation</p>
-                        )}
-                      </CardContent>
-                    </Card>
-                  </TabsContent>
-                </Tabs>
+                              </p>
+                            )}
+                          </ItemRow>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-muted-foreground px-4 py-6 text-center text-sm">No documents found</p>
+                    ))}
+                </div>
               </div>
             </ScrollArea>
           )}
 
+          {/* ── Employment ── */}
           {viewEmployeeProfile && modalViewMode === "employment" && (
-            <ScrollArea className="h-full pr-4">
-              <div className="space-y-6 pt-4">
-                <Card className="border-2">
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <UserCircle className="h-5 w-5" />
-                      Employment Details
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-6">
-                    <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                      <div className="space-y-1">
-                        <p className="text-muted-foreground text-sm font-medium">Current Status</p>
-                        <EmployeeStatusBadge status={viewEmployeeProfile.employment_status || "active"} size="lg" />
-                      </div>
-                      <div className="space-y-1">
-                        <p className="text-muted-foreground text-sm font-medium">Hire Date</p>
-                        <div className="text-foreground flex items-center gap-2">
-                          <Calendar className="h-4 w-4" />
-                          <span className="font-medium">
-                            {viewEmployeeProfile.employment_date
-                              ? new Date(viewEmployeeProfile.employment_date).toLocaleDateString("en-GB", {
+            <ScrollArea className="h-full">
+              <div className="px-5 py-4 sm:px-6">
+                <div className="rounded-lg border">
+                  <dl className="divide-y px-4">
+                    <InfoRow label="Current Status">
+                      <EmployeeStatusBadge status={viewEmployeeProfile.employment_status || "active"} size="lg" />
+                    </InfoRow>
+                    <InfoRow label="Hire Date">
+                      {viewEmployeeProfile.employment_date
+                        ? new Date(viewEmployeeProfile.employment_date).toLocaleDateString("en-GB", {
+                            day: "numeric",
+                            month: "long",
+                            year: "numeric",
+                          })
+                        : "Not recorded"}
+                    </InfoRow>
+                    {viewEmployeeProfile.employment_date && (
+                      <InfoRow label="Tenure">
+                        {differenceInDays(new Date(), new Date(viewEmployeeProfile.employment_date))} days
+                      </InfoRow>
+                    )}
+                    {viewEmployeeProfile.employment_status === "exited" && (
+                      <>
+                        <InfoRow label="Separation Date">
+                          <span className="text-red-600 dark:text-red-400">
+                            {viewEmployeeProfile.separation_date
+                              ? new Date(viewEmployeeProfile.separation_date).toLocaleDateString("en-GB", {
                                   day: "numeric",
                                   month: "long",
                                   year: "numeric",
                                 })
                               : "Not recorded"}
                           </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {viewEmployeeProfile.employment_status === "separated" && (
-                      <div className="rounded-lg border border-red-100 bg-red-50 p-4 dark:border-red-900/30 dark:bg-red-950/20">
-                        <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-                          <div className="space-y-1">
-                            <p className="text-sm font-semibold text-red-700 dark:text-red-400">Separation Date</p>
-                            <p className="text-foreground font-medium">
-                              {viewEmployeeProfile.separation_date
-                                ? new Date(viewEmployeeProfile.separation_date).toLocaleDateString("en-GB", {
-                                    day: "numeric",
-                                    month: "long",
-                                    year: "numeric",
-                                  })
-                                : "Not recorded"}
-                            </p>
-                          </div>
-                          <div className="space-y-1">
-                            <p className="text-sm font-semibold text-red-700 dark:text-red-400">Separation Reason</p>
-                            <p className="text-foreground font-medium italic">
-                              {viewEmployeeProfile.separation_reason || "No reason specified"}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
+                        </InfoRow>
+                        <InfoRow label="Reason">
+                          <span className="text-red-600 italic dark:text-red-400">
+                            {viewEmployeeProfile.separation_reason || "No reason specified"}
+                          </span>
+                        </InfoRow>
+                      </>
                     )}
-
                     {viewEmployeeProfile.employment_status === "suspended" && (
-                      <div className="rounded-lg border border-amber-100 bg-amber-50 p-4 dark:border-amber-900/30 dark:bg-amber-950/20">
-                        <p className="text-sm font-semibold text-amber-700 dark:text-amber-400">Suspension Note</p>
-                        <p className="text-foreground mt-1 text-sm italic">
+                      <InfoRow label="Note">
+                        <span className="text-xs text-amber-600 dark:text-amber-400">
                           Contact IT / Admin for active suspension period details.
-                        </p>
-                      </div>
+                        </span>
+                      </InfoRow>
                     )}
-                  </CardContent>
-                </Card>
-
-                <div className="bg-muted/30 rounded-lg p-4">
-                  <p className="text-muted-foreground text-xs leading-relaxed">
-                    Note: Changes to employment status are logged for audit purposes. Terminating an employee will
-                    automatically revoke their system access and clear their assigned roles.
-                  </p>
+                  </dl>
                 </div>
+                <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
+                  Changes to employment status are logged for audit purposes. Terminating an employee will automatically
+                  revoke their system access and clear their assigned roles.
+                </p>
               </div>
             </ScrollArea>
           )}
 
+          {/* ── Signature ── */}
           {viewEmployeeProfile && modalViewMode === "signature" && (
-            <ScrollArea className="h-full pr-4">
-              <div className="mt-4">
+            <ScrollArea className="h-full">
+              <div className="px-5 py-4 sm:px-6">
                 <SignatureCreator
                   profile={viewEmployeeProfile}
                   variant="selectable"
@@ -610,9 +512,10 @@ export function EmployeeViewModal({
             </ScrollArea>
           )}
 
+          {/* ── Change Status ── */}
           {viewEmployeeProfile && modalViewMode === "status" && (
-            <ScrollArea className="h-full pr-4">
-              <div className="mx-auto max-w-md pb-4">
+            <ScrollArea className="h-full">
+              <div className="px-5 py-4 sm:px-6">
                 <ChangeStatusContent
                   employee={
                     {
@@ -623,9 +526,8 @@ export function EmployeeViewModal({
                     } satisfies EmployeeStatusSummary
                   }
                   onSuccess={() => {
-                    setModalViewMode("profile")
+                    setModalViewMode("employment")
                     loadData()
-                    // Refresh profile data
                     supabase
                       .from("profiles")
                       .select("*")
@@ -640,9 +542,10 @@ export function EmployeeViewModal({
             </ScrollArea>
           )}
 
+          {/* ── Edit Profile ── */}
           {viewEmployeeProfile && modalViewMode === "edit" && (
-            <ScrollArea className="h-full pr-4">
-              <div className="space-y-4 py-4">
+            <ScrollArea className="h-full">
+              <div className="space-y-4 px-5 py-4 sm:px-6">
                 <div>
                   <Label htmlFor="role">Role *</Label>
                   <Select
@@ -717,11 +620,6 @@ export function EmployeeViewModal({
                       ))}
                     </SelectContent>
                   </Select>
-                  {editForm.is_department_lead && editForm.department && (
-                    <p className="text-muted-foreground mt-1 text-xs">
-                      Lead department will be set to {editForm.department}.
-                    </p>
-                  )}
                   <div className="mt-3 flex items-center gap-2">
                     <input
                       id="is_department_lead"
@@ -738,10 +636,7 @@ export function EmployeeViewModal({
                     />
                     <Label htmlFor="is_department_lead">Department Lead</Label>
                   </div>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    When enabled, the selected department is used automatically as the lead department.
-                  </p>
-                  <div className="mt-4 flex items-center gap-2">
+                  <div className="mt-3 flex items-center gap-2">
                     <input
                       id="attendance_exempt"
                       type="checkbox"
@@ -751,9 +646,6 @@ export function EmployeeViewModal({
                     />
                     <Label htmlFor="attendance_exempt">Exempt from attendance tracking</Label>
                   </div>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    When enabled, this employee will not appear in attendance reports or deduction calculations.
-                  </p>
                 </div>
 
                 <div>
@@ -762,10 +654,7 @@ export function EmployeeViewModal({
                     value={editForm.office_location}
                     onValueChange={(value) => setEditForm({ ...editForm, office_location: value })}
                     placeholder="Select office location"
-                    options={officeLocations.map((location) => ({
-                      value: location,
-                      label: location,
-                    }))}
+                    options={officeLocations.map((loc) => ({ value: loc, label: loc }))}
                   />
                 </div>
 
@@ -793,37 +682,27 @@ export function EmployeeViewModal({
 
                   {showMoreOptions && (
                     <div className="animate-in slide-in-from-top-2 mt-4 space-y-4">
-                      {/* Personal Information */}
                       <div className="space-y-4">
                         <h4 className="text-foreground text-sm font-semibold">Personal Information</h4>
                         <div>
-                          <Label htmlFor="edit_employee_number">Employee Number</Label>
-                          <Input
-                            id="edit_employee_number"
-                            value={editForm.employee_number}
-                            placeholder="e.g., ACOB/2026/058"
-                            className="font-mono"
-                            readOnly
-                            disabled
-                          />
+                          <Label>Employee Number</Label>
+                          <Input value={editForm.employee_number} className="font-mono" readOnly disabled />
                           <p className="text-muted-foreground mt-1 text-xs">
                             Employee number is locked after creation.
                           </p>
                         </div>
                         <div className="grid gap-4 md:grid-cols-2">
                           <div>
-                            <Label htmlFor="edit_first_name">First Name</Label>
+                            <Label>First Name</Label>
                             <Input
-                              id="edit_first_name"
                               value={editForm.first_name}
                               onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
                               placeholder="First name"
                             />
                           </div>
                           <div>
-                            <Label htmlFor="edit_last_name">Last Name</Label>
+                            <Label>Last Name</Label>
                             <Input
-                              id="edit_last_name"
                               value={editForm.last_name}
                               onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
                               placeholder="Last name"
@@ -831,9 +710,8 @@ export function EmployeeViewModal({
                           </div>
                         </div>
                         <div>
-                          <Label htmlFor="edit_other_names">Other Names</Label>
+                          <Label>Other Names</Label>
                           <Input
-                            id="edit_other_names"
                             value={editForm.other_names}
                             onChange={(e) => setEditForm({ ...editForm, other_names: e.target.value })}
                             placeholder="Middle name or other names"
@@ -841,9 +719,8 @@ export function EmployeeViewModal({
                         </div>
                         <div className="grid gap-4 md:grid-cols-2">
                           <div>
-                            <Label htmlFor="edit_company_email">Company Email</Label>
+                            <Label>Company Email</Label>
                             <Input
-                              id="edit_company_email"
                               type="email"
                               value={editForm.company_email}
                               onChange={(e) => setEditForm({ ...editForm, company_email: e.target.value })}
@@ -852,9 +729,8 @@ export function EmployeeViewModal({
                             />
                           </div>
                           <div>
-                            <Label htmlFor="edit_additional_email">Additional Email</Label>
+                            <Label>Additional Email</Label>
                             <Input
-                              id="edit_additional_email"
                               type="email"
                               value={editForm.additional_email}
                               onChange={(e) => setEditForm({ ...editForm, additional_email: e.target.value })}
@@ -864,40 +740,36 @@ export function EmployeeViewModal({
                         </div>
                         <div className="grid gap-4 md:grid-cols-2">
                           <div>
-                            <Label htmlFor="edit_phone_number">Phone Number</Label>
+                            <Label>Phone Number</Label>
                             <Input
-                              id="edit_phone_number"
                               type="tel"
                               value={editForm.phone_number}
                               onChange={(e) => setEditForm({ ...editForm, phone_number: e.target.value })}
                               placeholder="+234 800 000 0000"
                             />
                           </div>
-                        </div>
-                        <div>
-                          <Label htmlFor="edit_additional_phone">Additional Phone</Label>
-                          <Input
-                            id="edit_additional_phone"
-                            type="tel"
-                            value={editForm.additional_phone}
-                            onChange={(e) => setEditForm({ ...editForm, additional_phone: e.target.value })}
-                            placeholder="Alternative phone number"
-                          />
+                          <div>
+                            <Label>Additional Phone</Label>
+                            <Input
+                              type="tel"
+                              value={editForm.additional_phone}
+                              onChange={(e) => setEditForm({ ...editForm, additional_phone: e.target.value })}
+                              placeholder="Alternative phone"
+                            />
+                          </div>
                         </div>
                         <div className="grid gap-4 md:grid-cols-2">
                           <div>
-                            <Label htmlFor="edit_date_of_birth">Date of Birth</Label>
+                            <Label>Date of Birth</Label>
                             <Input
-                              id="edit_date_of_birth"
                               type="date"
                               value={editForm.date_of_birth}
                               onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })}
                             />
                           </div>
                           <div>
-                            <Label htmlFor="edit_employment_date">Employment Date</Label>
+                            <Label>Employment Date</Label>
                             <Input
-                              id="edit_employment_date"
                               type="date"
                               value={editForm.employment_date}
                               onChange={(e) => setEditForm({ ...editForm, employment_date: e.target.value })}
@@ -906,28 +778,21 @@ export function EmployeeViewModal({
                         </div>
                       </div>
 
-                      {/* Address Information */}
                       <div className="space-y-4 border-t pt-4">
-                        <h4 className="text-foreground text-sm font-semibold">Address Information</h4>
-                        <div>
-                          <Label htmlFor="edit_residential_address">Residential Address</Label>
-                          <Textarea
-                            id="edit_residential_address"
-                            value={editForm.residential_address}
-                            onChange={(e) => setEditForm({ ...editForm, residential_address: e.target.value })}
-                            placeholder="Full residential address"
-                            rows={2}
-                          />
-                        </div>
+                        <h4 className="text-foreground text-sm font-semibold">Address</h4>
+                        <Textarea
+                          value={editForm.residential_address}
+                          onChange={(e) => setEditForm({ ...editForm, residential_address: e.target.value })}
+                          placeholder="Full residential address"
+                          rows={2}
+                        />
                       </div>
 
-                      {/* Banking Information */}
                       <div className="space-y-4 border-t pt-4">
-                        <h4 className="text-foreground text-sm font-semibold">Banking Information</h4>
+                        <h4 className="text-foreground text-sm font-semibold">Banking</h4>
                         <div>
-                          <Label htmlFor="edit_bank_name">Bank Name</Label>
+                          <Label>Bank Name</Label>
                           <Input
-                            id="edit_bank_name"
                             value={editForm.bank_name}
                             onChange={(e) => setEditForm({ ...editForm, bank_name: e.target.value })}
                             placeholder="Bank name"
@@ -935,18 +800,16 @@ export function EmployeeViewModal({
                         </div>
                         <div className="grid gap-4 md:grid-cols-2">
                           <div>
-                            <Label htmlFor="edit_bank_account_number">Account Number</Label>
+                            <Label>Account Number</Label>
                             <Input
-                              id="edit_bank_account_number"
                               value={editForm.bank_account_number}
                               onChange={(e) => setEditForm({ ...editForm, bank_account_number: e.target.value })}
                               placeholder="Account number"
                             />
                           </div>
                           <div>
-                            <Label htmlFor="edit_bank_account_name">Account Name</Label>
+                            <Label>Account Name</Label>
                             <Input
-                              id="edit_bank_account_name"
                               value={editForm.bank_account_name}
                               onChange={(e) => setEditForm({ ...editForm, bank_account_name: e.target.value })}
                               placeholder="Account holder name"
@@ -955,19 +818,14 @@ export function EmployeeViewModal({
                         </div>
                       </div>
 
-                      {/* Job Description */}
                       <div className="space-y-4 border-t pt-4">
                         <h4 className="text-foreground text-sm font-semibold">Job Information</h4>
-                        <div>
-                          <Label htmlFor="edit_job_description">Job Description</Label>
-                          <Textarea
-                            id="edit_job_description"
-                            value={editForm.job_description}
-                            onChange={(e) => setEditForm({ ...editForm, job_description: e.target.value })}
-                            placeholder="Job description or responsibilities"
-                            rows={4}
-                          />
-                        </div>
+                        <Textarea
+                          value={editForm.job_description}
+                          onChange={(e) => setEditForm({ ...editForm, job_description: e.target.value })}
+                          placeholder="Job description or responsibilities"
+                          rows={4}
+                        />
                       </div>
                     </div>
                   )}
@@ -977,78 +835,60 @@ export function EmployeeViewModal({
           )}
         </div>
 
-        <DialogFooter className="bg-background/95 flex w-full flex-col gap-3 border-t px-5 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div className="flex flex-wrap items-center gap-2">
-            {modalViewMode === "edit" ? (
-              <>
-                <Button variant="outline" onClick={() => setModalViewMode("profile")} disabled={isSaving}>
-                  Back to Profile
-                </Button>
-              </>
-            ) : modalViewMode === "signature" || modalViewMode === "status" ? (
-              <Button variant="outline" onClick={() => setModalViewMode("profile")}>
-                Back to Profile
+        {/* ── Footer ── */}
+        <DialogFooter className="bg-background/95 flex w-full flex-col gap-2 border-t px-5 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div>
+            {isSubView && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setModalViewMode(modalViewMode === "status" ? "employment" : "profile")}
+                disabled={isSaving}
+              >
+                ← Back
               </Button>
-            ) : (
-              <>
-                <Button
-                  variant={modalViewMode === "profile" ? "secondary" : "outline"}
-                  onClick={() => setModalViewMode("profile")}
-                  className="gap-2"
-                >
-                  Overview
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    if (viewEmployeeProfile) onSignature(viewEmployeeProfile)
-                  }}
-                  className="gap-2"
-                >
-                  <FileSignature className="h-4 w-4" />
-                  Signature
-                </Button>
-                <Button
-                  variant={modalViewMode === "employment" ? "secondary" : "outline"}
-                  onClick={() => setModalViewMode(modalViewMode === "profile" ? "employment" : "profile")}
-                  className="gap-2"
-                >
-                  <UserCircle className="h-4 w-4" />
-                  Employment
-                </Button>
-              </>
             )}
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {modalViewMode === "edit" ? (
-              <Button onClick={onSave} loading={isSaving}>
+          <div className="flex items-center gap-2">
+            {modalViewMode === "edit" && (
+              <Button onClick={onSave} loading={isSaving} size="sm">
                 Save Changes
               </Button>
-            ) : (
-              <>
-                {canManageUsers && modalViewMode === "profile" && (
-                  <Button
-                    variant="default"
-                    onClick={() => {
-                      if (viewEmployeeProfile) onEditEmployee(viewEmployeeProfile)
-                    }}
-                    className="gap-2"
-                  >
-                    <Edit className="h-4 w-4" />
-                    Edit Profile
-                  </Button>
-                )}
-                {canManageUsers && modalViewMode === "employment" && (
-                  <Button variant="default" onClick={() => setModalViewMode("status")} className="gap-2">
-                    <UserCircle className="h-4 w-4" />
-                    Change Status
-                  </Button>
-                )}
-              </>
             )}
-
+            {canManageUsers && modalViewMode === "profile" && (
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (viewEmployeeProfile) onEditEmployee(viewEmployeeProfile)
+                }}
+                className="gap-1.5"
+              >
+                <Edit className="h-3.5 w-3.5" />
+                Edit Profile
+              </Button>
+            )}
+            {canManageUsers && modalViewMode === "employment" && (
+              <Button size="sm" onClick={() => setModalViewMode("status")} className="gap-1.5">
+                <UserCircle className="h-3.5 w-3.5" />
+                Change Status
+              </Button>
+            )}
+            {canManageUsers && modalViewMode === "signature" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (viewEmployeeProfile) onSignature(viewEmployeeProfile)
+                }}
+                className="gap-1.5"
+              >
+                <FileSignature className="h-3.5 w-3.5" />
+                Open Full Signature
+              </Button>
+            )}
             <Button
               variant="ghost"
+              size="sm"
               onClick={() => {
                 onOpenChange(false)
                 setModalViewMode("profile")

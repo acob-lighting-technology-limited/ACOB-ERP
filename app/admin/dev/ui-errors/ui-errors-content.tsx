@@ -33,6 +33,7 @@ export function UiErrorsContent({ rows, stats, error }: UiErrorsContentProps) {
         label: "Time",
         sortable: true,
         accessor: (r) => r.created_at,
+        hideOnMobile: true,
         render: (r) => <span className="text-xs whitespace-nowrap">{new Date(r.created_at).toLocaleString()}</span>,
       },
       {
@@ -66,6 +67,7 @@ export function UiErrorsContent({ rows, stats, error }: UiErrorsContentProps) {
         resizable: true,
         initialWidth: 500,
         accessor: (r) => r.message,
+        hideOnMobile: true,
         render: (r) => <span className="max-w-[520px] truncate text-xs">{r.message}</span>,
       },
     ],

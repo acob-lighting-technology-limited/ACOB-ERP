@@ -283,6 +283,7 @@ export default function DepartmentsPage() {
       key: "department_code",
       label: "Code",
       accessor: (department) => department.department_code || "",
+      hideOnMobile: true,
       render: (department) =>
         department.department_code ? (
           <code className="bg-muted rounded px-1.5 py-0.5 font-mono text-xs font-semibold">
@@ -297,6 +298,7 @@ export default function DepartmentsPage() {
       key: "description",
       label: "Description",
       accessor: (department) => department.description || "",
+      hideOnMobile: true,
       render: (department) => (
         <span className="text-muted-foreground block max-w-[260px] truncate text-sm">
           {department.description || "No description added"}
@@ -329,6 +331,7 @@ export default function DepartmentsPage() {
       label: "Created",
       sortable: true,
       accessor: (department) => department.created_at,
+      hideOnMobile: true,
       render: (department) => (
         <span className="text-muted-foreground text-sm">
           {new Date(department.created_at).toLocaleDateString("en-GB")}
@@ -611,7 +614,6 @@ export default function DepartmentsPage() {
         emptyDescription="Create your first department to start structuring teams and reporting lines."
         emptyIcon={Building}
         skeletonRows={5}
-        minWidth="980px"
       />
     </DataTablePage>
   )

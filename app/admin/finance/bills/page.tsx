@@ -170,6 +170,7 @@ export default function BillsPage() {
         key: "bill_date",
         label: "Bill Date",
         sortable: true,
+        hideOnMobile: true,
         accessor: (bill) => bill.bill_date,
         render: (bill) => formatDate(bill.bill_date),
       },
@@ -177,6 +178,7 @@ export default function BillsPage() {
         key: "due_date",
         label: "Due Date",
         sortable: true,
+        hideOnMobile: true,
         accessor: (bill) => bill.due_date,
         render: (bill) => (
           <div className="space-y-1">

@@ -98,16 +98,12 @@ export default function SignUpPage() {
       <div className="w-full max-w-6xl">
         <div className="grid items-stretch gap-6 lg:grid-cols-[minmax(0,1fr)_420px] xl:gap-8">
           <Card className="border-2 shadow-xl">
-            <CardHeader className="space-y-3 pb-6">
-              <div className="mb-2 flex justify-center lg:hidden">
+            <CardHeader className="pb-4">
+              <div className="mb-4 flex justify-center lg:hidden">
                 <Image src={logoSrc} alt="ACOB Lighting" width={220} height={56} className="h-14 w-auto" />
               </div>
-              <h1 className="text-3xl font-bold tracking-tight lg:text-4xl">Join ACOB</h1>
-              <p className="text-muted-foreground text-base lg:text-lg">
-                Create your account to access the employee portal
-              </p>
-              <CardTitle className="text-2xl font-semibold">Create Account</CardTitle>
-              <CardDescription className="text-base">Fill in your details to get started</CardDescription>
+              <CardTitle className="text-2xl font-bold tracking-tight lg:text-3xl">Join ACOB</CardTitle>
+              <CardDescription className="text-sm">Fill in your details to create your account</CardDescription>
             </CardHeader>
             <CardContent className="pb-8">
               <form onSubmit={handleSignUp}>

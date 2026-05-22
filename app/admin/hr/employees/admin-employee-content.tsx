@@ -468,6 +468,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         resizable: true,
         initialWidth: 120,
         accessor: (r) => r.employee_number || "",
+        hideOnMobile: true,
         render: (r) => <span className="text-muted-foreground font-mono text-sm">{r.employee_number || "—"}</span>,
       },
       {
@@ -480,7 +481,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         render: (r) => (
           <div className="flex flex-col">
             <span
-              className={cn("font-medium", r.employment_status === "separated" && "text-muted-foreground line-through")}
+              className={cn("font-medium", r.employment_status === "exited" && "text-muted-foreground line-through")}
             >
               {formatName(r.last_name)}, {formatName(r.first_name)}
             </span>
@@ -499,6 +500,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         resizable: true,
         initialWidth: 220,
         accessor: (r) => r.company_email,
+        hideOnMobile: true,
         render: (r) => (
           <div className="flex flex-col gap-1 text-sm">
             <button
@@ -614,7 +616,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           { value: "active", label: "Active" },
           { value: "suspended", label: "Suspended" },
           { value: "on_leave", label: "On Leave" },
-          { value: "separated", label: "Separated" },
+          { value: "exited", label: "Exited" },
         ],
         placeholder: "Active Statuses",
       },

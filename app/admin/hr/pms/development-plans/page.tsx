@@ -350,6 +350,7 @@ export default function AdminDevelopmentPlansPage() {
         label: "Department",
         sortable: true,
         accessor: (plan) => plan.user?.department || "-",
+        hideOnMobile: true,
       },
       {
         key: "title",
@@ -365,12 +366,14 @@ export default function AdminDevelopmentPlansPage() {
         label: "Quarter",
         sortable: true,
         accessor: (plan) => cycleNameMap.get(plan.review_cycle_id || "") || "-",
+        hideOnMobile: true,
       },
       {
         key: "focus_area",
         label: "Focus",
         sortable: true,
         accessor: (plan) => FOCUS_LABELS[plan.focus_area] || plan.focus_area,
+        hideOnMobile: true,
       },
       {
         key: "priority",
@@ -382,6 +385,7 @@ export default function AdminDevelopmentPlansPage() {
             {plan.priority}
           </Badge>
         ),
+        hideOnMobile: true,
       },
       {
         key: "progress_pct",
@@ -412,6 +416,7 @@ export default function AdminDevelopmentPlansPage() {
         sortable: true,
         accessor: (plan) => plan.target_date || "",
         render: (plan) => <span className="text-muted-foreground text-sm">{formatDate(plan.target_date)}</span>,
+        hideOnMobile: true,
       },
     ],
     [cycleNameMap]
@@ -572,7 +577,6 @@ export default function AdminDevelopmentPlansPage() {
         emptyDescription="Create a plan to start tracking employee growth and follow-up actions."
         emptyIcon={BookOpen}
         skeletonRows={6}
-        minWidth="1100px"
       />
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>

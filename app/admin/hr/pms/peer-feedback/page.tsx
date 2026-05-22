@@ -175,6 +175,7 @@ export default function AdminPeerFeedbackPage() {
         label: "Department",
         sortable: true,
         accessor: (row) => row.subject?.department || "-",
+        hideOnMobile: true,
       },
       {
         key: "reviewer",
@@ -183,12 +184,14 @@ export default function AdminPeerFeedbackPage() {
         accessor: (row) => formatName(row.reviewer),
         resizable: true,
         initialWidth: 190,
+        hideOnMobile: true,
       },
       {
         key: "cycle",
         label: "Quarter",
         sortable: true,
         accessor: (row) => cycleNameMap.get(row.review_cycle_id) || "-",
+        hideOnMobile: true,
       },
       {
         key: "score",
@@ -212,6 +215,7 @@ export default function AdminPeerFeedbackPage() {
         render: (row) => (
           <span className="text-muted-foreground text-sm">{new Date(row.created_at).toLocaleDateString()}</span>
         ),
+        hideOnMobile: true,
       },
     ],
     [cycleNameMap]
@@ -363,7 +367,6 @@ export default function AdminPeerFeedbackPage() {
         emptyDescription="Peer feedback submissions will appear here once employees start reviewing colleagues."
         emptyIcon={MessageSquare}
         skeletonRows={6}
-        minWidth="980px"
       />
 
       <Dialog open={Boolean(selectedRow)} onOpenChange={() => setSelectedRow(null)}>

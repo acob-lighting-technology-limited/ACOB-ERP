@@ -93,12 +93,14 @@ export function AdminGoalsContent({
         label: "Department",
         sortable: true,
         accessor: (r) => r.department || "-",
+        hideOnMobile: true,
       },
       {
         key: "cycle",
         label: "Cycle",
         sortable: true,
         accessor: (r) => r.cycle?.name || "-",
+        hideOnMobile: true,
       },
       {
         key: "status",
@@ -111,6 +113,7 @@ export function AdminGoalsContent({
         label: "Approval",
         accessor: (r) => r.approval_status || "pending",
         render: (r) => <span className="capitalize">{r.approval_status || "pending"}</span>,
+        hideOnMobile: true,
       },
       {
         key: "due",
@@ -172,24 +175,28 @@ export function AdminGoalsContent({
         label: "Review Type",
         sortable: true,
         accessor: (r) => r.review_type,
+        hideOnMobile: true,
       },
       {
         key: "departments",
         label: "Departments",
         align: "center",
         accessor: (r) => String(r.departments),
+        hideOnMobile: true,
       },
       {
         key: "goals_count",
         label: "Goals",
         align: "center",
         accessor: (r) => String(r.goals),
+        hideOnMobile: true,
       },
       {
         key: "approved",
         label: "Approved",
         align: "center",
         accessor: (r) => String(r.approved),
+        hideOnMobile: true,
       },
     ],
     []

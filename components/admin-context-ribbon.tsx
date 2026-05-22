@@ -86,10 +86,14 @@ export function AdminContextRibbon({
               variant={isAdminLeadMode ? "default" : "outline"}
               onClick={toggleScopeMode}
               disabled={isPending}
-              className="h-7 gap-1.5 px-2.5 text-xs"
+              className="h-7 gap-1.5 px-2 text-xs"
+              title={isAdminLeadMode ? "Switch to Admin View" : "Switch to Lead View"}
             >
               <ArrowLeftRight className="h-3.5 w-3.5" />
-              {isAdminLeadMode ? "Switch to Admin View" : "Switch to Lead View"}
+              <span className="sm:hidden">{isAdminLeadMode ? "Admin View" : "Lead View"}</span>
+              <span className="hidden sm:inline">
+                {isAdminLeadMode ? "Switch to Admin View" : "Switch to Lead View"}
+              </span>
             </Button>
           ) : null}
 
@@ -98,7 +102,8 @@ export function AdminContextRibbon({
             className="text-muted-foreground hover:text-foreground inline-flex shrink-0 items-center gap-1 text-xs font-medium"
           >
             <ArrowLeftRight className="h-3.5 w-3.5" />
-            Switch to User View
+            <span className="sm:hidden">User View</span>
+            <span className="hidden sm:inline">Switch to User View</span>
           </Link>
         </div>
       </div>

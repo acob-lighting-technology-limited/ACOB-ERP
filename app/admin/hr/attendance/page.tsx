@@ -707,6 +707,7 @@ export default function AttendanceReportsPage() {
       render: (r) => <span className="text-xs">{r.employee_no || "—"}</span>,
       resizable: true,
       initialWidth: 120,
+      hideOnMobile: true,
     },
     {
       key: "user_name",
@@ -729,6 +730,7 @@ export default function AttendanceReportsPage() {
       accessor: (r) => r.present_days,
       render: (r) => <span className="text-green-600">{r.present_days}</span>,
       align: "center",
+      hideOnMobile: true,
     },
     {
       key: "late_days",
@@ -737,6 +739,7 @@ export default function AttendanceReportsPage() {
       accessor: (r) => r.late_days,
       render: (r) => <span className="text-yellow-600">{r.late_days}</span>,
       align: "center",
+      hideOnMobile: true,
     },
     {
       key: "incomplete_days",
@@ -745,6 +748,7 @@ export default function AttendanceReportsPage() {
       accessor: (r) => r.incomplete_days || 0,
       render: (r) => <span className="text-cyan-600">{r.incomplete_days || 0}</span>,
       align: "center",
+      hideOnMobile: true,
     },
     {
       key: "exempted_days",
@@ -753,6 +757,7 @@ export default function AttendanceReportsPage() {
       accessor: (r) => r.exempted_days || 0,
       render: (r) => <span className="text-violet-600">{r.exempted_days || 0}</span>,
       align: "center",
+      hideOnMobile: true,
     },
     {
       key: "half_day_days",
@@ -761,6 +766,7 @@ export default function AttendanceReportsPage() {
       accessor: (r) => r.half_day_days ?? 0,
       render: (r) => <span className="text-orange-600">{r.half_day_days ?? 0}</span>,
       align: "center",
+      hideOnMobile: true,
     },
     {
       key: "leave_days",
@@ -769,6 +775,7 @@ export default function AttendanceReportsPage() {
       accessor: (r) => r.leave_days ?? 0,
       render: (r) => <span className="text-purple-600">{r.leave_days ?? 0}</span>,
       align: "center",
+      hideOnMobile: true,
     },
     {
       key: "holiday_days",
@@ -777,6 +784,7 @@ export default function AttendanceReportsPage() {
       accessor: (r) => r.holiday_days ?? 0,
       render: (r) => <span className="text-sky-600">{r.holiday_days ?? 0}</span>,
       align: "center",
+      hideOnMobile: true,
     },
     {
       key: "waived_days",
@@ -785,6 +793,7 @@ export default function AttendanceReportsPage() {
       accessor: (r) => r.waived_days,
       render: (r) => <span className="text-blue-600">{r.waived_days}</span>,
       align: "center",
+      hideOnMobile: true,
     },
     {
       key: "absent_days",
@@ -793,6 +802,7 @@ export default function AttendanceReportsPage() {
       accessor: (r) => r.absent_days,
       render: (r) => <span className="text-red-600">{r.absent_days}</span>,
       align: "center",
+      hideOnMobile: true,
     },
     {
       key: "total_hours",
@@ -801,6 +811,7 @@ export default function AttendanceReportsPage() {
       accessor: (r) => r.total_hours,
       render: (r) => r.total_hours.toFixed(1),
       align: "center",
+      hideOnMobile: true,
     },
     {
       key: "total_missed_hours",
@@ -814,12 +825,14 @@ export default function AttendanceReportsPage() {
           <span className="text-muted-foreground text-xs">0h</span>
         ),
       align: "center",
+      hideOnMobile: true,
     },
     {
       key: "attendance_credits",
       label: "Credit",
       sortable: true,
       accessor: (r) => r.attendance_credits ?? 0,
+      hideOnMobile: true,
       render: (r) => {
         const credit = r.attendance_credits ?? 0
         const total = r.total_days
@@ -991,7 +1004,6 @@ export default function AttendanceReportsPage() {
         emptyDescription="No attendance results available for this period."
         emptyIcon={FileText}
         skeletonRows={6}
-        minWidth="900px"
       />
       <ExportOptionsDialog
         open={isExportOpen}

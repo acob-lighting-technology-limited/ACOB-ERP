@@ -132,6 +132,7 @@ export default function SuppliersPage() {
         sortable: true,
         accessor: (supplier) => supplier.code,
         render: (supplier) => <span className="font-mono text-sm">{supplier.code}</span>,
+        hideOnMobile: true,
       },
       {
         key: "name",
@@ -152,6 +153,7 @@ export default function SuppliersPage() {
         label: "Contact",
         accessor: (supplier) => supplier.contact_person || "",
         render: (supplier) => <span>{supplier.contact_person || "No contact person"}</span>,
+        hideOnMobile: true,
       },
       {
         key: "email",
@@ -160,6 +162,7 @@ export default function SuppliersPage() {
         resizable: true,
         initialWidth: 220,
         render: (supplier) => <span className="text-muted-foreground text-sm">{supplier.email || "No email"}</span>,
+        hideOnMobile: true,
       },
       {
         key: "status",

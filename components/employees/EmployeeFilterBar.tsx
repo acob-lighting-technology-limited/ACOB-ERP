@@ -85,7 +85,7 @@ export function EmployeeFilterBar({ filters, onFilterChange, departments, employ
               options={[
                 { value: "active", label: "Active" },
                 { value: "suspended", label: "Suspended" },
-                { value: "separated", label: "Separated" },
+                { value: "exited", label: "Exited" },
                 { value: "on_leave", label: "On Leave" },
               ]}
               onChange={(values) => onFilterChange({ statusFilter: values })}

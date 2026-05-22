@@ -194,6 +194,7 @@ export function AttendanceContent({
         sortable: true,
         accessor: (row) => row.dayLabel,
         render: (row) => <span className="font-medium">{row.dayLabel}</span>,
+        hideOnMobile: true,
       },
       {
         key: "period",
@@ -214,6 +215,7 @@ export function AttendanceContent({
         sortable: true,
         accessor: (row) => row.workHours || 0,
         render: (row) => (row.workHours != null ? `${row.workHours.toFixed(2)} hrs` : "-"),
+        hideOnMobile: true,
       },
       {
         key: "missed_hours",
@@ -228,6 +230,7 @@ export function AttendanceContent({
           ) : (
             "-"
           ),
+        hideOnMobile: true,
       },
       {
         key: "overtime_hours",
@@ -235,6 +238,7 @@ export function AttendanceContent({
         sortable: true,
         accessor: (row) => row.overtimeHours || 0,
         render: (row) => (row.overtimeHours != null ? `${row.overtimeHours.toFixed(2)} hrs` : "-"),
+        hideOnMobile: true,
       },
       {
         key: "status",

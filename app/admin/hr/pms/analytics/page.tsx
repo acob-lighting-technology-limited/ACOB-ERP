@@ -218,6 +218,7 @@ export default function PmsAnalyticsPage() {
         label: "Department",
         sortable: true,
         accessor: (row) => row.department,
+        hideOnMobile: true,
       },
       {
         key: "cycle",
@@ -226,12 +227,14 @@ export default function PmsAnalyticsPage() {
         accessor: (row) => row.cycle,
         resizable: true,
         initialWidth: 180,
+        hideOnMobile: true,
       },
       {
         key: "reviewType",
         label: "Review Type",
         sortable: true,
         accessor: (row) => row.reviewType,
+        hideOnMobile: true,
       },
       {
         key: "kpi",
@@ -239,6 +242,7 @@ export default function PmsAnalyticsPage() {
         sortable: true,
         accessor: (row) => row.kpi ?? -1,
         render: (row) => scoreText(row.kpi),
+        hideOnMobile: true,
       },
       {
         key: "cbt",
@@ -246,6 +250,7 @@ export default function PmsAnalyticsPage() {
         sortable: true,
         accessor: (row) => row.cbt ?? -1,
         render: (row) => scoreText(row.cbt),
+        hideOnMobile: true,
       },
       {
         key: "attendance",
@@ -253,6 +258,7 @@ export default function PmsAnalyticsPage() {
         sortable: true,
         accessor: (row) => row.attendance ?? -1,
         render: (row) => scoreText(row.attendance),
+        hideOnMobile: true,
       },
       {
         key: "behaviour",
@@ -260,6 +266,7 @@ export default function PmsAnalyticsPage() {
         sortable: true,
         accessor: (row) => row.behaviour ?? -1,
         render: (row) => scoreText(row.behaviour),
+        hideOnMobile: true,
       },
       {
         key: "final",
@@ -417,7 +424,6 @@ export default function PmsAnalyticsPage() {
         emptyDescription="Performance analytics will appear here once reviews have been created and scored."
         emptyIcon={BarChart3}
         skeletonRows={8}
-        minWidth="1220px"
       />
     </DataTablePage>
   )

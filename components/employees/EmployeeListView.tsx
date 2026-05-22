@@ -159,7 +159,7 @@ export function EmployeeListView({
                     <TableRow
                       className={cn(
                         "hover:bg-muted/30 cursor-pointer transition-colors",
-                        member.employment_status === "separated" && "opacity-60",
+                        member.employment_status === "exited" && "opacity-60",
                         member.is_department_lead && "border-l-2 border-l-amber-500/70",
                         isExpanded && "bg-muted/30"
                       )}
@@ -181,7 +181,7 @@ export function EmployeeListView({
                           <span
                             className={cn(
                               "text-foreground font-medium",
-                              member.employment_status === "separated" && "text-muted-foreground line-through"
+                              member.employment_status === "exited" && "text-muted-foreground line-through"
                             )}
                           >
                             {formatName(member.last_name)}, {formatName(member.first_name)}
@@ -364,7 +364,7 @@ export function EmployeeListView({
       {employees.map((member) => (
         <Card
           key={member.id}
-          className={`border-2 transition-shadow hover:shadow-lg ${member.employment_status === "separated" ? "opacity-60" : ""}`}
+          className={`border-2 transition-shadow hover:shadow-lg ${member.employment_status === "exited" ? "opacity-60" : ""}`}
         >
           <CardHeader className="from-primary/5 to-background border-b bg-linear-to-r">
             <div className="flex items-start justify-between">
@@ -376,7 +376,7 @@ export function EmployeeListView({
                   <CardTitle
                     className={cn(
                       "text-lg",
-                      member.employment_status === "separated" && "text-muted-foreground line-through"
+                      member.employment_status === "exited" && "text-muted-foreground line-through"
                     )}
                   >
                     {member.first_name} {member.last_name}

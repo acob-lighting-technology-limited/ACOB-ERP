@@ -118,6 +118,7 @@ export default function AdminJobDescriptionsPage() {
         sortable: true,
         resizable: true,
         initialWidth: 150,
+        hideOnMobile: true,
         accessor: (r) => r.department,
         render: (r) => <span className="text-sm">{r.department}</span>,
       },
@@ -127,6 +128,7 @@ export default function AdminJobDescriptionsPage() {
         sortable: true,
         resizable: true,
         initialWidth: 200,
+        hideOnMobile: true,
         accessor: (r) => r.designation || "N/A",
         render: (r) => <span className="text-muted-foreground text-sm">{r.designation || "—"}</span>,
       },
@@ -153,6 +155,7 @@ export default function AdminJobDescriptionsPage() {
         key: "updated_at",
         label: "Last Updated",
         sortable: true,
+        hideOnMobile: true,
         accessor: (r) => r.job_description_updated_at || "",
         render: (r) => (
           <span className="text-muted-foreground text-xs italic">

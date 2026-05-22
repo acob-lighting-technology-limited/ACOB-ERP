@@ -244,6 +244,7 @@ export default function ReviewCyclesPage() {
         sortable: true,
         accessor: (cycle) => cycle.review_type,
         render: (cycle) => <span className="capitalize">{cycle.review_type}</span>,
+        hideOnMobile: true,
       },
       {
         key: "start_date",
@@ -251,6 +252,7 @@ export default function ReviewCyclesPage() {
         sortable: true,
         accessor: (cycle) => cycle.start_date,
         render: (cycle) => formatDate(cycle.start_date),
+        hideOnMobile: true,
       },
       {
         key: "end_date",
@@ -258,6 +260,7 @@ export default function ReviewCyclesPage() {
         sortable: true,
         accessor: (cycle) => cycle.end_date,
         render: (cycle) => formatDate(cycle.end_date),
+        hideOnMobile: true,
       },
       {
         key: "status",
@@ -409,7 +412,6 @@ export default function ReviewCyclesPage() {
         emptyDescription="Create the first cycle using the New Cycle button."
         emptyIcon={Calendar}
         skeletonRows={6}
-        minWidth="800px"
       />
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>

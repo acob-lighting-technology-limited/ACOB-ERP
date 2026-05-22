@@ -680,6 +680,7 @@ export function KssRosterTable({
         key: "meeting_date",
         label: "Meeting Date",
         sortable: true,
+        hideOnMobile: true,
         accessor: (row) =>
           row.meeting_date || docByWeekYear.get(`${row.meeting_year}-${row.meeting_week}`)?.meeting_date || "",
         render: (row) =>
@@ -691,6 +692,7 @@ export function KssRosterTable({
         key: "meeting_week",
         label: "Week",
         sortable: true,
+        hideOnMobile: true,
         accessor: (row) => row.meeting_week,
         render: (row) => <span className="font-medium">{`W${row.meeting_week}`}</span>,
       },
@@ -698,11 +700,13 @@ export function KssRosterTable({
         key: "meeting_year",
         label: "Year",
         sortable: true,
+        hideOnMobile: true,
         accessor: (row) => row.meeting_year,
       },
       {
         key: "submitted_by",
         label: "Submitted By",
+        hideOnMobile: true,
         accessor: (row) => (row.created_by ? employeeNameById.get(row.created_by) || "Unknown" : "-"),
         render: (row) => (row.created_by ? employeeNameById.get(row.created_by) || "Unknown" : "-"),
       },
@@ -710,6 +714,7 @@ export function KssRosterTable({
         key: "created_at",
         label: "Submitted Date",
         sortable: true,
+        hideOnMobile: true,
         accessor: (row) => row.created_at,
         resizable: true,
         initialWidth: 220,
@@ -1025,7 +1030,7 @@ export function KssRosterTable({
                         <SelectItem key={emp.id} value={emp.id}>
                           {emp.full_name}
                           {!isAssignableEmploymentStatus(emp.employment_status, { allowLegacyNullStatus: false })
-                            ? " (separated)"
+                            ? " (exited)"
                             : ""}
                         </SelectItem>
                       ))}

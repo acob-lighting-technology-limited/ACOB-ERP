@@ -140,10 +140,10 @@ export default function UsersPage() {
       {
         key: "status",
         label: "Status",
-        accessor: (u) => (u.employment_status === "separated" ? "Separated" : u.is_active ? "Active" : "Inactive"),
+        accessor: (u) => (u.employment_status === "exited" ? "Exited" : u.is_active ? "Active" : "Inactive"),
         render: (u) => (
           <Badge variant={u.is_active ? "default" : "secondary"}>
-            {u.employment_status === "separated" ? "Separated" : u.is_active ? "Active" : "Inactive"}
+            {u.employment_status === "exited" ? "Exited" : u.is_active ? "Active" : "Inactive"}
           </Badge>
         ),
       },
@@ -315,7 +315,7 @@ export default function UsersPage() {
                   <p className="text-muted-foreground mt-0.5 text-xs">{u.email}</p>
                 </div>
                 <Badge variant={u.is_active ? "default" : "secondary"}>
-                  {u.employment_status === "separated" ? "Separated" : u.is_active ? "Active" : "Inactive"}
+                  {u.employment_status === "exited" ? "Exited" : u.is_active ? "Active" : "Inactive"}
                 </Badge>
               </div>
 

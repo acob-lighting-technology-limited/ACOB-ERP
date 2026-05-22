@@ -292,8 +292,16 @@ export default function AdminPmsCbtPage() {
       resizable: true,
       initialWidth: 200,
     },
-    { key: "department", label: "Department", sortable: true, accessor: (row) => row.department },
-    { key: "cycle", label: "Cycle", sortable: true, accessor: (row) => row.cycle, resizable: true, initialWidth: 220 },
+    { key: "department", label: "Department", sortable: true, accessor: (row) => row.department, hideOnMobile: true },
+    {
+      key: "cycle",
+      label: "Cycle",
+      sortable: true,
+      accessor: (row) => row.cycle,
+      resizable: true,
+      initialWidth: 220,
+      hideOnMobile: true,
+    },
     {
       key: "cbt_score",
       label: "CBT Score",
@@ -316,8 +324,22 @@ export default function AdminPmsCbtPage() {
       resizable: true,
       initialWidth: 220,
     },
-    { key: "cycle", label: "Cycle", sortable: true, accessor: (row) => row.cycle, resizable: true, initialWidth: 220 },
-    { key: "scores_recorded", label: "Scores Recorded", sortable: true, accessor: (row) => row.scores_recorded },
+    {
+      key: "cycle",
+      label: "Cycle",
+      sortable: true,
+      accessor: (row) => row.cycle,
+      resizable: true,
+      initialWidth: 220,
+      hideOnMobile: true,
+    },
+    {
+      key: "scores_recorded",
+      label: "Scores Recorded",
+      sortable: true,
+      accessor: (row) => row.scores_recorded,
+      hideOnMobile: true,
+    },
     {
       key: "average_score",
       label: "Average Score",
@@ -329,9 +351,21 @@ export default function AdminPmsCbtPage() {
 
   const cycleColumns: DataTableColumn<CycleRow>[] = [
     { key: "cycle", label: "Cycle", sortable: true, accessor: (row) => row.cycle, resizable: true, initialWidth: 240 },
-    { key: "review_type", label: "Review Type", sortable: true, accessor: (row) => row.review_type },
-    { key: "scores_recorded", label: "Scores Recorded", sortable: true, accessor: (row) => row.scores_recorded },
-    { key: "questions", label: "Questions", sortable: true, accessor: (row) => row.questions },
+    {
+      key: "review_type",
+      label: "Review Type",
+      sortable: true,
+      accessor: (row) => row.review_type,
+      hideOnMobile: true,
+    },
+    {
+      key: "scores_recorded",
+      label: "Scores Recorded",
+      sortable: true,
+      accessor: (row) => row.scores_recorded,
+      hideOnMobile: true,
+    },
+    { key: "questions", label: "Questions", sortable: true, accessor: (row) => row.questions, hideOnMobile: true },
   ]
 
   const individualFilters: DataTableFilter<IndividualRow>[] = [
@@ -515,7 +549,6 @@ export default function AdminPmsCbtPage() {
           emptyDescription="Scores will appear here once employees start completing CBT assessments."
           emptyIcon={Brain}
           skeletonRows={6}
-          minWidth="900px"
         />
       ) : null}
 
@@ -556,7 +589,6 @@ export default function AdminPmsCbtPage() {
           emptyDescription="Department averages will appear here when cycles have CBT scores."
           emptyIcon={Brain}
           skeletonRows={6}
-          minWidth="900px"
         />
       ) : null}
 
@@ -601,7 +633,6 @@ export default function AdminPmsCbtPage() {
           emptyDescription="Create a cycle question bank to start collecting CBT results."
           emptyIcon={Brain}
           skeletonRows={6}
-          minWidth="920px"
         />
       ) : null}
     </DataTablePage>

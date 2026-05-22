@@ -178,6 +178,7 @@ export default function WarehousesPage() {
         key: "code",
         label: "Code",
         sortable: true,
+        hideOnMobile: true,
         accessor: (warehouse) => warehouse.code,
         render: (warehouse) => <span className="font-mono text-sm">{warehouse.code}</span>,
       },
@@ -203,6 +204,7 @@ export default function WarehousesPage() {
         accessor: (warehouse) => warehouse.address || "",
         resizable: true,
         initialWidth: 280,
+        hideOnMobile: true,
         render: (warehouse) => (
           <span className="text-muted-foreground line-clamp-2 text-sm">
             {warehouse.address || "No address provided"}

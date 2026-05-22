@@ -112,7 +112,7 @@ export function EditUserDialog({
                   <SelectContent>
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="suspended">Suspended</SelectItem>
-                    <SelectItem value="separated">Separated</SelectItem>
+                    <SelectItem value="exited">Exited</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
