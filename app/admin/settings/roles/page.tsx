@@ -228,6 +228,7 @@ export default function RolesPage() {
       accessor: (role) => role.description || "",
       resizable: true,
       initialWidth: 260,
+      hideOnMobile: true,
       render: (role) => <span className="text-muted-foreground">{role.description || "No description"}</span>,
     },
     {
@@ -236,6 +237,7 @@ export default function RolesPage() {
       sortable: true,
       accessor: (role) => role.permissions?.length || 0,
       align: "center",
+      hideOnMobile: true,
       render: (role) => <Badge variant="secondary">{role.permissions?.length || 0}</Badge>,
     },
     {

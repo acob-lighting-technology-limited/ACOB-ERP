@@ -83,6 +83,7 @@ export function AdminAuditLogsContent({
         label: "Time",
         sortable: true,
         accessor: (r) => r.created_at,
+        hideOnMobile: true,
         render: (r) => (
           <div className="flex flex-col text-xs">
             <span className="font-medium">{new Date(r.created_at).toLocaleDateString()}</span>

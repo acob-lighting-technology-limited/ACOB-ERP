@@ -72,6 +72,7 @@ export function PmsTablePage({
       accessor: (row) => normalizeCell(row[column.key]),
       resizable: index < 2,
       initialWidth: index === 0 ? 220 : index === 1 ? 260 : undefined,
+      hideOnMobile: index >= 3,
       render: (row) => {
         const value = normalizeCell(row[column.key])
         return index === 0 ? <span className="font-medium">{value}</span> : value

@@ -366,6 +366,7 @@ export function AdminTasksContent({
         key: "work_item_number",
         label: "S/N",
         sortable: true,
+        hideOnMobile: true,
         accessor: (r) => r.work_item_number || "",
         render: (r) => <span className="text-muted-foreground font-mono text-xs">{r.work_item_number || "—"}</span>,
       },
@@ -426,6 +427,7 @@ export function AdminTasksContent({
         label: "Goal",
         resizable: true,
         initialWidth: 220,
+        hideOnMobile: true,
         accessor: (r) => r.goal_title || goals.find((goal) => goal.id === r.goal_id)?.title || "",
         render: (r) => <span className="line-clamp-1">{r.goal_title || "—"}</span>,
       },
@@ -433,6 +435,7 @@ export function AdminTasksContent({
         key: "due_date",
         label: "Due Date",
         sortable: true,
+        hideOnMobile: true,
         accessor: (r) => r.due_date || "",
         render: (r) => (
           <div className="text-muted-foreground flex items-center gap-1.5 text-xs">

@@ -315,15 +315,31 @@ export default function AdminPmsQuarterReviewsPage() {
         resizable: true,
         initialWidth: 160,
         accessor: (r) => r.user?.department || "-",
+        hideOnMobile: true,
       },
-      { key: "kpi_score", label: "KPI", sortable: true, width: "w-20", accessor: (r) => fmt(r.kpi_score) },
-      { key: "cbt_score", label: "CBT", sortable: true, width: "w-20", accessor: (r) => fmt(r.cbt_score) },
+      {
+        key: "kpi_score",
+        label: "KPI",
+        sortable: true,
+        width: "w-20",
+        accessor: (r) => fmt(r.kpi_score),
+        hideOnMobile: true,
+      },
+      {
+        key: "cbt_score",
+        label: "CBT",
+        sortable: true,
+        width: "w-20",
+        accessor: (r) => fmt(r.cbt_score),
+        hideOnMobile: true,
+      },
       {
         key: "attendance_score",
         label: "Attendance",
         sortable: true,
         width: "w-24",
         accessor: (r) => fmt(r.attendance_score),
+        hideOnMobile: true,
       },
       {
         key: "behaviour_score",
@@ -331,6 +347,7 @@ export default function AdminPmsQuarterReviewsPage() {
         sortable: true,
         width: "w-24",
         accessor: (r) => fmt(r.behaviour_score),
+        hideOnMobile: true,
       },
       {
         key: "final_score",
@@ -411,14 +428,49 @@ export default function AdminPmsQuarterReviewsPage() {
         initialWidth: 200,
         accessor: (r) => r.department,
       },
-      { key: "reviews", label: "Reviews", sortable: true, width: "w-20", accessor: (r) => String(r.reviews) },
-      { key: "submitted", label: "Submitted", sortable: true, width: "w-24", accessor: (r) => String(r.submitted) },
-      { key: "kpi", label: "KPI", sortable: true, width: "w-20", accessor: (r) => r.kpi },
-      { key: "cbt", label: "CBT", sortable: true, width: "w-20", accessor: (r) => r.cbt },
-      { key: "attendance", label: "Attendance", sortable: true, width: "w-24", accessor: (r) => r.attendance },
-      { key: "behaviour", label: "Behaviour", sortable: true, width: "w-24", accessor: (r) => r.behaviour },
+      {
+        key: "reviews",
+        label: "Reviews",
+        sortable: true,
+        width: "w-20",
+        accessor: (r) => String(r.reviews),
+        hideOnMobile: true,
+      },
+      {
+        key: "submitted",
+        label: "Submitted",
+        sortable: true,
+        width: "w-24",
+        accessor: (r) => String(r.submitted),
+        hideOnMobile: true,
+      },
+      { key: "kpi", label: "KPI", sortable: true, width: "w-20", accessor: (r) => r.kpi, hideOnMobile: true },
+      { key: "cbt", label: "CBT", sortable: true, width: "w-20", accessor: (r) => r.cbt, hideOnMobile: true },
+      {
+        key: "attendance",
+        label: "Attendance",
+        sortable: true,
+        width: "w-24",
+        accessor: (r) => r.attendance,
+        hideOnMobile: true,
+      },
+      {
+        key: "behaviour",
+        label: "Behaviour",
+        sortable: true,
+        width: "w-24",
+        accessor: (r) => r.behaviour,
+        hideOnMobile: true,
+      },
       { key: "final", label: "Final", sortable: true, width: "w-20", accessor: (r) => r.final },
-      { key: "completed", label: "Completed", sortable: true, width: "w-24", accessor: (r) => String(r.completed) },
+      {
+        key: "completed",
+        label: "Completed",
+        sortable: true,
+        width: "w-24",
+        accessor: (r) => String(r.completed),
+        hideOnMobile: true,
+      },
     ],
     []
   )
@@ -460,6 +512,7 @@ export default function AdminPmsQuarterReviewsPage() {
         sortable: true,
         width: "w-32",
         accessor: (r) => r.review_type,
+        hideOnMobile: true,
       },
       {
         key: "employee_count",
@@ -467,6 +520,7 @@ export default function AdminPmsQuarterReviewsPage() {
         sortable: true,
         width: "w-24",
         accessor: (r) => String(r.employee_count),
+        hideOnMobile: true,
       },
       {
         key: "submitted",
@@ -474,6 +528,7 @@ export default function AdminPmsQuarterReviewsPage() {
         sortable: true,
         width: "w-24",
         accessor: (r) => String(r.submitted),
+        hideOnMobile: true,
       },
       {
         key: "departments",
@@ -481,6 +536,7 @@ export default function AdminPmsQuarterReviewsPage() {
         sortable: true,
         width: "w-20",
         accessor: (r) => String(r.departments),
+        hideOnMobile: true,
       },
       {
         key: "completed",
@@ -488,6 +544,7 @@ export default function AdminPmsQuarterReviewsPage() {
         sortable: true,
         width: "w-24",
         accessor: (r) => String(r.completed),
+        hideOnMobile: true,
       },
     ],
     []
@@ -625,7 +682,6 @@ export default function AdminPmsQuarterReviewsPage() {
           emptyIcon={FileText}
           emptyTitle="No reviews found"
           emptyDescription="No reviews have been submitted for this cycle yet."
-          minWidth="1100px"
         />
       )}
 
@@ -644,7 +700,6 @@ export default function AdminPmsQuarterReviewsPage() {
           emptyIcon={FileText}
           emptyTitle="No departments found"
           emptyDescription="No reviews have been grouped by department yet."
-          minWidth="1000px"
         />
       )}
 
@@ -661,7 +716,6 @@ export default function AdminPmsQuarterReviewsPage() {
           emptyIcon={FileText}
           emptyTitle="No cycle data"
           emptyDescription="No reviews found for this cycle."
-          minWidth="800px"
         />
       )}
 

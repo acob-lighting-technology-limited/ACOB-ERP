@@ -204,6 +204,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
       sortable: true,
       accessor: (t) => t.work_item_number,
       render: (t) => <span className="font-mono text-xs font-bold">{t.work_item_number || "---"}</span>,
+      hideOnMobile: true,
     },
     {
       key: "title",
@@ -280,6 +281,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
         ) : (
           <span className="text-muted-foreground text-xs">Not linked</span>
         ),
+      hideOnMobile: true,
     },
     {
       key: "dates",
@@ -288,6 +290,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
       render: (t) => (
         <span className="text-muted-foreground text-xs">{new Date(t.created_at).toLocaleDateString()}</span>
       ),
+      hideOnMobile: true,
     },
   ]
 

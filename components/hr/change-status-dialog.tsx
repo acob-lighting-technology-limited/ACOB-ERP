@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { AlertTriangle, Loader2, CheckCircle2, List } from "lucide-react"
+import { AlertTriangle, Loader2, CheckCircle2, List, Mail } from "lucide-react"
 import { toast } from "sonner"
 import type { EmploymentStatus } from "@/types/database"
 import { EmployeeStatusBadge } from "./employee-status-badge"
@@ -53,7 +53,7 @@ interface ChangeStatusContentProps {
   onCancel?: () => void
 }
 
-interface SeparationBlockers {
+interface ExitBlockers {
   assets: number
   tasks: number
   task_assignments: number
@@ -71,11 +71,11 @@ interface LeaveTypeOption {
 const statusOptions: { value: EmploymentStatus; label: string; description: string }[] = [
   { value: "active", label: "Active", description: "Employee has full access to the system" },
   { value: "suspended", label: "Suspended", description: "Employee is temporarily blocked from accessing the system" },
-  { value: "separated", label: "Separated", description: "Employee has left the organization" },
+  { value: "exited", label: "Exited", description: "Employee has exited the organisation" },
   { value: "on_leave", label: "On Leave", description: "Employee is on extended leave" },
 ]
 
-const separatedReasonOptions = [
+const exitReasonOptions = [
   { value: "resignation", label: "Resignation" },
   { value: "mutual_separation", label: "Mutual Separation" },
   { value: "contract_completed", label: "Contract Completed" },
@@ -92,7 +92,7 @@ const suspensionReasonOptions = [
   { value: "temporary_access_hold", label: "Temporary Access Hold" },
 ]
 
-async function fetchEmployeeStatusBlockers(employeeId: string): Promise<SeparationBlockers | null> {
+async function fetchEmployeeStatusBlockers(employeeId: string): Promise<ExitBlockers | null> {
   const response = await fetch(`/api/v1/hr/employees/${employeeId}/status`, { method: "GET" })
   if (!response.ok) throw new Error("Failed to load offboarding blockers")
   const result = await response.json()
@@ -110,18 +110,21 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
   const [status, setStatus] = useState<EmploymentStatus>(employee.employment_status)
   const [reasonCode, setReasonCode] = useState("")
   const [suspensionEndDate, setSuspensionEndDate] = useState("")
-  const [separationDate, setSeparationDate] = useState("")
+  const [exitDate, setExitDate] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
+  const [exitNotifyOpen, setExitNotifyOpen] = useState(false)
+  const [exitedEmployeeId, setExitedEmployeeId] = useState<string | null>(null)
+  const [isSendingNotification, setIsSendingNotification] = useState(false)
   const [selectedLeaveTypeId, setSelectedLeaveTypeId] = useState("")
-  const [localBlockersOverride, setLocalBlockersOverride] = useState<SeparationBlockers | null>(null)
+  const [localBlockersOverride, setLocalBlockersOverride] = useState<ExitBlockers | null>(null)
   const router = useRouter()
 
   useEffect(() => {
     setStatus(employee.employment_status)
     setReasonCode("")
     setSuspensionEndDate("")
-    setSeparationDate("")
+    setExitDate("")
     setSelectedLeaveTypeId("")
     setLocalBlockersOverride(null)
   }, [employee.id, employee.employment_status])
@@ -151,22 +154,22 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
       return
     }
 
-    if (status === "separated" && !reasonCode) {
-      toast.error("Please select a separation reason")
+    if (status === "exited" && !reasonCode) {
+      toast.error("Please select an exit reason")
       return
     }
 
-    if (status === "separated" && !separationDate) {
-      toast.error("Please provide a separation date")
+    if (status === "exited" && !exitDate) {
+      toast.error("Please provide an exit date")
       return
     }
 
-    if (status === "separated" && blockers && blockers.total > 0) {
-      toast.error("Cannot separate employee with active assignments. Reassign all blockers first.")
+    if (status === "exited" && blockers && blockers.total > 0) {
+      toast.error("Cannot exit employee with active assignments. Reassign all blockers first.")
       return
     }
 
-    if (status === "suspended" || status === "separated") {
+    if (status === "suspended" || status === "exited") {
       setConfirmOpen(true)
       return
     }
@@ -177,8 +180,8 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
   const submitStatusChange = async () => {
     const selectedLeaveType = leaveTypeOptions.find((opt) => opt.id === selectedLeaveTypeId)
     const selectedReasonLabel =
-      status === "separated"
-        ? separatedReasonOptions.find((opt) => opt.value === reasonCode)?.label
+      status === "exited"
+        ? exitReasonOptions.find((opt) => opt.value === reasonCode)?.label
         : status === "suspended"
           ? suspensionReasonOptions.find((opt) => opt.value === reasonCode)?.label
           : status === "on_leave"
@@ -198,14 +201,14 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
           leave_type_id: status === "on_leave" ? selectedLeaveTypeId : undefined,
           leave_type_name: status === "on_leave" ? selectedLeaveType?.name : undefined,
           suspension_end_date: status === "suspended" ? suspensionEndDate || null : undefined,
-          separation_date: status === "separated" ? separationDate : undefined,
+          separation_date: status === "exited" ? exitDate : undefined,
         }),
       })
 
       if (!response.ok) {
         const error = await response.json()
         if (response.status === 409 && error?.blockers) {
-          setLocalBlockersOverride(error.blockers)
+          setLocalBlockersOverride(error.blockers as ExitBlockers)
         }
         throw new Error(error.error || "Failed to update status")
       }
@@ -214,7 +217,13 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
       toast.success(result.message || "Status updated successfully")
 
       router.refresh()
-      onSuccess?.()
+
+      if (status === "exited") {
+        setExitedEmployeeId(employee.id)
+        setExitNotifyOpen(true)
+      } else {
+        onSuccess?.()
+      }
     } catch (error) {
       log.error("Error updating status:", error)
       toast.error(error instanceof Error ? error.message : "Failed to update status")
@@ -225,9 +234,9 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
 
   const isStatusChanged = status !== employee.employment_status
   const isSuspending = status === "suspended"
-  const isSeparating = status === "separated"
+  const isExiting = status === "exited"
   const isOnLeave = status === "on_leave"
-  const hasSeparationBlockers = isSeparating && (blockers?.total || 0) > 0
+  const hasExitBlockers = isExiting && (blockers?.total || 0) > 0
 
   return (
     <div className="space-y-4 py-4">
@@ -298,17 +307,17 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
         </div>
       )}
 
-      {isSeparating && (
+      {isExiting && (
         <div className="space-y-2">
-          <Label htmlFor="separation-reason">
-            Separation Reason <span className="text-destructive">*</span>
+          <Label htmlFor="exit-reason">
+            Exit Reason <span className="text-destructive">*</span>
           </Label>
           <Select value={reasonCode} onValueChange={setReasonCode}>
-            <SelectTrigger id="separation-reason">
-              <SelectValue placeholder="Select separation reason" />
+            <SelectTrigger id="exit-reason">
+              <SelectValue placeholder="Select exit reason" />
             </SelectTrigger>
             <SelectContent>
-              {separatedReasonOptions.map((option) => (
+              {exitReasonOptions.map((option) => (
                 <SelectItem key={option.value} value={option.value}>
                   {option.label}
                 </SelectItem>
@@ -335,23 +344,18 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
         </div>
       )}
 
-      {/* Separation Date (only for separated status) */}
-      {isSeparating && (
+      {/* Exit Date (only for exited status) */}
+      {isExiting && (
         <div className="space-y-2">
-          <Label htmlFor="separation_date">
-            Separation Date <span className="text-destructive">*</span>
+          <Label htmlFor="exit_date">
+            Exit Date <span className="text-destructive">*</span>
           </Label>
-          <Input
-            id="separation_date"
-            type="date"
-            value={separationDate}
-            onChange={(e) => setSeparationDate(e.target.value)}
-          />
+          <Input id="exit_date" type="date" value={exitDate} onChange={(e) => setExitDate(e.target.value)} />
         </div>
       )}
 
-      {/* Offboarding Checklist (only for separated status) */}
-      {isSeparating && (
+      {/* Offboarding Checklist (only for exited status) */}
+      {isExiting && (
         <div className="space-y-3 rounded-lg border border-blue-100 bg-blue-50 p-4 dark:border-blue-900/30 dark:bg-blue-900/10">
           <h4 className="flex items-center gap-2 text-sm font-semibold">
             <List className="h-4 w-4" /> Offboarding Checklist
@@ -396,22 +400,22 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
               </span>
             </div>
           </div>
-          {!isFetchingCounts && hasSeparationBlockers && (
+          {!isFetchingCounts && hasExitBlockers && (
             <p className="text-xs text-amber-600 italic dark:text-amber-400">
-              * Separation is blocked until every active responsibility is unassigned/reassigned.
+              * Exit is blocked until every active responsibility is unassigned/reassigned.
             </p>
           )}
         </div>
       )}
 
-      {/* Warning for separation */}
-      {isSeparating && (
+      {/* Warning for exit */}
+      {isExiting && (
         <div className="bg-destructive/10 border-destructive/20 flex items-start gap-2 rounded-lg border p-3">
           <AlertTriangle className="text-destructive mt-0.5 h-5 w-5 flex-shrink-0" />
           <div className="text-sm">
             <p className="text-destructive font-medium">Warning</p>
             <p className="text-muted-foreground">
-              Separating an employee will permanently revoke their access to the system. This action cannot be easily
+              Exiting an employee will permanently revoke their access to the system. This action cannot be easily
               undone.
             </p>
           </div>
@@ -426,8 +430,8 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
         )}
         <Button
           onClick={handleSubmit}
-          disabled={isLoading || !isStatusChanged || hasSeparationBlockers}
-          variant={isSeparating ? "destructive" : "default"}
+          disabled={isLoading || !isStatusChanged || hasExitBlockers}
+          variant={isExiting ? "destructive" : "default"}
           className="min-w-[140px]"
         >
           {isLoading ? (
@@ -447,9 +451,9 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
       <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{isSeparating ? "Confirm separation" : "Confirm suspension"}</AlertDialogTitle>
+            <AlertDialogTitle>{isExiting ? "Confirm exit" : "Confirm suspension"}</AlertDialogTitle>
             <AlertDialogDescription>
-              {isSeparating
+              {isExiting
                 ? "This will remove the employee's access immediately. Are you sure?"
                 : "This will suspend the employee's access immediately. Are you sure?"}
             </AlertDialogDescription>
@@ -462,6 +466,76 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
               onClick={() => void submitStatusChange()}
             >
               Confirm
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={exitNotifyOpen}
+        onOpenChange={(open) => {
+          if (!open && !isSendingNotification) {
+            setExitNotifyOpen(false)
+            onSuccess?.()
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Mail className="h-4 w-4" />
+              Send Exit Notification?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Do you want to send an all-staff notification email informing everyone that{" "}
+              <strong>
+                {employee.first_name} {employee.last_name}
+              </strong>{" "}
+              has exited the organisation? An in-app notification will also be created for all active staff.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              disabled={isSendingNotification}
+              onClick={() => {
+                setExitNotifyOpen(false)
+                onSuccess?.()
+              }}
+            >
+              No, skip
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isSendingNotification}
+              onClick={async () => {
+                if (!exitedEmployeeId) return
+                setIsSendingNotification(true)
+                try {
+                  const res = await fetch(`/api/v1/hr/employees/${exitedEmployeeId}/exit-notification`, {
+                    method: "POST",
+                  })
+                  if (res.ok) {
+                    toast.success("Exit notification sent to all staff")
+                  } else {
+                    const err = await res.json()
+                    toast.error(err.error || "Failed to send notification")
+                  }
+                } catch {
+                  toast.error("Failed to send notification")
+                } finally {
+                  setIsSendingNotification(false)
+                  setExitNotifyOpen(false)
+                  onSuccess?.()
+                }
+              }}
+            >
+              {isSendingNotification ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending…
+                </>
+              ) : (
+                "Yes, send notification"
+              )}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

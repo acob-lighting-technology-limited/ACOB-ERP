@@ -38,8 +38,15 @@ export function ProfileHero({ profile, onEdit }: ProfileHeroProps) {
   return (
     <Card className="overflow-hidden">
       <CardContent className="p-4 sm:p-6">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+        <div className="flex flex-col gap-3">
+          <div className="flex justify-end">
+            <Button onClick={onEdit} variant="outline" size="sm" className="gap-2">
+              <Edit className="h-4 w-4" />
+              Edit Profile
+            </Button>
+          </div>
+
+          <div className="flex flex-row items-center gap-4">
             <Avatar className="border-background h-24 w-24 border-4 shadow-md sm:h-28 sm:w-28 lg:h-32 lg:w-32">
               <AvatarFallback className="bg-primary text-primary-foreground text-3xl font-bold sm:text-4xl">
                 {getInitials(profile.first_name, profile.last_name)}
@@ -55,11 +62,6 @@ export function ProfileHero({ profile, onEdit }: ProfileHeroProps) {
               </div>
             </div>
           </div>
-
-          <Button onClick={onEdit} variant="outline" size="sm" className="w-full gap-2 sm:w-auto">
-            <Edit className="h-4 w-4" />
-            Edit Profile
-          </Button>
         </div>
       </CardContent>
     </Card>

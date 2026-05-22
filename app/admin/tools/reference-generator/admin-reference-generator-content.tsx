@@ -207,12 +207,14 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
       key: "created_by",
       label: "Created by",
       sortable: true,
+      hideOnMobile: true,
       accessor: (r) => r.created_by_name || r.sender_name || "-",
     },
     {
       key: "created_at",
       label: "Date",
       sortable: true,
+      hideOnMobile: true,
       accessor: (r) => r.created_at,
       render: (r) =>
         r.created_at

@@ -146,6 +146,7 @@ export default function MovementsPage() {
         key: "created_at",
         label: "Date",
         sortable: true,
+        hideOnMobile: true,
         accessor: (movement) => movement.created_at,
         resizable: true,
         initialWidth: 210,
@@ -198,6 +199,7 @@ export default function MovementsPage() {
       {
         key: "reference_number",
         label: "Reference",
+        hideOnMobile: true,
         accessor: (movement) => movement.reference_number || "",
         render: (movement) => (
           <span className="text-muted-foreground text-sm">{movement.reference_number || "None"}</span>

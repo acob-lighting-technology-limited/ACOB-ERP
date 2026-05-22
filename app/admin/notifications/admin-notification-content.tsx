@@ -204,6 +204,7 @@ export function AdminNotificationContent({ initialNotifications }: AdminNotifica
             {n.category}
           </Badge>
         ),
+        hideOnMobile: true,
       },
       {
         key: "priority",
@@ -215,6 +216,7 @@ export function AdminNotificationContent({ initialNotifications }: AdminNotifica
             {n.priority}
           </Badge>
         ),
+        hideOnMobile: true,
       },
       {
         key: "timestamp",
@@ -222,6 +224,7 @@ export function AdminNotificationContent({ initialNotifications }: AdminNotifica
         sortable: true,
         accessor: (n) => n.timestamp,
         render: (n) => <span className="text-muted-foreground text-xs whitespace-nowrap">{n.timestamp}</span>,
+        hideOnMobile: true,
       },
     ],
     [readIds]

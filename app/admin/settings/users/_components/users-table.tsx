@@ -67,7 +67,7 @@ export function UsersTable({ users, loading, onEdit, formatDate }: UsersTablePro
                   <TableCell className="text-muted-foreground">{user.department || "—"}</TableCell>
                   <TableCell>
                     <Badge variant={user.is_active ? "default" : "secondary"}>
-                      {user.employment_status === "separated" ? "Separated" : user.is_active ? "Active" : "Inactive"}
+                      {user.employment_status === "exited" ? "Exited" : user.is_active ? "Active" : "Inactive"}
                     </Badge>
                   </TableCell>
                   <TableCell className="text-sm">{formatDate(user.created_at)}</TableCell>

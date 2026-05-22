@@ -174,12 +174,14 @@ export default function SiteLocationsPage() {
       key: "address",
       label: "Address",
       accessor: (s) => s.address ?? "",
+      hideOnMobile: true,
       render: (s) => <span className="text-muted-foreground text-sm">{s.address || "—"}</span>,
     },
     {
       key: "coordinates",
       label: "GPS Coordinates",
       accessor: (s) => `${s.latitude},${s.longitude}`,
+      hideOnMobile: true,
       render: (s) => (
         <span className="font-mono text-xs">
           {Number(s.latitude).toFixed(5)}, {Number(s.longitude).toFixed(5)}
@@ -191,6 +193,7 @@ export default function SiteLocationsPage() {
       label: "Radius",
       sortable: true,
       accessor: (s) => s.radius_metres,
+      hideOnMobile: true,
       render: (s) => <span className="text-sm">{s.radius_metres}m</span>,
       align: "center",
     },

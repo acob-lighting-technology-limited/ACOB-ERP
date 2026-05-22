@@ -255,6 +255,7 @@ export function LeaveContent({
             {formatName(r.current_stage_code || r.approval_stage || "-")}
           </span>
         ),
+        hideOnMobile: true,
       },
     ],
     [leaveTypeMap]

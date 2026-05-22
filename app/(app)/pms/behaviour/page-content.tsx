@@ -57,6 +57,7 @@ export function BehaviourContent({
         label: "Cycle",
         sortable: true,
         accessor: (row) => row.cycle,
+        hideOnMobile: true,
       },
     ],
     []

@@ -122,6 +122,7 @@ export default function ReceiptsPage() {
         sortable: true,
         accessor: (receipt) => receipt.po_number || "",
         render: (receipt) => <span className="font-mono text-sm">{receipt.po_number || "No PO"}</span>,
+        hideOnMobile: true,
       },
       {
         key: "supplier_name",
@@ -138,6 +139,7 @@ export default function ReceiptsPage() {
         sortable: true,
         accessor: (receipt) => receipt.received_date,
         render: (receipt) => formatDate(receipt.received_date),
+        hideOnMobile: true,
       },
       {
         key: "total_items",

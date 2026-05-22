@@ -3,7 +3,8 @@ export const ASSIGNABLE_ROLES = ["visitor", "employee", "admin", "super_admin", 
 
 export function canAssignRole(assignerRole: string, targetRole: string): boolean {
   if (assignerRole === "super_admin") return ASSIGNABLE_ROLES.includes(targetRole as (typeof ASSIGNABLE_ROLES)[number])
-  if (assignerRole === "developer") return ["visitor", "employee", "admin", "developer"].includes(targetRole)
+  if (assignerRole === "developer")
+    return ["visitor", "employee", "admin", "super_admin", "developer"].includes(targetRole)
   if (assignerRole === "admin") return ["visitor", "employee"].includes(targetRole)
   return false
 }
@@ -13,12 +14,12 @@ export function canManageDeveloperAccounts(actorRole: string): boolean {
 }
 
 export function canManageSuperAdminAccounts(actorRole: string): boolean {
-  return actorRole === "super_admin"
+  return actorRole === "super_admin" || actorRole === "developer"
 }
 
 export function getAssignableRolesForActor(actorRole: string): string[] {
   if (actorRole === "super_admin") return [...ASSIGNABLE_ROLES]
-  if (actorRole === "developer") return ["visitor", "employee", "admin", "developer"]
+  if (actorRole === "developer") return ["visitor", "employee", "admin", "super_admin", "developer"]
   if (actorRole === "admin") return ["visitor", "employee"]
   return []
 }

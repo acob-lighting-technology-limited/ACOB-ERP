@@ -273,6 +273,7 @@ export default function AdminPmsCbtQuestionPage() {
       render: (row) => cycleNameById.get(row.review_cycle_id || "") || "Unassigned",
       resizable: true,
       initialWidth: 240,
+      hideOnMobile: true,
     },
     {
       key: "correct_option",
@@ -280,6 +281,7 @@ export default function AdminPmsCbtQuestionPage() {
       sortable: true,
       accessor: (row) => row.correct_option,
       render: (row) => <Badge variant="secondary">Option {row.correct_option}</Badge>,
+      hideOnMobile: true,
     },
     {
       key: "is_active",
@@ -298,6 +300,7 @@ export default function AdminPmsCbtQuestionPage() {
       sortable: true,
       accessor: (row) => row.created_at || "",
       render: (row) => formatDate(row.created_at),
+      hideOnMobile: true,
     },
   ]
 
@@ -542,7 +545,6 @@ export default function AdminPmsCbtQuestionPage() {
         emptyDescription="Choose a cycle and add questions to start building its CBT test."
         emptyIcon={Brain}
         skeletonRows={6}
-        minWidth="1040px"
       />
 
       <Dialog

@@ -18,7 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, CheckCircle, UserPlus, ChevronRight, ShieldCheck, Hash } from "lucide-react"
+import { Loader2, CheckCircle, UserPlus, ChevronRight, ShieldCheck, Hash, Mail } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { format } from "date-fns"
@@ -67,6 +67,12 @@ interface ApprovalEmailPreview {
   }
 }
 
+interface PendingEmailDispatch {
+  profileId: string
+  welcome: { subject: string; recipients: string[]; html: string }
+  internal: { subject: string; recipients: string[]; html: string }
+}
+
 interface ApprovalEmailWarning {
   audience: "employee" | "management"
   reason: string
@@ -87,6 +93,8 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
   const [pendingReject, setPendingReject] = useState(false)
   const [employeeId, setEmployeeId] = useState("")
   const [hireDate, setHireDate] = useState(toLocalISODate())
+  const [pendingEmailDispatch, setPendingEmailDispatch] = useState<PendingEmailDispatch | null>(null)
+  const [isSendingEmails, setIsSendingEmails] = useState(false)
 
   const [supabase] = useState(() => createClient())
   const queryClient = useQueryClient()
@@ -182,6 +190,7 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
           pendingUserId: selectedUser.id,
           employeeId: employeeId,
           hireDate: hireDate,
+          sendEmails: false,
         }),
       })
 
@@ -191,15 +200,7 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
         throw new Error(result.error || "Failed to approve user")
       }
 
-      const emailWarnings = Array.isArray(result.emailWarnings) ? (result.emailWarnings as ApprovalEmailWarning[]) : []
-
-      if (emailWarnings.length > 0) {
-        toast.warning("User approved, but some emails were not sent", {
-          description: emailWarnings.map((warning) => `${warning.audience}: ${warning.reason}`).join(" | "),
-        })
-      } else {
-        toast.success("User approved and account created successfully")
-      }
+      toast.success("Account created successfully")
 
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pendingApplications() })
       const remaining = pendingUsers.filter((u) => u.id !== selectedUser.id)
@@ -210,6 +211,15 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
         setEmployeeId("")
       }
       onEmployeeCreated()
+
+      // Prompt admin to send onboarding emails
+      if (result.profileId && result.pendingEmailPreview) {
+        setPendingEmailDispatch({
+          profileId: result.profileId as string,
+          welcome: result.pendingEmailPreview.welcome as PendingEmailDispatch["welcome"],
+          internal: result.pendingEmailPreview.internal as PendingEmailDispatch["internal"],
+        })
+      }
     } catch (error: unknown) {
       log.error("Approval error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to approve user")
@@ -548,6 +558,77 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
           </main>
         </div>
       </DialogContent>
+
+      <AlertDialog
+        open={Boolean(pendingEmailDispatch)}
+        onOpenChange={(open) => {
+          if (!open && !isSendingEmails) setPendingEmailDispatch(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <Mail className="h-4 w-4" />
+              Send Onboarding Emails?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The account has been created. Do you want to send the onboarding notification emails to the configured
+              recipients?
+              {pendingEmailDispatch && (
+                <span className="mt-2 block text-xs">
+                  Welcome email → {pendingEmailDispatch.welcome.recipients.join(", ") || "no recipients"}.
+                  <br />
+                  Internal notice → {pendingEmailDispatch.internal.recipients.join(", ") || "no recipients"}.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isSendingEmails} onClick={() => setPendingEmailDispatch(null)}>
+              No, skip
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isSendingEmails}
+              onClick={async () => {
+                if (!pendingEmailDispatch) return
+                setIsSendingEmails(true)
+                try {
+                  const res = await fetch("/api/admin/send-onboarding-emails", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(pendingEmailDispatch),
+                  })
+                  const data = await res.json()
+                  if (res.ok) {
+                    const warnings = Array.isArray(data.warnings) ? (data.warnings as string[]) : []
+                    if (warnings.length > 0) {
+                      toast.warning("Emails sent with some issues", { description: warnings.join(" | ") })
+                    } else {
+                      toast.success("Onboarding emails sent successfully")
+                    }
+                  } else {
+                    toast.error(data.error || "Failed to send onboarding emails")
+                  }
+                } catch {
+                  toast.error("Failed to send onboarding emails")
+                } finally {
+                  setIsSendingEmails(false)
+                  setPendingEmailDispatch(null)
+                }
+              }}
+            >
+              {isSendingEmails ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending…
+                </>
+              ) : (
+                "Yes, send emails"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={pendingReject} onOpenChange={(open) => !open && setPendingReject(false)}>
         <AlertDialogContent>

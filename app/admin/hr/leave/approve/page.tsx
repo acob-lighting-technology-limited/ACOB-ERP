@@ -318,12 +318,14 @@ export default function LeaveApprovePage() {
         label: "Department",
         sortable: true,
         accessor: (r) => r.user?.department || "-",
+        hideOnMobile: true,
       },
       {
         key: "stage",
         label: "Current Stage",
         accessor: (r) =>
           STAGE_LABELS[r.current_stage_code || r.approval_stage] || r.current_stage_code || r.approval_stage,
+        hideOnMobile: true,
         render: (r) => (
           <Badge variant="outline">
             {STAGE_LABELS[r.current_stage_code || r.approval_stage] || r.current_stage_code || r.approval_stage}
@@ -334,12 +336,14 @@ export default function LeaveApprovePage() {
         key: "approver",
         label: "Pending Approver",
         accessor: (r) => expectedApproverLabel(r),
+        hideOnMobile: true,
         render: (r) => <span className="text-sm">{expectedApproverLabel(r)}</span>,
       },
       {
         key: "evidence",
         label: "Evidence",
         accessor: (r) => (r.evidence_complete ? "Complete" : "Incomplete"),
+        hideOnMobile: true,
         render: (r) => (
           <Badge variant={r.evidence_complete ? "default" : "secondary"}>
             {r.evidence_complete ? "Complete" : "Incomplete"}

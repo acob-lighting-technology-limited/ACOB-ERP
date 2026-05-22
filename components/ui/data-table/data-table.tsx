@@ -28,6 +28,7 @@ import {
   List,
   Check,
   GripVertical,
+  MoreHorizontal,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -41,6 +42,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
@@ -958,22 +960,49 @@ export function DataTable<TData>({
                       ))}
                       {rowActions && rowActions.length > 0 && (
                         <TableCell className="text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {rowActions
-                              .filter((a) => !a.hidden || !a.hidden(row))
-                              .map((action) => (
+                          {(() => {
+                            const visible = rowActions.filter((a) => !a.hidden || !a.hidden(row))
+                            if (visible.length === 0) return null
+                            if (visible.length === 1) {
+                              const action = visible[0]
+                              return (
                                 <Button
-                                  key={action.label}
                                   size="sm"
                                   variant={action.variant === "destructive" ? "destructive" : "outline"}
                                   onClick={() => action.onClick(row)}
-                                  className="gap-1"
+                                  className="h-7 gap-1 px-2 text-xs"
                                 >
                                   {action.icon && <action.icon className="h-3.5 w-3.5" />}
                                   {action.label}
                                 </Button>
-                              ))}
-                          </div>
+                              )
+                            }
+                            return (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                    <span className="sr-only">Actions</span>
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end" className="w-40">
+                                  {visible.map((action) => (
+                                    <DropdownMenuItem
+                                      key={action.label}
+                                      onClick={() => action.onClick(row)}
+                                      className={cn(
+                                        "gap-2 text-sm",
+                                        action.variant === "destructive" && "text-destructive focus:text-destructive"
+                                      )}
+                                    >
+                                      {action.icon && <action.icon className="h-3.5 w-3.5" />}
+                                      {action.label}
+                                    </DropdownMenuItem>
+                                  ))}
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )
+                          })()}
                         </TableCell>
                       )}
                     </TableRow>

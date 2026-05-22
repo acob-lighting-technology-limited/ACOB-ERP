@@ -129,16 +129,20 @@ async function realignCorrespondenceCounter(params: {
   dataClient: CounterClient
   departmentCode: string
   recipientCode: string
+  letterType?: string | null
   categoryInput?: string | null
   referenceYear: number
 }): Promise<void> {
   const departmentCode = params.departmentCode.trim().toUpperCase()
   const recipientCode = params.recipientCode.trim().toUpperCase()
   const categoryCode = await resolveCategoryCodeForReference(params.dataClient, params.categoryInput)
-  const counterKey = `outgoing:${recipientCode}:${departmentCode}:${categoryCode || ""}`
+  const isInternal = (params.letterType || "external").toLowerCase() === "internal"
+  const seg1 = isInternal ? recipientCode : departmentCode
+  const seg2 = isInternal ? departmentCode : recipientCode
+  const counterKey = `outgoing:${seg1}:${seg2}:${categoryCode || ""}`
   const prefix = categoryCode
-    ? `ACOB/${recipientCode}/${departmentCode}/${categoryCode}/${params.referenceYear}/`
-    : `ACOB/${recipientCode}/${departmentCode}/${params.referenceYear}/`
+    ? `ACOB/${seg1}/${seg2}/${categoryCode}/${params.referenceYear}/`
+    : `ACOB/${seg1}/${seg2}/${params.referenceYear}/`
 
   const { data: references, error: refsError } = await params.dataClient
     .from("correspondence_records")
@@ -184,6 +188,7 @@ async function ensureReferenceNumberForApprovedRecord(params: {
     | "reference_number"
     | "department_code"
     | "recipient_code"
+    | "letter_type"
     | "category"
     | "company_code"
     | "submitted_at"
@@ -215,6 +220,7 @@ async function ensureReferenceNumberForApprovedRecord(params: {
     {
       p_department_code: departmentCode,
       p_recipient_code: recipientCode,
+      p_letter_type: params.record.letter_type || "external",
       p_category_code: categoryCode,
       p_company_code: params.record.company_code || "ACOB",
       p_reference_year: referenceYear,
@@ -500,6 +506,7 @@ export async function POST(request: NextRequest) {
           dataClient,
           departmentCode,
           recipientCode: parsed.data.recipient_code,
+          letterType: parsed.data.letter_type || "external",
           categoryInput: parsed.data.category || null,
           referenceYear,
         })

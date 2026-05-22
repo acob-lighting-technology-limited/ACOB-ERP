@@ -304,6 +304,7 @@ export default function OfficeLocationsPage() {
       label: "Linked Department",
       sortable: true,
       accessor: (location) => location.department || "",
+      hideOnMobile: true,
       render: (location) =>
         location.department ? (
           <Badge variant="secondary">{location.department}</Badge>
@@ -575,7 +576,6 @@ export default function OfficeLocationsPage() {
         emptyDescription="Create your first office location to start organizing workplace assignments."
         emptyIcon={MapPin}
         skeletonRows={5}
-        minWidth="1100px"
       />
     </DataTablePage>
   )

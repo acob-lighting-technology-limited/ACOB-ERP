@@ -276,6 +276,7 @@ export function WeeklyReportsContent({
         key: "meeting_date",
         label: "Meeting Date",
         sortable: true,
+        hideOnMobile: true,
         accessor: () => meetingDate,
         render: () => {
           const date = new Date(`${meetingDate}T00:00:00`)
@@ -287,6 +288,7 @@ export function WeeklyReportsContent({
         key: "week_number",
         label: "Week",
         sortable: true,
+        hideOnMobile: true,
         accessor: (report) => report.week_number,
         render: (report) => <span className="font-medium">{`W${report.week_number}`}</span>,
       },
@@ -294,12 +296,14 @@ export function WeeklyReportsContent({
         key: "year",
         label: "Year",
         sortable: true,
+        hideOnMobile: true,
         accessor: (report) => report.year,
       },
       {
         key: "submitted_by",
         label: "Submitted By",
         sortable: true,
+        hideOnMobile: true,
         accessor: (report) => {
           const profile = Array.isArray(report.profiles) ? report.profiles[0] : report.profiles
           return profile ? `${profile.first_name} ${profile.last_name}` : "Unknown"
@@ -313,6 +317,7 @@ export function WeeklyReportsContent({
         key: "created_at",
         label: "Submission Date",
         sortable: true,
+        hideOnMobile: true,
         accessor: (report) => report.created_at,
         render: (report) => {
           const created = new Date(report.created_at).toLocaleDateString("en-GB", {

@@ -90,6 +90,7 @@ async function ensureReferenceNumberOnFinalApproval(params: {
     {
       p_department_code: departmentCode,
       p_recipient_code: recipientCode,
+      p_letter_type: String((params.record.letter_type as string | null | undefined) || "external"),
       p_category_code: categoryCode,
       p_reference_year: referenceYear,
     }
@@ -165,7 +166,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       canAccessDepartment(profile, approvalScopeDepartment)
 
     const isExecutiveApprover = isManagingDirector || isExecutiveLead
-    const canBypassChain = role === "super_admin" || role === "developer"
+    const canBypassChain = role === "super_admin" || role === "developer" || role === "admin"
 
     const { data: existingApprovals, error: approvalError } = await supabase
       .from("correspondence_approvals")
@@ -530,7 +531,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
     return NextResponse.json({ data: { record: updatedRecord, approval: targetApproval } })
   } catch (error) {
-    log.error({ err: String(error) }, "Error in POST /api/correspondence/records/[id]/approvals:")
+    const errMsg = error instanceof Error ? error.message : JSON.stringify(error)
+    log.error({ err: errMsg }, "Error in POST /api/correspondence/records/[id]/approvals:")
     return NextResponse.json({ error: "Failed to process approval" }, { status: 500 })
   }
 }

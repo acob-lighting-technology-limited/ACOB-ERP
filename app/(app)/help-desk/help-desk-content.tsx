@@ -208,6 +208,7 @@ export function HelpDeskContent({
       sortable: true,
       accessor: (ticket) => ticket.ticket_number,
       render: (ticket) => <span className="font-mono text-xs font-bold">{ticket.ticket_number}</span>,
+      hideOnMobile: true,
     },
     {
       key: "title",
@@ -248,6 +249,7 @@ export function HelpDeskContent({
         ) : (
           <span className="text-muted-foreground text-xs">Not linked</span>
         ),
+      hideOnMobile: true,
     },
     {
       key: "comments",
@@ -282,6 +284,7 @@ export function HelpDeskContent({
       render: (ticket) => (
         <span className="text-muted-foreground text-xs">{new Date(ticket.created_at).toLocaleDateString()}</span>
       ),
+      hideOnMobile: true,
     },
   ]
 

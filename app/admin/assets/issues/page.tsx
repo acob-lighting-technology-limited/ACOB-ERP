@@ -303,6 +303,7 @@ export default function AssetIssuesPage() {
       key: "reported_by",
       label: "Reported By",
       sortable: true,
+      hideOnMobile: true,
       accessor: (issue) =>
         issue.creator ? `${formatName(issue.creator.first_name)} ${formatName(issue.creator.last_name)}` : "Unknown",
       render: (issue) => (
@@ -315,6 +316,7 @@ export default function AssetIssuesPage() {
       key: "created_at",
       label: "Date",
       sortable: true,
+      hideOnMobile: true,
       accessor: (issue) => issue.created_at,
       render: (issue) => (
         <span className="text-muted-foreground text-sm">{new Date(issue.created_at).toLocaleDateString()}</span>
@@ -449,7 +451,6 @@ export default function AssetIssuesPage() {
         emptyDescription="Open issues will appear here when assets are reported for maintenance or follow-up."
         emptyIcon={AlertCircle}
         skeletonRows={6}
-        minWidth="1180px"
       />
 
       <AlertDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)}>

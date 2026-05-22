@@ -63,6 +63,7 @@ export function SecurityEventsContent({ rows, error }: { rows: AuditLogRow[]; er
         accessor: (row) => row.created_at,
         resizable: true,
         initialWidth: 220,
+        hideOnMobile: true,
         render: (row) => new Date(row.created_at).toLocaleString(),
       },
       {
@@ -82,6 +83,7 @@ export function SecurityEventsContent({ rows, error }: { rows: AuditLogRow[]; er
         label: "Entity",
         sortable: true,
         accessor: (row) => row.entity_type || "",
+        hideOnMobile: true,
         render: (row) => row.entity_type || "Unknown",
       },
       {
@@ -98,6 +100,7 @@ export function SecurityEventsContent({ rows, error }: { rows: AuditLogRow[]; er
         accessor: (row) => row.user_id || "",
         resizable: true,
         initialWidth: 220,
+        hideOnMobile: true,
         render: (row) => <span className="font-mono text-xs">{row.user_id || "-"}</span>,
       },
     ],

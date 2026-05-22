@@ -154,6 +154,7 @@ export default function PurchaseOrdersPage() {
         sortable: true,
         accessor: (order) => order.order_date,
         render: (order) => formatDate(order.order_date),
+        hideOnMobile: true,
       },
       {
         key: "expected_date",
@@ -166,6 +167,7 @@ export default function PurchaseOrdersPage() {
             <p className="text-muted-foreground text-xs">{getDeliveryWindow(order)}</p>
           </div>
         ),
+        hideOnMobile: true,
       },
       {
         key: "total_amount",

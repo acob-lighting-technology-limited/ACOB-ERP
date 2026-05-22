@@ -110,6 +110,7 @@ export function AdminDocumentationContent({
         label: "Category",
         sortable: true,
         accessor: (row) => row.category || "",
+        hideOnMobile: true,
         render: (row) => (
           <Badge variant="outline" className="text-xs">
             {row.category || "General"}
@@ -121,6 +122,7 @@ export function AdminDocumentationContent({
         label: "Author",
         sortable: true,
         accessor: (row) => `${row.user?.first_name || ""} ${row.user?.last_name || ""}`,
+        hideOnMobile: true,
         render: (row) => (
           <div className="space-y-1">
             <p className="text-sm">
@@ -142,6 +144,7 @@ export function AdminDocumentationContent({
         label: "Last Updated",
         sortable: true,
         accessor: (row) => row.updated_at,
+        hideOnMobile: true,
         render: (row) => <span className="text-muted-foreground text-sm">{formatDate(row.updated_at)}</span>,
       },
     ],

@@ -265,6 +265,7 @@ export function FleetContent() {
             {(row.attachments || []).length}
           </span>
         ),
+        hideOnMobile: true,
       },
       {
         key: "created_at",
@@ -272,6 +273,7 @@ export function FleetContent() {
         sortable: true,
         accessor: (row) => row.created_at,
         render: (row) => formatDateTime(row.created_at),
+        hideOnMobile: true,
       },
       {
         key: "reviewer",
@@ -279,6 +281,7 @@ export function FleetContent() {
         sortable: true,
         accessor: (row) => row.reviewer?.full_name || "-",
         render: (row) => row.reviewer?.full_name || "-",
+        hideOnMobile: true,
       },
     ],
     []

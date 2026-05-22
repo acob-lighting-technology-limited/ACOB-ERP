@@ -154,6 +154,7 @@ export function FeedbackContent({ initialFeedback }: FeedbackContentProps) {
         sortable: true,
         accessor: (row) => row.created_at,
         render: (row) => new Date(row.created_at).toLocaleDateString("en-GB"),
+        hideOnMobile: true,
       },
     ],
     []

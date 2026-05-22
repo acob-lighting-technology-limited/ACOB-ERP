@@ -124,6 +124,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
         label: "Ref #",
         sortable: true,
         accessor: (r) => r.id,
+        hideOnMobile: true,
         render: (r) => (
           <span className="text-muted-foreground font-mono text-xs font-semibold">
             {r.id.substring(0, 8).toUpperCase()}
@@ -170,6 +171,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
         label: "Department",
         sortable: true,
         accessor: (r) => (r.is_anonymous ? "Hidden" : r.profiles?.department || "Unassigned"),
+        hideOnMobile: true,
         render: (r) => <span className="text-sm">{r.is_anonymous ? "Hidden" : r.profiles?.department || "—"}</span>,
       },
       {
@@ -204,6 +206,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
         label: "Date Created",
         sortable: true,
         accessor: (r) => r.created_at,
+        hideOnMobile: true,
         render: (r) => (
           <span className="text-muted-foreground text-xs">{new Date(r.created_at).toLocaleDateString()}</span>
         ),
