@@ -1,7 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
-import { ScrollText, Download, Eye, FileText, Plus, Pencil, Trash2 } from "lucide-react"
+import { useMemo, useState, useCallback } from "react"
+import { ScrollText, Download, Eye, FileText, Plus, Pencil, Trash2, Copy } from "lucide-react"
+import { toast } from "sonner"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
@@ -9,7 +10,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { AuditLogDetailPanel } from "@/components/audit/AuditLogDetailPanel"
 import { exportAuditLogsToExcel, exportAuditLogsToPDF, exportAuditLogsToWord } from "@/lib/audit/audit-log-export"
-import { HIDDEN_ACTIONS } from "@/lib/audit/audit-log-display"
+import { HIDDEN_ACTIONS, VISIBLE_AUDIT_ACTIONS, getAuditLogSummary } from "@/lib/audit/audit-log-display"
+import { getAuditActionColor } from "@/lib/audit/action-colors"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import type { AuditLog, EmployeeMember, UserProfile } from "./types"
 import { formatName } from "@/lib/utils"
@@ -24,14 +26,6 @@ interface AdminAuditLogsContentProps {
   userProfile: UserProfile
 }
 
-const ACTION_COLOR_MAP: Record<string, string> = {
-  create: "bg-emerald-500/10 text-emerald-500 border-emerald-200",
-  update: "bg-blue-500/10 text-blue-500 border-blue-200",
-  delete: "bg-red-500/10 text-red-500 border-red-200",
-  approve: "bg-purple-500/10 text-purple-500 border-purple-200",
-  reject: "bg-amber-500/10 text-amber-500 border-amber-200",
-}
-
 export function AdminAuditLogsContent({
   initialLogs,
   initialTotalCount,
@@ -42,6 +36,18 @@ export function AdminAuditLogsContent({
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false)
+
+  const handleCopyEntry = useCallback(async (r: AuditLog) => {
+    const userName = r.user ? `${r.user.first_name} ${r.user.last_name}` : "System"
+    const summary = getAuditLogSummary(r)
+    const text = `[${new Date(r.created_at).toLocaleString("en-US", { timeZone: "Africa/Lagos" })}] ${r.action.toUpperCase()} ${r.entity_type} — ${summary} (by ${userName})`
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success("Entry copied")
+    } catch {
+      toast.error("Failed to copy")
+    }
+  }, [])
 
   const scopedDepartments = useMemo(
     () => userProfile.managed_departments ?? userProfile.lead_departments ?? [],
@@ -86,8 +92,21 @@ export function AdminAuditLogsContent({
         hideOnMobile: true,
         render: (r) => (
           <div className="flex flex-col text-xs">
-            <span className="font-medium">{new Date(r.created_at).toLocaleDateString()}</span>
-            <span className="text-muted-foreground">{new Date(r.created_at).toLocaleTimeString()}</span>
+            <span className="font-medium">
+              {new Date(r.created_at).toLocaleDateString("en-US", {
+                timeZone: "Africa/Lagos",
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })}
+            </span>
+            <span className="text-muted-foreground">
+              {new Date(r.created_at).toLocaleTimeString("en-US", {
+                timeZone: "Africa/Lagos",
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </span>
           </div>
         ),
       },
@@ -97,9 +116,7 @@ export function AdminAuditLogsContent({
         sortable: true,
         accessor: (r) => r.action || "update",
         render: (r) => (
-          <Badge className={ACTION_COLOR_MAP[r.action || "update"] || "bg-muted text-muted-foreground"}>
-            {formatName(r.action || "update")}
-          </Badge>
+          <Badge className={getAuditActionColor(r.action || "update")}>{formatName(r.action || "update")}</Badge>
         ),
       },
       {
@@ -140,22 +157,8 @@ export function AdminAuditLogsContent({
         label: "Summary",
         resizable: true,
         initialWidth: 250,
-        accessor: (r) => {
-          if (r.metadata?.event) return String(r.metadata?.event)
-          if (r.task_info?.title) return `Task: ${r.task_info.title}`
-          if (r.asset_info?.unique_code) return `Asset: ${r.asset_info.unique_code}`
-          return `Modified ${r.entity_type}`
-        },
-        render: (r) => {
-          const summary = String(
-            r.metadata?.event ||
-              r.task_info?.title ||
-              r.asset_info?.unique_code ||
-              r.leave_request_info?.leave_type_name ||
-              `Modified ${r.entity_type}`
-          )
-          return <span className="block max-w-[250px] truncate text-sm">{summary}</span>
-        },
+        accessor: (r) => getAuditLogSummary(r),
+        render: (r) => <span className="block max-w-[250px] truncate text-sm">{getAuditLogSummary(r)}</span>,
       },
     ],
     []
@@ -168,13 +171,7 @@ export function AdminAuditLogsContent({
       {
         key: "action",
         label: "Action",
-        options: [
-          { value: "create", label: "Create" },
-          { value: "update", label: "Update" },
-          { value: "delete", label: "Delete" },
-          { value: "approve", label: "Approve" },
-          { value: "reject", label: "Reject" },
-        ],
+        options: [...VISIBLE_AUDIT_ACTIONS],
       },
       {
         key: "entity_type",
@@ -249,7 +246,7 @@ export function AdminAuditLogsContent({
         getRowId={(r) => r.id}
         searchPlaceholder="Search action, module, user or summary..."
         searchFn={(r, q) => {
-          const summary = String(r.metadata?.event || r.task_info?.title || r.asset_info?.unique_code || "")
+          const summary = getAuditLogSummary(r)
           const userName = r.user ? `${r.user.first_name} ${r.user.last_name}` : "System"
           return `${r.action} ${r.entity_type} ${userName} ${summary}`.toLowerCase().includes(q)
         }}
@@ -263,6 +260,11 @@ export function AdminAuditLogsContent({
               setSelectedLog(r)
               setIsDetailsOpen(true)
             },
+          },
+          {
+            label: "Copy Entry",
+            icon: Copy,
+            onClick: handleCopyEntry,
           },
         ]}
         expandable={{
@@ -322,18 +324,16 @@ export function AdminAuditLogsContent({
             }}
           >
             <div className="mb-2 flex items-start justify-between">
-              <Badge className={ACTION_COLOR_MAP[r.action || "update"] || "bg-muted text-muted-foreground"}>
-                {formatName(r.action || "update")}
-              </Badge>
+              <Badge className={getAuditActionColor(r.action || "update")}>{formatName(r.action || "update")}</Badge>
               <span className="text-muted-foreground font-mono text-[10px]">
-                {new Date(r.created_at).toLocaleTimeString()}
+                {new Date(r.created_at).toLocaleTimeString("en-US", {
+                  timeZone: "Africa/Lagos",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
               </span>
             </div>
-            <h4 className="truncate text-sm font-semibold">
-              {String(
-                r.metadata?.event || r.task_info?.title || r.asset_info?.unique_code || `Modified ${r.entity_type}`
-              )}
-            </h4>
+            <h4 className="truncate text-sm font-semibold">{getAuditLogSummary(r)}</h4>
             <div className="mt-3 flex items-center gap-2 border-t pt-3">
               <div className="bg-muted flex h-5 w-5 items-center justify-center rounded-full text-[8px] font-bold">
                 {r.user ? r.user.first_name.charAt(0) : "S"}

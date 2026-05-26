@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -143,13 +144,7 @@ export default function JobDescriptionPage() {
   }
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
+    return formatWATDateTime(dateString, { month: "short", day: "numeric", year: "numeric" })
   }
 
   const handlePrint = () => {
@@ -221,9 +216,7 @@ export default function JobDescriptionPage() {
                 {profile?.company_email && <p className="mb-1">{profile.company_email}</p>}
                 {profile?.department && <p className="mb-1">{profile.department}</p>}
                 {profile?.phone_number && <p className="mb-1">{profile.phone_number}</p>}
-                <p className="mt-2">
-                  {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-                </p>
+                <p className="mt-2">{formatWATDate(new Date(), { month: "long", day: "numeric", year: "numeric" })}</p>
               </div>
             </div>
           </div>

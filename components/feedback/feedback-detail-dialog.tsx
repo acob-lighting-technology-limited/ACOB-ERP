@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { formatName } from "@/lib/utils"
+import { formatWATDateTime } from "@/lib/utils/date"
 import type { FeedbackRecord } from "@/components/feedback/types"
 
 function getTypeColor(type: string): string {
@@ -78,13 +79,9 @@ export function FeedbackDetailDialog({
                   <p className="text-muted-foreground text-lg font-medium italic">Anonymous Submission</p>
                 )}
                 <div className="mt-2 border-t pt-2">
-                  <p className="text-muted-foreground text-xs">
-                    Submitted: {new Date(feedback.created_at).toLocaleString()}
-                  </p>
+                  <p className="text-muted-foreground text-xs">Submitted: {formatWATDateTime(feedback.created_at)}</p>
                   {feedback.updated_at !== feedback.created_at && (
-                    <p className="text-muted-foreground text-xs">
-                      Updated: {new Date(feedback.updated_at).toLocaleString()}
-                    </p>
+                    <p className="text-muted-foreground text-xs">Updated: {formatWATDateTime(feedback.updated_at)}</p>
                   )}
                 </div>
               </div>

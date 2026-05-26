@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import { useQuery } from "@tanstack/react-query"
 import { Calendar, DollarSign, BarChart3, TrendingDown, TrendingUp } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
@@ -113,7 +114,7 @@ function formatCurrency(amount: number, currency = "NGN") {
 function formatMonth(monthStr: string) {
   const [year, month] = monthStr.split("-")
   const date = new Date(parseInt(year, 10), parseInt(month, 10) - 1)
-  return date.toLocaleDateString("en-NG", { month: "short", year: "numeric" })
+  return formatWATDate(date, { month: "short", year: "numeric" })
 }
 
 function getPeriodLabel(date: string) {
@@ -206,7 +207,7 @@ export default function FinanceReportsPage() {
         render: (row) => (
           <div className="space-y-1">
             <p className="font-medium">{row.title}</p>
-            <p className="text-muted-foreground text-xs">{new Date(row.created_at).toLocaleDateString("en-NG")}</p>
+            <p className="text-muted-foreground text-xs">{formatWATDate(row.created_at)}</p>
           </div>
         ),
       },
@@ -431,7 +432,7 @@ export default function FinanceReportsPage() {
               </div>
               <div className="rounded-lg border p-4">
                 <p className="text-muted-foreground text-xs tracking-wide uppercase">Created</p>
-                <p className="mt-2 text-sm">{new Date(row.created_at).toLocaleString("en-NG")}</p>
+                <p className="mt-2 text-sm">{formatWATDateTime(row.created_at)}</p>
               </div>
             </div>
           ),

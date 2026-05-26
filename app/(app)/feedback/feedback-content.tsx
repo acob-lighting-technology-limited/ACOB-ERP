@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { Edit2, MessageSquare, Plus, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
@@ -153,7 +154,7 @@ export function FeedbackContent({ initialFeedback }: FeedbackContentProps) {
         label: "Created",
         sortable: true,
         accessor: (row) => row.created_at,
-        render: (row) => new Date(row.created_at).toLocaleDateString("en-GB"),
+        render: (row) => formatWATDate(row.created_at),
         hideOnMobile: true,
       },
     ],

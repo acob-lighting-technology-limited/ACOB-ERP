@@ -19,6 +19,7 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { formatName } from "@/lib/utils"
+import { formatWATDate } from "@/lib/utils/date"
 
 interface ReviewsContentProps {
   initialReviews: Review[]
@@ -235,9 +236,7 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
           </p>
           {r.acknowledged_at && (
             <div className="mt-4 border-t pt-2">
-              <p className="text-xs font-medium text-emerald-600">
-                Acknowledged on {new Date(r.acknowledged_at).toLocaleDateString()}
-              </p>
+              <p className="text-xs font-medium text-emerald-600">Acknowledged on {formatWATDate(r.acknowledged_at)}</p>
               <p className="text-muted-foreground italic">
                 &quot;{r.employee_comments || "No employee comments"}&quot;
               </p>

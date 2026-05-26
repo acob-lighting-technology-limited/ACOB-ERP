@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { BookOpen, Eye, Pencil, Plus, Target, TrendingUp, Users } from "lucide-react"
+import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
@@ -86,7 +87,7 @@ function formatName(profile: Profile | null | undefined) {
 
 function formatDate(date: string | null | undefined) {
   if (!date) return "-"
-  return new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+  return formatWATDate(date, { day: "2-digit", month: "short", year: "numeric" })
 }
 
 function normalizeCycleValue(value: string) {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { useQuery } from "@tanstack/react-query"
 import { ArrowDown, ArrowUp, ArrowUpDown, Boxes, ClipboardList, Package2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
@@ -68,13 +69,7 @@ async function fetchMovementsList(): Promise<StockMovement[]> {
 }
 
 function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("en-NG", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return formatWATDate(date, { year: "numeric", month: "short", day: "numeric" })
 }
 
 function getQuantityLabel(movement: StockMovement) {

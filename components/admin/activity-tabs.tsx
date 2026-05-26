@@ -7,6 +7,7 @@ import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ArrowRight } from "lucide-react"
+import { formatWATDate } from "@/lib/utils/date"
 
 export interface AdminAssetActivityRow {
   id: string
@@ -157,7 +158,7 @@ function priorityColor(priority: string | null): string {
 
 function shortDate(dateString: string | null): string {
   if (!dateString) return "—"
-  return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })
+  return formatWATDate(dateString, { month: "short", day: "numeric", year: "2-digit" })
 }
 
 function EmptyTab({ label }: { label: string }) {
@@ -429,12 +430,12 @@ export function AdminActivityTabs({
                       <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(a.status)}`}>{a.status}</Badge>
                       {a.clock_in && (
                         <span className="text-muted-foreground text-[10px]">
-                          In {new Date(a.clock_in).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          In {(a.clock_in as string).substring(0, 5)}
                         </span>
                       )}
                       {a.clock_out && (
                         <span className="text-muted-foreground text-[10px]">
-                          Out {new Date(a.clock_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          Out {(a.clock_out as string).substring(0, 5)}
                         </span>
                       )}
                     </div>

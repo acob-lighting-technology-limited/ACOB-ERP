@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
+import { formatWATDate } from "@/lib/utils/date"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
@@ -30,7 +31,7 @@ interface EmployeeRemoteAccess {
 
 function formatDate(d: string | null) {
   if (!d) return "Never"
-  return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  return formatWATDate(d, { month: "short", day: "numeric", year: "numeric" })
 }
 
 async function fetchEmployees(dept: string): Promise<{ data: EmployeeRemoteAccess[]; departments: string[] }> {

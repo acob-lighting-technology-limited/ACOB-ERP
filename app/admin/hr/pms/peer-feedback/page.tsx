@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { StatCard } from "@/components/ui/stat-card"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { exportPmsRowsToExcel } from "@/lib/pms/export"
-import { toLocalISODate } from "@/lib/utils/date"
+import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
 
 type Profile = {
   id: string
@@ -156,7 +156,7 @@ export default function AdminPeerFeedbackPage() {
     Professionalism: row.professionalism ?? "-",
     Comments: row.comments || "",
     Status: row.status,
-    Date: new Date(row.created_at).toLocaleDateString(),
+    Date: formatWATDate(row.created_at),
   }))
 
   const columns: DataTableColumn<PeerFeedbackRow>[] = useMemo(
@@ -212,9 +212,7 @@ export default function AdminPeerFeedbackPage() {
         label: "Date",
         sortable: true,
         accessor: (row) => row.created_at,
-        render: (row) => (
-          <span className="text-muted-foreground text-sm">{new Date(row.created_at).toLocaleDateString()}</span>
-        ),
+        render: (row) => <span className="text-muted-foreground text-sm">{formatWATDate(row.created_at)}</span>,
         hideOnMobile: true,
       },
     ],

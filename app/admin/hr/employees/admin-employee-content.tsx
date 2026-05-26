@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { formatName, cn } from "@/lib/utils"
+import { formatWATDate } from "@/lib/utils/date"
 import { Users, Shield, Mail, Phone, Download, Plus, Pencil, Eye, Building2, Calendar, IdCard } from "lucide-react"
 import type { UserRole, EmploymentStatus } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
@@ -731,11 +732,11 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Joined</span>
-                    <span>{r.employment_date ? new Date(r.employment_date).toLocaleDateString() : "—"}</span>
+                    <span>{r.employment_date ? formatWATDate(r.employment_date) : "—"}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">DOB</span>
-                    <span>{r.date_of_birth ? new Date(r.date_of_birth).toLocaleDateString() : "—"}</span>
+                    <span>{r.date_of_birth ? formatWATDate(r.date_of_birth) : "—"}</span>
                   </div>
                 </div>
               </div>

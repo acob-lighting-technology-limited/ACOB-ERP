@@ -102,6 +102,7 @@ export async function GET(request: NextRequest) {
         isHoliday: holidayDates.has(date),
         isOnLeave: leaveDates.has(date),
         isExempted: Boolean(profile?.attendance_exempt) || exemptDates.has(date),
+        recordDate: date,
       })
       return { date, record: rec, status }
     })

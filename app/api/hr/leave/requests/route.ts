@@ -341,7 +341,7 @@ export async function GET(request: NextRequest) {
 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = request.nextUrl
     const paginationParsed = PaginationSchema.safeParse({
       page: searchParams.get("page") || "1",
       per_page: searchParams.get("limit") || "20",
@@ -1335,7 +1335,7 @@ export async function DELETE(request: NextRequest) {
 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = request.nextUrl
     const id = searchParams.get("id")
 
     if (!id) return NextResponse.json({ error: "Leave request ID is required" }, { status: 400 })

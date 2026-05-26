@@ -9,6 +9,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ListToolbar } from "@/components/ui/patterns"
 import { ItemInfoButton } from "@/components/ui/item-info-button"
 import { PriorityBadge, TicketStatusBadge } from "@/components/dashboard/help-desk/ticket-badges"
+import { HELP_DESK_STATUSES } from "@/lib/help-desk/server"
 
 export interface MyHelpDeskTicket {
   id: string
@@ -31,17 +32,17 @@ interface MyTicketsTableProps {
   onViewTicket: (ticketId: string) => void
 }
 
-const PENDING_STATUSES = new Set(["new", "pending_lead_review", "department_queue", "pending_approval", "assigned"])
-const OPEN_STATUSES = new Set([
-  "new",
-  "pending_lead_review",
-  "department_queue",
-  "department_assigned",
-  "assigned",
-  "in_progress",
-])
-const RESOLVED_STATUSES = new Set(["resolved"])
-const CLOSED_STATUSES = new Set(["closed", "cancelled", "rejected"])
+const s = HELP_DESK_STATUSES
+const PENDING_STATUSES = new Set<string>(
+  s.filter((x) => ["new", "pending_lead_review", "department_queue", "pending_approval", "assigned"].includes(x))
+)
+const OPEN_STATUSES = new Set<string>(
+  s.filter((x) =>
+    ["new", "pending_lead_review", "department_queue", "department_assigned", "assigned", "in_progress"].includes(x)
+  )
+)
+const RESOLVED_STATUSES = new Set<string>(s.filter((x) => x === "resolved"))
+const CLOSED_STATUSES = new Set<string>(s.filter((x) => ["closed", "cancelled", "rejected"].includes(x)))
 
 function belongsToTab(ticket: MyHelpDeskTicket, tab: TicketTab) {
   if (tab === "all") return true

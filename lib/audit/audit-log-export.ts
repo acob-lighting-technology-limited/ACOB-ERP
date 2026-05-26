@@ -16,7 +16,7 @@ import {
   getDepartmentLocation,
 } from "@/lib/audit/audit-log-display"
 import type { AuditLog } from "@/app/admin/audit-logs/types"
-import { toLocalISODate } from "@/lib/utils/date"
+import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
 
 const log = logger("audit-log-export")
 
@@ -82,7 +82,7 @@ export async function exportAuditLogsToPDF(logs: AuditLog[]): Promise<void> {
     doc.setFontSize(16)
     doc.text("Audit Logs Report", 14, 15)
     doc.setFontSize(10)
-    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 22)
+    doc.text(`Generated on: ${formatWATDate(new Date())}`, 14, 22)
     doc.text(`Total Logs: ${logs.length}`, 14, 28)
 
     const rows = logs.map((entry, index) => [
@@ -155,7 +155,7 @@ export async function exportAuditLogsToWord(logs: AuditLog[]): Promise<void> {
               alignment: AlignmentType.CENTER,
             }),
             new Paragraph({
-              text: `Generated on: ${new Date().toLocaleDateString()}`,
+              text: `Generated on: ${formatWATDate(new Date())}`,
               alignment: AlignmentType.CENTER,
             }),
             new Paragraph({ text: `Total Logs: ${logs.length}`, alignment: AlignmentType.CENTER }),

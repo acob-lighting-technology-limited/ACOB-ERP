@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { createClient } from "@/lib/supabase/client"
@@ -281,7 +282,7 @@ export function WeeklyReportsContent({
         render: () => {
           const date = new Date(`${meetingDate}T00:00:00`)
           if (Number.isNaN(date.getTime())) return "-"
-          return date.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+          return formatWATDate(date, { day: "2-digit", month: "short", year: "numeric" })
         },
       },
       {
@@ -320,11 +321,7 @@ export function WeeklyReportsContent({
         hideOnMobile: true,
         accessor: (report) => report.created_at,
         render: (report) => {
-          const created = new Date(report.created_at).toLocaleDateString("en-GB", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          })
+          const created = formatWATDate(report.created_at, { day: "2-digit", month: "short", year: "numeric" })
           const updatedAt = (report as WeeklyReport & { updated_at?: string | null }).updated_at
           const wasEdited = Boolean(updatedAt && new Date(updatedAt).getTime() > new Date(report.created_at).getTime())
           return (
@@ -599,7 +596,7 @@ export function WeeklyReportsContent({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Submitted</span>
-                  <span>{new Date(report.created_at).toLocaleDateString("en-GB")}</span>
+                  <span>{formatWATDate(report.created_at)}</span>
                 </div>
               </div>
             </div>

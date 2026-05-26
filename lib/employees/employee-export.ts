@@ -8,7 +8,7 @@ import { getRoleDisplayName } from "@/lib/permissions"
 import { logger } from "@/lib/logger"
 import { toast } from "sonner"
 import type { UserRole, EmploymentStatus } from "@/types/database"
-import { toLocalISODate } from "@/lib/utils/date"
+import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
 
 export interface Employee {
   id: string
@@ -71,8 +71,7 @@ export function buildEmployeeExportRows(employees: Employee[], opts: ExportOptio
     if (selectedColumns["Is Lead"]) row["Is Lead"] = member.is_department_lead ? "Yes" : "No"
     if (selectedColumns["Lead Departments"])
       row["Lead Departments"] = member.lead_departments?.length ? member.lead_departments.join(", ") : "-"
-    if (selectedColumns["Created At"])
-      row["Created At"] = member.created_at ? new Date(member.created_at).toLocaleDateString() : "-"
+    if (selectedColumns["Created At"]) row["Created At"] = member.created_at ? formatWATDate(member.created_at) : "-"
     return row
   })
 }
@@ -131,7 +130,7 @@ export async function exportEmployeesToPDF(
     doc.setFontSize(16)
     doc.text("ACOB Employee Report", 14, 15)
     doc.setFontSize(10)
-    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 22)
+    doc.text(`Generated on: ${formatWATDate(new Date())}`, 14, 22)
     doc.text(`Total Employees: ${employees.length}`, 14, 28)
 
     const dataToExport = employees.map((member, index) => {
@@ -224,7 +223,7 @@ export async function exportEmployeesToPDF(
         headers.push("Lead Departments")
       }
       if (selectedColumns["Created At"]) {
-        row.push(member.created_at ? new Date(member.created_at).toLocaleDateString() : "-")
+        row.push(member.created_at ? formatWATDate(member.created_at) : "-")
         headers.push("Created At")
       }
 
@@ -307,7 +306,7 @@ export async function exportEmployeesToWord(rows: Record<string, unknown>[], fil
               alignment: AlignmentType.CENTER,
             }),
             new Paragraph({
-              text: `Generated on: ${new Date().toLocaleDateString()}`,
+              text: `Generated on: ${formatWATDate(new Date())}`,
               alignment: AlignmentType.CENTER,
             }),
             new Paragraph({

@@ -24,6 +24,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatName } from "@/lib/utils"
+import { formatWATDateTime } from "@/lib/utils/date"
 
 interface LeaveContentProps {
   currentUserId: string
@@ -751,7 +752,7 @@ export function LeaveContent({
                                     <span className="capitalize">{item.status}</span>
                                     {stageActorName ? ` by ${stageActorName}` : ""}
                                     {stageActorName ? ` (${stageName[stageKey]})` : ""}
-                                    {item.approved_at ? ` at ${new Date(item.approved_at).toLocaleString()}` : ""}
+                                    {item.approved_at ? ` at ${formatWATDateTime(item.approved_at)}` : ""}
                                   </>
                                 ) : stageKey === "reliever" && !hasRelieverAssignee ? (
                                   <span className="text-muted-foreground">Not required for this request</span>
@@ -840,7 +841,7 @@ export function LeaveContent({
                         <span className="font-medium">{formatName(item.stage_code || "approval_stage")}</span>
                         <span className="text-muted-foreground">{item.request?.user?.full_name || "Employee"}</span>
                         <span className="text-muted-foreground">
-                          {item.approved_at ? new Date(item.approved_at).toLocaleString() : ""}
+                          {item.approved_at ? formatWATDateTime(item.approved_at) : ""}
                         </span>
                       </div>
                       {item.comments ? <p className="mt-1 text-xs">{item.comments}</p> : null}

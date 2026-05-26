@@ -4,6 +4,7 @@ import { useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { FileText, Plus, Eye, Edit2, Trash2 } from "lucide-react"
+import { formatWATDateTime } from "@/lib/utils/date"
 import { Badge } from "@/components/ui/badge"
 import { MarkdownContent } from "@/components/ui/markdown-content"
 import { Button } from "@/components/ui/button"
@@ -38,13 +39,7 @@ interface InternalDocumentationContentProps {
 }
 
 function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return formatWATDateTime(dateString)
 }
 
 function getStatusColor(isDraft: boolean) {

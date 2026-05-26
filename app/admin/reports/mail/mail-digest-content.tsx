@@ -30,7 +30,7 @@ import {
 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { getCurrentOfficeWeek } from "@/lib/meeting-week"
-import { toLocalISODate } from "@/lib/utils/date"
+import { toLocalISODate, formatWATDateTime } from "@/lib/utils/date"
 
 type Employee = {
   id: string
@@ -310,13 +310,7 @@ export function MailDigestContent({ employees, currentUser }: Props) {
       }
 
       toast.success(
-        `Email scheduled for ${scheduledDateTime.toLocaleString("en-GB", {
-          weekday: "short",
-          day: "numeric",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-        })}`
+        `Email scheduled for ${formatWATDateTime(scheduledDateTime, { weekday: "short", day: "numeric", month: "short" })}`
       )
       fetchSchedules()
       return
@@ -911,13 +905,7 @@ export function MailDigestContent({ employees, currentUser }: Props) {
                         <span>
                           {s.schedule_type === "recurring"
                             ? `Every ${capitalize(s.send_day || "monday")} at ${s.send_time || "09:00"}`
-                            : `One-time: W${s.meeting_week} — ${new Date(s.next_run_at).toLocaleString("en-GB", {
-                                weekday: "short",
-                                day: "numeric",
-                                month: "short",
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}`}
+                            : `One-time: W${s.meeting_week} — ${formatWATDateTime(s.next_run_at, { weekday: "short", day: "numeric", month: "short" })}`}
                         </span>
                         <Badge variant="secondary" className="text-xs">
                           {(s.recipients as string[])?.length || 0} recipients
@@ -1029,12 +1017,10 @@ export function MailDigestContent({ employees, currentUser }: Props) {
                       <Clock className="h-4 w-4 text-orange-600" />
                       <span>
                         {scheduledDate
-                          ? new Date(`${scheduledDate}T${scheduledTime}`).toLocaleString("en-GB", {
+                          ? formatWATDateTime(`${scheduledDate}T${scheduledTime}`, {
                               weekday: "short",
                               day: "numeric",
                               month: "short",
-                              hour: "2-digit",
-                              minute: "2-digit",
                             })
                           : "Not set"}
                       </span>

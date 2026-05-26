@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Boxes, FolderOpen, Layers3, Pencil, Plus, Tag, Trash2 } from "lucide-react"
 import { toast } from "sonner"
@@ -179,9 +180,7 @@ export default function CategoriesPage() {
         render: (category) => (
           <div className="space-y-1">
             <p className="font-medium">{category.name}</p>
-            <p className="text-muted-foreground text-xs">
-              Created {new Date(category.created_at).toLocaleDateString()}
-            </p>
+            <p className="text-muted-foreground text-xs">Created {formatWATDate(category.created_at)}</p>
           </div>
         ),
       },

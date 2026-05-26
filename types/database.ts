@@ -1,3 +1,6 @@
+import type { TaskStatus } from "@/lib/tasks/constants"
+export type { TaskStatus }
+
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
@@ -285,7 +288,6 @@ export type EmploymentStatus = Database["public"]["Enums"]["employment_status"]
 
 export type DeviceStatus = "available" | "assigned" | "maintenance" | "retired"
 export type AssetStatus = "available" | "assigned" | "maintenance" | "retired"
-export type TaskStatus = "pending" | "in_progress" | "completed" | "cancelled"
 export type TaskPriority = "low" | "medium" | "high" | "urgent"
 export type ProjectStatus = "planning" | "active" | "on_hold" | "completed" | "cancelled"
 export type ProjectMemberRole = "member" | "lead" | "manager"

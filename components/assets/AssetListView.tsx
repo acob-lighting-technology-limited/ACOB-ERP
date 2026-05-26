@@ -27,6 +27,7 @@ import {
 } from "lucide-react"
 import { ASSET_TYPE_MAP } from "@/lib/asset-types"
 import { cn } from "@/lib/utils"
+import { formatWATDate } from "@/lib/utils/date"
 
 export type { Asset, UserProfile, Employee } from "@/app/admin/assets/admin-assets-content"
 import type { Asset, UserProfile } from "@/app/admin/assets/admin-assets-content"
@@ -181,7 +182,7 @@ export function AssetListView({
                 const assignedDepartment = asset.current_assignment?.department || asset.department || "-"
                 const assignedOffice = asset.current_assignment?.office_location || asset.office_location || "-"
                 const notes = asset.notes?.trim() || "No notes added for this asset."
-                const createdOn = asset.created_at ? new Date(asset.created_at).toLocaleDateString() : "-"
+                const createdOn = asset.created_at ? formatWATDate(asset.created_at) : "-"
                 const isAssignedLike =
                   asset.status === "assigned" || asset.status === "retired" || asset.status === "maintenance"
 

@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { ArrowRight, ScrollText } from "lucide-react"
 import { EmptyState } from "@/components/ui/patterns"
+import { formatWATDate } from "@/lib/utils/date"
 
 export interface PersonalRecentActivityItem {
   id: string
@@ -53,7 +54,7 @@ function formatDate(dateString: string): string {
   if (mins < 60) return `${mins}m ago`
   if (hours < 24) return `${hours}h ago`
   if (days < 7) return `${days}d ago`
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  return formatWATDate(d, { month: "short", day: "numeric" })
 }
 
 interface PersonalRecentActivityFeedProps {

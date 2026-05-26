@@ -15,6 +15,7 @@ import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getRequestScope } from "@/lib/admin/api-scope"
 import { apiError, ApiErrorCode } from "@/lib/api/errors"
 import { checkRequestSize } from "@/lib/api/request-size"
+import { APPROVAL_STATUSES } from "@/lib/validation"
 
 const log = logger("hr-leave-approve")
 
@@ -22,7 +23,7 @@ const ApproveLeaveRequestSchema = z
   .object({
     leave_request_id: z.string().trim().min(1, "Missing required fields"),
     action: z.enum(["approve", "reject"]).optional(),
-    status: z.enum(["approved", "rejected"]).optional(),
+    status: z.enum(APPROVAL_STATUSES).optional(),
     comments: z.string().optional(),
     override_evidence: z.boolean().optional(),
   })

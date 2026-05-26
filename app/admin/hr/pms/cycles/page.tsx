@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Calendar, CheckCircle2, Loader2, Lock, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
@@ -65,7 +66,7 @@ const STATUS_TRANSITIONS: Record<CycleStatus, CycleStatus[]> = {
 }
 
 function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+  return formatWATDate(date, { day: "2-digit", month: "short", year: "numeric" })
 }
 
 function StatusBadge({ status }: { status: CycleStatus | null }) {

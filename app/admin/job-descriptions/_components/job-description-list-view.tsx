@@ -1,5 +1,6 @@
 "use client"
 
+import { formatWATDate } from "@/lib/utils/date"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -31,11 +32,7 @@ function getCompletionColor(hasDescription: boolean): string {
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "Never"
-  return new Date(dateString).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })
+  return formatWATDate(dateString, { month: "short", day: "numeric", year: "numeric" })
 }
 
 interface JobDescriptionListViewProps {

@@ -1,5 +1,6 @@
 "use client"
 
+import { formatWATDate } from "@/lib/utils/date"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -25,11 +26,7 @@ interface Profile {
 
 function formatDate(dateString: string | null): string {
   if (!dateString) return "Never"
-  return new Date(dateString).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })
+  return formatWATDate(dateString, { month: "short", day: "numeric", year: "numeric" })
 }
 
 interface JobDescriptionDialogProps {
@@ -96,9 +93,7 @@ export function JobDescriptionDialog({ profile, isOpen, onOpenChange }: JobDescr
               {profile?.company_email && <p className="mb-1">{profile.company_email}</p>}
               {profile?.department && <p className="mb-1">{profile.department}</p>}
               {profile?.phone_number && <p className="mb-1">{profile.phone_number}</p>}
-              <p className="mt-2">
-                {new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
-              </p>
+              <p className="mt-2">{formatWATDate(new Date(), { month: "long", day: "numeric", year: "numeric" })}</p>
             </div>
           </div>
         </div>

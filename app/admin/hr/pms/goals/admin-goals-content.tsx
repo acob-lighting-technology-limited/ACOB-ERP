@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react"
 import { Plus, Target, CheckCircle, Clock } from "lucide-react"
+import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
 
@@ -120,7 +121,7 @@ export function AdminGoalsContent({
         label: "Due Date",
         sortable: true,
         accessor: (r) => r.due_date || "",
-        render: (r) => <span>{r.due_date ? new Date(r.due_date).toLocaleDateString() : "-"}</span>,
+        render: (r) => <span>{r.due_date ? formatWATDate(r.due_date) : "-"}</span>,
         hideOnMobile: true,
       },
     ],

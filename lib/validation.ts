@@ -52,6 +52,9 @@ export const commonSchemas = {
   nonNegativeNumber: z.number().min(0, "Cannot be negative"),
 }
 
+export const APPROVAL_STATUSES = ["approved", "rejected"] as const
+export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number]
+
 /**
  * HR Module Validation Schemas
  */
@@ -70,7 +73,7 @@ export const hrSchemas = {
 
   approveLeave: z.object({
     leave_request_id: commonSchemas.uuid,
-    status: z.enum(["approved", "rejected"]),
+    status: z.enum(APPROVAL_STATUSES),
     comments: z.string().max(500).optional(),
   }),
 
@@ -87,13 +90,16 @@ export const hrSchemas = {
 /**
  * Payment Validation Schemas
  */
+export const PAYMENT_TYPES = ["one-time", "recurring"] as const
+export type PaymentType = (typeof PAYMENT_TYPES)[number]
+
 export const paymentSchemas = {
   createPayment: z.object({
     department_id: commonSchemas.uuid,
     title: z.string().min(3).max(200),
     amount: commonSchemas.positiveNumber.optional(),
     currency: z.string().length(3, "Currency must be 3 characters"),
-    payment_type: z.enum(["one-time", "recurring"]),
+    payment_type: z.enum(PAYMENT_TYPES),
     category: z.string().min(2).max(100),
   }),
 }

@@ -19,6 +19,7 @@ import { useForm } from "react-hook-form"
 import { z } from "zod"
 import { zodResolver } from "@hookform/resolvers/zod"
 import type { Department } from "./payment-types"
+import { PAYMENT_TYPES } from "@/lib/validation"
 
 export interface CreatePaymentFormData {
   department_id: string
@@ -54,7 +55,7 @@ interface CreatePaymentDialogProps {
 const CreatePaymentDialogSchema = z
   .object({
     department_id: z.string().trim().min(1, "Department is required"),
-    payment_type: z.enum(["one-time", "recurring"]),
+    payment_type: z.enum(PAYMENT_TYPES),
     title: z.string().trim().min(1, "Title is required"),
     description: z.string(),
     amount: z.string().trim().min(1, "Amount is required"),

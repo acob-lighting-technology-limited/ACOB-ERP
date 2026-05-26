@@ -3,6 +3,7 @@
 import Link from "next/link"
 import { useMemo, useState } from "react"
 import { Plus, Target } from "lucide-react"
+import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -132,7 +133,7 @@ export function GoalsContent({
         label: "Due Date",
         sortable: true,
         accessor: (row) => row.due_date || "",
-        render: (row) => (row.due_date ? new Date(row.due_date).toLocaleDateString("en-GB") : "-"),
+        render: (row) => (row.due_date ? formatWATDate(row.due_date) : "-"),
         hideOnMobile: true,
       },
     ],

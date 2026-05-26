@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = request.nextUrl
     const location = searchParams.get("location") || null
 
     let query = supabase.from("holiday_calendar").select("*").order("holiday_date", { ascending: true })

@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { PriorityBadge, TicketStatusBadge } from "@/components/dashboard/help-desk/ticket-badges"
+import { formatWATDateTime } from "@/lib/utils/date"
 
 const TICKET_STATUS_OPTIONS = [
   "new",
@@ -129,7 +130,7 @@ export function ViewTicketDialog({
               </div>
               <div className="space-y-2">
                 <p className="text-muted-foreground text-xs uppercase">Created</p>
-                <p className="text-sm">{ticket.created_at ? new Date(ticket.created_at).toLocaleString() : "-"}</p>
+                <p className="text-sm">{ticket.created_at ? formatWATDateTime(ticket.created_at) : "-"}</p>
               </div>
             </div>
 
@@ -148,7 +149,7 @@ export function ViewTicketDialog({
                         <p className="text-muted-foreground text-xs">
                           {(event.old_status || "-").replaceAll("_", " ")} to{" "}
                           {(event.new_status || "-").replaceAll("_", " ")} at{" "}
-                          {event.created_at ? new Date(event.created_at).toLocaleString() : "-"}
+                          {event.created_at ? formatWATDateTime(event.created_at) : "-"}
                         </p>
                       </div>
                     ))

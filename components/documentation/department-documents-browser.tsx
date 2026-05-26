@@ -60,7 +60,7 @@ import { getFileCategory } from "@/lib/onedrive"
 import { toast } from "sonner"
 import JSZip from "jszip"
 import { saveAs } from "file-saver"
-import { toLocalISODate } from "@/lib/utils/date"
+import { toLocalISODate, formatWATDateTime } from "@/lib/utils/date"
 
 interface DepartmentDocumentsBrowserProps {
   initialPath?: string
@@ -782,13 +782,7 @@ export function DepartmentDocumentsBrowser({
   const formatDate = (dateString: string): string =>
     Number.isNaN(Date.parse(dateString))
       ? "-"
-      : new Date(dateString).toLocaleString(undefined, {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-        })
+      : formatWATDateTime(dateString, { year: "numeric", month: "short", day: "numeric" })
 
   const getFileExtension = (fileName: string): string => {
     const parts = fileName.split(".")

@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = request.nextUrl
     const all = searchParams.get("all") === "true"
     const scope = await getRequestScope()
     let scopedDepts = scope ? getScopedDepartments(scope) : null

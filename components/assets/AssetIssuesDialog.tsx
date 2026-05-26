@@ -19,6 +19,7 @@ import {
 import { ASSET_TYPE_MAP } from "@/lib/asset-types"
 import { AlertCircle, CheckCircle2, Calendar, Package, Plus, X } from "lucide-react"
 import type { Asset } from "@/app/admin/assets/admin-assets-content"
+import { formatWATDate } from "@/lib/utils/date"
 
 interface AssetIssue {
   id: string
@@ -188,14 +189,14 @@ export function AssetIssuesDialog({
                       <div className="text-muted-foreground mt-2 flex items-center gap-2 text-xs">
                         <div className="flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
-                          {new Date(issue.created_at).toLocaleDateString()}
+                          {formatWATDate(issue.created_at)}
                         </div>
                         {issue.resolved && issue.resolved_at && (
                           <>
                             <span>•</span>
                             <div className="flex items-center gap-1">
                               <CheckCircle2 className="h-3 w-3" />
-                              Resolved {new Date(issue.resolved_at).toLocaleDateString()}
+                              Resolved {formatWATDate(issue.resolved_at)}
                             </div>
                           </>
                         )}

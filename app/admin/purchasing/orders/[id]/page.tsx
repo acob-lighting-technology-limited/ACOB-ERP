@@ -1,6 +1,7 @@
 "use client"
 
 import { useParams } from "next/navigation"
+import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { createClient } from "@/lib/supabase/client"
@@ -70,7 +71,7 @@ function formatCurrency(amount: number, currency: string = "NGN") {
 }
 
 function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("en-NG", { year: "numeric", month: "long", day: "numeric" })
+  return formatWATDate(date, { year: "numeric", month: "long", day: "numeric" })
 }
 
 export default function PurchaseOrderDetailPage() {

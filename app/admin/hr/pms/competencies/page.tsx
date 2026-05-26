@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { BookOpen, Pencil, Plus, ToggleLeft, ToggleRight, Trash2 } from "lucide-react"
+import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
@@ -57,11 +58,7 @@ const CATEGORY_VARIANTS: Record<CompetencyCategory, "default" | "secondary" | "o
 }
 
 function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  })
+  return formatWATDate(date, { day: "2-digit", month: "short", year: "numeric" })
 }
 
 function CompetencyStatusBadge({ isActive }: { isActive: boolean }) {

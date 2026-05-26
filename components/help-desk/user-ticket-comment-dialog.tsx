@@ -7,16 +7,11 @@ import { EmptyState } from "@/components/ui/patterns"
 import { ResponsiveModal } from "@/components/ui/patterns/responsive-modal"
 import { MessageSquare, Send } from "lucide-react"
 import type { HelpDeskTicketDetailResponse } from "@/components/help-desk/help-desk-types"
+import { formatWATDateTime } from "@/lib/utils/date"
 
 function formatDateTime(dateString: string | null | undefined) {
   if (!dateString) return "-"
-  return new Date(dateString).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return formatWATDateTime(dateString)
 }
 
 interface UserHelpDeskTicketCommentDialogProps {

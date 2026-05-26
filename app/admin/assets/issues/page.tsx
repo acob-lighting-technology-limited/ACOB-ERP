@@ -6,6 +6,7 @@ import { QUERY_KEYS } from "@/lib/query-keys"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { formatName } from "@/lib/utils"
+import { formatWATDate } from "@/lib/utils/date"
 import { ASSET_TYPE_MAP } from "@/lib/asset-types"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
@@ -318,9 +319,7 @@ export default function AssetIssuesPage() {
       sortable: true,
       hideOnMobile: true,
       accessor: (issue) => issue.created_at,
-      render: (issue) => (
-        <span className="text-muted-foreground text-sm">{new Date(issue.created_at).toLocaleDateString()}</span>
-      ),
+      render: (issue) => <span className="text-muted-foreground text-sm">{formatWATDate(issue.created_at)}</span>,
     },
   ]
 
@@ -438,7 +437,7 @@ export default function AssetIssuesPage() {
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">Reported</p>
-                <p className="mt-1">{new Date(issue.created_at).toLocaleDateString()}</p>
+                <p className="mt-1">{formatWATDate(issue.created_at)}</p>
               </div>
             </div>
           ),

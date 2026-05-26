@@ -5,6 +5,7 @@ import { Wrench } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { MaintenanceToggle } from "@/components/admin/maintenance-toggle"
 import { canManageMaintenanceMode, parseMaintenanceMode } from "@/lib/maintenance"
+import { formatWATDateTime } from "@/lib/utils/date"
 
 export default async function SettingsMaintenancePage() {
   const supabase = await createClient()
@@ -55,7 +56,7 @@ export default async function SettingsMaintenancePage() {
             </p>
             <p>
               <span className="font-medium">Last updated:</span>{" "}
-              {settings?.updated_at ? new Date(settings.updated_at).toLocaleString() : "Unknown"}
+              {settings?.updated_at ? formatWATDateTime(settings.updated_at) : "Unknown"}
             </p>
             <p>
               <span className="font-medium">Updated by:</span>{" "}

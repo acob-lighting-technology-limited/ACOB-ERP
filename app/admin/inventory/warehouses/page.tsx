@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { BadgeCheck, MapPin, Pencil, Plus, Trash2, Warehouse, WarehouseIcon, XCircle } from "lucide-react"
 import { toast } from "sonner"
@@ -192,9 +193,7 @@ export default function WarehousesPage() {
         render: (warehouse) => (
           <div className="space-y-1">
             <p className="font-medium">{warehouse.name}</p>
-            <p className="text-muted-foreground text-xs">
-              Created {new Date(warehouse.created_at).toLocaleDateString()}
-            </p>
+            <p className="text-muted-foreground text-xs">Created {formatWATDate(warehouse.created_at)}</p>
           </div>
         ),
       },

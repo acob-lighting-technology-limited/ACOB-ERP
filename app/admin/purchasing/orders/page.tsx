@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "next/navigation"
 import { BadgeCheck, CalendarClock, Eye, Plus, ShoppingCart, Wallet } from "lucide-react"
@@ -65,7 +66,7 @@ function formatCurrency(amount: number, currency = "NGN") {
 }
 
 function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("en-NG", { year: "numeric", month: "short", day: "numeric" })
+  return formatWATDate(date, { year: "numeric", month: "short", day: "numeric" })
 }
 
 function getDeliveryWindow(order: PurchaseOrder) {

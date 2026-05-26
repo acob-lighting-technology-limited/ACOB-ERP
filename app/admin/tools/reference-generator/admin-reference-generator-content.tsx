@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -217,9 +218,7 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
       hideOnMobile: true,
       accessor: (r) => r.created_at,
       render: (r) =>
-        r.created_at
-          ? new Date(r.created_at).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
-          : "-",
+        r.created_at ? formatWATDate(r.created_at, { day: "2-digit", month: "short", year: "numeric" }) : "-",
     },
   ]
 

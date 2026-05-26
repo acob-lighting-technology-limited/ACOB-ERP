@@ -1,5 +1,6 @@
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
+import { formatWATDate } from "@/lib/utils/date"
 
 const log = logger("pms-export")
 
@@ -37,7 +38,7 @@ export async function exportPmsRowsToPdf(rows: PmsExportRow[], filename: string,
     doc.setFontSize(16)
     doc.text(title, 14, 15)
     doc.setFontSize(10)
-    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 22)
+    doc.text(`Generated on: ${formatWATDate(new Date())}`, 14, 22)
 
     autoTable(doc, {
       head: [headers],

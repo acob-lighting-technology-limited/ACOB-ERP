@@ -1,5 +1,6 @@
 "use client"
 
+import { formatWATDateTime } from "@/lib/utils/date"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -195,12 +196,10 @@ export function SendSummary({
                   <Clock className="h-4 w-4 text-orange-600" />
                   <span>
                     {scheduledDate
-                      ? new Date(`${scheduledDate}T${scheduledTime}`).toLocaleString("en-GB", {
+                      ? formatWATDateTime(`${scheduledDate}T${scheduledTime}`, {
                           weekday: "short",
                           day: "numeric",
                           month: "short",
-                          hour: "2-digit",
-                          minute: "2-digit",
                         })
                       : "Not set"}
                   </span>

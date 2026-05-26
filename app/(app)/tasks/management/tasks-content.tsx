@@ -16,6 +16,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { formatName } from "@/lib/utils"
+import { formatWATDate } from "@/lib/utils/date"
 
 export type { Task, TaskUserProfile } from "@/types/task"
 
@@ -287,9 +288,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
       key: "dates",
       label: "Assigned",
       accessor: (t) => t.created_at,
-      render: (t) => (
-        <span className="text-muted-foreground text-xs">{new Date(t.created_at).toLocaleDateString()}</span>
-      ),
+      render: (t) => <span className="text-muted-foreground text-xs">{formatWATDate(t.created_at)}</span>,
       hideOnMobile: true,
     },
   ]
@@ -435,9 +434,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
                 </div>
                 <div className="flex items-center justify-between rounded-md border p-2 text-xs">
                   <span className="text-muted-foreground">Due Date</span>
-                  <span className="font-medium">
-                    {t.due_date ? new Date(t.due_date).toLocaleDateString() : "Not set"}
-                  </span>
+                  <span className="font-medium">{t.due_date ? formatWATDate(t.due_date) : "Not set"}</span>
                 </div>
               </div>
             </div>
@@ -472,7 +469,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
               <Badge variant={t.status === "completed" ? "default" : "secondary"} className="text-[10px]">
                 {formatName(t.status)}
               </Badge>
-              <span className="text-muted-foreground text-[10px]">{new Date(t.created_at).toLocaleDateString()}</span>
+              <span className="text-muted-foreground text-[10px]">{formatWATDate(t.created_at)}</span>
             </div>
           </div>
         )}

@@ -270,7 +270,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = request.nextUrl
     const id = searchParams.get("id")
     if (!id) return NextResponse.json({ error: "Missing cycle ID" }, { status: 400 })
 

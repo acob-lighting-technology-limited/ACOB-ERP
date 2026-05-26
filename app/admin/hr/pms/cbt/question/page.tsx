@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Brain, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
+import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
@@ -60,7 +61,7 @@ const INITIAL_FORM = {
 
 function formatDate(date: string | undefined) {
   if (!date) return "-"
-  return new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+  return formatWATDate(date, { day: "2-digit", month: "short", year: "numeric" })
 }
 
 function getPreferredCycleId(cycles: ReviewCycle[], requestedCycleId: string | null) {

@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback } from "react"
+import { formatWATDateTime } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { writeAuditLogClient } from "@/lib/audit/client"
@@ -461,13 +462,7 @@ export function useWeeklySummarySend({
       }
 
       toast.success(
-        `Email scheduled for ${scheduledDateTime.toLocaleString("en-GB", {
-          weekday: "short",
-          day: "numeric",
-          month: "short",
-          hour: "2-digit",
-          minute: "2-digit",
-        })}`
+        `Email scheduled for ${formatWATDateTime(scheduledDateTime, { weekday: "short", day: "numeric", month: "short" })}`
       )
       fetchSchedules()
       return

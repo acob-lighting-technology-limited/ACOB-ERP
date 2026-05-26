@@ -6,6 +6,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Ticket, HeadphonesIcon } from "lucide-react"
 import type { Task } from "@/types/task"
+import { formatWATDate } from "@/lib/utils/date"
 
 function getStatusColor(status: string) {
   switch (status) {
@@ -36,11 +37,7 @@ function getPriorityColor(priority: string) {
 }
 
 function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })
+  return formatWATDate(dateString, { month: "short", day: "numeric", year: "numeric" })
 }
 
 function getSourceBadge(sourceType?: string) {

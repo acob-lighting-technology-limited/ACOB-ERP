@@ -3,7 +3,7 @@ import { formatName } from "@/lib/utils"
 import { ASSET_TYPE_MAP } from "@/lib/asset-types"
 import { getDepartmentForOffice } from "@/lib/office-locations"
 import { logger } from "@/lib/logger"
-import { toLocalISODate } from "@/lib/utils/date"
+import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
 
 const log = logger("assets-export")
 
@@ -215,7 +215,7 @@ export async function exportAssetsToPDF(
     doc.setFontSize(16)
     doc.text("Assets Report", 14, 15)
     doc.setFontSize(10)
-    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 22)
+    doc.text(`Generated on: ${formatWATDate(new Date())}`, 14, 22)
     doc.text(`Total Assets: ${extraMeta?.total ?? rows.length}`, 14, 28)
 
     const headers = Object.keys(rows[0] || {})
@@ -284,7 +284,7 @@ export async function exportAssetsToWord(rows: AssetExportRow[], filename?: stri
               alignment: AlignmentType.CENTER,
             }),
             new Paragraph({
-              text: `Generated on: ${new Date().toLocaleDateString()}`,
+              text: `Generated on: ${formatWATDate(new Date())}`,
               alignment: AlignmentType.CENTER,
             }),
             new Paragraph({
@@ -409,7 +409,7 @@ export async function exportEmployeeReportToPDF(input: EmployeeReportInput, file
     doc.setFontSize(16)
     doc.text("Employee Assets Report", 14, 15)
     doc.setFontSize(10)
-    doc.text(`Generated on: ${new Date().toLocaleDateString()}`, 14, 22)
+    doc.text(`Generated on: ${formatWATDate(new Date())}`, 14, 22)
     const assetTypesLabel = assetTypesInReport.map((t) => input.assetTypeMap[t]?.label || t).join(", ")
     doc.text(`Asset Types: ${assetTypesLabel}`, 14, 28)
     doc.text(`Total Employee: ${input.employees.length}`, 14, 34)
@@ -481,7 +481,7 @@ export async function exportEmployeeReportToWord(input: EmployeeReportInput, fil
               alignment: AlignmentType.CENTER,
             }),
             new Paragraph({
-              text: `Generated on: ${new Date().toLocaleDateString()}`,
+              text: `Generated on: ${formatWATDate(new Date())}`,
               alignment: AlignmentType.CENTER,
             }),
             new Paragraph({

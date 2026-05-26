@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { formatWATDateTime } from "@/lib/utils/date"
 import { createClient } from "@/lib/supabase/client"
 import { getCurrentOfficeWeek, getOfficeWeekMonday } from "@/lib/meeting-week"
 import { toast } from "sonner"
@@ -53,13 +54,7 @@ function resolveDueDate(task: ActionTask) {
 }
 
 function formatDueDate(task: ActionTask) {
-  return resolveDueDate(task).toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return formatWATDateTime(resolveDueDate(task), { day: "2-digit", month: "short", year: "numeric" })
 }
 
 function getDueDateClassName(task: ActionTask) {

@@ -4,17 +4,17 @@
  * Single source of truth — update here, not in the consumer files.
  */
 export const AUDIT_ACTION_COLORS: Record<string, string> = {
-  create: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400",
-  update: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400",
-  delete: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
-  assign: "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400",
-  unassign: "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400",
-  approve: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
-  reject: "bg-rose-100 text-rose-800 dark:bg-rose-900/30 dark:text-rose-400",
-  dispatch: "bg-cyan-100 text-cyan-800 dark:bg-cyan-900/30 dark:text-cyan-400",
-  send: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400",
-  status_change: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-  default: "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400",
+  create: "bg-emerald-500/10 text-emerald-500 border-emerald-200",
+  update: "bg-blue-500/10 text-blue-500 border-blue-200",
+  delete: "bg-red-500/10 text-red-500 border-red-200",
+  assign: "bg-purple-500/10 text-purple-500 border-purple-200",
+  unassign: "bg-orange-500/10 text-orange-500 border-orange-200",
+  approve: "bg-purple-500/10 text-purple-500 border-purple-200",
+  reject: "bg-amber-500/10 text-amber-500 border-amber-200",
+  dispatch: "bg-cyan-500/10 text-cyan-500 border-cyan-200",
+  send: "bg-indigo-500/10 text-indigo-500 border-indigo-200",
+  status_change: "bg-amber-500/10 text-amber-500 border-amber-200",
+  default: "bg-muted text-muted-foreground",
 }
 
 /**

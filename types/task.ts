@@ -1,6 +1,6 @@
-export type TaskStatus = "pending" | "in_progress" | "completed" | "cancelled"
+import type { TaskStatus, TaskAssignmentType } from "@/lib/tasks/constants"
+export type { TaskStatus, TaskAssignmentType }
 export type TaskSourceType = "manual" | "help_desk" | "action_item"
-export type TaskAssignmentType = "individual" | "department"
 
 export interface TaskPersonSummary {
   id: string

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Send, Clock, Repeat, Trash2 } from "lucide-react"
 import { capitalize } from "./composer-utils"
-import { toLocalISODate } from "@/lib/utils/date"
+import { toLocalISODate, formatWATDateTime } from "@/lib/utils/date"
 
 type SendTiming = "now" | "scheduled" | "recurring"
 
@@ -179,13 +179,7 @@ export function SchedulingOptions({
                 <span>
                   {s.schedule_type === "recurring"
                     ? `Every ${capitalize(s.send_day || "sunday")} at ${String(s.send_time || "18:00").slice(0, 5)}`
-                    : `One-time: ${new Date(s.next_run_at).toLocaleString("en-GB", {
-                        weekday: "short",
-                        day: "numeric",
-                        month: "short",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}`}
+                    : `One-time: ${formatWATDateTime(s.next_run_at, { weekday: "short", day: "numeric", month: "short" })}`}
                 </span>
                 <Badge variant="secondary" className="text-xs">
                   {(s.recipients as string[])?.length || 0} recipients

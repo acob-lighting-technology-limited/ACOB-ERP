@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     if (!requester) return NextResponse.json({ error: "Profile not found" }, { status: 404 })
 
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = request.nextUrl
     const daysCount = Number(searchParams.get("days") || "1")
     const startDate = searchParams.get("start_date") || toLocalISODate()
 

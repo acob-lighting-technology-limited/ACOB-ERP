@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { formatWATDateTime } from "@/lib/utils/date"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { CalendarClock, Car, Paperclip, Plus } from "lucide-react"
@@ -68,13 +69,7 @@ type FleetBookingRow = FleetBooking & {
 function formatDateTime(value: string) {
   const parsed = new Date(value)
   if (Number.isNaN(parsed.getTime())) return value
-  return parsed.toLocaleString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return formatWATDateTime(parsed, { day: "2-digit", month: "short", year: "numeric" })
 }
 
 function toLocalDateTimeInput(value?: string) {

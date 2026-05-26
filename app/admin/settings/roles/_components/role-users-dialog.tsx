@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Label } from "@/components/ui/label"
 import { EmptyState } from "@/components/ui/patterns"
 import { Plus, Users } from "lucide-react"
+import { formatWATDate } from "@/lib/utils/date"
 
 export interface RoleMember {
   id: string
@@ -134,7 +135,7 @@ export function RoleUsersDialog({
                         {member.employment_status || "unknown"}
                       </Badge>
                     </TableCell>
-                    <TableCell>{new Date(member.created_at).toLocaleDateString("en-NG")}</TableCell>
+                    <TableCell>{formatWATDate(member.created_at)}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>

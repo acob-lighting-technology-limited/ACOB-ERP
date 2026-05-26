@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { formatWATDateTime } from "@/lib/utils/date"
 
 type Ticket = {
   id: string
@@ -160,7 +161,7 @@ export function TicketDetailContent({
                 <div key={comment.id} className="rounded-lg border p-3">
                   <div>{comment.comment || comment.body || "-"}</div>
                   <div className="text-xs text-slate-500">
-                    {comment.created_at ? new Date(comment.created_at).toLocaleString() : ""}
+                    {comment.created_at ? formatWATDateTime(comment.created_at) : ""}
                   </div>
                 </div>
               ))}
@@ -192,8 +193,8 @@ export function TicketDetailContent({
               <div>Assigned To: {ticket.assigned_to_name || (ticket.assigned_to === viewerId ? "You" : "-")}</div>
               <div>Department: {ticket.service_department || "-"}</div>
               <div>Category: {ticket.category || "-"}</div>
-              <div>SLA Target: {ticket.sla_target_at ? new Date(ticket.sla_target_at).toLocaleString() : "-"}</div>
-              <div>Created: {ticket.created_at ? new Date(ticket.created_at).toLocaleString() : "-"}</div>
+              <div>SLA Target: {ticket.sla_target_at ? formatWATDateTime(ticket.sla_target_at) : "-"}</div>
+              <div>Created: {ticket.created_at ? formatWATDateTime(ticket.created_at) : "-"}</div>
             </CardContent>
           </Card>
           {canRate ? (
