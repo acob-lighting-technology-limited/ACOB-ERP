@@ -1,12 +1,38 @@
 import { Resend } from "resend"
 import { createClient } from "@supabase/supabase-js"
+import { readFileSync } from "fs"
+import { resolve } from "path"
 
-const SUPABASE_URL = "https://itqegqxeqkeogwrvlzlj.supabase.co"
-const SUPABASE_SERVICE_ROLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0cWVncXhlcWtlb2d3cnZsemxqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTY0MjQ1NywiZXhwIjoyMDc3MjE4NDU3fQ.uUEg9q9jT9IsERFmmhmYMxdIr_xgakdf52EmMEZbf50"
+// Load .env.local without requiring dotenv as a dep
+function loadEnv() {
+  try {
+    const raw = readFileSync(resolve(process.cwd(), ".env.local"), "utf8")
+    for (const line of raw.split("\n")) {
+      const trimmed = line.trim()
+      if (!trimmed || trimmed.startsWith("#")) continue
+      const eq = trimmed.indexOf("=")
+      if (eq === -1) continue
+      const key = trimmed.slice(0, eq).trim()
+      const val = trimmed.slice(eq + 1).trim().replace(/^["']|["']$/g, "")
+      if (!process.env[key]) process.env[key] = val
+    }
+  } catch {
+    // .env.local not found — rely on shell environment
+  }
+}
+loadEnv()
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
+const RESEND_API_KEY = process.env.RESEND_API_KEY
+
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY || !RESEND_API_KEY) {
+  console.error("Missing env vars. Ensure .env.local has NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, RESEND_API_KEY")
+  process.exit(1)
+}
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
-const resend = new Resend("re_jcDqGbxZ_MatqmaHdKaxs2B3J3juZf5kk")
+const resend = new Resend(RESEND_API_KEY)
 
 // ACOB/2025/042 — Oluwatobi Oladele, Project dept (not exiting, test only)
 const employeeName = "Oluwatobi Oladele"

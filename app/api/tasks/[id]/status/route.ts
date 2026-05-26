@@ -7,11 +7,12 @@ import { checkRequestSize } from "@/lib/api/request-size"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { apiError, ApiErrorCode } from "@/lib/api/errors"
 import { getRequestScope, type AdminScope } from "@/lib/admin/api-scope"
+import { TASK_STATUSES } from "@/lib/tasks/constants"
 
 const log = logger("tasks-status-route")
 
 const StatusBodySchema = z.object({
-  status: z.enum(["pending", "in_progress", "completed", "cancelled"]),
+  status: z.enum(TASK_STATUSES),
   comment: z.string().trim().max(5000).optional(),
 })
 

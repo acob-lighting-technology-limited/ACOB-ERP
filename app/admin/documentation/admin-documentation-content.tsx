@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { FileText, List, Eye, User, FolderOpen, Calendar } from "lucide-react"
+import { formatWATDate } from "@/lib/utils/date"
 import { StatCard } from "@/components/ui/stat-card"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
@@ -36,7 +37,7 @@ interface AdminDocumentationContentProps {
 }
 
 const formatDate = (dateString: string) =>
-  new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  formatWATDate(dateString, { month: "short", day: "numeric", year: "numeric" })
 
 const getStatusColor = (isDraft: boolean) =>
   isDraft

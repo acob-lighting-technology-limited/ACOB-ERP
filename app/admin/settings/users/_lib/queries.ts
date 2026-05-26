@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/client"
+import { formatWATDate } from "@/lib/utils/date"
 
 export interface User {
   id: string
@@ -67,5 +68,5 @@ export async function fetchAllUsersForPicker(): Promise<User[]> {
 }
 
 export function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("en-NG", { year: "numeric", month: "short", day: "numeric" })
+  return formatWATDate(date, { year: "numeric", month: "short", day: "numeric" })
 }

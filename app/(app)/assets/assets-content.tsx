@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { Building2, Hash, Package, User } from "lucide-react"
 import { ASSET_TYPE_MAP } from "@/lib/asset-types"
 import { formatName } from "@/lib/utils"
+import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import type { AssetAssignment } from "./page"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
@@ -126,14 +127,7 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
         label: "Assigned",
         sortable: true,
         accessor: (row) => row.assigned_at,
-        render: (row) =>
-          new Date(row.assigned_at).toLocaleDateString("en-GB", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
+        render: (row) => formatWATDate(row.assigned_at, { day: "2-digit", month: "short", year: "numeric" }),
       },
     ],
     []
@@ -292,8 +286,7 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
                   <span className="text-muted-foreground">Acquisition Year:</span> {row.asset?.acquisition_year || "-"}
                 </p>
                 <p>
-                  <span className="text-muted-foreground">Assigned:</span>{" "}
-                  {new Date(row.assigned_at).toLocaleString("en-GB")}
+                  <span className="text-muted-foreground">Assigned:</span> {formatWATDateTime(row.assigned_at)}
                 </p>
               </div>
               <div className="space-y-2 text-sm">

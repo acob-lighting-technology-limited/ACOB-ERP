@@ -2,6 +2,7 @@
 
 import { Fragment, useState } from "react"
 import { cn, formatName } from "@/lib/utils"
+import { formatWATDate } from "@/lib/utils/date"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -149,10 +150,8 @@ export function EmployeeListView({
                     .replace(/\s+/g, " ")
                     .trim()
                 const leadDepartments = member.lead_departments.filter(Boolean)
-                const createdAt = member.created_at ? new Date(member.created_at).toLocaleDateString() : "-"
-                const employmentDate = member.employment_date
-                  ? new Date(member.employment_date).toLocaleDateString()
-                  : "-"
+                const createdAt = member.created_at ? formatWATDate(member.created_at) : "-"
+                const employmentDate = member.employment_date ? formatWATDate(member.employment_date) : "-"
 
                 return (
                   <Fragment key={member.id}>

@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { ArrowRight, ScrollText } from "lucide-react"
 import { EmptyState } from "@/components/ui/patterns"
 import type { RecentActivityItem } from "./dashboard-types"
+import { formatWATRelative } from "@/lib/utils/date"
 
 const activityRouteMap: Record<string, string> = {
   task: "/admin/tasks",
@@ -32,21 +33,7 @@ function resolveActivityRoute(moduleKey: string): string {
 }
 
 function formatDate(dateString: string): string {
-  const d = new Date(dateString)
-  const now = new Date()
-  const isToday = d.toDateString() === now.toDateString()
-  const isThisYear = d.getFullYear() === now.getFullYear()
-  if (isToday) {
-    return d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-  }
-  if (isThisYear) {
-    return (
-      d.toLocaleDateString("en-US", { month: "short", day: "numeric" }) +
-      ", " +
-      d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
-    )
-  }
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  return formatWATRelative(dateString)
 }
 
 interface RecentActivityFeedProps {

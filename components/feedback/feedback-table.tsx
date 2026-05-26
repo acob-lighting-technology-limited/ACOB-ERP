@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { MessageSquare, Eye, ArrowUp, ArrowDown } from "lucide-react"
 import { formatName } from "@/lib/utils"
+import { formatWATDate } from "@/lib/utils/date"
 import type { FeedbackRecord } from "@/components/feedback/types"
 
 function getTypeColor(type: string): string {
@@ -111,9 +112,7 @@ export function FeedbackTable({ items, nameSortOrder, onToggleSort, onView, hasA
                   <TableCell>
                     <Badge className={getStatusColor(item.status)}>{item.status}</Badge>
                   </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {new Date(item.created_at).toLocaleDateString()}
-                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">{formatWATDate(item.created_at)}</TableCell>
                   <TableCell>
                     <Button
                       variant="ghost"

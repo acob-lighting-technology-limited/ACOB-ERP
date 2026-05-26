@@ -10,6 +10,7 @@
  */
 
 import { redirect, notFound } from "next/navigation"
+import { formatWATDate } from "@/lib/utils/date"
 import { createClient } from "@/lib/supabase/server"
 import { PageWrapper, PageHeader, Section } from "@/components/layout"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -197,11 +198,11 @@ export default async function DetailPage({ params }: DetailPageProps) {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Created</span>
-                <span>{new Date(pageData.item.created_at).toLocaleDateString()}</span>
+                <span>{formatWATDate(pageData.item.created_at)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Updated</span>
-                <span>{new Date(pageData.item.updated_at).toLocaleDateString()}</span>
+                <span>{formatWATDate(pageData.item.updated_at)}</span>
               </div>
             </CardContent>
           </Card>

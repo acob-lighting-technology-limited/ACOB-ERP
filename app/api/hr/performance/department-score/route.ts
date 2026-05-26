@@ -35,8 +35,8 @@ export async function GET(request: NextRequest) {
       }>()
 
     const parsed = DepartmentScoreQuerySchema.safeParse({
-      department: new URL(request.url).searchParams.get("department"),
-      cycle_id: new URL(request.url).searchParams.get("cycle_id"),
+      department: request.nextUrl.searchParams.get("department"),
+      cycle_id: request.nextUrl.searchParams.get("cycle_id"),
     })
 
     if (!parsed.success) {

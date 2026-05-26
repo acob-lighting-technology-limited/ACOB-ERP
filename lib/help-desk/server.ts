@@ -4,6 +4,7 @@ import { writeAuditLog } from "@/lib/audit/write-audit"
 import { BUSINESS_HOUR_START, BUSINESS_HOUR_END, HELP_DESK_SLA } from "@/lib/org-config"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import type { SupabaseClient } from "@supabase/supabase-js"
+import type { TaskStatus, TaskAssignmentType } from "@/lib/tasks/constants"
 
 /** Minimal profile shape used in help-desk access-control helpers */
 export interface ProfileLike {
@@ -71,6 +72,7 @@ export const HELP_DESK_STATUSES = [
   "department_assigned",
   "assigned",
   "in_progress",
+  "paused",
   "pending_approval",
   "approved_for_procurement",
   "rejected",
@@ -87,9 +89,6 @@ export type HelpDeskPriority = (typeof HELP_DESK_PRIORITIES)[number]
 export type HelpDeskStatus = (typeof HELP_DESK_STATUSES)[number]
 export type HelpDeskSupportMode = (typeof HELP_DESK_SUPPORT_MODES)[number]
 export type HelpDeskHandlingMode = (typeof HELP_DESK_HANDLING_MODES)[number]
-
-type TaskStatus = "pending" | "in_progress" | "completed" | "cancelled"
-type TaskAssignmentType = "individual" | "department"
 
 type SyncedTaskRow = {
   id: string

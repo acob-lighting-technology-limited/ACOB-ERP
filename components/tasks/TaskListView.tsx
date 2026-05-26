@@ -8,6 +8,7 @@ import { EmptyState } from "@/components/ui/patterns"
 import { ItemInfoButton } from "@/components/ui/item-info-button"
 import { ClipboardList, Edit, Trash2, Calendar, User, Building2, Ticket, HeadphonesIcon } from "lucide-react"
 import { formatName } from "@/lib/utils"
+import { formatWATDate } from "@/lib/utils/date"
 import type { Task } from "@/types/task"
 
 type TaskAssignee = NonNullable<Task["assigned_to_user"]>
@@ -52,11 +53,7 @@ function getPriorityColor(priority: string) {
 }
 
 function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })
+  return formatWATDate(dateString, { month: "short", day: "numeric", year: "numeric" })
 }
 
 function getSourceBadge(sourceType?: string) {

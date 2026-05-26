@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label"
 import { Clock, Calendar, Download, BarChart3 } from "lucide-react"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { dayCredit, monthBounds, toLocalYearMonth } from "@/lib/hr/attendance-utils"
+import { formatWATDate } from "@/lib/utils/date"
 import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
 
 interface AttendanceRecord {
@@ -27,11 +28,11 @@ interface AttendanceRecord {
 }
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  return formatWATDate(dateStr, { month: "short", day: "numeric", year: "numeric" })
 }
 
 function formatDay(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString("en-US", { weekday: "long" })
+  return formatWATDate(dateStr, { weekday: "long" })
 }
 
 function formatTime(t: string | null) {

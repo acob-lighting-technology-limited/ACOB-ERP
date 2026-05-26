@@ -8,7 +8,7 @@ import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-tabl
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { StatCard } from "@/components/ui/stat-card"
 import { exportPmsRowsToExcel, exportPmsRowsToPdf } from "@/lib/pms/export"
-import { toLocalISODate } from "@/lib/utils/date"
+import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
 
 type IconKey = "kpi" | "goals" | "attendance" | "cbt" | "behaviour" | "reviews"
 type TableColumn = { key: string; label: string }
@@ -249,9 +249,7 @@ export function PmsTablePage({
                                 <td className="px-3 py-2 capitalize">
                                   {String(task.assignmentType || "department").replace(/_/g, " ")}
                                 </td>
-                                <td className="px-3 py-2">
-                                  {task.dueDate ? new Date(task.dueDate).toLocaleDateString("en-GB") : "-"}
-                                </td>
+                                <td className="px-3 py-2">{task.dueDate ? formatWATDate(task.dueDate) : "-"}</td>
                               </tr>
                             ))}
                           </tbody>

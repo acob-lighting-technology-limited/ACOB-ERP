@@ -1,6 +1,7 @@
 "use client"
 
 import { Fragment } from "react"
+import { formatWATDateTime } from "@/lib/utils/date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -85,13 +86,7 @@ export function ActionTrackerTable({
   }
 
   const formatDueDate = (task: ActionTask) => {
-    return resolveDueDate(task).toLocaleString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
+    return formatWATDateTime(resolveDueDate(task), { day: "2-digit", month: "short", year: "numeric" })
   }
 
   const getDueDateClassName = (task: ActionTask) => {

@@ -1,3 +1,4 @@
+import { formatWATDate } from "@/lib/utils/date"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { getRoleBadgeColor, getRoleDisplayName } from "@/lib/permissions"
@@ -87,7 +88,7 @@ export function ContactInfoCard({ profile }: ContactInfoCardProps) {
           )}
           {employmentDate && (
             <Row label="Joined">
-              {employmentDate.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
+              {formatWATDate(employmentDate, { month: "long", day: "numeric", year: "numeric" })}
             </Row>
           )}
           {daysAtAcob !== null && <Row label="Tenure">{daysAtAcob} days</Row>}

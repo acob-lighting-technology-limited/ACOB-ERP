@@ -77,9 +77,9 @@ export async function GET(request: NextRequest) {
     }
 
     const parsed = SnapshotQuerySchema.safeParse({
-      metric: new URL(request.url).searchParams.get("metric"),
-      cycle_id: new URL(request.url).searchParams.get("cycle_id"),
-      view: new URL(request.url).searchParams.get("view") || "individual",
+      metric: request.nextUrl.searchParams.get("metric"),
+      cycle_id: request.nextUrl.searchParams.get("cycle_id"),
+      view: request.nextUrl.searchParams.get("view") || "individual",
     })
 
     if (!parsed.success) {

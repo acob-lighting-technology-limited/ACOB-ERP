@@ -6,6 +6,7 @@ import { buttonVariants } from "@/components/ui/button"
 import { EmptyState } from "@/components/ui/patterns"
 import { cn } from "@/lib/utils"
 import { CheckSquare, Laptop, Package, FileText, MessageSquare, ScrollText } from "lucide-react"
+import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import Link from "next/link"
 import type {
   EmployeeTask,
@@ -134,7 +135,7 @@ export function EmployeeDetailTabs({
                         <Badge className={getPriorityColor(task.priority)}>{task.priority}</Badge>
                       </TableCell>
                       <TableCell>{task.department || "N/A"}</TableCell>
-                      <TableCell>{task.due_date ? new Date(task.due_date).toLocaleDateString() : "N/A"}</TableCell>
+                      <TableCell>{task.due_date ? formatWATDate(task.due_date) : "N/A"}</TableCell>
                       <TableCell>
                         <Link
                           href={`${taskLinkBase}?taskId=${task.id}`}
@@ -184,7 +185,7 @@ export function EmployeeDetailTabs({
                       <TableCell>
                         <Badge className={getStatusColor(device.status)}>{device.status}</Badge>
                       </TableCell>
-                      <TableCell>{new Date(device.assigned_at).toLocaleDateString()}</TableCell>
+                      <TableCell>{formatWATDate(device.assigned_at)}</TableCell>
                       <TableCell>
                         <Link
                           href={`${deviceLinkBase}?deviceId=${device.id}`}
@@ -234,7 +235,7 @@ export function EmployeeDetailTabs({
                       <TableCell>
                         <Badge className={getStatusColor(asset.status)}>{asset.status}</Badge>
                       </TableCell>
-                      <TableCell>{new Date(asset.assigned_at).toLocaleDateString()}</TableCell>
+                      <TableCell>{formatWATDate(asset.assigned_at)}</TableCell>
                       <TableCell>
                         <Link
                           href={`${assetLinkBase}?assetId=${asset.id}`}
@@ -278,7 +279,7 @@ export function EmployeeDetailTabs({
                       <TableCell>
                         <Badge variant="outline">{doc.category || "N/A"}</Badge>
                       </TableCell>
-                      <TableCell>{new Date(doc.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>{formatWATDate(doc.created_at)}</TableCell>
                       <TableCell>
                         <Link
                           href={`${docLinkBase}?docId=${doc.id}`}
@@ -326,7 +327,7 @@ export function EmployeeDetailTabs({
                       <TableCell>
                         <Badge className={getStatusColor(item.status)}>{item.status}</Badge>
                       </TableCell>
-                      <TableCell>{new Date(item.created_at).toLocaleDateString()}</TableCell>
+                      <TableCell>{formatWATDate(item.created_at)}</TableCell>
                       <TableCell>
                         <Link
                           href={`${feedbackLinkBase}?feedbackId=${item.id}`}
@@ -372,7 +373,7 @@ export function EmployeeDetailTabs({
                       </TableCell>
                       <TableCell>{entry.entity_type}</TableCell>
                       <TableCell className="font-mono text-xs">{entry.entity_id?.substring(0, 8) || "N/A"}</TableCell>
-                      <TableCell>{new Date(entry.created_at).toLocaleString()}</TableCell>
+                      <TableCell>{formatWATDateTime(entry.created_at)}</TableCell>
                       <TableCell>
                         <Link
                           href={`${auditLinkBase}?logId=${entry.id}`}

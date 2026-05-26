@@ -6,6 +6,7 @@ import Link from "next/link"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
+import { formatWATDate } from "@/lib/utils/date"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
@@ -101,7 +102,7 @@ function formatRelativeTime(dateString: string): string {
     const days = Math.floor(diffInSeconds / 86400)
     return `${days} day${days > 1 ? "s" : ""} ago`
   }
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  return formatWATDate(date, { month: "short", day: "numeric", year: "numeric" })
 }
 
 export function NotificationContent({ initialNotifications, userId }: NotificationContentProps) {

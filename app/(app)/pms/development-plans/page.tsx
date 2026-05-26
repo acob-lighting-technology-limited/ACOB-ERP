@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { BookOpen, CheckCircle2, ChevronDown, ChevronRight, Clock, Loader2 } from "lucide-react"
+import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { PageHeader, PageWrapper } from "@/components/layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -59,7 +60,7 @@ const PRIORITY_VARIANTS: Record<string, "default" | "secondary" | "outline" | "d
 
 function formatDate(date: string | null) {
   if (!date) return null
-  return new Date(date).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" })
+  return formatWATDate(date, { day: "2-digit", month: "short", year: "numeric" })
 }
 
 export default function DevelopmentPlansPage() {

@@ -13,6 +13,7 @@ import {
   type TaskAssignmentAuthorityProfile,
   type TaskAssignmentTargetProfile,
 } from "@/lib/tasks/assignment-scope"
+import { TASK_STATUSES, TASK_ASSIGNMENT_TYPES } from "@/lib/tasks/constants"
 
 const log = logger("task-detail-route")
 
@@ -20,10 +21,10 @@ const UpdateTaskSchema = z.object({
   title: z.string().trim().min(1).optional(),
   description: z.string().optional().nullable(),
   priority: z.string().trim().min(1).optional(),
-  status: z.enum(["pending", "in_progress", "completed", "cancelled"]).optional(),
+  status: z.enum(TASK_STATUSES).optional(),
   due_date: z.string().optional().nullable(),
   department: z.string().optional().nullable(),
-  assignment_type: z.enum(["individual", "department"]).optional(),
+  assignment_type: z.enum(TASK_ASSIGNMENT_TYPES).optional(),
   assigned_to: z.string().uuid().optional().nullable(),
   goal_id: z.string().uuid().optional().nullable(),
   task_start_date: z.string().optional().nullable(),

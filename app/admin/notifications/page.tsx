@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { AdminNotificationContent, type DynamicNotification } from "./admin-notification-content"
 import { getDepartmentScope, resolveAdminScope } from "@/lib/admin/rbac"
-import { toLocalISODate } from "@/lib/utils/date"
+import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
 
 type ProfileIdRow = { id: string }
 type DepartmentIdRow = { id: string }
@@ -27,7 +27,7 @@ async function formatRelativeTime(dateString: string): Promise<string> {
     return `${days} day${days > 1 ? "s" : ""} ago`
   }
 
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+  return formatWATDate(date, { month: "short", day: "numeric", year: "numeric" })
 }
 
 async function getAdminNotificationsData() {

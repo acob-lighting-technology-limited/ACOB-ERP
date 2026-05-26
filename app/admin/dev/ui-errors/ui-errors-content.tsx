@@ -2,6 +2,7 @@
 
 import { useMemo } from "react"
 import { Badge } from "@/components/ui/badge"
+import { formatWATDateTime } from "@/lib/utils/date"
 import { Bug, AlertTriangle, ShieldAlert } from "lucide-react"
 import { StatCard } from "@/components/ui/stat-card"
 import { DataTablePage, DataTable, type DataTableColumn, type DataTableFilter } from "@/components/ui/data-table"
@@ -34,7 +35,7 @@ export function UiErrorsContent({ rows, stats, error }: UiErrorsContentProps) {
         sortable: true,
         accessor: (r) => r.created_at,
         hideOnMobile: true,
-        render: (r) => <span className="text-xs whitespace-nowrap">{new Date(r.created_at).toLocaleString()}</span>,
+        render: (r) => <span className="text-xs whitespace-nowrap">{formatWATDateTime(r.created_at)}</span>,
       },
       {
         key: "source",

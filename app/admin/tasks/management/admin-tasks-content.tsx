@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { formatName } from "@/lib/utils"
+import { formatWATDate } from "@/lib/utils/date"
 import {
   ClipboardList,
   Plus,
@@ -440,7 +441,7 @@ export function AdminTasksContent({
         render: (r) => (
           <div className="text-muted-foreground flex items-center gap-1.5 text-xs">
             <Calendar className="h-3.5 w-3.5" />
-            <span>{r.due_date ? new Date(r.due_date).toLocaleDateString() : "No Date"}</span>
+            <span>{r.due_date ? formatWATDate(r.due_date) : "No Date"}</span>
           </div>
         ),
       },

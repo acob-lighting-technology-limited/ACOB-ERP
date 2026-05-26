@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { formatWATDate, formatWATTime } from "@/lib/utils/date"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -166,7 +167,7 @@ export function UserFeedbackList({ feedback }: UserFeedbackListProps) {
               </div>
 
               <p className="text-muted-foreground text-xs">
-                {new Date(item.created_at).toLocaleDateString()} at {new Date(item.created_at).toLocaleTimeString()}
+                {formatWATDate(item.created_at)} at {formatWATTime(item.created_at)}
               </p>
             </div>
           ))}

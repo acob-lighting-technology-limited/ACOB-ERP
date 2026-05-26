@@ -472,3 +472,73 @@ If your feature needs a category not in the table above, you **must** also:
 ### `admin/notifications` is a separate system
 
 `app/admin/notifications/page.tsx` is a real-time aggregation dashboard that queries operational tables dynamically. It does **not** read from the `notifications` table. Do not conflate the two.
+
+---
+
+## Email and In-App Notification Parity — Mandatory
+
+Every API route or lib function that dispatches an outgoing email to a named user **must also** create an in-app notification for that same user. Sending email without a matching in-app notification is a silent failure — recipients miss events they should see inside the ERP.
+
+### The rule
+
+Whenever you call any of the following email helpers, also call `create_notification` (or `notifyUsers` for the leave system) for every named recipient:
+
+| Email helper | Location |
+|---|---|
+| `sendLeaveWorkflowEmail` | `lib/leave-mailer.ts` — use `notifyUsers` from `lib/hr/leave-workflow.ts` instead; it handles both channels |
+| `sendHelpDeskMail` | `lib/help-desk/mailer.ts` |
+| `sendCorrespondenceDecisionEmail` | `lib/correspondence/mailer.ts` |
+| `sendExitNotificationEmail` | `lib/hr/exit-mailer.ts` |
+| `sendNotificationEmail` / `sendNotificationEmailWithRetry` | `lib/notifications/email-gateway.ts` |
+
+### Event → notification type mapping
+
+| Event | `p_type` | `p_category` |
+|---|---|---|
+| Approval needed (next approver) | `approval_request` | `approvals` |
+| Approved (requester notified) | `approval_granted` | `approvals` |
+| Rejected (requester notified) | `approval_rejected` | `approvals` |
+| Task assigned | `task_assigned` | `tasks` |
+| Task completed / resolved | `task_completed` | `tasks` |
+| Asset assigned | `asset_assigned` | `assets` |
+| SLA reminder / breach / lapsed | `system` | `system` |
+| Broadcast / onboarding / announcement | `announcement` | `system` |
+
+### Required pattern
+
+```ts
+// 1. Send email (in try/catch so it never crashes the operation)
+try {
+  await sendSomeEmail({ to: [recipientEmail], ... })
+} catch (err) {
+  log.error({ err: String(err) }, "email failed")
+}
+
+// 2. Create matching in-app notification (also in try/catch)
+try {
+  await supabase.rpc("create_notification", {
+    p_user_id: recipientUserId,
+    p_type: "approval_granted",   // use the correct type from the table above
+    p_category: "approvals",
+    p_title: "...",
+    p_message: "...",
+    p_priority: "normal",
+    p_link_url: "/your-feature",
+    p_actor_id: actorId,
+    p_entity_type: "...",
+    p_entity_id: record.id,
+  })
+} catch (err) {
+  log.error({ err: String(err) }, "notification failed")
+}
+```
+
+Always wrap both calls in separate `try/catch` blocks. Notification failure must never crash the parent operation, and email failure must not prevent the notification.
+
+### Known exception — Supabase Edge Functions
+
+Edge functions under `supabase/functions/` run outside the Next.js process. They currently send emails only (`send-weekly-report`, `send-meeting-reminder`, `send-communications-mail`). Adding in-app notifications from edge functions requires calling the Supabase REST API directly with the service-role key — do not attempt this inside a Next.js route handler. Track as a separate task and document when complete.
+
+### Leave system — use `notifyUsers`, not raw RPC
+
+For any leave workflow event, always use `notifyUsers` from `lib/hr/leave-workflow.ts`. It handles delivery policy resolution, channel eligibility, and both email and in-app in one call. Pass `emailEvent` so the correct `p_type` is set per the mapping above.

@@ -8,6 +8,7 @@ import {
   resolveAdminScope,
   normalizeDepartmentName,
 } from "@/lib/admin/rbac"
+import { PAYMENT_TYPES } from "@/lib/validation"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
@@ -33,8 +34,8 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-
 const CreatePaymentSchema = z
   .object({
     department_id: z.string().trim().min(1, "Missing required fields (including Issuer Name & Phone)"),
-    payment_type: z.enum(["one-time", "recurring"]).optional(),
-    category: z.enum(["one-time", "recurring"], {
+    payment_type: z.enum(PAYMENT_TYPES).optional(),
+    category: z.enum(PAYMENT_TYPES, {
       errorMap: () => ({ message: "Category must be 'one-time' or 'recurring'" }),
     }),
     title: z.string().trim().min(1, "Missing required fields (including Issuer Name & Phone)"),

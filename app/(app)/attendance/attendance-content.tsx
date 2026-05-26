@@ -1,17 +1,23 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { Clock, Download, UserCheck, AlertCircle, MapPin, BarChart3 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
-import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
+import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
+import { EmployeeCalendarView } from "./calendar-view"
 import { StatCard } from "@/components/ui/stat-card"
 import type { AttendanceRecord } from "./page"
 import { logger } from "@/lib/logger"
 import { RemoteCheckinModal } from "@/components/attendance/remote-checkin-modal"
 import { dayCredit, isLate, getWorkdaysInMonth, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
-import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
+import {
+  ATTENDANCE_STATUS_COLORS,
+  ATTENDANCE_STATUS_LABELS,
+  deriveUnifiedAttendanceStatus,
+} from "@/lib/hr/attendance-status"
 
 const log = logger("dashboard-attendance-attendance-content")
 
@@ -88,11 +94,17 @@ function isCoveredStatus(status: AttendanceRow["normalizedStatus"]) {
   return status === "waiver" || status === "exempted" || status === "on_leave" || status === "holiday"
 }
 
+const ATTENDANCE_TABS: DataTableTab[] = [
+  { key: "log", label: "Log" },
+  { key: "calendar", label: "Calendar" },
+]
+
 export function AttendanceContent({
   initialTodayRecord,
   initialRecentRecords,
   remoteCheckinEnabled = false,
 }: AttendanceContentProps) {
+  const [activeTab, setActiveTab] = useState<"log" | "calendar">("log")
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(initialTodayRecord)
   const [recentRecords, setRecentRecords] = useState<AttendanceRecord[]>(initialRecentRecords)
   const [unifiedDays, setUnifiedDays] = useState<UnifiedDay[] | null>(null)
@@ -145,10 +157,10 @@ export function AttendanceContent({
             clock_out: null,
             total_hours: null,
             status: "no_record",
-            dayLabel: date.toLocaleDateString("en-GB", { weekday: "long" }),
-            dateLabel: date.toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" }),
+            dayLabel: formatWATDate(date, { weekday: "long" }),
+            dateLabel: formatWATDate(date, { day: "2-digit", month: "long", year: "numeric" }),
             periodLabel: "-",
-            monthLabel: date.toLocaleDateString("en-GB", { month: "long", year: "numeric" }),
+            monthLabel: formatWATDate(date, { month: "long", year: "numeric" }),
             calculatedTotalHours: null,
             workHours: null,
             overtimeHours: null,
@@ -165,10 +177,10 @@ export function AttendanceContent({
         return {
           ...existing,
           total_hours: breakdown.total ?? existing.total_hours,
-          dayLabel: date.toLocaleDateString("en-GB", { weekday: "long" }),
-          dateLabel: date.toLocaleDateString("en-GB", { day: "2-digit", month: "long", year: "numeric" }),
+          dayLabel: formatWATDate(date, { weekday: "long" }),
+          dateLabel: formatWATDate(date, { day: "2-digit", month: "long", year: "numeric" }),
           periodLabel: `${existing.clock_in || "-"} - ${existing.clock_out || "In Progress"}`,
-          monthLabel: date.toLocaleDateString("en-GB", { month: "long", year: "numeric" }),
+          monthLabel: formatWATDate(date, { month: "long", year: "numeric" }),
           calculatedTotalHours: breakdown.total,
           workHours: breakdown.work,
           overtimeHours: breakdown.overtime,
@@ -237,7 +249,8 @@ export function AttendanceContent({
         label: "Overtime",
         sortable: true,
         accessor: (row) => row.overtimeHours || 0,
-        render: (row) => (row.overtimeHours != null ? `${row.overtimeHours.toFixed(2)} hrs` : "-"),
+        render: (row) =>
+          row.overtimeHours != null && row.overtimeHours >= 0.05 ? `${row.overtimeHours.toFixed(2)} hrs` : "-",
         hideOnMobile: true,
       },
       {
@@ -325,6 +338,9 @@ export function AttendanceContent({
         description="Track your work hours and attendance records."
         icon={Clock}
         backLink={{ href: "/profile", label: "Back to Dashboard" }}
+        tabs={ATTENDANCE_TABS}
+        activeTab={activeTab}
+        onTabChange={(t) => setActiveTab(t as "log" | "calendar")}
         actions={
           <div className="flex items-center gap-2">
             {remoteCheckinEnabled && (
@@ -387,46 +403,50 @@ export function AttendanceContent({
           </div>
         }
       >
-        <DataTable<AttendanceRow>
-          data={rows}
-          columns={columns}
-          filters={filters}
-          getRowId={(row) => row.id}
-          searchPlaceholder="Search date, clock period, or status..."
-          searchFn={(row, query) =>
-            `${row.dayLabel} ${row.dateLabel} ${row.periodLabel} ${row.status}`.toLowerCase().includes(query)
-          }
-          isLoading={unifiedDays === null}
-          emptyTitle={unifiedDays === null ? "Loading attendance..." : "No attendance records"}
-          emptyDescription={
-            unifiedDays === null ? "Fetching your attendance status..." : "No records are available yet."
-          }
-          emptyIcon={Clock}
-          skeletonRows={6}
-          expandable={{
-            render: (row) => (
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <div>
-                  <p className="text-muted-foreground text-xs uppercase">Day</p>
-                  <p className="font-medium">{row.dayLabel}</p>
+        {activeTab === "calendar" ? (
+          <EmployeeCalendarView />
+        ) : (
+          <DataTable<AttendanceRow>
+            data={rows}
+            columns={columns}
+            filters={filters}
+            getRowId={(row) => row.id}
+            searchPlaceholder="Search date, clock period, or status..."
+            searchFn={(row, query) =>
+              `${row.dayLabel} ${row.dateLabel} ${row.periodLabel} ${row.status}`.toLowerCase().includes(query)
+            }
+            isLoading={unifiedDays === null}
+            emptyTitle={unifiedDays === null ? "Loading attendance..." : "No attendance records"}
+            emptyDescription={
+              unifiedDays === null ? "Fetching your attendance status..." : "No records are available yet."
+            }
+            emptyIcon={Clock}
+            skeletonRows={6}
+            expandable={{
+              render: (row) => (
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <p className="text-muted-foreground text-xs uppercase">Day</p>
+                    <p className="font-medium">{row.dayLabel}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs uppercase">Date</p>
+                    <p className="font-medium">{row.dateLabel}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs uppercase">Clock In</p>
+                    <p className="font-medium">{row.clock_in || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs uppercase">Clock Out</p>
+                    <p className="font-medium">{row.clock_out || "-"}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-muted-foreground text-xs uppercase">Date</p>
-                  <p className="font-medium">{row.dateLabel}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs uppercase">Clock In</p>
-                  <p className="font-medium">{row.clock_in || "-"}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs uppercase">Clock Out</p>
-                  <p className="font-medium">{row.clock_out || "-"}</p>
-                </div>
-              </div>
-            ),
-          }}
-          urlSync
-        />
+              ),
+            }}
+            urlSync
+          />
+        )}
       </DataTablePage>
 
       {remoteCheckinEnabled && (
@@ -444,25 +464,10 @@ export function AttendanceContent({
   )
 }
 function normalizeStatus(record: AttendanceRecord | null, recordDate?: string): AttendanceRow["normalizedStatus"] {
-  if (!record) return "absent"
-  const value = String(record.status || "").toLowerCase()
-  if (value === "holiday") return "holiday"
-  if (value === "on_leave" || value === "leave") return "on_leave"
-  if (value === "exempted" || value === "exempt") return "exempted"
-  if (value === "waiver" || value === "waived" || record.waived) return "waiver"
-  if (value === "half_day") return "half_day"
-  if (value === "present") return "present"
-  if (value === "late") return "late"
-  if (value === "incomplete") return "incomplete"
-  if (value === "absent") return "absent"
-  if (!record.clock_in && !record.clock_out) return "absent"
-  if (record.clock_in && !record.clock_out) {
-    const today = new Date().toISOString().slice(0, 10)
-    const date = recordDate ?? (record as { date?: string }).date
-    return date && date < today ? "half_day" : "incomplete"
-  }
-  if (!record.clock_in) return "incomplete"
-  return isLate(record.clock_in) ? "late" : "present"
+  return deriveUnifiedAttendanceStatus({
+    record: record ?? undefined,
+    recordDate: recordDate ?? (record as { date?: string } | null)?.date,
+  }) as AttendanceRow["normalizedStatus"]
 }
 
 function StatusBadge({ status }: { status: AttendanceRow["normalizedStatus"] }) {

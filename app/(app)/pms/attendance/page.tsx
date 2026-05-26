@@ -1,4 +1,5 @@
 import { PmsTablePage } from "@/app/admin/hr/pms/_components/pms-table-page"
+import { formatWATDate } from "@/lib/utils/date"
 import { getCurrentUserPmsData } from "../_lib"
 
 function formatPercent(value: number | null | undefined) {
@@ -14,8 +15,8 @@ export default async function PmsAttendancePage() {
   }
   const rows = attendance.recent.map((record) => ({
     cycle: getCycleLabel(record.date),
-    month: new Date(record.date).toLocaleDateString(undefined, { month: "long" }),
-    date: new Date(record.date).toLocaleDateString(),
+    month: formatWATDate(record.date, { month: "long" }),
+    date: formatWATDate(record.date),
     clock_in: record.clock_in || "-",
     clock_out: record.clock_out || "In progress",
     total_hours: record.total_hours !== null ? `${record.total_hours.toFixed(2)} hrs` : "Pending",

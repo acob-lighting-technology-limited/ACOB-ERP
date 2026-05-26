@@ -18,6 +18,7 @@ import type {
   LeaveItem,
   AttendanceItem,
 } from "@/app/(app)/profile/page"
+import { formatWATDate } from "@/lib/utils/date"
 
 function statusColor(status: string): string {
   switch (status?.toLowerCase()) {
@@ -54,7 +55,7 @@ function priorityColor(priority: string): string {
 }
 
 function shortDate(dateString: string): string {
-  return new Date(dateString).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "2-digit" })
+  return formatWATDate(dateString, { month: "short", day: "numeric", year: "2-digit" })
 }
 
 function EmptyTab({ label }: { label: string }) {
@@ -338,12 +339,12 @@ export function ActivityTabs({
                       <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(a.status)}`}>{a.status}</Badge>
                       {a.clock_in && (
                         <span className="text-muted-foreground text-[10px]">
-                          In {new Date(a.clock_in).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          In {(a.clock_in as string).substring(0, 5)}
                         </span>
                       )}
                       {a.clock_out && (
                         <span className="text-muted-foreground text-[10px]">
-                          Out {new Date(a.clock_out).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                          Out {(a.clock_out as string).substring(0, 5)}
                         </span>
                       )}
                     </div>

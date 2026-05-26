@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import {
   Dialog,
   DialogContent,
@@ -397,11 +398,7 @@ export function EmployeeViewModal({
                               </Badge>
                               {task.created_at && (
                                 <span className="text-muted-foreground text-[10px]">
-                                  {new Date(task.created_at).toLocaleDateString("en-GB", {
-                                    day: "numeric",
-                                    month: "short",
-                                    year: "numeric",
-                                  })}
+                                  {formatWATDate(task.created_at, { day: "numeric", month: "short", year: "numeric" })}
                                 </span>
                               )}
                             </div>
@@ -421,11 +418,7 @@ export function EmployeeViewModal({
                             <p className="truncate text-sm font-medium">{doc.title || "Untitled document"}</p>
                             {doc.created_at && (
                               <p className="text-muted-foreground mt-0.5 text-[10px]">
-                                {new Date(doc.created_at).toLocaleDateString("en-GB", {
-                                  day: "numeric",
-                                  month: "short",
-                                  year: "numeric",
-                                })}
+                                {formatWATDate(doc.created_at, { day: "numeric", month: "short", year: "numeric" })}
                               </p>
                             )}
                           </ItemRow>
@@ -450,7 +443,7 @@ export function EmployeeViewModal({
                     </InfoRow>
                     <InfoRow label="Hire Date">
                       {viewEmployeeProfile.employment_date
-                        ? new Date(viewEmployeeProfile.employment_date).toLocaleDateString("en-GB", {
+                        ? formatWATDate(viewEmployeeProfile.employment_date, {
                             day: "numeric",
                             month: "long",
                             year: "numeric",
@@ -467,7 +460,7 @@ export function EmployeeViewModal({
                         <InfoRow label="Separation Date">
                           <span className="text-red-600 dark:text-red-400">
                             {viewEmployeeProfile.separation_date
-                              ? new Date(viewEmployeeProfile.separation_date).toLocaleDateString("en-GB", {
+                              ? formatWATDate(viewEmployeeProfile.separation_date, {
                                   day: "numeric",
                                   month: "long",
                                   year: "numeric",

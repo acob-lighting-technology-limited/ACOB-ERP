@@ -10,6 +10,22 @@ import type { AuditLog } from "@/app/admin/audit-logs/types"
 
 export const HIDDEN_ACTIONS = ["sync", "migrate", "update_schema", "migration"] as const
 
+export const VISIBLE_AUDIT_ACTIONS = [
+  { value: "create", label: "Create" },
+  { value: "update", label: "Update" },
+  { value: "delete", label: "Delete" },
+  { value: "approve", label: "Approve" },
+  { value: "reject", label: "Reject" },
+] as const
+
+export function getAuditLogSummary(log: AuditLog): string {
+  if (log.metadata?.event) return String(log.metadata.event)
+  if (log.task_info?.title) return `Task: ${log.task_info.title}`
+  if (log.asset_info?.unique_code) return `Asset: ${log.asset_info.unique_code}`
+  if (log.leave_request_info?.leave_type_name) return log.leave_request_info.leave_type_name
+  return `Modified ${log.entity_type}`
+}
+
 /** Safely read a string field from new_values / old_values (which are Record<string, unknown>) */
 function str(v: unknown): string | undefined {
   return typeof v === "string" && v.length > 0 ? v : undefined
@@ -30,6 +46,7 @@ export function formatAuditDate(dateString: string): string {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Africa/Lagos",
   })
 }
 

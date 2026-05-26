@@ -1,20 +1,5 @@
-export type HelpDeskPriority = "low" | "medium" | "high" | "urgent"
-
-export type HelpDeskStatus =
-  | "new"
-  | "department_queue"
-  | "department_assigned"
-  | "returned"
-  | "paused"
-  | "pending_lead_review"
-  | "assigned"
-  | "in_progress"
-  | "pending_approval"
-  | "approved_for_procurement"
-  | "rejected"
-  | "resolved"
-  | "closed"
-  | "cancelled"
+import type { HelpDeskPriority, HelpDeskStatus } from "@/lib/help-desk/server"
+export type { HelpDeskPriority, HelpDeskStatus }
 
 export interface HelpDeskTicket {
   id: string

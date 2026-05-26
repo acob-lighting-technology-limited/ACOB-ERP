@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { logger } from "@/lib/logger"
+import { formatWATDate } from "@/lib/utils/date"
 
 const log = logger("notification-bell")
 import type { SupabaseClient, RealtimeChannel } from "@supabase/supabase-js"
@@ -119,7 +120,7 @@ function formatRelativeTime(dateString: string): string {
     return `${weeks}w ago`
   }
 
-  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+  return formatWATDate(date, { month: "short", day: "numeric" })
 }
 
 // Get initials from name

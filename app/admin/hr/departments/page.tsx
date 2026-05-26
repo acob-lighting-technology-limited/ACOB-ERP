@@ -27,6 +27,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { logger } from "@/lib/logger"
+import { formatWATDate } from "@/lib/utils/date"
 
 const log = logger("hr-departments")
 
@@ -333,9 +334,7 @@ export default function DepartmentsPage() {
       accessor: (department) => department.created_at,
       hideOnMobile: true,
       render: (department) => (
-        <span className="text-muted-foreground text-sm">
-          {new Date(department.created_at).toLocaleDateString("en-GB")}
-        </span>
+        <span className="text-muted-foreground text-sm">{formatWATDate(department.created_at)}</span>
       ),
     },
   ]

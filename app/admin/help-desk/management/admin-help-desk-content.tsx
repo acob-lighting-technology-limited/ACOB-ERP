@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PriorityBadge, TicketStatusBadge } from "@/components/dashboard/help-desk/ticket-badges"
 import { isAssignableProfile } from "@/lib/workforce/assignment-policy"
 import { formatName } from "@/lib/utils"
+import { formatWATDateTime } from "@/lib/utils/date"
 import type { HelpDeskTicket, EmployeeOption, LeadDirectoryMember } from "@/components/help-desk/ticket-queue-table"
 import { resolveCurrentStage, resolveApproverName } from "@/components/help-desk/ticket-queue-table"
 
@@ -516,7 +517,7 @@ export function AdminHelpDeskContent({ initialTickets, employees, leadDirectory,
                     SLA Status
                   </h4>
                   <p className="text-sm">
-                    Target Date: {new Date(r.sla_target_at).toLocaleString()}
+                    Target Date: {formatWATDateTime(r.sla_target_at)}
                     {new Date(r.sla_target_at).getTime() < Date.now() && (
                       <span className="ml-2 font-medium text-red-600">(Breached)</span>
                     )}

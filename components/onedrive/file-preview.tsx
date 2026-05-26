@@ -6,6 +6,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Download, ExternalLink, X, Loader2 } from "lucide-react"
@@ -180,7 +181,7 @@ export function FilePreview({ file, category, isOpen, onClose, accessMode = "sel
                 <DialogTitle className="truncate">{file?.name}</DialogTitle>
                 {file && (
                   <p className="text-muted-foreground mt-0.5 text-xs">
-                    {formatFileSize(file.size)} • {new Date(file.lastModified).toLocaleDateString()}
+                    {formatFileSize(file.size)} • {formatWATDate(file.lastModified)}
                   </p>
                 )}
               </div>

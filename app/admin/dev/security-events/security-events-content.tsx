@@ -6,6 +6,7 @@ import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-tabl
 import { StatCard } from "@/components/ui/stat-card"
 import { Badge } from "@/components/ui/badge"
 import { AlertTriangle, ShieldAlert, ShieldCheck, Siren } from "lucide-react"
+import { formatWATDateTime } from "@/lib/utils/date"
 
 export type AuditLogRow = {
   id: string
@@ -64,7 +65,7 @@ export function SecurityEventsContent({ rows, error }: { rows: AuditLogRow[]; er
         resizable: true,
         initialWidth: 220,
         hideOnMobile: true,
-        render: (row) => new Date(row.created_at).toLocaleString(),
+        render: (row) => formatWATDateTime(row.created_at),
       },
       {
         key: "action",
@@ -212,7 +213,7 @@ export function SecurityEventsContent({ rows, error }: { rows: AuditLogRow[]; er
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-medium">{row.action || row.operation || "Unknown action"}</p>
-                <p className="text-muted-foreground text-sm">{new Date(row.created_at).toLocaleString()}</p>
+                <p className="text-muted-foreground text-sm">{formatWATDateTime(row.created_at)}</p>
               </div>
               <Badge variant={getSeverity(row) === "Critical" ? "destructive" : "outline"}>{getSeverity(row)}</Badge>
             </div>

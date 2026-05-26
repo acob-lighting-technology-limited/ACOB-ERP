@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/patterns"
 import { ResponsiveModal } from "@/components/ui/patterns/responsive-modal"
 import { MessageSquare, Send } from "lucide-react"
 import type { Task } from "@/types/task"
+import { formatWATDateTime } from "@/lib/utils/date"
 
 interface TaskUpdate {
   id: string
@@ -20,7 +21,7 @@ interface TaskUpdate {
 }
 
 function formatDateTime(dateString: string) {
-  return new Date(dateString).toLocaleString("en-US", {
+  return formatWATDateTime(dateString, {
     month: "short",
     day: "numeric",
     year: "numeric",

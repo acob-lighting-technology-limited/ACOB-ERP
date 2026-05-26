@@ -2,6 +2,7 @@
 
 import { useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable } from "@/components/ui/data-table"
@@ -95,11 +96,7 @@ export function DevLoginLogsContent() {
         .reverse()
         .map((date) => ({
           value: date,
-          label: new Date(`${date}T00:00:00`).toLocaleDateString("en-NG", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-          }),
+          label: formatWATDate(`${date}T00:00:00`, { day: "2-digit", month: "short", year: "numeric" }),
         })),
     [rows]
   )
@@ -123,7 +120,7 @@ export function DevLoginLogsContent() {
         resizable: true,
         initialWidth: 220,
         hideOnMobile: true,
-        render: (row) => new Date(row.login_at).toLocaleString(),
+        render: (row) => formatWATDateTime(row.login_at),
       },
       {
         key: "full_name",

@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
     const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single()
     if (!canViewFlow(profile?.role)) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = request.nextUrl
     const targetUserId = searchParams.get("user_id")
     const relieverId = searchParams.get("reliever_id")
 

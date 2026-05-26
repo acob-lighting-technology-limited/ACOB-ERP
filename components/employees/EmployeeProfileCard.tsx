@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { User, Mail, Phone, Building2, MapPin, Shield, Calendar } from "lucide-react"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
+import { formatWATDate } from "@/lib/utils/date"
 import type { UserRole } from "@/types/database"
 import type { UserProfile } from "./employee-detail-types"
 
@@ -124,7 +125,7 @@ export function EmployeeProfileCard({ profile, fullName, initials }: EmployeePro
             <Calendar className="text-muted-foreground h-5 w-5" />
             <div>
               <p className="text-muted-foreground text-sm">Member Since</p>
-              <p className="font-medium">{new Date(profile.created_at).toLocaleDateString()}</p>
+              <p className="font-medium">{formatWATDate(profile.created_at)}</p>
             </div>
           </div>
         </div>

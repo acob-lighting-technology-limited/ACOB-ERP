@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Ban, Building2, CheckCircle2, Eye, Mail, Pencil, Plus, Trash2, Users } from "lucide-react"
@@ -144,7 +145,7 @@ export default function SuppliersPage() {
         render: (supplier) => (
           <div className="space-y-1">
             <p className="font-medium">{supplier.name}</p>
-            <p className="text-muted-foreground text-xs">Added {new Date(supplier.created_at).toLocaleDateString()}</p>
+            <p className="text-muted-foreground text-xs">Added {formatWATDate(supplier.created_at)}</p>
           </div>
         ),
       },

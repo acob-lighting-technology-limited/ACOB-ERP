@@ -44,7 +44,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Requester profile not found" }, { status: 404 })
     }
 
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = request.nextUrl
     const relieverId = searchParams.get("reliever_id") || PLACEHOLDER_RELIEVER_ID
 
     const requesterKind = classifyRequesterKind(requester)

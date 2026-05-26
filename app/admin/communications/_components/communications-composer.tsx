@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useMemo, useCallback, useEffect } from "react"
+import { formatWATDateTime } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { PageWrapper, PageHeader } from "@/components/layout"
@@ -692,7 +693,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
 
         toast.success(
           sendTiming === "scheduled"
-            ? `✅ Scheduled for ${new Date(`${scheduledDate}T${scheduledTime}`).toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+            ? `✅ Scheduled for ${formatWATDateTime(`${scheduledDate}T${scheduledTime}`, { weekday: "short", day: "numeric", month: "short" })}`
             : `✅ Recurring every ${capitalize(recurringDay)} at ${recurringTime}`,
           { id: toastId }
         )

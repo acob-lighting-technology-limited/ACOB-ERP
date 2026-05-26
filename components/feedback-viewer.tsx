@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -249,7 +250,7 @@ export function FeedbackViewer({ feedback }: FeedbackViewerProps) {
                           <Badge className={getStatusColor(item.status)}>{item.status}</Badge>
                         </TableCell>
                         <TableCell className="text-muted-foreground text-sm">
-                          {new Date(item.created_at).toLocaleDateString()}
+                          {formatWATDate(item.created_at)}
                         </TableCell>
                         <TableCell>
                           <Button
@@ -308,9 +309,7 @@ export function FeedbackViewer({ feedback }: FeedbackViewerProps) {
                     {item.description || "No description provided."}
                   </p>
                   <div className="flex items-center justify-between pt-2">
-                    <span className="text-muted-foreground text-xs">
-                      {new Date(item.created_at).toLocaleDateString()}
-                    </span>
+                    <span className="text-muted-foreground text-xs">{formatWATDate(item.created_at)}</span>
                     <Button variant="outline" size="sm" onClick={() => handleViewDetails(item)} className="gap-2">
                       <Eye className="h-4 w-4" />
                       View
@@ -364,11 +363,11 @@ export function FeedbackViewer({ feedback }: FeedbackViewerProps) {
                     <p className="text-muted-foreground font-medium italic">Anonymous Submission</p>
                   )}
                   <p className="text-muted-foreground mt-1 text-xs">
-                    Submitted: {new Date(selectedFeedback.created_at).toLocaleString()}
+                    Submitted: {formatWATDateTime(selectedFeedback.created_at)}
                   </p>
                   {selectedFeedback.updated_at !== selectedFeedback.created_at && (
                     <p className="text-muted-foreground text-xs">
-                      Updated: {new Date(selectedFeedback.updated_at).toLocaleString()}
+                      Updated: {formatWATDateTime(selectedFeedback.updated_at)}
                     </p>
                   )}
                 </div>

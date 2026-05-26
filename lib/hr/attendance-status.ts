@@ -42,13 +42,20 @@ export const ATTENDANCE_STATUS_LABELS: Record<UnifiedAttendanceStatus, string> =
  * "holiday", "on_leave", and "exempted" are derived from other tables (calendar /
  * leave_requests / exemption_periods) and must never be stored as a raw status value.
  */
-export const DB_WRITABLE_STATUSES = ["present", "late", "absent", "incomplete", "waiver"] as const
+export const DB_WRITABLE_STATUSES = ["present", "late", "absent", "incomplete", "half_day", "waiver"] as const
 export type DbAttendanceStatus = (typeof DB_WRITABLE_STATUSES)[number]
 
 export type AttendanceLike = {
   clock_in?: string | null
   clock_out?: string | null
   waived?: boolean | null
+}
+
+/** Returns true if a clock_out time string is before 17:00. */
+export function isEarlyDeparture(clockOut: string): boolean {
+  const [h, m] = clockOut.split(":").map(Number)
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return false
+  return h * 60 + m < 17 * 60
 }
 
 export function deriveUnifiedAttendanceStatus(input: {
@@ -65,10 +72,18 @@ export function deriveUnifiedAttendanceStatus(input: {
   if (!rec) return "absent"
   if (rec.waived) return "waiver"
   if (!rec.clock_in && !rec.clock_out) return "absent"
+
+  const today = new Date().toISOString().slice(0, 10)
+  const isPastDate = Boolean(input.recordDate && input.recordDate < today)
+
+  // clock_in present, no clock_out — half day if past, incomplete if today
   if (rec.clock_in && !rec.clock_out) {
-    const today = new Date().toISOString().slice(0, 10)
-    return input.recordDate && input.recordDate < today ? "half_day" : "incomplete"
+    return isPastDate ? "half_day" : "incomplete"
   }
   if (!rec.clock_in) return "incomplete"
+  // Same-second double-fire — treat as incomplete
+  if (rec.clock_out && rec.clock_out <= rec.clock_in) return "incomplete"
+  // Clocked out before 17:00 → half day (left early), regardless of date
+  if (rec.clock_out && isEarlyDeparture(rec.clock_out)) return "half_day"
   return isLate(rec.clock_in) ? "late" : "present"
 }

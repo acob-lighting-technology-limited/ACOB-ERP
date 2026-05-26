@@ -5,9 +5,9 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { writeAuditLog } from "@/lib/audit/write-audit"
-import { isLate } from "@/lib/hr/attendance-utils"
+import { isLate, toLocalISODate } from "@/lib/hr/attendance-utils"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
-import { DB_WRITABLE_STATUSES } from "@/lib/hr/attendance-status"
+import { DB_WRITABLE_STATUSES, isEarlyDeparture, deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 
 const CreateSchema = z.object({
   user_id: z.string().uuid(),
@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
     const { scope, supabase } = scopeResult
 
     const depts = getScopedDepartments(scope)
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = request.nextUrl
     const startDate = searchParams.get("start_date")
     const endDate = searchParams.get("end_date")
     const userId = searchParams.get("user_id")
@@ -86,23 +86,94 @@ export async function GET(request: NextRequest) {
 
     const rows = data ?? []
 
-    // Fetch profiles separately (no FK constraint between attendance_records and profiles)
+    // Collect unique user IDs and date bounds for context lookups
     const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))]
+    const allDates = rows.map((r) => r.date).sort()
+    const minDate = allDates[0] ?? toLocalISODate()
+    const maxDate = allDates[allDates.length - 1] ?? toLocalISODate()
+
+    // Fetch profiles, holidays, leaves, and exemptions in parallel
+    const [profileRows, holidayRows, leaveRows, exemptPeriodRows] = await Promise.all([
+      userIds.length > 0
+        ? dataClient
+            .from("profiles")
+            .select("id, full_name, first_name, last_name, department, attendance_exempt")
+            .in("id", userIds)
+            .then((r) => r.data ?? [])
+        : Promise.resolve([]),
+
+      dataClient
+        .from("holiday_calendar")
+        .select("holiday_date")
+        .gte("holiday_date", minDate)
+        .lte("holiday_date", maxDate)
+        .then((r) => r.data ?? []),
+
+      userIds.length > 0
+        ? dataClient
+            .from("leave_requests")
+            .select("user_id, start_date, end_date")
+            .in("user_id", userIds)
+            .eq("status", "approved")
+            .lte("start_date", maxDate)
+            .gte("end_date", minDate)
+            .then((r) => r.data ?? [])
+        : Promise.resolve([]),
+
+      userIds.length > 0
+        ? dataClient
+            .from("attendance_exempt_periods")
+            .select("user_id, start_date, end_date")
+            .in("user_id", userIds)
+            .lte("start_date", maxDate)
+            .gte("end_date", minDate)
+            .then((r) => r.data ?? [])
+        : Promise.resolve([]),
+    ])
+
+    // Build lookup structures
     const profileMap = new Map<
       string,
-      { full_name?: string; first_name?: string; last_name?: string; department?: string }
+      { full_name?: string; first_name?: string; last_name?: string; department?: string; attendance_exempt?: boolean }
     >()
-    if (userIds.length > 0) {
-      const { data: profileRows } = await dataClient
-        .from("profiles")
-        .select("id, full_name, first_name, last_name, department")
-        .in("id", userIds)
-      for (const p of profileRows ?? []) profileMap.set(p.id, p)
+    for (const p of profileRows) profileMap.set(p.id, p)
+
+    const holidaySet = new Set<string>(holidayRows.map((h: { holiday_date: string }) => h.holiday_date))
+
+    // Per-user leave date sets
+    const leaveDatesByUser = new Map<string, Set<string>>()
+    for (const lr of leaveRows as { user_id: string; start_date: string; end_date: string }[]) {
+      if (!leaveDatesByUser.has(lr.user_id)) leaveDatesByUser.set(lr.user_id, new Set())
+      const s = new Date(lr.start_date)
+      const e = new Date(lr.end_date)
+      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+        leaveDatesByUser.get(lr.user_id)!.add(toLocalISODate(d))
+      }
+    }
+
+    // Per-user exemption date sets
+    const exemptDatesByUser = new Map<string, Set<string>>()
+    for (const ep of exemptPeriodRows as { user_id: string; start_date: string; end_date: string }[]) {
+      if (!exemptDatesByUser.has(ep.user_id)) exemptDatesByUser.set(ep.user_id, new Set())
+      const s = new Date(ep.start_date)
+      const e = new Date(ep.end_date)
+      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
+        exemptDatesByUser.get(ep.user_id)!.add(toLocalISODate(d))
+      }
     }
 
     const records = rows.map((r) => {
       const p = profileMap.get(r.user_id)
       const name = p?.full_name?.trim() || [p?.first_name, p?.last_name].filter(Boolean).join(" ") || "Unknown"
+
+      const derivedStatus = deriveUnifiedAttendanceStatus({
+        record: r,
+        isHoliday: holidaySet.has(r.date),
+        isOnLeave: leaveDatesByUser.get(r.user_id)?.has(r.date) ?? false,
+        isExempted: Boolean(p?.attendance_exempt) || (exemptDatesByUser.get(r.user_id)?.has(r.date) ?? false),
+        recordDate: r.date,
+      })
+
       return {
         id: r.id,
         user_id: r.user_id,
@@ -112,7 +183,7 @@ export async function GET(request: NextRequest) {
         clock_in: r.clock_in,
         clock_out: r.clock_out,
         total_hours: r.total_hours,
-        status: r.waived ? "waiver" : r.status,
+        status: derivedStatus,
         source: r.source,
         waived: r.waived,
         waiver_reason: r.waiver_reason,
@@ -184,16 +255,17 @@ export async function POST(request: NextRequest) {
       } else if (!clock_in && !clock_out) {
         status = "absent"
       } else if (clock_in && !clock_out) {
-        status = "incomplete"
-      } else if (clock_in && clock_out) {
-        status = isLate(clock_in) ? "late" : "present"
+        const today = new Date().toISOString().slice(0, 10)
+        status = date < today ? "half_day" : "incomplete"
+      } else if (clock_in && clock_out && clock_out > clock_in) {
+        status = isEarlyDeparture(clock_out) ? "half_day" : isLate(clock_in) ? "late" : "present"
       } else {
         status = "incomplete"
       }
     }
 
-    if (clock_in && clock_out && clock_out < clock_in) {
-      return NextResponse.json({ error: "Clock out cannot be before clock in" }, { status: 400 })
+    if (clock_in && clock_out && clock_out <= clock_in) {
+      return NextResponse.json({ error: "Clock out must be after clock in" }, { status: 400 })
     }
     if (!waived && !clock_in && !clock_out) {
       return NextResponse.json({ error: "Provide both clock in and clock out before saving" }, { status: 400 })

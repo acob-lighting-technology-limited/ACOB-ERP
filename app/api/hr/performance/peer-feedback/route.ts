@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = request.nextUrl
     const subjectUserId = searchParams.get("subject_user_id")
     const cycleId = searchParams.get("review_cycle_id")
     const asReviewer = searchParams.get("as_reviewer") === "true"

@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { useQuery } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { createClient } from "@/lib/supabase/client"
@@ -159,7 +160,7 @@ export default function AdminJobDescriptionsPage() {
         accessor: (r) => r.job_description_updated_at || "",
         render: (r) => (
           <span className="text-muted-foreground text-xs italic">
-            {r.job_description_updated_at ? new Date(r.job_description_updated_at).toLocaleDateString() : "Never"}
+            {r.job_description_updated_at ? formatWATDate(r.job_description_updated_at) : "Never"}
           </span>
         ),
       },

@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const rosterId = new URL(request.url).searchParams.get("roster_id")
+    const rosterId = request.nextUrl.searchParams.get("roster_id")
     let query = supabase
       .from("kss_results")
       .select(

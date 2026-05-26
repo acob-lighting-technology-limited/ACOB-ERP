@@ -19,6 +19,7 @@ import {
 } from "lucide-react"
 import { formatName } from "@/lib/utils"
 import type { Task } from "@/types/task"
+import { formatWATDateTime } from "@/lib/utils/date"
 
 function getPriorityColor(priority: string) {
   switch (priority) {
@@ -66,7 +67,7 @@ function getStatusIcon(status: string) {
 }
 
 function formatDueDate(dateString: string) {
-  return new Date(dateString).toLocaleString("en-US", {
+  return formatWATDateTime(dateString, {
     month: "short",
     day: "numeric",
     year: "numeric",

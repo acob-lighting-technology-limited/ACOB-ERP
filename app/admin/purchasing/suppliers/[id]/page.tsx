@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { useParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { useQueryClient } from "@tanstack/react-query"
@@ -64,7 +65,7 @@ function formatCurrency(amount: number) {
 }
 
 function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("en-NG", { year: "numeric", month: "short", day: "numeric" })
+  return formatWATDate(date, { year: "numeric", month: "short", day: "numeric" })
 }
 
 export default function SupplierDetailPage() {

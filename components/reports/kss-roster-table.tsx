@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -127,11 +128,7 @@ function formatMeetingDate(value?: string | null): string {
   if (!value) return "-"
   const date = new Date(`${value}T00:00:00`)
   if (Number.isNaN(date.getTime())) return "-"
-  return date.toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  })
+  return formatWATDate(date, { day: "2-digit", month: "short", year: "numeric" })
 }
 
 export function KssRosterTable({
@@ -718,14 +715,7 @@ export function KssRosterTable({
         accessor: (row) => row.created_at,
         resizable: true,
         initialWidth: 220,
-        render: (row) =>
-          new Date(row.created_at).toLocaleString("en-GB", {
-            day: "2-digit",
-            month: "short",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
+        render: (row) => formatWATDateTime(row.created_at, { day: "2-digit", month: "short", year: "numeric" }),
       },
     ],
     [docByWeekYear, employeeNameById, getPresenterName]

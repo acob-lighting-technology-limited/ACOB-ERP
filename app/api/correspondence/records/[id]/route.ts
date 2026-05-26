@@ -17,6 +17,8 @@ import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("correspondence-records")
 
+const EDITABLE_STATUSES = ["under_review", "returned_for_correction", "rejected"] as const
+
 async function resolveCategoryCodeForReference(
   supabase: Awaited<ReturnType<typeof getAuthContext>>["supabase"],
   categoryInput: string | null | undefined
@@ -192,7 +194,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
     const isOwner = record.originator_id === user.id || record.created_by_id === user.id
-    const editableStatuses = ["under_review", "returned_for_correction", "rejected"]
+    const editableStatuses = EDITABLE_STATUSES
 
     if (!isAdmin && !isOwner) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
@@ -555,7 +557,7 @@ export async function DELETE(_request: NextRequest, props: { params: Promise<{ i
     const deleteScope = await getRequestScope()
     const isAdmin = isAdminRole(profile.role) && deleteScope?.scopeMode !== "lead"
     const isOwner = record.originator_id === user.id || record.created_by_id === user.id
-    const editableStatuses = ["under_review", "returned_for_correction", "rejected"]
+    const editableStatuses = EDITABLE_STATUSES
 
     if (!isAdmin && !isOwner) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     if (!isAdmin && !editableStatuses.includes(record.status)) {

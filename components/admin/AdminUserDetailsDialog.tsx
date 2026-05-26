@@ -1,5 +1,6 @@
 "use client"
 
+import { formatWATDateTime } from "@/lib/utils/date"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -110,9 +111,7 @@ export function AdminUserDetailsDialog({ user, open, onClose, feedbackByUserId }
                   <div className="flex items-center gap-2">
                     <span className={`inline-block h-2 w-2 rounded-full ${getTypeColor(fb.feedback_type)}`} />
                     <span className="font-medium">{fb.feedback_type}</span>
-                    <span className="text-muted-foreground ml-auto text-xs">
-                      {new Date(fb.created_at).toLocaleString()}
-                    </span>
+                    <span className="text-muted-foreground ml-auto text-xs">{formatWATDateTime(fb.created_at)}</span>
                   </div>
                   <div className="mt-1 font-medium">{fb.title}</div>
                   <div className="text-muted-foreground">{fb.description}</div>

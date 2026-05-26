@@ -125,7 +125,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { searchParams } = new URL(request.url)
+    const { searchParams } = request.nextUrl
     const cycleId = searchParams.get("cycle_id")
     const userId = searchParams.get("user_id")
     const limitParam = searchParams.get("limit")

@@ -8,8 +8,10 @@ import { EmptyState } from "@/components/ui/patterns"
 import { PriorityBadge, TicketStatusBadge } from "@/components/dashboard/help-desk/ticket-badges"
 import { MessageSquare, Building2 } from "lucide-react"
 import type { HelpDeskTicketDetailResponse } from "@/components/help-desk/help-desk-types"
+import type { HelpDeskStatus } from "@/lib/help-desk/server"
+import { formatWATDateTime } from "@/lib/utils/date"
 
-const STATUS_TRANSITIONS: Record<string, string[]> = {
+const STATUS_TRANSITIONS: Partial<Record<HelpDeskStatus, HelpDeskStatus[]>> = {
   new: ["assigned", "department_queue", "cancelled"],
   department_queue: ["department_assigned", "assigned", "cancelled"],
   department_assigned: ["assigned", "in_progress", "cancelled"],
@@ -32,13 +34,7 @@ function formatLabel(value: string | null | undefined) {
 
 function formatDateTime(dateString: string | null | undefined) {
   if (!dateString) return "-"
-  return new Date(dateString).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return formatWATDateTime(dateString)
 }
 
 interface UserHelpDeskTicketDetailsDialogProps {
@@ -74,7 +70,7 @@ export function UserHelpDeskTicketDetailsDialog({
   const nextStatuses = useMemo(() => {
     if (!ticket?.status) return []
     const current = String(ticket.status)
-    return [current, ...(STATUS_TRANSITIONS[current] || [])]
+    return [current, ...((STATUS_TRANSITIONS as Record<string, HelpDeskStatus[]>)[current] || [])]
   }, [ticket?.status])
 
   return (

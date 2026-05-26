@@ -6,6 +6,7 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -151,11 +152,7 @@ export function OneDriveBrowser({
       return "-"
     }
 
-    return new Date(dateString).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
+    return formatWATDate(dateString, { year: "numeric", month: "short", day: "numeric" })
   }
 
   const getFileExtension = (fileName: string): string => {

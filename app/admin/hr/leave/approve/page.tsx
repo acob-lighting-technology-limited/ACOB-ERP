@@ -12,6 +12,7 @@ import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/component
 import { StatCard } from "@/components/ui/stat-card"
 import { PromptDialog } from "@/components/ui/prompt-dialog"
 import { formatName } from "@/lib/utils"
+import { formatWATDateTime } from "@/lib/utils/date"
 
 interface LeaveItem {
   id: string
@@ -646,7 +647,7 @@ export default function LeaveApprovePage() {
                                   <span className="capitalize">{item.status}</span>
                                   {stageActorName ? ` by ${stageActorName}` : ""}
                                   {stageActorName ? ` (${stageName[stageKey]})` : ""}
-                                  {item.approved_at ? ` at ${new Date(item.approved_at).toLocaleString()}` : ""}
+                                  {item.approved_at ? ` at ${formatWATDateTime(item.approved_at)}` : ""}
                                 </>
                               ) : stageKey === "reliever" && !hasRelieverAssignee ? (
                                 <span className="text-muted-foreground">Not required for this request</span>
@@ -775,7 +776,7 @@ export default function LeaveApprovePage() {
                     <span className="font-medium">{formatName(entry.stage_code || "approval_stage")}</span>
                     <span className="text-muted-foreground">{entry.request?.user?.full_name || "Employee"}</span>
                     <span className="text-muted-foreground">
-                      {entry.approved_at ? new Date(entry.approved_at).toLocaleString() : ""}
+                      {entry.approved_at ? formatWATDateTime(entry.approved_at) : ""}
                     </span>
                   </div>
                   {entry.comments ? <p className="mt-1 text-xs">{entry.comments}</p> : null}

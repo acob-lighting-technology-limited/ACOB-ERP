@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { formatWATDate } from "@/lib/utils/date"
 
 export type MeetingDocumentType = "knowledge_sharing_session" | "minutes" | "action_points"
 
@@ -42,11 +43,7 @@ export function toIsoDateString(value: string | Date): string {
 }
 
 export function formatMeetingDateLabel(value: string | Date): string {
-  return normalizeDateInput(value).toLocaleDateString("en-GB", {
-    day: "numeric",
-    month: "long",
-    year: "numeric",
-  })
+  return formatWATDate(normalizeDateInput(value), { day: "numeric", month: "long", year: "numeric" })
 }
 
 export function normalizeMeetingTime(value?: string | null): string {

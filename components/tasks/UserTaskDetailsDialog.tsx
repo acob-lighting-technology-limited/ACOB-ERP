@@ -7,6 +7,7 @@ import { EmptyState } from "@/components/ui/patterns"
 import { ResponsiveModal } from "@/components/ui/patterns/responsive-modal"
 import { Building2, MessageSquare, TrendingUp, AlertCircle, CheckCircle2, Clock, HeadphonesIcon } from "lucide-react"
 import type { Task } from "@/types/task"
+import { formatWATDateTime } from "@/lib/utils/date"
 
 interface TaskUpdate {
   id: string
@@ -65,13 +66,7 @@ function getStatusIcon(status: string) {
 }
 
 function formatDateTime(dateString: string) {
-  return new Date(dateString).toLocaleString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  })
+  return formatWATDateTime(dateString)
 }
 
 interface UserTaskDetailsDialogProps {

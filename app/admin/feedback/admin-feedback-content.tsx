@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button"
 import { FeedbackDetailDialog } from "@/components/feedback/feedback-detail-dialog"
 import type { FeedbackRecord } from "@/components/feedback/types"
 import { cn, formatName } from "@/lib/utils"
+import { formatWATDate } from "@/lib/utils/date"
 
 interface AdminFeedbackContentProps {
   initialFeedback: FeedbackRecord[]
@@ -207,9 +208,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
         sortable: true,
         accessor: (r) => r.created_at,
         hideOnMobile: true,
-        render: (r) => (
-          <span className="text-muted-foreground text-xs">{new Date(r.created_at).toLocaleDateString()}</span>
-        ),
+        render: (r) => <span className="text-muted-foreground text-xs">{formatWATDate(r.created_at)}</span>,
       },
     ],
     []

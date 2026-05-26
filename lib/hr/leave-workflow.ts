@@ -638,6 +638,21 @@ export async function assertRelieverAvailability(
   }
 }
 
+function resolveLeaveNotificationType(emailEvent?: LeaveEmailEvent): { type: string; category: string } {
+  switch (emailEvent) {
+    case "approved":
+      return { type: "approval_granted", category: "approvals" }
+    case "rejected":
+      return { type: "approval_rejected", category: "approvals" }
+    case "sla_reminder":
+    case "sla_breached":
+    case "lapsed":
+      return { type: "system", category: "system" }
+    default:
+      return { type: "approval_request", category: "approvals" }
+  }
+}
+
 function buildNotificationRows(params: {
   userIds: string[]
   title: string
@@ -645,18 +660,20 @@ function buildNotificationRows(params: {
   actorId?: string
   linkUrl?: string
   entityId?: string
+  emailEvent?: LeaveEmailEvent
 }) {
   const actionUrl = params.linkUrl || "/leave"
+  const { type, category } = resolveLeaveNotificationType(params.emailEvent)
   return params.userIds.map((userId) => ({
     user_id: userId,
-    type: "approval_request",
-    category: "approvals",
+    type,
+    category,
     title: params.title,
     message: params.message,
     priority: "high",
     action_url: actionUrl,
     data: {
-      category: "approvals",
+      category,
       actor_id: params.actorId || null,
       entity_type: "leave_request",
       entity_id: params.entityId || null,
@@ -736,6 +753,7 @@ export async function notifyUsers(
       actorId: params.actorId,
       linkUrl: params.linkUrl,
       entityId: params.entityId,
+      emailEvent: params.emailEvent,
     })
 
     const { error: notifyError } = await supabase.from("notifications").insert(rows)

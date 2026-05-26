@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const cycleId = new URL(request.url).searchParams.get("cycle_id")
+    const cycleId = request.nextUrl.searchParams.get("cycle_id")
     let query = dataClient
       .from("cbt_questions")
       .select(

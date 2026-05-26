@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
+import { formatWATDateTime } from "@/lib/utils/date"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { Calendar, ChevronDown, ChevronUp, Loader2, Lock, Plus, ShieldCheck, Unlock } from "lucide-react"
@@ -136,7 +137,7 @@ export function WeekSetupCard() {
     if (!year || !month || !day) return null
     const base = new Date(year, month - 1, day, 0, 0, 0, 0)
     base.setHours(base.getHours() + (lockState.graceHours || 0))
-    return base.toLocaleString("en-GB")
+    return formatWATDateTime(base)
   }, [lockState])
 
   const { data: weekSetupData } = useQuery({
@@ -387,7 +388,7 @@ export function WeekSetupCard() {
           <div className="bg-muted/40 flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs">
             <span className="font-medium">{`Meeting date: ${lockState.meetingDate}`}</span>
             <span className="text-muted-foreground">{`Grace window: ${lockState.graceHours}h`}</span>
-            <span className="text-muted-foreground">{`Deadline: ${computedDeadlineLabel || new Date(lockState.lockDeadline).toLocaleString("en-GB")}`}</span>
+            <span className="text-muted-foreground">{`Deadline: ${computedDeadlineLabel || formatWATDateTime(lockState.lockDeadline)}`}</span>
             {lockState.hasOverrideRole && (
               <span className="text-emerald-700 dark:text-emerald-300">
                 Your developer/super-admin role can still create, update, and delete after the grace period.

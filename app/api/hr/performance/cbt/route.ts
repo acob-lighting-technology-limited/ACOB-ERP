@@ -111,7 +111,7 @@ export async function GET(request: NextRequest) {
       return routeAccess.response
     }
 
-    const cycleId = new URL(request.url).searchParams.get("cycle_id")
+    const cycleId = request.nextUrl.searchParams.get("cycle_id")
 
     const usersQuery = supabase
       .from("profiles")

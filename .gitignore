@@ -38,6 +38,11 @@
 # cursor
 .cursor
 
+# local test scripts (may contain sensitive data)
+/scripts/test-*.mjs
+/scripts/test-*.ts
+/scripts/test-*.js
+
 # debug
 npm-debug.log*
 yarn-debug.log*

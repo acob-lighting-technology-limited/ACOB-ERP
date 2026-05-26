@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { FileText, Plus } from "lucide-react"
+import { formatWATDateTime } from "@/lib/utils/date"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Documentation } from "./page"
 import { AppTablePage } from "@/components/app/app-table-page"
@@ -219,14 +220,7 @@ export function DocumentationContent({
     }
   }
 
-  const formatDate = (dateString: string) =>
-    new Date(dateString).toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
+  const formatDate = (dateString: string) => formatWATDateTime(dateString)
 
   const stats = {
     total: docs.length,

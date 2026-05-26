@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
-import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { isLate } from "@/lib/hr/attendance-utils"
-import { DB_WRITABLE_STATUSES } from "@/lib/hr/attendance-status"
+import { DB_WRITABLE_STATUSES, isEarlyDeparture } from "@/lib/hr/attendance-status"
+import { requireApiAdminScope } from "@/lib/admin/api-scope"
 
 const log = logger("admin-hr-attendance-record-patch")
 
@@ -29,18 +29,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
   if (!rl.allowed) return NextResponse.json({ error: "Too many requests" }, { status: 429 })
 
   try {
-    const supabase = await createClient()
+    const auth = await requireApiAdminScope()
+    if (!auth.ok) return auth.response
+    const { supabase } = auth
     const {
       data: { user },
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
-
-    const role = String(profile?.role || "")
-    if (!["developer", "admin", "super_admin"].includes(role)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
 
     const parsed = PatchSchema.safeParse(await request.json())
     if (!parsed.success) {
@@ -63,8 +58,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     // Recalculate total_hours if both times are known after update
     const clockIn = parsed.data.clock_in ?? record.clock_in
     const clockOut = parsed.data.clock_out ?? record.clock_out
-    if (clockIn && clockOut && clockOut < clockIn) {
-      return NextResponse.json({ error: "Clock out cannot be before clock in" }, { status: 400 })
+    if (clockIn && clockOut && clockOut <= clockIn) {
+      return NextResponse.json({ error: "Clock out must be after clock in" }, { status: 400 })
     }
     if (parsed.data.waived !== true && !clockIn && !clockOut) {
       return NextResponse.json({ error: "Provide both clock in and clock out before saving" }, { status: 400 })
@@ -83,17 +78,23 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (!clockIn && !clockOut) {
         updates.status = "absent"
       } else if (clockIn && !clockOut) {
+        const today = new Date().toISOString().slice(0, 10)
+        updates.status = record.date < today ? "half_day" : "incomplete"
+      } else if (clockIn && clockOut && clockOut > clockIn) {
+        updates.status = isEarlyDeparture(clockOut) ? "half_day" : isLate(clockIn) ? "late" : "present"
+      } else {
         updates.status = "incomplete"
-      } else if (clockIn && clockOut) {
-        updates.status = isLate(clockIn) ? "late" : "present"
       }
     } else if (parsed.data.waived === false) {
       if (!clockIn && !clockOut) {
         updates.status = "absent"
       } else if (clockIn && !clockOut) {
+        const today = new Date().toISOString().slice(0, 10)
+        updates.status = record.date < today ? "half_day" : "incomplete"
+      } else if (clockIn && clockOut && clockOut > clockIn) {
+        updates.status = isEarlyDeparture(clockOut) ? "half_day" : isLate(clockIn) ? "late" : "present"
+      } else {
         updates.status = "incomplete"
-      } else if (clockIn && clockOut) {
-        updates.status = isLate(clockIn) ? "late" : "present"
       }
     }
 

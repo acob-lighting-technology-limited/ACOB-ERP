@@ -20,7 +20,7 @@ import { Clock, Calendar, Pencil, AlertCircle, Download, MapPin, Camera, ShieldC
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
-import { toLocalISODate } from "@/lib/utils/date"
+import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
 import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
 
 const log = logger("admin-attendance-records")
@@ -48,12 +48,7 @@ interface AttendanceRecord {
 }
 
 function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString("en-US", {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  })
+  return formatWATDate(dateString, { weekday: "short", month: "short", day: "numeric", year: "numeric" })
 }
 
 function formatTime(t: string | null) {

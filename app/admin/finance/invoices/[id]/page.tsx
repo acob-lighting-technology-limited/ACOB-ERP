@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { useParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
@@ -126,7 +127,7 @@ export default function InvoiceDetailPage() {
   }
 
   function formatDate(date: string) {
-    return new Date(date).toLocaleDateString("en-NG", { year: "numeric", month: "long", day: "numeric" })
+    return formatWATDate(date, { year: "numeric", month: "long", day: "numeric" })
   }
 
   if (isLoading) return <PageLoader />

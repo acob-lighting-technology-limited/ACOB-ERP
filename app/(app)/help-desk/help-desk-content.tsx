@@ -19,6 +19,7 @@ import { UserHelpDeskTicketDetailsDialog } from "@/components/help-desk/user-tic
 import { UserHelpDeskTicketCommentDialog } from "@/components/help-desk/user-ticket-comment-dialog"
 import { PriorityBadge, TicketStatusBadge } from "@/components/dashboard/help-desk/ticket-badges"
 import { formatName } from "@/lib/utils"
+import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 
 type ErrorPayload = {
   error?: string
@@ -281,9 +282,7 @@ export function HelpDeskContent({
       label: "Created",
       sortable: true,
       accessor: (ticket) => ticket.created_at,
-      render: (ticket) => (
-        <span className="text-muted-foreground text-xs">{new Date(ticket.created_at).toLocaleDateString()}</span>
-      ),
+      render: (ticket) => <span className="text-muted-foreground text-xs">{formatWATDate(ticket.created_at)}</span>,
       hideOnMobile: true,
     },
   ]
@@ -655,7 +654,7 @@ export function HelpDeskContent({
                 <p className="mt-1 text-sm">{ticket.description || "No description provided."}</p>
                 <div className="text-muted-foreground mt-3 space-y-1 text-xs">
                   <p>Request Type: {formatName(ticket.request_type)}</p>
-                  <p>SLA Target: {ticket.sla_target_at ? new Date(ticket.sla_target_at).toLocaleString() : "-"}</p>
+                  <p>SLA Target: {ticket.sla_target_at ? formatWATDateTime(ticket.sla_target_at) : "-"}</p>
                 </div>
               </div>
               <div className="space-y-2">
@@ -733,9 +732,7 @@ export function HelpDeskContent({
             <p className="text-muted-foreground mt-1 mb-3 text-[10px] uppercase">{ticket.service_department}</p>
             <div className="flex items-center justify-between border-t pt-2">
               <TicketStatusBadge status={ticket.status} />
-              <span className="text-muted-foreground text-[10px]">
-                {new Date(ticket.created_at).toLocaleDateString()}
-              </span>
+              <span className="text-muted-foreground text-[10px]">{formatWATDate(ticket.created_at)}</span>
             </div>
           </div>
         )}

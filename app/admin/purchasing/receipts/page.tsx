@@ -1,6 +1,7 @@
 "use client"
 
 import { useMemo } from "react"
+import { formatWATDate } from "@/lib/utils/date"
 import { useQuery } from "@tanstack/react-query"
 import { CalendarDays, Package, PackageCheck, ReceiptText, ShoppingBag } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
@@ -46,7 +47,7 @@ async function fetchReceipts(): Promise<Receipt[]> {
 }
 
 function formatDate(date: string) {
-  return new Date(date).toLocaleDateString("en-NG", { year: "numeric", month: "short", day: "numeric" })
+  return formatWATDate(date, { year: "numeric", month: "short", day: "numeric" })
 }
 
 function getItemBand(totalItems: number) {

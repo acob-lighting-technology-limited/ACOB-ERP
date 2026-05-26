@@ -1,9 +1,10 @@
+"use server"
+
 import { createClient } from "@supabase/supabase-js"
-import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse, after } from "next/server"
 import { z } from "zod"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
-import { writeAuditLog } from "@/lib/audit/write-audit"
 import { isLate } from "@/lib/hr/attendance-utils"
 
 const log = logger("hikvision-events")
@@ -18,14 +19,154 @@ const HikvisionEventSchema = z.object({
   }),
 })
 
+type ParsedEvent = z.infer<typeof HikvisionEventSchema>
+
+async function processHikvisionEvent(event: ParsedEvent) {
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!supabaseUrl || !supabaseServiceKey) {
+    log.error({}, "Missing Supabase env vars — cannot process Hikvision event")
+    return
+  }
+
+  const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  })
+
+  const { dateTime, AccessControllerEvent: ace } = event
+  const { employeeNoString, attendanceStatus } = ace
+
+  // Skip events with no employee ID
+  if (!employeeNoString) return
+
+  // Skip break events
+  if (attendanceStatus === "breakIn" || attendanceStatus === "breakOut") return
+
+  // Resolve employee
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id")
+    .like("employee_number", `%/${employeeNoString}`)
+    .eq("employment_status", "active")
+    .maybeSingle()
+
+  if (!profile) {
+    log.info({ employeeNoString }, "No active profile found for device employee ID — skipping")
+    return
+  }
+
+  const userId = profile.id
+
+  // Strip timezone offset — use local time from the device as-is
+  const localPart = dateTime.replace(/[+-]\d{2}:\d{2}$/, "")
+  const [date, timeFull] = localPart.split("T")
+  const time = timeFull ? timeFull.substring(0, 8) : "00:00:00"
+
+  // Fetch today's record
+  const { data: existing } = await supabase
+    .from("attendance_records")
+    .select("id, clock_in, clock_out")
+    .eq("user_id", userId)
+    .eq("date", date)
+    .maybeSingle()
+
+  // ── Determine action ────────────────────────────────────────────────────────
+  const normalised = (attendanceStatus ?? "").toLowerCase().trim()
+  let action: "in" | "out" | "skip"
+
+  if (normalised === "checkin") {
+    action = existing?.clock_in ? "skip" : "in"
+  } else if (normalised === "checkout") {
+    action = "out"
+  } else {
+    action = !existing?.clock_in ? "in" : "out"
+  }
+
+  // ── 30-second deduplication window ─────────────────────────────────────────
+  // Because we now respond before processing, the DB race condition is gone —
+  // events are processed one-at-a-time in the background. The 30-second window
+  // remains as a guard against genuine device retries (e.g. user scans twice).
+  if (action === "in" && existing?.clock_in) {
+    const existingIn = new Date(`${date}T${existing.clock_in}Z`).getTime()
+    const incomingTs = new Date(`${date}T${time}Z`).getTime()
+    if (Math.abs(incomingTs - existingIn) <= 30_000) {
+      log.info({ userId, date, time }, "Hikvision clock-in deduped — within 30 s of existing clock_in")
+      return
+    }
+  }
+
+  if (action === "out") {
+    const incomingTs = new Date(`${date}T${time}Z`).getTime()
+
+    // Clock-out within 5 minutes of clock-in → reject (accidental tap or double-fire)
+    if (existing?.clock_in) {
+      const clockInTs = new Date(`${date}T${existing.clock_in}Z`).getTime()
+      if (incomingTs - clockInTs < 5 * 60_000) {
+        log.info({ userId, date, time }, "Hikvision clock-out ignored — within 5-minute grace window of clock_in")
+        return
+      }
+    }
+
+    // Device retry: new clock-out within 30 s of an existing clock-out
+    if (existing?.clock_out) {
+      const existingOut = new Date(`${date}T${existing.clock_out}Z`).getTime()
+      if (Math.abs(incomingTs - existingOut) <= 30_000) {
+        log.info({ userId, date, time }, "Hikvision clock-out deduped — within 30 s of existing clock_out")
+        return
+      }
+    }
+  }
+
+  if (action === "skip") {
+    log.info({ userId, date, attendanceStatus }, "Hikvision checkIn skipped — clock_in already recorded")
+    return
+  }
+
+  // ── Write attendance record ─────────────────────────────────────────────────
+  if (action === "in") {
+    const status = isLate(time) ? "late" : "present"
+    const { error } = await supabase
+      .from("attendance_records")
+      .upsert(
+        { user_id: userId, date, clock_in: time, status, source: "hikvision" },
+        { onConflict: "user_id,date", ignoreDuplicates: false }
+      )
+
+    if (error) {
+      log.error({ err: String(error), userId, date }, "Failed to upsert clock-in")
+    }
+  } else {
+    if (!existing?.clock_in) {
+      log.warn({ userId, date, time }, "Hikvision clock-out received but no clock-in on record — skipping")
+      return
+    }
+
+    const clockIn = new Date(`${date}T${existing.clock_in}Z`)
+    const clockOut = new Date(`${date}T${time}Z`)
+    const totalHours = Math.max(0, (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60))
+
+    const { error } = await supabase
+      .from("attendance_records")
+      .update({ clock_out: time, total_hours: totalHours, source: "hikvision" })
+      .eq("user_id", userId)
+      .eq("date", date)
+
+    if (error) {
+      log.error({ err: String(error), userId, date }, "Failed to update clock-out")
+    }
+  }
+
+  log.info({ userId, date, action, employeeNoString }, "Hikvision attendance recorded")
+}
+
 export async function POST(request: NextRequest) {
   const rl = await rateLimit(`hikvision-events:${getClientId(request)}`, { limit: 60, windowSec: 60 })
   if (!rl.allowed) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 })
   }
 
+  // ── Auth ────────────────────────────────────────────────────────────────────
   const secret = process.env.HIKVISION_WEBHOOK_SECRET
-  // Prefer Authorization header; fall back to query param for Hikvision hardware that can't send custom headers
   const authHeader = request.headers.get("authorization")
   const bearerToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null
   const queryToken = request.nextUrl.searchParams.get("token")
@@ -35,16 +176,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
   }
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!supabaseUrl || !supabaseServiceKey) {
-    return NextResponse.json({ error: "System configuration error" }, { status: 500 })
-  }
-
-  const supabase = createClient(supabaseUrl, supabaseServiceKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
-
+  // ── Parse & validate body (must happen before responding) ──────────────────
   let raw: string | null = null
   try {
     const formData = await request.formData()
@@ -70,93 +202,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid event payload" }, { status: 400 })
   }
 
-  const { dateTime, AccessControllerEvent: event } = result.data
-  const { employeeNoString, attendanceStatus } = event
+  // ── Respond immediately so the device never retries ─────────────────────────
+  // All DB work runs in the background via after(). The device gets its 200 OK
+  // in milliseconds regardless of how long Supabase takes.
+  after(async () => {
+    await processHikvisionEvent(result.data)
+  })
 
-  // Skip events with no employee ID (e.g. door-open access-control events)
-  if (!employeeNoString) {
-    return NextResponse.json({ success: true })
-  }
-
-  // Skip break events
-  if (attendanceStatus === "breakIn" || attendanceStatus === "breakOut") {
-    return NextResponse.json({ success: true })
-  }
-
-  // Resolve employee by matching the numeric suffix of employee_number (e.g. "038" matches "ACOB/2025/038")
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id")
-    .like("employee_number", `%/${employeeNoString}`)
-    .eq("employment_status", "active")
-    .maybeSingle()
-
-  if (!profile) {
-    log.info({ employeeNoString }, "No active profile found for device employee ID — skipping")
-    return NextResponse.json({ success: true })
-  }
-
-  const userId = profile.id
-
-  // Strip timezone offset and use the local time as-is from the device
-  // e.g. "2026-05-14T17:45:00+01:00" → date="2026-05-14", time="17:45:00"
-  const localPart = dateTime.replace(/[+-]\d{2}:\d{2}$/, "")
-  const [date, timeFull] = localPart.split("T")
-  const time = timeFull ? timeFull.substring(0, 8) : "00:00:00"
-
-  // Fetch today's record to decide clock-in vs clock-out
-  const { data: existing } = await supabase
-    .from("attendance_records")
-    .select("id, clock_in, clock_out")
-    .eq("user_id", userId)
-    .eq("date", date)
-    .maybeSingle()
-
-  // First scan of the day → clock-in. Every scan after → update clock-out.
-  const action: "in" | "out" = !existing?.clock_in ? "in" : "out"
-
-  if (action === "in") {
-    const status = isLate(time) ? "late" : "present"
-    const { error } = await supabase
-      .from("attendance_records")
-      .upsert(
-        { user_id: userId, date, clock_in: time, status, source: "hikvision" },
-        { onConflict: "user_id,date", ignoreDuplicates: false }
-      )
-
-    if (error) {
-      log.error({ err: String(error), userId, date }, "Failed to upsert clock-in")
-      return NextResponse.json({ error: "Failed to record clock-in" }, { status: 500 })
-    }
-  } else {
-    const clockIn = new Date(`${date}T${existing!.clock_in}Z`)
-    const clockOut = new Date(`${date}T${time}Z`)
-    const totalHours = Math.max(0, (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60))
-
-    const { error } = await supabase
-      .from("attendance_records")
-      .update({ clock_out: time, total_hours: totalHours, source: "hikvision" })
-      .eq("user_id", userId)
-      .eq("date", date)
-
-    if (error) {
-      log.error({ err: String(error), userId, date }, "Failed to update clock-out")
-      return NextResponse.json({ error: "Failed to record clock-out" }, { status: 500 })
-    }
-  }
-
-  await writeAuditLog(
-    supabase,
-    {
-      action: action === "in" ? "create" : "update",
-      entityType: "attendance_record",
-      entityId: userId,
-      newValues: { date, [action === "in" ? "clock_in" : "clock_out"]: time, source: "hikvision" },
-      context: { actorId: userId, source: "api", route: "/api/devices/hikvision/events" },
-    },
-    { failOpen: true }
-  )
-
-  log.info({ userId, date, action, employeeNoString }, "Hikvision attendance recorded")
   return NextResponse.json({ success: true })
 }
