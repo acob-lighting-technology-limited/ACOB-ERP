@@ -108,7 +108,7 @@ function AnalyticsCard({ row }: { row: AnalyticsRow }) {
   )
 }
 
-export default function PmsAnalyticsPage() {
+export default function PmsAnalyticsPage({ backLinkHref }: { backLinkHref?: string } = {}) {
   const [reviews, setReviews] = useState<ReviewRow[]>([])
   const [cycles, setCycles] = useState<Cycle[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -324,7 +324,7 @@ export default function PmsAnalyticsPage() {
       title="PMS Analytics"
       description="Performance distribution, review outcomes, and department benchmarking in one unified analytics table."
       icon={BarChart3}
-      backLink={{ href: "/admin/hr/pms", label: "Back to PMS" }}
+      backLink={{ href: backLinkHref ?? "/admin/hr/pms", label: "Back to PMS" }}
       actions={
         <Button
           variant="outline"

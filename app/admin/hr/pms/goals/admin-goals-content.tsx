@@ -51,11 +51,15 @@ export function AdminGoalsContent({
   managedDepartments,
   cycles,
   canCreateGoal,
+  backLinkHref,
+  goalsBasePath,
 }: {
   initialGoals: GoalWithCycle[]
   managedDepartments: string[]
   cycles: ReviewCycle[]
   canCreateGoal: boolean
+  backLinkHref?: string
+  goalsBasePath?: string
 }) {
   const router = useRouter()
   const [goals, setGoals] = useState(initialGoals)
@@ -250,7 +254,7 @@ export function AdminGoalsContent({
       title="PMS Goals"
       description="Department leads create department goals here, then create tasks under the specific goal."
       icon={Target}
-      backLink={{ href: "/admin/hr/pms", label: "Back to PMS" }}
+      backLink={{ href: backLinkHref ?? "/admin/hr/pms", label: "Back to PMS" }}
       tabs={TABS}
       activeTab={tab}
       onTabChange={setTab}
@@ -298,7 +302,8 @@ export function AdminGoalsContent({
           rowActions={[
             {
               label: "Create Task",
-              onClick: (row) => router.push(`/admin/hr/pms/goals/task?goal_id=${encodeURIComponent(row.id)}`),
+              onClick: (row) =>
+                router.push(`${goalsBasePath ?? "/admin/hr/pms/goals"}/task?goal_id=${encodeURIComponent(row.id)}`),
             },
           ]}
         />

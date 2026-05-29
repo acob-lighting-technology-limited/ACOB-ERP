@@ -176,7 +176,10 @@ function LocationCard({ location, onEdit }: { location: OfficeLocation; onEdit: 
   )
 }
 
-export default function OfficeLocationsPage() {
+export default function OfficeLocationsPage({
+  backLinkHref,
+  employeesBasePath,
+}: { backLinkHref?: string; employeesBasePath?: string } = {}) {
   const queryClient = useQueryClient()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingLocation, setEditingLocation] = useState<OfficeLocation | null>(null)
@@ -370,7 +373,7 @@ export default function OfficeLocationsPage() {
       title="Office Locations"
       description="Manage office locations and the employees assigned to each location."
       icon={MapPin}
-      backLink={{ href: "/admin/hr", label: "Back to HR" }}
+      backLink={{ href: backLinkHref ?? "/admin/hr", label: "Back to HR" }}
       actions={
         canManageLocations ? (
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
@@ -555,7 +558,7 @@ export default function OfficeLocationsPage() {
                             <Badge variant="outline">{member.designation || "Employee"}</Badge>
                           </td>
                           <td className="px-3 py-2 text-right">
-                            <Link href={`/admin/hr/employees?userId=${member.id}`}>
+                            <Link href={`${employeesBasePath ?? "/admin/hr/employees"}?userId=${member.id}`}>
                               <Button variant="ghost" size="icon" className="h-8 w-8">
                                 <Pencil className="h-4 w-4" />
                               </Button>

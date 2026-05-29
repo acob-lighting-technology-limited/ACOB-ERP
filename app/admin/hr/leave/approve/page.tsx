@@ -168,7 +168,7 @@ async function fetchLeaveApprovalData(): Promise<{
   }
 }
 
-export default function LeaveApprovePage() {
+export default function LeaveApprovePage({ backLinkHref }: { backLinkHref?: string } = {}) {
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState("my-actions")
   const [actionDialog, setActionDialog] = useState<ActionDialogState>({
@@ -487,7 +487,7 @@ export default function LeaveApprovePage() {
         title="Leave Approvals"
         description="Review and manage leave requests, endorsements, and workflow history."
         icon={CalendarCheck2}
-        backLink={{ href: "/admin/hr", label: "Back to HR" }}
+        backLink={{ href: backLinkHref ?? "/admin/hr", label: "Back to HR" }}
         tabs={TABS}
         activeTab={activeTab}
         onTabChange={setActiveTab}

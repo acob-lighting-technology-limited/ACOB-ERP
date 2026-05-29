@@ -15,7 +15,6 @@ export interface ClientAdminScope {
   managedDepartmentIds: string[]
   isDepartmentLead: boolean
   isAdminLike: boolean
-  canToggleLeadScope: boolean
 }
 
 const AdminScopeContext = createContext<ClientAdminScope | null>(null)

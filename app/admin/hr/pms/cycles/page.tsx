@@ -120,7 +120,7 @@ function CycleCard({
   )
 }
 
-export default function ReviewCyclesPage() {
+export default function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {}) {
   const [cycles, setCycles] = useState<ReviewCycle[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -320,7 +320,7 @@ export default function ReviewCyclesPage() {
       title="Review Cycles"
       description="Create and manage performance review cycles. Only one cycle can be active at a time."
       icon={RefreshCw}
-      backLink={{ href: "/admin/hr/pms", label: "Back to PMS" }}
+      backLink={{ href: backLinkHref ?? "/admin/hr/pms", label: "Back to PMS" }}
       actions={
         <Button onClick={() => setIsCreateOpen(true)} size="sm" className="gap-2">
           <Plus className="h-4 w-4" />

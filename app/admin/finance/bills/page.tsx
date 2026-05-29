@@ -78,7 +78,10 @@ function getDateBand(bill: Bill) {
   return "Future"
 }
 
-export default function BillsPage() {
+export default function BillsPage({
+  backLinkHref,
+  financeBasePath,
+}: { backLinkHref?: string; financeBasePath?: string } = {}) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
@@ -246,7 +249,7 @@ export default function BillsPage() {
       title="Bills"
       description="Track supplier bills, payment progress, and upcoming due dates."
       icon={Receipt}
-      backLink={{ href: "/admin", label: "Back to Admin" }}
+      backLink={{ href: backLinkHref ?? "/admin", label: "Back" }}
       actions={
         <Button onClick={() => setIsCreateOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
@@ -309,14 +312,14 @@ export default function BillsPage() {
             label: "View",
             icon: Eye,
             onClick: (bill) => {
-              router.push(`/admin/finance/bills/${bill.id}`)
+              router.push(`${financeBasePath ?? "/admin/finance"}/bills/${bill.id}`)
             },
           },
           {
             label: "Open Bill",
             icon: CircleDollarSign,
             onClick: (bill) => {
-              router.push(`/admin/finance/bills/${bill.id}`)
+              router.push(`${financeBasePath ?? "/admin/finance"}/bills/${bill.id}`)
             },
           },
         ]}

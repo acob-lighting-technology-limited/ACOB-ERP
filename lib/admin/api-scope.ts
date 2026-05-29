@@ -2,6 +2,7 @@ import { NextResponse } from "next/server"
 import { headers } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { resolveAdminScope, expandDepartmentScopeForQuery, type AdminScope } from "@/lib/admin/rbac"
+import type { DeptScope } from "@/lib/dept/scope"
 import { logger } from "@/lib/logger"
 
 const log = logger("admin-api-scope")
@@ -9,10 +10,42 @@ const log = logger("admin-api-scope")
 export type { AdminScope }
 
 /**
+ * Synthesises an AdminScope from a DeptScope so that existing admin API
+ * route handlers work for dept leads without modification.
+ *
+ * The resulting scope has scopeMode "lead" and managedDepartments scoped to
+ * the single dept the lead owns, which makes getScopedDepartments() return
+ * the correct department filter automatically.
+ */
+function adminScopeFromDeptScope(deptScope: DeptScope): AdminScope {
+  return {
+    userId: deptScope.userId,
+    role: deptScope.role,
+    department: deptScope.deptName,
+    departmentId: deptScope.deptId,
+    officeLocation: null,
+    isDepartmentLead: true,
+    leadDepartments: [deptScope.deptName],
+    managedDepartments: [deptScope.deptName],
+    managedDepartmentIds: [deptScope.deptId],
+    managedOffices: [],
+    isAdminLike: deptScope.isAdminLike,
+    adminDomains: [],
+    scopeMode: "lead",
+  }
+}
+
+/**
  * Reads the AdminScope injected by middleware (x-admin-scope header).
  * This is the PRIMARY way for API route handlers to get scope —
- * no extra DB round-trip. Falls back to resolveApiAdminScope() if the
- * header is absent (e.g. local dev without middleware, or uncovered paths).
+ * no extra DB round-trip.
+ *
+ * Falls back to x-dept-scope (injected for /dept/ and /api/dept/ paths),
+ * synthesising a compatible AdminScope so existing admin API handlers work
+ * for dept leads without any changes.
+ *
+ * Falls back to resolveApiAdminScope() if both headers are absent (e.g. local
+ * dev without middleware, or uncovered paths).
  */
 export async function getRequestScope(): Promise<AdminScope | null> {
   try {
@@ -20,6 +53,12 @@ export async function getRequestScope(): Promise<AdminScope | null> {
     const raw = h.get("x-admin-scope")
     if (raw) {
       return JSON.parse(Buffer.from(raw, "base64").toString("utf-8")) as AdminScope
+    }
+    // Fallback: dept scope injected for /dept/ and /api/dept/ paths
+    const deptRaw = h.get("x-dept-scope")
+    if (deptRaw) {
+      const deptScope = JSON.parse(Buffer.from(deptRaw, "base64").toString("utf-8")) as DeptScope
+      if (deptScope?.userId) return adminScopeFromDeptScope(deptScope)
     }
   } catch {
     // Header absent or malformed — fall through to DB resolution
@@ -31,6 +70,9 @@ export async function getRequestScope(): Promise<AdminScope | null> {
  * Resolves the current authenticated user's AdminScope for use in API route
  * handlers. Returns null if the user is unauthenticated or has no admin access.
  * Prefer getRequestScope() in new code — it reads from the middleware header first.
+ *
+ * Falls back to a synthesised dept-lead AdminScope for pure leads who no longer
+ * enter /admin (since Phase 6) but still call /api/hr/ routes from the /dept/ surface.
  */
 export async function resolveApiAdminScope(): Promise<AdminScope | null> {
   const supabase = await createClient()
@@ -42,7 +84,47 @@ export async function resolveApiAdminScope(): Promise<AdminScope | null> {
   if (error || !user) return null
 
   const scope = await resolveAdminScope(supabase, user.id)
-  return scope
+  if (scope) return scope
+
+  // Fallback for pure dept leads: synthesise a scoped AdminScope so they can
+  // still call /api/hr/ and /api/admin/ routes from the /dept/[dept_id]/ surface.
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, is_department_lead, lead_departments, department, department_id")
+    .eq("id", user.id)
+    .single<{
+      role: string | null
+      is_department_lead: boolean
+      lead_departments: string[] | null
+      department: string | null
+      department_id: string | null
+    }>()
+
+  if (!profile?.is_department_lead) return null
+
+  const leadDepts: string[] = Array.isArray(profile.lead_departments)
+    ? profile.lead_departments
+    : profile.department
+      ? [profile.department]
+      : []
+
+  if (leadDepts.length === 0) return null
+
+  return {
+    userId: user.id,
+    role: (profile.role ?? "employee") as AdminScope["role"],
+    department: profile.department ?? null,
+    departmentId: profile.department_id ?? null,
+    officeLocation: null,
+    isDepartmentLead: true,
+    leadDepartments: leadDepts,
+    managedDepartments: leadDepts,
+    managedDepartmentIds: profile.department_id ? [profile.department_id] : [],
+    managedOffices: [],
+    isAdminLike: false,
+    adminDomains: [],
+    scopeMode: "lead",
+  }
 }
 
 /**

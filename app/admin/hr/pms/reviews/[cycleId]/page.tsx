@@ -116,7 +116,7 @@ function statusBadge(status: string | null) {
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function AdminPmsQuarterReviewsPage() {
+export default function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: string } = {}) {
   const params = useParams<{ cycleId: string }>()
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -567,7 +567,7 @@ export default function AdminPmsQuarterReviewsPage() {
       title={cycleName}
       description="Review and edit employee records for this quarter."
       icon={FileText}
-      backLink={{ href: "/admin/hr/pms/reviews", label: "Back to PMS Reviews" }}
+      backLink={{ href: backLinkHref ?? "/admin/hr/pms/reviews", label: "Back to PMS Reviews" }}
       tabs={pageTabs}
       activeTab={mode}
       onTabChange={handleTabChange}

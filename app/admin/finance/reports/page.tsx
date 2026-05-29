@@ -122,7 +122,7 @@ function getPeriodLabel(date: string) {
   return `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, "0")}`
 }
 
-export default function FinanceReportsPage() {
+export default function FinanceReportsPage({ backLinkHref }: { backLinkHref?: string } = {}) {
   const [period, setPeriod] = useState("year")
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -272,7 +272,7 @@ export default function FinanceReportsPage() {
       title="Financial Reports"
       description="Review spending patterns, category concentration, and month-by-month finance activity."
       icon={BarChart3}
-      backLink={{ href: "/admin/finance", label: "Back to Finance" }}
+      backLink={{ href: backLinkHref ?? "/admin/finance", label: "Back to Finance" }}
       actions={
         <Select value={period} onValueChange={setPeriod}>
           <SelectTrigger className="w-[180px]">

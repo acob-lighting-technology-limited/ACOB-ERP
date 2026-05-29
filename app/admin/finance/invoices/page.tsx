@@ -77,7 +77,10 @@ function getDueWindow(invoice: Invoice) {
   return "Future"
 }
 
-export default function InvoicesPage() {
+export default function InvoicesPage({
+  backLinkHref,
+  financeBasePath,
+}: { backLinkHref?: string; financeBasePath?: string } = {}) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
@@ -256,7 +259,7 @@ export default function InvoicesPage() {
       title="Invoices"
       description="Create and manage customer invoices, collections, and overdue balances."
       icon={FileText}
-      backLink={{ href: "/admin", label: "Back to Admin" }}
+      backLink={{ href: backLinkHref ?? "/admin", label: "Back" }}
       actions={
         <Button onClick={() => setIsCreateOpen(true)}>
           <Plus className="mr-2 h-4 w-4" />
@@ -319,17 +322,17 @@ export default function InvoicesPage() {
           {
             label: "View",
             icon: Eye,
-            onClick: (invoice) => router.push(`/admin/finance/invoices/${invoice.id}`),
+            onClick: (invoice) => router.push(`${financeBasePath ?? "/admin/finance"}/invoices/${invoice.id}`),
           },
           {
             label: "Send",
             icon: Send,
-            onClick: (invoice) => router.push(`/admin/finance/invoices/${invoice.id}`),
+            onClick: (invoice) => router.push(`${financeBasePath ?? "/admin/finance"}/invoices/${invoice.id}`),
           },
           {
             label: "Download",
             icon: Download,
-            onClick: (invoice) => router.push(`/admin/finance/invoices/${invoice.id}`),
+            onClick: (invoice) => router.push(`${financeBasePath ?? "/admin/finance"}/invoices/${invoice.id}`),
           },
         ]}
         expandable={{

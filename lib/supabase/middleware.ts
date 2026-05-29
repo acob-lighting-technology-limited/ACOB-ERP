@@ -2,7 +2,8 @@ import { createServerClient } from "@supabase/ssr"
 import { NextResponse, type NextRequest } from "next/server"
 import { canManageMaintenanceMode, parseMaintenanceMode } from "@/lib/maintenance"
 import type { EmploymentStatus } from "@/types/database"
-import { resolveAdminScope, roleCanEnterAdmin } from "@/lib/admin/rbac"
+import { resolveAdminScope, roleCanEnterAdmin, isAdminLikeRole } from "@/lib/admin/rbac"
+import { resolveDeptScope } from "@/lib/dept/scope"
 import { buildAccessContextV2, canAccessRouteV2, resolveAdminRouteKeyV2 } from "@/lib/admin/policy-v2"
 
 // ---------------------------------------------------------------------------
@@ -50,6 +51,14 @@ async function getMaintenanceMode(supabase: ReturnType<typeof createServerClient
 export async function updateSession(request: NextRequest) {
   const requestId = globalThis.crypto.randomUUID()
   request.headers.set("x-request-id", requestId)
+
+  // SECURITY: strip any client-supplied internal scope headers up-front, for
+  // EVERY request, before any branch runs. These headers are only ever trusted
+  // downstream (getRequestScope) and must originate from the server-side
+  // injection below — never from the client. Deleting them here closes the
+  // spoofing window on paths where scope injection is skipped or fails.
+  request.headers.delete("x-admin-scope")
+  request.headers.delete("x-dept-scope")
 
   let supabaseResponse = NextResponse.next({
     request,
@@ -105,10 +114,10 @@ export async function updateSession(request: NextRequest) {
 
   if (isAdminOrApiPath && user) {
     try {
-      // Check role from user_metadata first (fast path, no extra DB query for non-admins)
+      // Check role from user_metadata first (fast path, no extra DB query for non-admins).
+      // Pure dept leads no longer enter /admin — only admin-like roles need scope here.
       const metaRole = user.user_metadata?.role as string | undefined
-      const metaIsLead = Boolean(user.user_metadata?.is_department_lead)
-      const needsScope = !metaRole || roleCanEnterAdmin(metaRole, metaIsLead)
+      const needsScope = !metaRole || isAdminLikeRole(metaRole)
       if (needsScope) {
         const scope = await resolveAdminScope(supabase, user.id)
         if (scope) {
@@ -140,6 +149,48 @@ export async function updateSession(request: NextRequest) {
       }
     } catch {
       // Non-fatal — routes fall back to resolving scope themselves via DB
+    }
+  }
+
+  // -----------------------------------------------------------------------
+  // DEPT SCOPE INJECTION
+  // Mirrors the admin scope pattern above for /dept/[dept_id]/ pages and
+  // their API routes (/api/dept/[dept_id]/...).
+  //
+  // Extracts dept_id from the URL, resolves DeptScope for the user, and
+  // injects it as x-dept-scope so server components / API routes can read
+  // it via headers() without an extra DB round-trip.
+  //
+  // Client-supplied x-dept-scope is stripped first (anti-spoofing).
+  // If scope is null the user is not the lead of that dept — page-level
+  // requireDeptScope() handles the redirect so the middleware stays non-fatal.
+  // -----------------------------------------------------------------------
+  const isDeptPath = pathname.startsWith("/dept/") || pathname.startsWith("/api/dept/")
+
+  if (isDeptPath && user) {
+    try {
+      // URL shapes:
+      //   /dept/[dept_id]/...      → segments: ["", "dept", id, ...]      → index 2
+      //   /api/dept/[dept_id]/...  → segments: ["", "api", "dept", id, ...] → index 3
+      const segments = pathname.split("/")
+      const deptId = pathname.startsWith("/api/dept/") ? segments[3] : segments[2]
+      if (deptId) {
+        const deptScope = await resolveDeptScope(supabase, user.id, deptId)
+        if (deptScope) {
+          const encoded = Buffer.from(JSON.stringify(deptScope)).toString("base64")
+          const forwardedHeaders = new Headers(request.headers)
+          // Strip any client-supplied value first (anti-spoofing)
+          forwardedHeaders.delete("x-dept-scope")
+          forwardedHeaders.set("x-dept-scope", encoded)
+          supabaseResponse = NextResponse.next({ request: { headers: forwardedHeaders } })
+          supabaseResponse.headers.set("x-request-id", requestId)
+          request.cookies.getAll().forEach(({ name, value }) => {
+            supabaseResponse.cookies.set(name, value)
+          })
+        }
+      }
+    } catch {
+      // Non-fatal — page falls back to resolving scope via DB directly
     }
   }
 

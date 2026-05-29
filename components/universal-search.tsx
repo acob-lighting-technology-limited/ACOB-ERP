@@ -1,19 +1,49 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { Search, Loader2, User, Laptop, Package, ClipboardList, FileText, MessageSquare, X } from "lucide-react"
+import {
+  Search,
+  Loader2,
+  User,
+  Laptop,
+  Package,
+  ClipboardList,
+  FileText,
+  MessageSquare,
+  LifeBuoy,
+  CalendarDays,
+  Mail,
+  Banknote,
+  Building2,
+  MapPin,
+  X,
+} from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
+
+type SearchType =
+  | "profile"
+  | "device"
+  | "asset"
+  | "task"
+  | "documentation"
+  | "feedback"
+  | "helpdesk"
+  | "leave"
+  | "correspondence"
+  | "payment"
+  | "department"
+  | "office_location"
 
 interface SearchResult {
   id: string
-  type: "profile" | "device" | "asset" | "task" | "documentation" | "feedback"
+  type: SearchType
   title: string
   subtitle?: string
   description?: string
@@ -25,26 +55,40 @@ interface UniversalSearchProps {
   isAdminMode?: boolean
 }
 
-const typeIcons = {
+const typeIcons: Record<SearchType, typeof User> = {
   profile: User,
   device: Laptop,
   asset: Package,
   task: ClipboardList,
   documentation: FileText,
   feedback: MessageSquare,
+  helpdesk: LifeBuoy,
+  leave: CalendarDays,
+  correspondence: Mail,
+  payment: Banknote,
+  department: Building2,
+  office_location: MapPin,
 }
 
-const typeLabels = {
-  profile: "employee",
+const typeLabels: Record<SearchType, string> = {
+  profile: "Employee",
   device: "Device",
   asset: "Asset",
   task: "Task",
   documentation: "Documentation",
   feedback: "Feedback",
+  helpdesk: "Help Desk",
+  leave: "Leave",
+  correspondence: "Correspondence",
+  payment: "Payment",
+  department: "Department",
+  office_location: "Office Location",
 }
 
-async function performSearch(q: string): Promise<SearchResult[]> {
-  const response = await fetch(`/api/search?q=${encodeURIComponent(q)}`)
+async function performSearch(q: string, deptId?: string): Promise<SearchResult[]> {
+  const params = new URLSearchParams({ q })
+  if (deptId) params.set("dept", deptId)
+  const response = await fetch(`/api/search?${params.toString()}`)
   if (!response.ok) throw new Error("Search failed")
   const data = await response.json()
   return data.results || []
@@ -55,6 +99,10 @@ export function UniversalSearch({ isAdminMode = false }: UniversalSearchProps) {
   const [query, setQuery] = useState("")
   const [debouncedQuery, setDebouncedQuery] = useState("")
   const router = useRouter()
+  const pathname = usePathname()
+  // When searching from inside the dept console (/dept/[id]/…), pass the dept
+  // id so the API scopes results to that department and routes links there.
+  const deptId = useMemo(() => pathname?.match(/^\/dept\/([^/]+)/)?.[1], [pathname])
 
   // Keyboard shortcut: Ctrl+K or Cmd+K
   useEffect(() => {
@@ -81,8 +129,8 @@ export function UniversalSearch({ isAdminMode = false }: UniversalSearchProps) {
   }, [query])
 
   const { data: results = [], isFetching: loading } = useQuery({
-    queryKey: QUERY_KEYS.search(debouncedQuery),
-    queryFn: () => performSearch(debouncedQuery),
+    queryKey: [QUERY_KEYS.search(debouncedQuery), deptId ?? "global"],
+    queryFn: () => performSearch(debouncedQuery, deptId),
     enabled: open && debouncedQuery.trim().length > 0,
     staleTime: 30 * 1000,
   })
@@ -152,7 +200,7 @@ export function UniversalSearch({ isAdminMode = false }: UniversalSearchProps) {
                 style={isAdminMode ? { color: "var(--navbar-admin-primary)" } : undefined}
               />
               <Input
-                placeholder="Search employee, devices, assets, tasks, documentation, feedback..."
+                placeholder="Search employees, assets, tasks, tickets, leave, correspondence, payments..."
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 className={cn("pl-9", isAdminMode && "focus-visible:ring-[var(--navbar-admin-primary)]")}

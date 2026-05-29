@@ -492,24 +492,45 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
             ) : historyItems.length === 0 ? (
               <p className="text-muted-foreground text-sm">No edits found.</p>
             ) : (
-              historyItems.map((item) => (
-                <div key={item.id} className="rounded-md border p-3">
-                  <p className="text-sm font-medium">{item.editor_name || "Unknown"}</p>
-                  <p className="text-muted-foreground text-xs">{formatWATDateTime(item.created_at)}</p>
-                  <div className="mt-2 space-y-1 text-xs">
-                    {Object.entries((item.new_values || {}) as Record<string, unknown>).length === 0 ? (
-                      <p className="text-muted-foreground">No field details captured.</p>
-                    ) : (
-                      Object.entries((item.new_values || {}) as Record<string, unknown>).map(([key, value]) => (
-                        <p key={key}>
-                          <span className="font-medium">{key.replaceAll("_", " ")}:</span>{" "}
-                          <span className="text-muted-foreground">{String(value ?? "—")}</span>
-                        </p>
-                      ))
-                    )}
+              historyItems.map((item) => {
+                const isDevice = (item.new_values as Record<string, unknown> | null)?.source === "hikvision"
+                const actionLabel =
+                  item.action === "create"
+                    ? "Created"
+                    : item.action === "update"
+                      ? "Updated"
+                      : (item.action ?? "Changed")
+                const displayFields = Object.entries((item.new_values || {}) as Record<string, unknown>).filter(
+                  ([key]) => !["source", "status"].includes(key)
+                )
+                return (
+                  <div key={item.id} className="rounded-md border p-3">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium">
+                        {isDevice ? "HiKVision Device" : item.editor_name || "Unknown"}
+                      </p>
+                      <Badge
+                        className={isDevice ? "bg-blue-100 text-xs text-blue-800" : "bg-gray-100 text-xs text-gray-800"}
+                      >
+                        {isDevice ? "Automated" : actionLabel}
+                      </Badge>
+                    </div>
+                    <p className="text-muted-foreground text-xs">{formatWATDateTime(item.created_at)}</p>
+                    <div className="mt-2 space-y-1 text-xs">
+                      {displayFields.length === 0 ? (
+                        <p className="text-muted-foreground">No field details captured.</p>
+                      ) : (
+                        displayFields.map(([key, value]) => (
+                          <p key={key}>
+                            <span className="font-medium">{key.replaceAll("_", " ")}:</span>{" "}
+                            <span className="text-muted-foreground">{String(value ?? "—")}</span>
+                          </p>
+                        ))
+                      )}
+                    </div>
                   </div>
-                </div>
-              ))
+                )
+              })
             )}
           </div>
         </DialogContent>
@@ -527,7 +548,7 @@ const ATTENDANCE_TABS: DataTableTab[] = [
   { key: "exceptions", label: "Exceptions" },
 ]
 
-export default function AttendanceReportsPage() {
+export default function AttendanceReportsPage({ backLinkHref }: { backLinkHref?: string } = {}) {
   const [activeTab, setActiveTab] = useState<AttendanceTab>("daily")
   const [loading, setLoading] = useState(false)
   const [reports, setReports] = useState<AttendanceReport[]>([])
@@ -970,7 +991,7 @@ export default function AttendanceReportsPage() {
               : "Records needing attention — late arrivals, missing clock-outs, absences."
       }
       icon={BarChart3}
-      backLink={{ href: "/admin/hr", label: "Back to HR" }}
+      backLink={{ href: backLinkHref ?? "/admin/hr", label: "Back to HR" }}
       tabs={ATTENDANCE_TABS}
       activeTab={activeTab}
       onTabChange={(t) => setActiveTab(t as AttendanceTab)}

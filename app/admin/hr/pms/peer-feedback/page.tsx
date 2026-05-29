@@ -77,7 +77,7 @@ function FeedbackCard({ row, onView }: { row: PeerFeedbackRow; onView: (row: Pee
   )
 }
 
-export default function AdminPeerFeedbackPage() {
+export default function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string } = {}) {
   const [feedback, setFeedback] = useState<PeerFeedbackRow[]>([])
   const [cycles, setCycles] = useState<Cycle[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -265,7 +265,7 @@ export default function AdminPeerFeedbackPage() {
       title="Peer Feedback"
       description="Review peer feedback submissions across employees, quarters, and reviewers."
       icon={MessageSquare}
-      backLink={{ href: "/admin/hr/pms", label: "Back to PMS" }}
+      backLink={{ href: backLinkHref ?? "/admin/hr/pms", label: "Back to PMS" }}
       actions={
         <Button
           variant="outline"

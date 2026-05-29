@@ -283,7 +283,10 @@ const TABS: DataTableTab[] = [
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
-export default function AdminPmsReviewsPage() {
+export default function AdminPmsReviewsPage({
+  backLinkHref,
+  reviewCycleBasePath,
+}: { backLinkHref?: string; reviewCycleBasePath?: string } = {}) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<TabMode>("individual")
@@ -477,7 +480,7 @@ export default function AdminPmsReviewsPage() {
 
   const goToIndividualCycle = useCallback(
     (cycleId: string) => {
-      router.push(`/admin/hr/pms/reviews/${encodeURIComponent(cycleId)}?mode=individual`)
+      router.push(`${reviewCycleBasePath ?? "/admin/hr/pms/reviews"}/${encodeURIComponent(cycleId)}?mode=individual`)
     },
     [router]
   )
@@ -794,7 +797,7 @@ export default function AdminPmsReviewsPage() {
       title="PMS Reviews"
       description="Manage quarterly performance reviews by individual, department, or cycle."
       icon={FileText}
-      backLink={{ href: "/admin/hr/pms", label: "Back to PMS" }}
+      backLink={{ href: backLinkHref ?? "/admin/hr/pms", label: "Back to PMS" }}
       tabs={TABS}
       activeTab={tab}
       onTabChange={(t) => setTab(t as TabMode)}

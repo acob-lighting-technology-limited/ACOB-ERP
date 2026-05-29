@@ -63,6 +63,8 @@ interface SidebarProps {
     lead_departments?: string[]
   }
   canAccessAdmin?: boolean
+  /** Href for the dept console — shown for pure leads (non-admin dept leads). */
+  deptConsoleHref?: string
 }
 
 type NavSubChild = { name: string; href: string }
@@ -140,7 +142,7 @@ const hrNavigation: NavItemDef[] = [
   },
 ]
 
-export function Sidebar({ user, profile, canAccessAdmin }: SidebarProps) {
+export function Sidebar({ user, profile, canAccessAdmin, deptConsoleHref }: SidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -258,8 +260,15 @@ export function Sidebar({ user, profile, canAccessAdmin }: SidebarProps) {
     profile?.first_name && profile?.last_name
       ? `${formatName(profile.first_name)} ${formatName(profile.last_name)}`
       : user?.email?.split("@")[0] || "Account"
+  // Pure leads (non-admin dept leads) get the (Lead) label stripped here —
+  // their dept sidebar already shows the dept + Lead badge in context.
+  // Admin+lead users keep it since they stay in the employee sidebar.
+  const isAdminLikeUser = Boolean(
+    profile?.role && ["developer", "admin", "super_admin"].includes(String(profile.role).toLowerCase())
+  )
+  const showLeadLabel = isLead && isAdminLikeUser
   const accountDepartment = profile?.department
-    ? `${departmentCode || formatName(profile.department)}${isLead ? " (Lead)" : ""}`
+    ? `${departmentCode || formatName(profile.department)}${showLeadLabel ? " (Lead)" : ""}`
     : null
   const accountRole = profile?.role ? getRoleDisplayName(profile.role) : null
 
@@ -504,6 +513,14 @@ export function Sidebar({ user, profile, canAccessAdmin }: SidebarProps) {
                 <Link href="/admin" className="flex w-full items-center gap-2">
                   <ShieldCheck className="h-4 w-4" />
                   Go to Admin
+                </Link>
+              </DropdownMenuItem>
+            )}
+            {deptConsoleHref && (
+              <DropdownMenuItem asChild>
+                <Link href={deptConsoleHref} className="flex w-full items-center gap-2">
+                  <ShieldCheck className="h-4 w-4" />
+                  Dept Console
                 </Link>
               </DropdownMenuItem>
             )}

@@ -68,7 +68,7 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-export default function AdminAttendanceRecordsPage() {
+export default function AdminAttendanceRecordsPage({ backLinkHref }: { backLinkHref?: string } = {}) {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState({
@@ -312,7 +312,7 @@ export default function AdminAttendanceRecordsPage() {
         title="Attendance Records"
         description="View and fix individual attendance records."
         icon={Calendar}
-        backLink={{ href: "/admin/hr/attendance", label: "Back to Attendance" }}
+        backLink={{ href: backLinkHref ?? "/admin/hr/attendance", label: "Back to Attendance" }}
         actions={
           <Button variant="outline" size="sm" onClick={() => setExportOpen(true)} disabled={records.length === 0}>
             <Download className="mr-2 h-4 w-4" />

@@ -93,11 +93,14 @@ function formatPercent(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? `${value}%` : "-"
 }
 
-export default async function AdminPmsPage() {
+export default async function AdminPmsPage({ basePath }: { basePath?: string } = {}) {
+  const base = basePath ?? "/admin"
   const { departments, scopedUserCount, summary } = await getAdminPmsData()
   const scope = await getRequestScope()
   const canAccessCbt = scope?.isAdminLike === true && scope.scopeMode !== "lead"
-  const visibleLinks = adminPmsLinks.filter((item) => item.href !== "/admin/hr/pms/cbt" || canAccessCbt)
+  const visibleLinks = adminPmsLinks
+    .filter((item) => item.href !== "/admin/hr/pms/cbt" || canAccessCbt)
+    .map((item) => ({ ...item, href: item.href.replace("/admin", base) }))
 
   return (
     <PageWrapper maxWidth="full" background="gradient">
@@ -105,7 +108,7 @@ export default async function AdminPmsPage() {
         title="PMS"
         description="Monitor live KPI, goals, attendance, CBT, behaviour, and reviews from one HR performance area."
         icon={Award}
-        backLink={{ href: "/admin/hr", label: "Back to HR Admin" }}
+        backLink={{ href: `${base}/hr`, label: "Back to HR" }}
       />
 
       <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-6">

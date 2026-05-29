@@ -5,12 +5,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Mail, Megaphone, ChevronRight } from "lucide-react"
 import Link from "next/link"
 
-export default function CommunicationsPage() {
+export default function CommunicationsPage({ basePath }: { basePath?: string } = {}) {
+  const base = basePath ?? "/admin"
   const cards = [
     {
       title: "Broadcast",
       description: "Send department-branded broadcast emails with rich text content.",
-      href: "/admin/communications/broadcast",
+      href: `${base}/communications/broadcast`,
       icon: Megaphone,
       color: "text-orange-600 dark:text-orange-400",
       bgColor: "bg-orange-100 dark:bg-orange-900/30",
@@ -18,7 +19,7 @@ export default function CommunicationsPage() {
     {
       title: "Meetings",
       description: "Open meeting communication tools (mailings and reminders).",
-      href: "/admin/communications/meetings",
+      href: `${base}/communications/meetings`,
       icon: Mail,
       color: "text-indigo-600 dark:text-indigo-400",
       bgColor: "bg-indigo-100 dark:bg-indigo-900/30",
@@ -31,7 +32,7 @@ export default function CommunicationsPage() {
         title="Communications"
         description="Manage outbound email communication workflows from one place."
         icon={Megaphone}
-        backLink={{ href: "/admin", label: "Back to Admin" }}
+        backLink={{ href: base, label: "Back" }}
       />
 
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">

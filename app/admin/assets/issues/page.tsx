@@ -199,7 +199,7 @@ function IssueCard({
   )
 }
 
-export default function AssetIssuesPage() {
+export default function AssetIssuesPage({ backLinkHref }: { backLinkHref?: string } = {}) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
@@ -369,7 +369,7 @@ export default function AssetIssuesPage() {
       title="Asset Issues"
       description="Track and manage asset issues across the organization."
       icon={AlertCircle}
-      backLink={{ href: "/admin/assets", label: "Back to Admin" }}
+      backLink={{ href: backLinkHref ?? "/admin/assets", label: "Back to Assets" }}
       stats={
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard

@@ -1,11 +1,10 @@
-"use server"
-
 import { createClient } from "@supabase/supabase-js"
-import { NextRequest, NextResponse, after } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
 import { isLate } from "@/lib/hr/attendance-utils"
+import { writeAuditLog } from "@/lib/audit/write-audit"
 
 const log = logger("hikvision-events")
 
@@ -72,69 +71,57 @@ async function processHikvisionEvent(event: ParsedEvent) {
 
   // ── Determine action ────────────────────────────────────────────────────────
   const normalised = (attendanceStatus ?? "").toLowerCase().trim()
-  let action: "in" | "out" | "skip"
+  let action: "in" | "out"
 
   if (normalised === "checkin") {
-    action = existing?.clock_in ? "skip" : "in"
+    action = !existing?.clock_in ? "in" : "out"
   } else if (normalised === "checkout") {
     action = "out"
   } else {
     action = !existing?.clock_in ? "in" : "out"
   }
 
-  // ── 30-second deduplication window ─────────────────────────────────────────
-  // Because we now respond before processing, the DB race condition is gone —
-  // events are processed one-at-a-time in the background. The 30-second window
-  // remains as a guard against genuine device retries (e.g. user scans twice).
-  if (action === "in" && existing?.clock_in) {
-    const existingIn = new Date(`${date}T${existing.clock_in}Z`).getTime()
-    const incomingTs = new Date(`${date}T${time}Z`).getTime()
-    if (Math.abs(incomingTs - existingIn) <= 30_000) {
-      log.info({ userId, date, time }, "Hikvision clock-in deduped — within 30 s of existing clock_in")
-      return
-    }
-  }
-
   if (action === "out") {
     const incomingTs = new Date(`${date}T${time}Z`).getTime()
 
-    // Clock-out within 5 minutes of clock-in → reject (accidental tap or double-fire)
+    // Clock-out within 3 minutes of clock-in → reject (accidental tap right after entry)
     if (existing?.clock_in) {
       const clockInTs = new Date(`${date}T${existing.clock_in}Z`).getTime()
-      if (incomingTs - clockInTs < 5 * 60_000) {
-        log.info({ userId, date, time }, "Hikvision clock-out ignored — within 5-minute grace window of clock_in")
+      if (incomingTs - clockInTs < 3 * 60_000) {
+        log.info({ userId, date, time }, "Hikvision clock-out ignored — within 3-minute grace window of clock_in")
         return
       }
     }
-
-    // Device retry: new clock-out within 30 s of an existing clock-out
-    if (existing?.clock_out) {
-      const existingOut = new Date(`${date}T${existing.clock_out}Z`).getTime()
-      if (Math.abs(incomingTs - existingOut) <= 30_000) {
-        log.info({ userId, date, time }, "Hikvision clock-out deduped — within 30 s of existing clock_out")
-        return
-      }
-    }
-  }
-
-  if (action === "skip") {
-    log.info({ userId, date, attendanceStatus }, "Hikvision checkIn skipped — clock_in already recorded")
-    return
   }
 
   // ── Write attendance record ─────────────────────────────────────────────────
   if (action === "in") {
     const status = isLate(time) ? "late" : "present"
-    const { error } = await supabase
+    const { data: upserted, error } = await supabase
       .from("attendance_records")
       .upsert(
         { user_id: userId, date, clock_in: time, status, source: "hikvision" },
         { onConflict: "user_id,date", ignoreDuplicates: false }
       )
+      .select("id")
+      .single()
 
     if (error) {
       log.error({ err: String(error), userId, date }, "Failed to upsert clock-in")
+      return
     }
+
+    await writeAuditLog(
+      supabase,
+      {
+        action: "create",
+        entityType: "attendance_record",
+        entityId: upserted.id,
+        newValues: { clock_in: time, status, source: "hikvision" },
+        context: { actorId: userId, source: "system", route: "/api/devices/hikvision/events" },
+      },
+      { failOpen: true }
+    )
   } else {
     if (!existing?.clock_in) {
       log.warn({ userId, date, time }, "Hikvision clock-out received but no clock-in on record — skipping")
@@ -153,7 +140,20 @@ async function processHikvisionEvent(event: ParsedEvent) {
 
     if (error) {
       log.error({ err: String(error), userId, date }, "Failed to update clock-out")
+      return
     }
+
+    await writeAuditLog(
+      supabase,
+      {
+        action: "update",
+        entityType: "attendance_record",
+        entityId: existing.id,
+        newValues: { clock_out: time, total_hours: totalHours, source: "hikvision" },
+        context: { actorId: userId, source: "system", route: "/api/devices/hikvision/events" },
+      },
+      { failOpen: true }
+    )
   }
 
   log.info({ userId, date, action, employeeNoString }, "Hikvision attendance recorded")
@@ -202,12 +202,16 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid event payload" }, { status: 400 })
   }
 
-  // ── Respond immediately so the device never retries ─────────────────────────
-  // All DB work runs in the background via after(). The device gets its 200 OK
-  // in milliseconds regardless of how long Supabase takes.
-  after(async () => {
+  // ── Process the event before responding ─────────────────────────────────────
+  // The DB write MUST complete before we return. Deferring it to after() caused
+  // the device to receive 200 while the record was silently never written.
+  // Hikvision tolerates the ~1-2s wait for Supabase to finish.
+  try {
     await processHikvisionEvent(result.data)
-  })
+  } catch (err) {
+    log.error({ err: String(err) }, "Failed to process Hikvision event")
+    // Still return 200 so the device doesn't spam retries; the error is logged.
+  }
 
   return NextResponse.json({ success: true })
 }
