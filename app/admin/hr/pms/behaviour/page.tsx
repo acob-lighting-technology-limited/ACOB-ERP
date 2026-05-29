@@ -1,12 +1,5 @@
-import { PmsMetricTabsPage } from "../_components/pms-metric-tabs-page"
+import { AdminPmsBehaviourPage } from "./view"
 
-export default function AdminPmsBehaviourPage() {
-  return (
-    <PmsMetricTabsPage
-      metric="behaviour"
-      title="PMS Behaviour"
-      description="Behaviour view with individual, department, and cycle tabs."
-      iconKey="behaviour"
-    />
-  )
+export default function AdminPmsBehaviourPageRoute() {
+  return <AdminPmsBehaviourPage />
 }

@@ -35,7 +35,8 @@ async function fetchPayments(): Promise<FinancePayment[]> {
   return payload.data || []
 }
 
-export function FinanceDashboardContent() {
+export function FinanceDashboardContent({ basePath }: { basePath?: string } = {}) {
+  const base = basePath ?? "/admin"
   const { data: allPayments = [] } = useQuery({
     queryKey: QUERY_KEYS.payments(),
     queryFn: fetchPayments,
@@ -63,7 +64,7 @@ export function FinanceDashboardContent() {
         title="Finance"
         description="Manage finance modules: Payments, Inventory, and Purchasing"
         icon={DollarSign}
-        backLink={{ href: "/admin", label: "Back to Admin" }}
+        backLink={{ href: base, label: "Back" }}
       />
 
       {/* Stats Grid */}
@@ -111,10 +112,10 @@ export function FinanceDashboardContent() {
               <CardDescription>Manage department payments and related finance records</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Link href="/admin/finance/payments">
+              <Link href={`${base}/finance/payments`}>
                 <Button className="w-full">Open Payments ({stats.totalPayments})</Button>
               </Link>
-              <Link href="/admin/finance/payments">
+              <Link href={`${base}/finance/payments`}>
                 <Button className="w-full" variant="outline">
                   By Department
                 </Button>
@@ -132,10 +133,10 @@ export function FinanceDashboardContent() {
               <CardDescription>Manage products, stock levels, categories, and warehouses</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Link href="/admin/inventory">
+              <Link href={`${base}/inventory`}>
                 <Button className="w-full">Open Inventory</Button>
               </Link>
-              <Link href="/admin/inventory/products">
+              <Link href={`${base}/inventory/products`}>
                 <Button className="w-full" variant="outline">
                   Products
                 </Button>
@@ -153,10 +154,10 @@ export function FinanceDashboardContent() {
               <CardDescription>Manage suppliers, purchase orders, and goods receipts</CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
-              <Link href="/admin/purchasing">
+              <Link href={`${base}/purchasing`}>
                 <Button className="w-full">Open Purchasing</Button>
               </Link>
-              <Link href="/admin/purchasing/orders">
+              <Link href={`${base}/purchasing/orders`}>
                 <Button className="w-full" variant="outline">
                   Purchase Orders
                 </Button>

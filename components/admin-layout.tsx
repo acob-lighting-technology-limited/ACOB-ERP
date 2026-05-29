@@ -4,6 +4,7 @@ import { AdminScopeProvider } from "@/components/admin-scope-context"
 import { SidebarContent } from "@/components/sidebar-content"
 import { createClient } from "@/lib/supabase/server"
 import { resolveAdminScope } from "@/lib/admin/rbac"
+import { normalizeDepartmentName } from "@/shared/departments"
 import { redirect } from "next/navigation"
 import type { ClientAdminScope } from "@/components/admin-scope-context"
 
@@ -41,7 +42,21 @@ export async function AdminLayout({ children }: AdminLayoutProps) {
     managedDepartmentIds: scope.managedDepartmentIds,
     isDepartmentLead: scope.isDepartmentLead,
     isAdminLike: scope.isAdminLike,
-    canToggleLeadScope: scope.canToggleLeadScope,
+  }
+
+  // Compute dept console href for admin+lead users so "Dept Console" appears
+  // in the admin sidebar dropdown — mirrors the same logic in app-layout.tsx.
+  let deptConsoleHref: string | undefined
+  if (profile.is_department_lead) {
+    const leadDepts: string[] = Array.isArray(profile.lead_departments) ? profile.lead_departments : []
+    const primaryDeptName = leadDepts[0] ?? profile.department
+    if (primaryDeptName) {
+      const normalized = normalizeDepartmentName(primaryDeptName)
+      const { data: deptRow } = await supabase.from("departments").select("id").eq("name", normalized).single()
+      if (deptRow?.id) {
+        deptConsoleHref = `/dept/${deptRow.id}`
+      }
+    }
   }
 
   // "lead" scope visuals apply when the user's view is dept-restricted:
@@ -51,7 +66,12 @@ export async function AdminLayout({ children }: AdminLayoutProps) {
 
   return (
     <div className="admin-shell flex min-h-screen" data-scope={isRestrictedView ? "lead" : "global"}>
-      <AdminSidebar user={userData} profile={profile} adminScopeMode={scope.scopeMode} />
+      <AdminSidebar
+        user={userData}
+        profile={profile}
+        adminScopeMode={scope.scopeMode}
+        deptConsoleHref={deptConsoleHref}
+      />
       <SidebarContent>
         <div className="min-h-screen bg-[var(--admin-content-bg)]">
           <AdminContextRibbon
@@ -59,7 +79,6 @@ export async function AdminLayout({ children }: AdminLayoutProps) {
             department={profile.department}
             scopeMode={scope.scopeMode}
             isAdminLike={scope.isAdminLike}
-            canToggleLeadScope={scope.canToggleLeadScope}
             managedDepartments={scope.managedDepartments}
           />
           <AdminScopeProvider scope={clientScope}>{children}</AdminScopeProvider>

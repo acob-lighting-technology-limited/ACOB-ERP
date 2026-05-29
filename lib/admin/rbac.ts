@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { redirect } from "next/navigation"
-import { cookies } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import {
   normalizeDepartmentName as normalizeCanonicalDepartmentName,
@@ -46,7 +45,6 @@ export interface AdminScope {
   isAdminLike: boolean
   adminDomains: AdminDomain[] | null
   scopeMode: AdminScopeMode
-  canToggleLeadScope: boolean
 }
 
 interface ProfileShape {
@@ -65,8 +63,6 @@ interface DepartmentRow {
 }
 
 const ADMIN_DOMAINS: AdminDomain[] = ["hr", "finance", "assets", "reports", "tasks", "projects", "communications"]
-export const ADMIN_SCOPE_MODE_COOKIE = "admin_scope_mode"
-
 function normalizeRoleValue(role: string | null | undefined): string | null {
   if (!role) return null
   const normalized = role.trim().toLowerCase()
@@ -102,10 +98,6 @@ function unique(values: string[]): string[] {
   )
 }
 
-function normalizeScopeMode(value: string | null | undefined): AdminScopeMode {
-  return value === "lead" ? "lead" : "global"
-}
-
 /**
  * Canonical department name normaliser.
  * Maps legacy "Finance" label → "Accounts" to match the DB value.
@@ -124,9 +116,20 @@ export function isAdminLikeRole(role: string | null | undefined): boolean {
   return normalized === "developer" || normalized === "admin" || normalized === "super_admin"
 }
 
+/**
+ * Returns true when the role alone gives access to the /admin shell.
+ *
+ * Department leads are NO LONGER granted access via this gate — they have
+ * their own /dept/[dept_id]/ surface. Admin users who are also dept leads
+ * still enter /admin and can use the scope-toggle ribbon there.
+ *
+ * The `isDepartmentLead` parameter is retained for backwards-compatibility
+ * with existing call-sites that pass it; it is intentionally unused here.
+ */
 export function roleCanEnterAdmin(role: string | null | undefined, isDepartmentLead = false): boolean {
+  void isDepartmentLead // param kept for call-site compat — no longer used
   const normalized = normalizeRoleValue(role)
-  return normalized === "developer" || normalized === "super_admin" || normalized === "admin" || isDepartmentLead
+  return normalized === "developer" || normalized === "super_admin" || normalized === "admin"
 }
 
 export function canAccessAdminSection(scope: AdminScope, section: AdminSection): boolean {
@@ -139,9 +142,10 @@ export function canAccessAdminSection(scope: AdminScope, section: AdminSection):
     const mapped = SECTION_TO_DOMAIN[section]
     return Boolean(mapped && domains.includes(mapped))
   }
+  // Pure department leads can no longer reach /admin (roleCanEnterAdmin no longer
+  // passes them through). This branch only fires for admin+lead users in "lead"
+  // scope mode — they retain access to all sections while scoped to their dept.
   if (!scope.isDepartmentLead) return false
-
-  // Department leads are permitted across admin sections by policy, scoped by managed departments/offices.
   return true
 }
 
@@ -206,9 +210,6 @@ async function resolveManagedOffices(
 }
 
 export async function resolveAdminScope(supabase: SupabaseClient, userId: string): Promise<AdminScope | null> {
-  const cookieStore = await cookies()
-  const requestedScopeMode = normalizeScopeMode(cookieStore.get(ADMIN_SCOPE_MODE_COOKIE)?.value)
-
   const { data: profile } = await supabase
     .from("profiles")
     .select("role, department, department_id, office_location, admin_domains, is_department_lead, lead_departments")
@@ -222,9 +223,10 @@ export async function resolveAdminScope(supabase: SupabaseClient, userId: string
 
   const isAdminLike = isAdminLikeRole(normalizedRole)
   const leadScopedDepartments = scopeDepartments(profile)
-  const canToggleLeadScope = isAdminLike && Boolean(profile.is_department_lead) && leadScopedDepartments.length > 0
-  const scopeMode: AdminScopeMode = canToggleLeadScope ? requestedScopeMode : "global"
-  const managedDepartments = scopeMode === "lead" || !isAdminLike ? leadScopedDepartments : []
+  // scopeMode is always "global" for admin users — the lead toggle has been removed.
+  // Dept leads use their own /dept/[id]/ shell instead.
+  const scopeMode: AdminScopeMode = "global"
+  const managedDepartments: string[] = []
   const departmentNamesForLookup = Array.from(
     new Set([
       ...managedDepartments.map((departmentName) => normalizeDepartmentName(departmentName)),
@@ -272,7 +274,6 @@ export async function resolveAdminScope(supabase: SupabaseClient, userId: string
     isAdminLike,
     adminDomains,
     scopeMode,
-    canToggleLeadScope,
   }
 }
 

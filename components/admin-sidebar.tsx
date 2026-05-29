@@ -25,8 +25,10 @@ import {
   Wrench,
   ShieldAlert,
   ShieldEllipsis,
+  ShieldCheck,
   FlaskConical,
   User,
+  Building2,
 } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
@@ -69,6 +71,147 @@ interface AdminSidebarProps {
     lead_departments?: string[]
   }
   adminScopeMode?: "global" | "lead"
+  /**
+   * When set, the sidebar knows it is rendered inside the /dept/[deptId]/ shell.
+   * Used to:
+   *  1. Switch nav links to /dept/[id]/... hrefs so navigation stays in the dept shell.
+   *  2. Show a "Go to Admin" link in the account dropdown for admin-like users.
+   */
+  deptId?: string
+  /**
+   * When set (admin shell only), a "Dept Console" link is shown in the account
+   * dropdown for admin+lead users so they can jump to their dept shell.
+   */
+  deptConsoleHref?: string
+}
+
+/**
+ * Builds dept-scoped navigation for the /dept/[deptId]/ shell.
+ * Hrefs point to /dept/[id]/... so clicking a nav item stays in the dept shell.
+ * Only the pages that exist in the dept surface are included.
+ */
+function buildDeptNavigation(deptId: string): NavItem[] {
+  const base = `/dept/${deptId}`
+  return [
+    {
+      section: "overview",
+      name: "Dashboard",
+      href: base,
+      icon: LayoutDashboard,
+      roles: [],
+    },
+    {
+      section: "management",
+      name: "HR",
+      href: `${base}/hr`,
+      icon: Calendar,
+      roles: [],
+      children: [
+        { name: "Employees", href: `${base}/hr/employees` },
+        {
+          name: "Attendance",
+          href: `${base}/hr/attendance`,
+          children: [{ name: "Records", href: `${base}/hr/attendance/records` }],
+        },
+        { name: "Leave", href: `${base}/hr/leave` },
+        { name: "Departments", href: `${base}/hr/departments` },
+        { name: "Office Location", href: `${base}/hr/office-location` },
+        {
+          name: "PMS",
+          href: `${base}/hr/pms`,
+          children: [
+            { name: "Analytics", href: `${base}/hr/pms/analytics` },
+            { name: "Cycles", href: `${base}/hr/pms/cycles` },
+            { name: "Goals", href: `${base}/hr/pms/goals` },
+            { name: "KPI", href: `${base}/hr/pms/kpi` },
+            { name: "Reviews", href: `${base}/hr/pms/reviews` },
+            { name: "Peer Feedback", href: `${base}/hr/pms/peer-feedback` },
+            { name: "Development Plans", href: `${base}/hr/pms/development-plans` },
+            { name: "Behaviour", href: `${base}/hr/pms/behaviour` },
+            { name: "Competencies", href: `${base}/hr/pms/competencies` },
+            { name: "CBT", href: `${base}/hr/pms/cbt` },
+            { name: "Attendance", href: `${base}/hr/pms/attendance` },
+          ],
+        },
+      ],
+    },
+    {
+      section: "management",
+      name: "Finance",
+      href: `${base}/finance`,
+      icon: CreditCard,
+      roles: [],
+      children: [
+        { name: "Payments", href: `${base}/finance/payments` },
+        { name: "Bills", href: `${base}/finance/bills` },
+        { name: "Invoices", href: `${base}/finance/invoices` },
+        { name: "Reports", href: `${base}/finance/reports` },
+      ],
+    },
+    {
+      section: "management",
+      name: "Tasks",
+      href: `${base}/tasks`,
+      icon: ClipboardList,
+      roles: [],
+    },
+    {
+      section: "operations",
+      name: "Help Desk",
+      href: `${base}/help-desk`,
+      icon: ClipboardList,
+      roles: [],
+    },
+    {
+      section: "operations",
+      name: "Assets",
+      href: `${base}/assets`,
+      icon: Package,
+      roles: [],
+      children: [{ name: "Issues", href: `${base}/assets/issues` }],
+    },
+    {
+      section: "operations",
+      name: "Correspondence",
+      href: `${base}/correspondence`,
+      icon: FileCode2,
+      roles: [],
+    },
+    {
+      section: "operations",
+      name: "Communications",
+      href: `${base}/communications`,
+      icon: Megaphone,
+      roles: [],
+      children: [{ name: "Broadcast", href: `${base}/communications/broadcast` }],
+    },
+    {
+      section: "operations",
+      name: "Documentation",
+      href: `${base}/documentation`,
+      icon: FileText,
+      roles: [],
+      children: [
+        { name: "Internal", href: `${base}/documentation/internal` },
+        { name: "Department", href: `${base}/documentation/department` },
+      ],
+    },
+    {
+      section: "operations",
+      name: "Feedback",
+      href: `${base}/feedback`,
+      icon: ScrollText,
+      roles: [],
+    },
+    {
+      section: "operations",
+      name: "Reports",
+      href: `${base}/reports`,
+      icon: FileBarChart,
+      roles: [],
+      children: [{ name: "Weekly Reports", href: `${base}/reports/weekly` }],
+    },
+  ]
 }
 
 const ADMIN_DOMAINS: AdminDomain[] = ["hr", "finance", "assets", "reports", "tasks", "communications"]
@@ -317,7 +460,7 @@ const ADMIN_ROUTE_ALIASES: Record<string, string[]> = {
   // Communications — correspondence is logically part of communications
 }
 
-export function AdminSidebar({ user, profile, adminScopeMode = "global" }: AdminSidebarProps) {
+export function AdminSidebar({ user, profile, adminScopeMode = "global", deptId, deptConsoleHref }: AdminSidebarProps) {
   const pathname = usePathname()
   const router = useRouter()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
@@ -368,7 +511,9 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global" }: Admin
 
   useEffect(() => {
     if (!pathname) return
-    for (const item of adminNavigation) {
+    // Use dept nav when in dept shell so the correct parent sections auto-expand.
+    const nav = deptId ? buildDeptNavigation(deptId) : adminNavigation
+    for (const item of nav) {
       if (!item.children) continue
       for (const child of item.children) {
         const childActive = pathname === child.href || pathname.startsWith(child.href + "/")
@@ -386,7 +531,7 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global" }: Admin
         }
       }
     }
-  }, [pathname])
+  }, [pathname, deptId])
 
   const handleLogout = async () => {
     await supabase.auth.signOut()
@@ -436,7 +581,12 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global" }: Admin
     return canAccessRouteV2(accessContext, resolveAdminRouteKeyV2(href))
   }
 
-  const filteredNavigation = adminNavigation.filter((item) => canAccessRoute(item.roles, item.href))
+  // In the dept shell use dept-scoped hrefs; roles[] is empty so canAccessRoute
+  // is bypassed — access is already guarded by requireDeptScope on the server.
+  const activeNavigation = deptId ? buildDeptNavigation(deptId) : adminNavigation
+  const filteredNavigation = deptId
+    ? activeNavigation
+    : activeNavigation.filter((item) => canAccessRoute(item.roles, item.href))
   const groupedNavigation = adminSections
     .map((section) => ({
       ...section,
@@ -446,7 +596,8 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global" }: Admin
 
   const isAdminNavItemActive = (href: string): boolean => {
     if (!pathname) return false
-    if (href === "/admin") return pathname === "/admin"
+    // Exact-match only for root dashboard hrefs so they don't light up on every sub-page.
+    if (href === "/admin" || (deptId && href === `/dept/${deptId}`)) return pathname === href
     if (pathname === href || pathname.startsWith(`${href}/`)) return true
 
     const aliases = ADMIN_ROUTE_ALIASES[href]
@@ -457,6 +608,11 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global" }: Admin
     return false
   }
 
+  // True for roles that can access the /admin shell (developer / admin / super_admin).
+  const isAdminLikeUser = ["developer", "admin", "super_admin"].includes(String(profile?.role || "").toLowerCase())
+
+  // After Phase 6, pure leads no longer enter /admin.
+  // The isLead flag here only applies to admin+lead users in the admin shell.
   const isLead = Boolean(
     profile?.is_department_lead || (profile?.lead_departments && profile.lead_departments.length > 0)
   )
@@ -744,6 +900,28 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global" }: Admin
                 Settings
               </Link>
             </DropdownMenuItem>
+            {!deptId && deptConsoleHref && (
+              <DropdownMenuItem
+                asChild
+                className="cursor-pointer text-[var(--admin-sidebar-foreground)] focus:bg-[var(--admin-accent-soft)] focus:text-[var(--admin-primary)] data-[highlighted]:bg-[var(--admin-accent-soft)] data-[highlighted]:text-[var(--admin-primary)]"
+              >
+                <Link href={deptConsoleHref} className="flex w-full items-center gap-2">
+                  <Building2 className="h-4 w-4" />
+                  Dept Console
+                </Link>
+              </DropdownMenuItem>
+            )}
+            {deptId && isAdminLikeUser && (
+              <DropdownMenuItem
+                asChild
+                className="cursor-pointer text-[var(--admin-sidebar-foreground)] focus:bg-[var(--admin-accent-soft)] focus:text-[var(--admin-primary)] data-[highlighted]:bg-[var(--admin-accent-soft)] data-[highlighted]:text-[var(--admin-primary)]"
+              >
+                <Link href="/admin" className="flex w-full items-center gap-2">
+                  <ShieldCheck className="h-4 w-4" />
+                  Go to Admin
+                </Link>
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem
               onClick={() => setShowLogoutConfirm(true)}
               className="flex cursor-pointer items-center gap-2 text-[var(--admin-sidebar-foreground)] focus:bg-[var(--admin-accent-soft)] focus:text-[var(--admin-primary)] data-[highlighted]:bg-[var(--admin-accent-soft)] data-[highlighted]:text-[var(--admin-primary)]"

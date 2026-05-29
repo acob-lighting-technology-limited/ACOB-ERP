@@ -373,11 +373,15 @@ export function PmsMetricTabsPage({
   title,
   description,
   iconKey,
+  backLinkHref,
+  attendanceBasePath,
 }: {
   metric: MetricKey
   title: string
   description: string
   iconKey: IconKey
+  backLinkHref?: string
+  attendanceBasePath?: string
 }) {
   const [tab, setTab] = useState<TabKey>("individual")
   const [isInitialLoading, setIsInitialLoading] = useState(true)
@@ -519,7 +523,7 @@ export function PmsMetricTabsPage({
             if (metric === "attendance") {
               const userId = asString(row.user_id)
               const query = userId !== "-" ? `?employee=${encodeURIComponent(userId)}` : ""
-              router.push(`/admin/hr/attendance${query}`)
+              router.push(`${attendanceBasePath ?? "/admin/hr/attendance"}${query}`)
               return
             }
             setEditingRow(row)
@@ -529,7 +533,7 @@ export function PmsMetricTabsPage({
       ]
     }
     return undefined
-  }, [tab, metric, router])
+  }, [tab, metric, router, attendanceBasePath])
 
   const expandedRowsByGroup = useMemo(() => {
     const individuals = (data?.rows.individual || []) as Record<string, unknown>[]
@@ -578,7 +582,7 @@ export function PmsMetricTabsPage({
       title={title}
       description={description}
       icon={Icon}
-      backLink={{ href: "/admin/hr/pms", label: "Back to PMS" }}
+      backLink={{ href: backLinkHref ?? "/admin/hr/pms", label: "Back to PMS" }}
       tabs={pageTabs}
       activeTab={tab}
       onTabChange={(value) => setTab(value as TabKey)}
