@@ -1,5 +1,5 @@
 import { requireDeptScope } from "@/lib/dept/require-dept-scope"
-import AdminAssetIssuesPage from "@/app/admin/assets/issues/page"
+import { AssetIssuesPage as AdminAssetIssuesPage } from "@/app/admin/assets/issues/view"
 
 interface Props {
   params: Promise<{ dept_id: string }>

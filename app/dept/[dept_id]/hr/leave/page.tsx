@@ -1,5 +1,5 @@
 import { requireDeptScope } from "@/lib/dept/require-dept-scope"
-import LeaveApprovePage from "@/app/admin/hr/leave/approve/page"
+import { LeaveApprovePage } from "@/app/admin/hr/leave/approve/view"
 
 interface Props {
   params: Promise<{ dept_id: string }>

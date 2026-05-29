@@ -1,5 +1,5 @@
 import { requireDeptScope } from "@/lib/dept/require-dept-scope"
-import AdminAttendanceRecordsPage from "@/app/admin/hr/attendance/records/page"
+import { AdminAttendanceRecordsPage } from "@/app/admin/hr/attendance/records/view"
 
 interface Props {
   params: Promise<{ dept_id: string }>
