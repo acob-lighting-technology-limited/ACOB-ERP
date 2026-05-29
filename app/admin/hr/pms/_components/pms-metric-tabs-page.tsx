@@ -533,7 +533,7 @@ export function PmsMetricTabsPage({
       ]
     }
     return undefined
-  }, [tab, metric, router])
+  }, [tab, metric, router, attendanceBasePath])
 
   const expandedRowsByGroup = useMemo(() => {
     const individuals = (data?.rows.individual || []) as Record<string, unknown>[]

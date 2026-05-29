@@ -482,7 +482,7 @@ export default function AdminPmsReviewsPage({
     (cycleId: string) => {
       router.push(`${reviewCycleBasePath ?? "/admin/hr/pms/reviews"}/${encodeURIComponent(cycleId)}?mode=individual`)
     },
-    [router]
+    [router, reviewCycleBasePath]
   )
 
   const goDeptCycle = useCallback(
