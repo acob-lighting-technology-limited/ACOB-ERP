@@ -1,30 +1,43 @@
-import { sendNotificationEmail } from "@/lib/notifications/email-gateway"
+import { sendNotificationEmailsIndividuallyWithRetry } from "@/lib/notifications/email-gateway"
 import { ORG_PRIMARY_DOMAIN } from "@/lib/org-config"
 import { logger } from "@/lib/logger"
 
 const log = logger("hr-exit-mailer")
 
-export interface ExitNotificationPayload {
-  employeeFullName: string
-  employeeFirstName: string
+export interface ExitedEmployee {
+  fullName: string
+  firstName: string
   department: string
+  exitDate?: string // ISO date string e.g. "2026-05-29"
+}
+
+export interface ExitNotificationPayload {
+  employees: ExitedEmployee[]
   recipients: string[]
   deptLeadEmail?: string
   hrLeadName?: string
   hrLeadDesignation?: string
   hrLeadEmail?: string
+  from?: string
 }
 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatDate(iso?: string): string {
+  if (!iso) return ""
+  try {
+    return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })
+  } catch {
+    return iso
+  }
+}
+
+// ─── HTML builder ─────────────────────────────────────────────────────────────
+
 function buildExitEmailHtml(payload: ExitNotificationPayload): string {
-  const {
-    employeeFullName: employeeName,
-    employeeFirstName,
-    department,
-    deptLeadEmail,
-    hrLeadName,
-    hrLeadDesignation,
-    hrLeadEmail,
-  } = payload
+  const { employees, deptLeadEmail, hrLeadName, hrLeadDesignation, hrLeadEmail } = payload
+  const isBulk = employees.length > 1
+
   const hodLink = deptLeadEmail
     ? `<a href="mailto:${deptLeadEmail}" style="color:#166534;font-weight:600;text-decoration:underline;">Head of Department</a>`
     : "Head of Department"
@@ -33,17 +46,52 @@ function buildExitEmailHtml(payload: ExitNotificationPayload): string {
     : "HR Department"
   const preparedBy = hrLeadName?.trim() || "HR Department"
   const designation = hrLeadDesignation?.trim() || ""
-  return buildExitEmailHtmlInner(employeeName, employeeFirstName, hodLink, hrLink, preparedBy, designation)
-}
 
-function buildExitEmailHtmlInner(
-  employeeName: string,
-  employeeFirstName: string,
-  hodLink: string,
-  hrLink: string,
-  preparedBy: string,
-  designation: string
-): string {
+  // ── Opening sentence ──
+  let openingSentence: string
+  if (isBulk) {
+    openingSentence = `<p class="text">Management wishes to inform all staff that the following individuals are no longer members of staff of <strong>ACOB Lighting Technology Limited</strong>.</p>`
+  } else {
+    openingSentence = `<p class="text">Management wishes to inform all staff that <strong>${employees[0].fullName}</strong> is no longer a member of staff of <strong>ACOB Lighting Technology Limited</strong>.</p>`
+  }
+
+  // ── Staff table (always shown for bulk; hidden for single) ──
+  let staffTable = ""
+  if (isBulk) {
+    const rows = employees
+      .map(
+        (e) =>
+          `<tr>` +
+          `<td style="padding:10px 14px;font-size:14px;font-weight:600;color:#111827;border-bottom:1px solid #e5e7eb;border-right:1px solid #e5e7eb;">${e.fullName}</td>` +
+          `<td style="padding:10px 14px;font-size:14px;color:#374151;border-bottom:1px solid #e5e7eb;">${e.department}</td>` +
+          `</tr>`
+      )
+      .join("")
+
+    staffTable =
+      `<div style="margin:24px 0;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;background:#f9fafb;">` +
+      `<div style="padding:10px 18px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;background:#fef2f2;color:#991b1b;border-bottom:1px solid #fecaca;">Exited Staff</div>` +
+      `<table style="width:100%;border-collapse:collapse;">` +
+      `<thead><tr>` +
+      `<th style="padding:8px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb;border-right:1px solid #e5e7eb;background:#f3f4f6;">Name</th>` +
+      `<th style="padding:8px 14px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#6b7280;text-align:left;border-bottom:1px solid #e5e7eb;background:#f3f4f6;">Department</th>` +
+      `</tr></thead>` +
+      `<tbody>${rows}</tbody>` +
+      `</table></div>`
+  }
+
+  // ── Body paragraphs ──
+  let body2: string
+  let body3: string
+  if (isBulk) {
+    body2 = `<p class="text">Accordingly, they are not authorised to act on behalf of the organisation in any capacity. All staff are advised to <strong>cease any work-related engagement</strong> with them immediately and direct any outstanding official matters to the appropriate ${hodLink} or the ${hrLink}.</p>`
+    body3 = `<p class="text">We wish them well in their future endeavours.</p>`
+  } else {
+    const { firstName } = employees[0]
+    body2 = `<p class="text">Accordingly, ${firstName} is not authorised to act on behalf of the organisation in any capacity. All staff are advised to <strong>cease any work-related engagement</strong> with ${firstName} immediately and direct any outstanding official matters to the appropriate ${hodLink} or the ${hrLink}.</p>`
+    body3 = `<p class="text">We wish ${firstName} well in future endeavours.</p>`
+  }
+
   return (
     "<!DOCTYPE html>" +
     '<html lang="en">' +
@@ -70,12 +118,13 @@ function buildExitEmailHtmlInner(
     "</td></tr></table>" +
     // Body
     '<div class="wrapper">' +
-    '<div class="notice-badge">Urgent Notice</div>' +
+    '<div class="notice-badge">Staff Notice</div>' +
     '<div class="title">Staff Exit Notification</div>' +
     '<p class="text">Dear All,</p>' +
-    `<p class="text">Management wishes to inform all staff that <strong>${employeeName}</strong> is no longer a member of staff of <strong>ACOB Lighting Technology Limited</strong>.</p>` +
-    `<p class="text">Accordingly, ${employeeFirstName} is not authorised to act on behalf of the organisation in any capacity. All staff are advised to <strong>cease any work-related engagement</strong> with ${employeeFirstName} immediately and direct any outstanding official matters to the appropriate ${hodLink} or the ${hrLink}.</p>` +
-    `<p class="text">We wish ${employeeFirstName} well in future endeavours.</p>` +
+    openingSentence +
+    staffTable +
+    body2 +
+    body3 +
     '<hr class="divider">' +
     '<p class="text" style="margin:0;font-size:14px;color:#6b7280;">This notice is issued by the HR Department on behalf of Management.</p>' +
     "</div>" +
@@ -96,23 +145,38 @@ function buildExitEmailHtmlInner(
   )
 }
 
+// ─── Public function ──────────────────────────────────────────────────────────
+
 export async function sendExitNotificationEmail(payload: ExitNotificationPayload): Promise<void> {
-  const { employeeFullName, recipients } = payload
+  const { employees, recipients } = payload
 
   if (!recipients.length) {
     log.warn("sendExitNotificationEmail called with no recipients — skipping")
     return
   }
 
+  const names = employees.map((e) => e.fullName).join(", ")
+  const isBulk = employees.length > 1
+  const html = buildExitEmailHtml(payload)
+  const subject = isBulk
+    ? `Staff Exit Notification (${employees.length} staff) — ACOB Lighting Technology Limited`
+    : "Staff Exit Notification — ACOB Lighting Technology Limited"
+
   try {
-    await sendNotificationEmail({
-      from: `ACOB HR Department <notifications@${ORG_PRIMARY_DOMAIN}>`,
+    const result = await sendNotificationEmailsIndividuallyWithRetry({
+      from: payload.from ?? `ACOB Admin & HR Department <notifications@${ORG_PRIMARY_DOMAIN}>`,
       to: recipients,
-      subject: "Staff Exit Notification — ACOB Lighting Technology Limited",
-      html: buildExitEmailHtml(payload),
+      subject,
+      html,
     })
-    log.info({ employeeFullName, recipientCount: recipients.length }, "Exit notification email sent")
+    log.info(
+      { names, delivered: result.deliveredRecipients.length, failed: result.failedRecipients.length },
+      "Exit notification emails sent"
+    )
+    if (result.failedRecipients.length > 0) {
+      log.warn({ failed: result.failedRecipients }, "Some exit notification emails failed to deliver")
+    }
   } catch (error) {
-    log.error({ error, employeeFullName }, "Failed to send exit notification email")
+    log.error({ error, names }, "Failed to send exit notification emails")
   }
 }

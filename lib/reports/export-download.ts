@@ -21,7 +21,8 @@ function readFilenameFromDisposition(disposition: string | null, fallback: strin
 async function downloadStoredReportPdf(
   path: string,
   fallbackFilename: string,
-  body: Record<string, unknown>
+  body: Record<string, unknown>,
+  formatLabel = "PDF"
 ): Promise<void> {
   const response = await fetch(path, {
     method: "POST",
@@ -35,9 +36,9 @@ async function downloadStoredReportPdf(
     const detail = await response.text().catch(() => "")
     try {
       const parsed = JSON.parse(detail) as { error?: string }
-      throw new Error(parsed.error || "Failed to export PDF")
+      throw new Error(parsed.error || `Failed to export ${formatLabel}`)
     } catch {
-      throw new Error(detail || "Failed to export PDF")
+      throw new Error(detail || `Failed to export ${formatLabel}`)
     }
   }
 
@@ -46,7 +47,12 @@ async function downloadStoredReportPdf(
   saveAs(blob, filename)
 }
 
-export async function downloadWeeklyReportPdf(params: { week: number; year: number; fallbackFilename?: string }) {
+export async function downloadWeeklyReportPdf(params: {
+  week: number
+  year: number
+  department?: string
+  fallbackFilename?: string
+}) {
   return downloadStoredReportPdf(
     "/api/reports/weekly-report-export",
     params.fallbackFilename || `ACOB Weekly Reports - Week ${params.week}.pdf`,
@@ -54,8 +60,32 @@ export async function downloadWeeklyReportPdf(params: { week: number; year: numb
       week: params.week,
       year: params.year,
       type: "weekly_report",
+      format: "pdf",
+      department: params.department,
       persist: false,
-    }
+    },
+    "PDF"
+  )
+}
+
+export async function downloadWeeklyReportDocx(params: {
+  week: number
+  year: number
+  department?: string
+  fallbackFilename?: string
+}) {
+  return downloadStoredReportPdf(
+    "/api/reports/weekly-report-export",
+    params.fallbackFilename || `ACOB Weekly Reports - Week ${params.week}.docx`,
+    {
+      week: params.week,
+      year: params.year,
+      type: "weekly_report",
+      format: "docx",
+      department: params.department,
+      persist: false,
+    },
+    "DOCX"
   )
 }
 

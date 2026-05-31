@@ -75,9 +75,7 @@ export async function POST(_: Request, { params }: RouteContext) {
 
     if (recipients.length > 0) {
       await sendExitNotificationEmail({
-        employeeFullName: fullName,
-        employeeFirstName: firstName,
-        department,
+        employees: [{ fullName, firstName, department }],
         recipients,
         deptLeadEmail,
         hrLeadName: hrLead ? `${hrLead.first_name} ${hrLead.last_name}`.trim() : undefined,

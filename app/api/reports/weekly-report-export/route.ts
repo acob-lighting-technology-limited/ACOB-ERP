@@ -2,7 +2,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import {
+  buildDocxDownloadResponse,
   buildOfficialReportPdf,
+  buildOfficialWeeklyReportDocx,
   buildPdfDownloadResponse,
   persistOfficialPdf,
   tryReadCurrentStoredOfficialPdf,
@@ -15,6 +17,8 @@ type RequestBody = {
   week: number
   year: number
   type?: "weekly_report" | "action_point"
+  format?: "pdf" | "docx"
+  department?: string
   persist?: boolean
   reuseStored?: boolean
 }
@@ -28,7 +32,15 @@ export async function POST(request: NextRequest) {
     )
   try {
     const body = (await request.json()) as RequestBody
-    const { week, year, type = "weekly_report", persist = false, reuseStored = false } = body
+    const {
+      week,
+      year,
+      type = "weekly_report",
+      format = "pdf",
+      department,
+      persist = false,
+      reuseStored = false,
+    } = body
 
     if (!week || !year) {
       return NextResponse.json({ error: "week and year are required" }, { status: 400 })
@@ -36,14 +48,23 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient()
 
+    if (format === "docx") {
+      if (type !== "weekly_report") {
+        return NextResponse.json({ error: "DOCX export is only supported for weekly reports" }, { status: 400 })
+      }
+
+      const { docxBytes, filename } = await buildOfficialWeeklyReportDocx(supabase, { week, year, department })
+      return buildDocxDownloadResponse(docxBytes, filename)
+    }
+
     if (persist && reuseStored) {
-      const storedPdf = await tryReadCurrentStoredOfficialPdf(supabase, { week, year, type })
+      const storedPdf = await tryReadCurrentStoredOfficialPdf(supabase, { week, year, type, department })
       if (storedPdf) {
         return buildPdfDownloadResponse(storedPdf.bytes, storedPdf.filename)
       }
     }
 
-    const { pdfBytes, filename, storagePath } = await buildOfficialReportPdf(supabase, { week, year, type })
+    const { pdfBytes, filename, storagePath } = await buildOfficialReportPdf(supabase, { week, year, type, department })
 
     if (persist) {
       try {

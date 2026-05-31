@@ -9,6 +9,7 @@ import { formatMeetingDateLabel, resolveEffectiveMeetingDateIso } from "@/lib/re
 import { generateActionPointsPdfFromDocxBuffer } from "@/lib/reports/action-points-word-pdf"
 import { fetchActionTrackerItems } from "@/lib/reports/action-tracker-data"
 import { buildWeeklyReportPDF, fetchLogoPair, type WeeklyReportRow } from "@/lib/reports/weekly-report-pdf"
+import { generateWeeklyReportDocxBuffer } from "@/lib/reports/weekly-report-docx"
 
 const log = logger("reports-official-pdf")
 
@@ -60,19 +61,27 @@ export async function fetchActionPointRows(supabase: ReportsPdfClient, week: num
 
 export async function resolveOfficialReportExportMeta(
   supabase: ReportsPdfClient,
-  params: { week: number; year: number; type: OfficialReportExportType }
+  params: {
+    week: number
+    year: number
+    type: OfficialReportExportType
+    department?: string
+    extension?: "pdf" | "docx"
+  }
 ) {
-  const { week, year, type } = params
+  const { week, year, type, department, extension = "pdf" } = params
   const meetingDateIso = await resolveEffectiveMeetingDateIso(supabase, week, year)
   const meetingDateLabel = formatMeetingDateLabel(meetingDateIso)
+  const departmentLabel = department ? `${department} - ` : ""
   const filename =
     type === "weekly_report"
-      ? `ACOB Weekly Reports - ${meetingDateLabel} - W${week}.pdf`
-      : `ACOB Action Points - ${meetingDateLabel} - W${week}.pdf`
+      ? `ACOB Weekly Reports - ${departmentLabel}${meetingDateLabel} - W${week}.${extension}`
+      : `ACOB Action Points - ${departmentLabel}${meetingDateLabel} - W${week}.${extension}`
   const storagePath = buildGeneratedReportExportPath({
     meetingYear: year,
     meetingWeek: week,
     exportType: type === "weekly_report" ? "weekly-reports" : "action-points",
+    department,
     fileName: filename,
   })
 
@@ -86,18 +95,21 @@ export async function resolveOfficialReportExportMeta(
 
 export async function resolveOfficialReportSourceUpdatedAt(
   supabase: ReportsPdfClient,
-  params: { week: number; year: number; type: OfficialReportExportType }
+  params: { week: number; year: number; type: OfficialReportExportType; department?: string }
 ): Promise<string | null> {
-  const { week, year, type } = params
+  const { week, year, type, department } = params
 
   if (type === "weekly_report") {
-    const reportsResult = await supabase
+    const reportsQuery = supabase
       .from("weekly_reports")
       .select("updated_at, created_at")
       .eq("week_number", week)
       .eq("year", year)
       .eq("status", "submitted")
-      .returns<TimestampedRow[]>()
+
+    if (department) reportsQuery.eq("department", department)
+
+    const reportsResult = await reportsQuery.returns<TimestampedRow[]>()
 
     if (reportsResult.error) throw new Error(reportsResult.error.message)
     return getNewestIsoTimestamp(reportsResult.data ?? [])
@@ -127,9 +139,9 @@ export async function resolveOfficialReportSourceUpdatedAt(
 
 export async function buildOfficialReportPdf(
   supabase: ReportsPdfClient,
-  params: { week: number; year: number; type: OfficialReportExportType }
+  params: { week: number; year: number; type: OfficialReportExportType; department?: string }
 ) {
-  const { week, year, type } = params
+  const { week, year, type, department } = params
   const { filename, storagePath, meetingDateIso, meetingDateLabel } = await resolveOfficialReportExportMeta(
     supabase,
     params
@@ -138,15 +150,17 @@ export async function buildOfficialReportPdf(
   let pdfBytes: Uint8Array
 
   if (type === "weekly_report") {
-    const [{ coverLogoBytes, headerLogoBytes }, reportsResult] = await Promise.all([
-      fetchLogoPair(),
-      supabase
-        .from("weekly_reports")
-        .select("id, department, week_number, year, work_done, tasks_new_week, challenges, status")
-        .eq("week_number", week)
-        .eq("year", year)
-        .eq("status", "submitted"),
-    ])
+    const reportsQuery = supabase
+      .from("weekly_reports")
+      .select("id, department, week_number, year, work_done, tasks_new_week, challenges, status")
+      .eq("week_number", week)
+      .eq("year", year)
+      .eq("status", "submitted")
+      .order("department", { ascending: true })
+
+    if (department) reportsQuery.eq("department", department)
+
+    const [{ coverLogoBytes, headerLogoBytes }, reportsResult] = await Promise.all([fetchLogoPair(), reportsQuery])
 
     if (reportsResult.error) throw new Error(reportsResult.error.message)
 
@@ -206,6 +220,42 @@ export async function buildOfficialReportPdf(
   }
 }
 
+export async function buildOfficialWeeklyReportDocx(
+  supabase: ReportsPdfClient,
+  params: { week: number; year: number; department?: string }
+) {
+  const { week, year, department } = params
+  const { filename, meetingDateLabel } = await resolveOfficialReportExportMeta(supabase, {
+    week,
+    year,
+    type: "weekly_report",
+    department,
+    extension: "docx",
+  })
+  const reportsQuery = supabase
+    .from("weekly_reports")
+    .select("id, department, week_number, year, work_done, tasks_new_week, challenges, status")
+    .eq("week_number", week)
+    .eq("year", year)
+    .eq("status", "submitted")
+    .order("department", { ascending: true })
+
+  if (department) reportsQuery.eq("department", department)
+
+  const reportsResult = await reportsQuery.returns<WeeklyReportRow[]>()
+  if (reportsResult.error) throw new Error(reportsResult.error.message)
+
+  const reports = reportsResult.data ?? []
+  if (reports.length === 0) {
+    throw new Error(`No submitted weekly reports found for W${week}/${year}`)
+  }
+
+  return {
+    docxBytes: await generateWeeklyReportDocxBuffer(reports, week, year, meetingDateLabel),
+    filename,
+  }
+}
+
 export async function tryReadStoredOfficialPdf(filePath: string): Promise<Uint8Array | null> {
   const onedrive = getOneDriveService()
   if (!onedrive.isEnabled()) return null
@@ -223,7 +273,7 @@ export async function tryReadStoredOfficialPdf(filePath: string): Promise<Uint8A
 
 export async function tryReadCurrentStoredOfficialPdf(
   supabase: ReportsPdfClient,
-  params: { week: number; year: number; type: OfficialReportExportType }
+  params: { week: number; year: number; type: OfficialReportExportType; department?: string }
 ): Promise<{ bytes: Uint8Array; filename: string } | null> {
   const onedrive = getOneDriveService()
   if (!onedrive.isEnabled()) return null
@@ -270,6 +320,16 @@ export function buildPdfDownloadResponse(pdfBytes: Uint8Array, filename: string)
   return new NextResponse(Buffer.from(pdfBytes), {
     headers: {
       "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${filename}"; filename*=UTF-8''${safeFilename}`,
+    },
+  })
+}
+
+export function buildDocxDownloadResponse(docxBytes: Uint8Array, filename: string) {
+  const safeFilename = encodeURIComponent(filename)
+  return new NextResponse(Buffer.from(docxBytes), {
+    headers: {
+      "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
       "Content-Disposition": `attachment; filename="${filename}"; filename*=UTF-8''${safeFilename}`,
     },
   })

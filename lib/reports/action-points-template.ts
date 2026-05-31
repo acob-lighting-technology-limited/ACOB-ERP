@@ -4,21 +4,32 @@ import { readFile } from "node:fs/promises"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
 import JSZip from "jszip"
-import type { ActionItem } from "@/lib/export-utils"
 import {
-  getActionPointsDepartmentHeading,
-  getCanonicalDepartmentOrder,
-  normalizeDepartmentName,
-} from "@/shared/departments"
+  AlignmentType,
+  Document,
+  Footer,
+  ImageRun,
+  Packer,
+  PageNumber,
+  Paragraph,
+  ShadingType,
+  Table,
+  TableCell,
+  TableRow,
+  TextRun,
+  WidthType,
+} from "docx"
+import type { ActionItem } from "@/lib/export-utils"
+import { getActionPointsDepartmentHeading, normalizeDepartmentName } from "@/shared/departments"
 
 const TEMPLATE_CANDIDATES = [
   join(process.cwd(), "action-points-template.docx"),
   join(process.cwd(), "templates", "action-points-template.docx"),
   join(process.cwd(), "ACTION POINTS - 9TH MARCH 2026.docx"),
 ]
+const ANNIVERSARY_LOGO_FILE = join(process.cwd(), "public", "images", "signature", "acob-10th-anniversary.png")
 const SAFE_SECTION_SPACER_XML =
   '<w:p><w:pPr><w:pStyle w:val="BodyText"/><w:spacing w:before="25"/><w:ind w:left="0" w:firstLine="0"/></w:pPr></w:p>'
-const DEPARTMENT_ORDER = getCanonicalDepartmentOrder().filter((department) => department !== "Executive Management")
 
 const TEMPLATE_HEADINGS = [
   { key: "Accounts", candidates: ["ACCOUNTS DEPARTMEMT:"] },
@@ -114,10 +125,7 @@ const groupActionItemsByDepartment = (actions: ActionItem[]) => {
     grouped[department].push({ ...action, department })
   })
 
-  const departments = DEPARTMENT_ORDER.filter((dept) => grouped[dept])
-  Object.keys(grouped).forEach((dept) => {
-    if (!departments.includes(dept)) departments.push(dept)
-  })
+  const departments = Object.keys(grouped).sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }))
 
   return { grouped, departments }
 }
@@ -135,6 +143,127 @@ const formatActionPointsDate = (week: number, year: number, meetingDate?: string
   return new Intl.DateTimeFormat("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" }).format(simple)
 }
 
+async function readAnniversaryLogoRun(): Promise<ImageRun | null> {
+  try {
+    const logo = await readFile(ANNIVERSARY_LOGO_FILE)
+    return new ImageRun({
+      data: logo,
+      type: "png",
+      transformation: {
+        width: 250,
+        height: 78,
+      },
+    })
+  } catch {
+    return null
+  }
+}
+
+async function generateFallbackActionPointsDocxBuffer(
+  actions: ActionItem[],
+  week: number,
+  year: number,
+  meetingDate?: string
+) {
+  const { grouped, departments } = groupActionItemsByDepartment(actions)
+  const logoRun = await readAnniversaryLogoRun()
+  const children: Array<Paragraph | Table> = []
+
+  if (logoRun) {
+    children.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        children: [logoRun],
+        spacing: { after: 180 },
+      })
+    )
+  }
+
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: "ACTION POINTS", bold: true, size: 32, color: "0F2D1F" })],
+      spacing: { after: 100 },
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: `Week ${week} - ${year}`, bold: true, size: 22, color: "1A7A4A" })],
+      spacing: { after: 60 },
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      children: [new TextRun({ text: `Date: ${formatActionPointsDate(week, year, meetingDate)}`, size: 20 })],
+      spacing: { after: 260 },
+    })
+  )
+
+  departments.forEach((department, departmentIndex) => {
+    const rows = [
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            shading: { type: ShadingType.SOLID, color: "1A7A4A", fill: "1A7A4A" },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({
+                    text: `${departmentIndex + 1}. ${getActionPointsDepartmentHeading(department)}`,
+                    bold: true,
+                    color: "FFFFFF",
+                  }),
+                ],
+              }),
+            ],
+          }),
+        ],
+      }),
+      ...(grouped[department] || []).map(
+        (action) =>
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [new TextRun(normalizeTemplateText(action.title))],
+                  }),
+                ],
+              }),
+            ],
+          })
+      ),
+    ]
+
+    children.push(
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows,
+      }),
+      new Paragraph({ text: "", spacing: { after: 180 } })
+    )
+  })
+
+  const doc = new Document({
+    sections: [
+      {
+        footers: {
+          default: new Footer({
+            children: [
+              new Paragraph({
+                alignment: AlignmentType.CENTER,
+                children: [new TextRun({ children: [PageNumber.CURRENT] })],
+              }),
+            ],
+          }),
+        },
+        children,
+      },
+    ],
+  })
+
+  return new Uint8Array(await Packer.toBuffer(doc))
+}
+
 export async function generateActionPointsDocxBuffer(
   actions: ActionItem[],
   week: number,
@@ -143,7 +272,7 @@ export async function generateActionPointsDocxBuffer(
 ) {
   const templateFile = TEMPLATE_CANDIDATES.find((candidate) => existsSync(candidate))
   if (!templateFile) {
-    throw new Error("Action Points template file is missing")
+    return generateFallbackActionPointsDocxBuffer(actions, week, year, meetingDate)
   }
 
   const templateBuffer = await readFile(templateFile)

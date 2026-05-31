@@ -23,7 +23,7 @@ import {
 import { WeeklyReportDialog } from "@/components/dashboard/reports/weekly-report-dialog"
 import { Button } from "@/components/ui/button"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
-import { downloadWeeklyReportPdf } from "@/lib/reports/export-download"
+import { downloadWeeklyReportDocx, downloadWeeklyReportPdf } from "@/lib/reports/export-download"
 import { Badge } from "@/components/ui/badge"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { getDepartmentAliases, normalizeDepartmentName } from "@/shared/departments"
@@ -606,11 +606,19 @@ export default function WeeklyReportsPortal() {
           if (exportTarget.kind === "single") {
             const report = exportTarget.report
             if (id === "pdf") {
-              void import("@/lib/export-utils").then(({ exportToPDF }) => exportToPDF(report, meetingDate))
+              void downloadWeeklyReportPdf({
+                week: report.week_number,
+                year: report.year,
+                department: report.department,
+              })
               return
             }
             if (id === "word") {
-              void import("@/lib/export-utils").then(({ exportToDocx }) => exportToDocx(report, meetingDate))
+              void downloadWeeklyReportDocx({
+                week: report.week_number,
+                year: report.year,
+                department: report.department,
+              })
               return
             }
             if (id === "excel") {
@@ -626,9 +634,7 @@ export default function WeeklyReportsPortal() {
             return
           }
           if (id === "word") {
-            void import("@/lib/export-utils").then(({ exportAllToDocx }) =>
-              exportAllToDocx(reports, weekFilter, yearFilter, meetingDate)
-            )
+            void downloadWeeklyReportDocx({ week: weekFilter, year: yearFilter })
             return
           }
           if (id === "excel") {

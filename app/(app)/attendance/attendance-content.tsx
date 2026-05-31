@@ -90,6 +90,12 @@ function calculateHourBreakdown(clockIn: string | null | undefined, clockOut: st
   }
 }
 
+function getClockOutLabel(row: Pick<AttendanceRow, "clock_in" | "clock_out" | "date">): string {
+  if (row.clock_out) return row.clock_out
+  if (row.clock_in && row.date === toLocalISODate()) return "In Progress"
+  return "-"
+}
+
 function isCoveredStatus(status: AttendanceRow["normalizedStatus"]) {
   return status === "waiver" || status === "exempted" || status === "on_leave" || status === "holiday"
 }
@@ -179,7 +185,7 @@ export function AttendanceContent({
           total_hours: breakdown.total ?? existing.total_hours,
           dayLabel: formatWATDate(date, { weekday: "long" }),
           dateLabel: formatWATDate(date, { day: "2-digit", month: "long", year: "numeric" }),
-          periodLabel: `${existing.clock_in || "-"} - ${existing.clock_out || "In Progress"}`,
+          periodLabel: `${existing.clock_in || "-"} - ${getClockOutLabel({ ...existing, date: workday })}`,
           monthLabel: formatWATDate(date, { month: "long", year: "numeric" }),
           calculatedTotalHours: breakdown.total,
           workHours: breakdown.work,
@@ -194,13 +200,6 @@ export function AttendanceContent({
   const columns = useMemo<DataTableColumn<AttendanceRow>[]>(
     () => [
       {
-        key: "date",
-        label: "Date",
-        sortable: true,
-        accessor: (row) => row.date,
-        render: (row) => <span>{row.dateLabel}</span>,
-      },
-      {
         key: "day",
         label: "Day",
         sortable: true,
@@ -209,10 +208,18 @@ export function AttendanceContent({
         hideOnMobile: true,
       },
       {
-        key: "period",
-        label: "Clock Period",
+        key: "clock_in",
+        label: "Clock In",
         sortable: true,
-        accessor: (row) => row.periodLabel,
+        accessor: (row) => row.clock_in ?? "",
+        render: (row) => <span>{row.clock_in || "-"}</span>,
+      },
+      {
+        key: "clock_out",
+        label: "Clock Out",
+        sortable: true,
+        accessor: (row) => row.clock_out ?? "",
+        render: (row) => <span>{getClockOutLabel(row)}</span>,
       },
       {
         key: "total_hours",
@@ -368,7 +375,7 @@ export function AttendanceContent({
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatCard
               title="Today Status"
-              value={todayStatus}
+              value={ATTENDANCE_STATUS_LABELS[todayStatus] ?? todayStatus}
               icon={UserCheck}
               iconBgColor="bg-blue-500/10"
               iconColor="text-blue-500"
@@ -411,7 +418,7 @@ export function AttendanceContent({
             columns={columns}
             filters={filters}
             getRowId={(row) => row.id}
-            searchPlaceholder="Search date, clock period, or status..."
+            searchPlaceholder="Search day, clock in/out, or status..."
             searchFn={(row, query) =>
               `${row.dayLabel} ${row.dateLabel} ${row.periodLabel} ${row.status}`.toLowerCase().includes(query)
             }

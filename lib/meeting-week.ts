@@ -1,5 +1,3 @@
-import { formatWATDate } from "@/lib/utils/date"
-
 const DEFAULT_ANCHOR_DAY = 12
 
 // Module-level cache: year → January day. Populated by initOfficeYearAnchors().
@@ -66,6 +64,6 @@ export function getOfficeWeekMonday(week: number, year: number): Date {
 export function formatOfficeDateWithOrdinal(date: Date): string {
   const day = date.getDate()
   const suffix = [1, 21, 31].includes(day) ? "st" : [2, 22].includes(day) ? "nd" : [3, 23].includes(day) ? "rd" : "th"
-  const month = formatWATDate(date, { month: "long" })
+  const month = new Intl.DateTimeFormat("en-GB", { month: "long", timeZone: "Africa/Lagos" }).format(date)
   return `${day}${suffix} ${month}, ${date.getFullYear()}`
 }

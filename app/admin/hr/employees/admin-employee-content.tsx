@@ -10,14 +10,13 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { formatName, cn } from "@/lib/utils"
 import { formatWATDate } from "@/lib/utils/date"
-import { Users, Shield, Mail, Phone, Download, Plus, Pencil, Eye, Building2, Calendar, IdCard } from "lucide-react"
+import { Users, Shield, Mail, Phone, Download, Pencil, Eye, Building2, Calendar, IdCard, Settings2 } from "lucide-react"
 import type { UserRole, EmploymentStatus } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
-import { PendingApplicationsModal } from "./pending-applications-modal"
 import { formValidation } from "@/lib/validation"
 import { getAssignableRolesForActor } from "@/lib/role-management"
 import { logger } from "@/lib/logger"
-import { CreateUserDialog } from "@/components/employees/CreateUserDialog"
+import { ManageUsersDialog } from "@/components/hr/manage-users-dialog"
 import { EmployeeViewModal } from "@/components/employees/EmployeeViewModal"
 import { EmployeeDeletionDialog } from "@/components/employees/EmployeeDeletionDialog"
 import { EmployeeExportDialog } from "@/components/employees/EmployeeExportDialog"
@@ -37,6 +36,15 @@ import { StatCard } from "@/components/ui/stat-card"
 import { EmployeeStatusBadge } from "@/components/hr/employee-status-badge"
 
 const log = logger("hr-employees-admin-employee-content")
+
+type EmployeeGender = "male" | "female" | "prefer_not_to_say" | "unspecified"
+
+const genderFilterOptions: { value: EmployeeGender; label: string }[] = [
+  { value: "male", label: "Male" },
+  { value: "female", label: "Female" },
+  { value: "prefer_not_to_say", label: "Prefer not to say" },
+  { value: "unspecified", label: "Unspecified" },
+]
 
 async function fetchAllEmployees(): Promise<Employee[]> {
   const response = await fetch("/api/admin/employees", { cache: "no-store" })
@@ -62,6 +70,7 @@ export interface Employee {
   admin_domains?: string[] | null
   phone_number: string | null
   additional_phone: string | null
+  gender?: EmployeeGender | null
   residential_address: string | null
   office_location: string | null
   bank_name: string | null
@@ -146,20 +155,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     documentation: [],
   })
 
-  const [isCreateUserDialogOpen, setIsCreateUserDialogOpen] = useState(false)
-  const [isCreatingUser, setIsCreatingUser] = useState(false)
-  const [createUserForm, setCreateUserForm] = useState({
-    firstName: "",
-    lastName: "",
-    otherNames: "",
-    email: "",
-    department: "",
-    companyRole: "",
-    phoneNumber: "",
-    role: "employee" as UserRole,
-    admin_domains: [] as string[],
-    employeeNumber: "",
-  })
+  const [manageUsersOpen, setManageUsersOpen] = useState(false)
 
   const [editForm, setEditForm] = useState({
     role: "employee" as UserRole,
@@ -383,47 +379,6 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     }
   }
 
-  const handleCreateUser = async () => {
-    if (isCreatingUser) return
-    setIsCreatingUser(true)
-    try {
-      if (!canManageUsers) throw new Error("Permission denied")
-      if (!createUserForm.firstName.trim() || !createUserForm.lastName.trim() || !createUserForm.email.trim()) {
-        throw new Error("Required fields are missing")
-      }
-      if (!formValidation.isCompanyEmail(createUserForm.email)) {
-        throw new Error("Invalid email domain")
-      }
-      const response = await fetch("/api/admin/create-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(createUserForm),
-      })
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || "Failed to create user")
-
-      toast.success("User created successfully")
-      setIsCreateUserDialogOpen(false)
-      setCreateUserForm({
-        firstName: "",
-        lastName: "",
-        otherNames: "",
-        email: "",
-        department: "",
-        companyRole: "",
-        phoneNumber: "",
-        role: "employee",
-        admin_domains: [],
-        employeeNumber: "",
-      })
-      loadData()
-    } catch (_error: unknown) {
-      toast.error(_error instanceof Error ? _error.message : "Failed to create user")
-    } finally {
-      setIsCreatingUser(false)
-    }
-  }
-
   const handleExportExecute = async () => {
     if (!exportType || employees.length === 0) return
     try {
@@ -605,6 +560,14 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         placeholder: "All Locations",
       },
       {
+        key: "gender",
+        label: "Gender",
+        options: genderFilterOptions,
+        placeholder: "All Genders",
+        mode: "custom",
+        filterFn: (employee, selected) => selected.includes(employee.gender || "unspecified"),
+      },
+      {
         key: "role",
         label: "Role",
         options: roleList.map((r) => ({ value: r, label: getRoleDisplayName(r) })),
@@ -630,7 +593,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       total: employees.length,
       admins: employees.filter((s) => ["developer", "super_admin", "admin"].includes(s.role)).length,
       leads: employees.filter((s) => s.is_department_lead).length,
-      employeesCount: employees.filter((s) => s.role === "employee").length,
+      currentEmployees: employees.filter((s) => s.role !== "visitor").length,
     }),
     [employees]
   )
@@ -654,11 +617,10 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       backLink={{ href: "/admin/hr", label: "Back to HR" }}
       actions={
         <div className="flex items-center gap-2">
-          {canReviewApplications && <PendingApplicationsModal onEmployeeCreated={loadData} />}
-          {canManageUsers && (
-            <Button onClick={() => setIsCreateUserDialogOpen(true)} variant="default" size="sm" className="h-8 gap-2">
-              <Plus className="h-4 w-4" />
-              <span className="hidden sm:inline">Create User</span>
+          {(canManageUsers || canReviewApplications) && (
+            <Button onClick={() => setManageUsersOpen(true)} variant="default" size="sm" className="h-8 gap-2">
+              <Settings2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Manage Users</span>
             </Button>
           )}
           <Button
@@ -697,8 +659,8 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             iconColor="text-amber-500"
           />
           <StatCard
-            title="Employees"
-            value={stats.employeesCount}
+            title="Current Employees"
+            value={stats.currentEmployees}
             icon={Users}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
@@ -868,17 +830,6 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         onConfirm={handleExportExecute}
       />
 
-      <CreateUserDialog
-        isOpen={isCreateUserDialogOpen}
-        onOpenChange={setIsCreateUserDialogOpen}
-        form={createUserForm}
-        setForm={setCreateUserForm}
-        isCreating={isCreatingUser}
-        onCreate={handleCreateUser}
-        canManageUsers={canManageUsers}
-        userProfile={userProfile}
-      />
-
       <EmployeeViewModal
         isOpen={isViewDialogOpen}
         onOpenChange={setIsViewDialogOpen}
@@ -900,6 +851,15 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         setViewEmployeeProfile={setViewEmployeeProfile}
         canManageUsers={canManageUsers}
         getAvailableRoles={getAvailableRoles}
+      />
+
+      <ManageUsersDialog
+        open={manageUsersOpen}
+        onOpenChange={setManageUsersOpen}
+        employees={employees}
+        onSuccess={loadData}
+        canManageUsers={canManageUsers}
+        userProfile={userProfile}
       />
 
       <EmployeeDeletionDialog

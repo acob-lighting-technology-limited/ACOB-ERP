@@ -14,6 +14,7 @@ type CanonicalDepartment = (typeof CANONICAL_DEPARTMENT_ORDER)[number]
 
 const DEPARTMENT_ALIASES: Partial<Record<CanonicalDepartment, readonly string[]>> = {
   Accounts: ["Finance"],
+  "Business, Growth and Innovation": ["Business Growth and Innovation", "Business Growth & Innovation", "BGI"],
   "Operations and Maintenance": ["Operations"],
 } as const
 
@@ -59,7 +60,7 @@ export function normalizeDepartmentList(values: string[]): string[] {
 export function getDepartmentAliases(value: string): string[] {
   const canonical = normalizeDepartmentName(value)
   const aliases = Object.entries(DEPARTMENT_ALIASES).find(([department]) => department === canonical)?.[1] ?? []
-  return Array.from(new Set([canonical, ...aliases]))
+  return Array.from(new Set([canonical, value.trim(), ...aliases].filter(Boolean)))
 }
 
 export function getCanonicalDepartmentOrder(): string[] {
