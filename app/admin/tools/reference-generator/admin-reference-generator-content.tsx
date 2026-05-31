@@ -156,10 +156,11 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
         throw new Error(body.error || "Failed to apply decision")
       }
 
-      const newStatus = ((body.data?.record?.status as string) ?? decision) as CorrespondenceStatus
+      const updatedRecord = body.data?.record as CorrespondenceRecord | undefined
+      const newStatus = (updatedRecord?.status ?? decision) as CorrespondenceStatus
       toast.success(`Record ${newStatus.replaceAll("_", " ")}`)
       setRecords((current) =>
-        current.map((record) => (record.id === recordId ? { ...record, status: newStatus } : record))
+        current.map((record) => (record.id === recordId ? { ...record, ...updatedRecord, status: newStatus } : record))
       )
       setGlobalCounts((prev) => {
         const next = { ...prev }
@@ -186,7 +187,7 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
       accessor: (r) => r.reference_number,
       render: (r) => (
         <span className="font-medium">
-          {["approved", "sent", "filed"].includes(r.status) ? r.reference_number : "-"}
+          {["approved", "sent", "filed"].includes(r.status) ? r.reference_number || "-" : "-"}
         </span>
       ),
     },

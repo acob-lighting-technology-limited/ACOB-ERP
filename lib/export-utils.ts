@@ -1,4 +1,3 @@
-import { formatWATDate } from "@/lib/utils/date"
 import { jsPDF } from "jspdf"
 import { saveAs } from "file-saver"
 import { DEPT_EXECUTIVE_MANAGEMENT } from "@/config/constants"
@@ -103,7 +102,7 @@ const formatActionPointsDate = (week: number, year: number, meetingDate?: string
   }).format(resolveExportMeetingDate(week, year, meetingDate))
 
 const formatMeetingDateWithWeekday = (date: Date): string => {
-  const weekday = formatWATDate(date, { weekday: "long" })
+  const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Africa/Lagos" }).format(date)
   return `${weekday}, ${formatOfficeDateWithOrdinal(date)}`
 }
 

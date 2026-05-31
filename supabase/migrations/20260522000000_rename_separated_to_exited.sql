@@ -1,5 +1,27 @@
--- Rename employment_status enum value 'separated' → 'exited'
-ALTER TYPE public.employment_status RENAME VALUE 'separated' TO 'exited';
+-- Rename employment_status enum value 'separated' to 'exited' when upgrading
+-- databases that still have the legacy value.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+      AND t.typname = 'employment_status'
+      AND e.enumlabel = 'separated'
+  ) AND NOT EXISTS (
+    SELECT 1
+    FROM pg_enum e
+    JOIN pg_type t ON t.oid = e.enumtypid
+    JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE n.nspname = 'public'
+      AND t.typname = 'employment_status'
+      AND e.enumlabel = 'exited'
+  ) THEN
+    ALTER TYPE public.employment_status RENAME VALUE 'separated' TO 'exited';
+  END IF;
+END $$;
 
 -- Update column comments to reflect the new terminology
 COMMENT ON COLUMN public.profiles.separation_date IS
@@ -13,7 +35,7 @@ COMMENT ON COLUMN public.profiles.employment_status IS
   'Current employment status: active, suspended, exited, or on_leave';
 
 -- Recreate the employee_directory view with updated filter so exited employees are excluded.
--- The previous version filtered on ''separated''; after the rename the value is ''exited''.
+-- The previous version filtered on the legacy separated value; after the rename the value is exited.
 CREATE OR REPLACE VIEW public.employee_directory AS
 SELECT
   id,

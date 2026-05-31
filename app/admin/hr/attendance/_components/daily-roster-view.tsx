@@ -15,7 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatCard } from "@/components/ui/stat-card"
-import { Users, Clock, AlertCircle, FileText, Pencil } from "lucide-react"
+import { Users, Clock, AlertCircle, FileText, Pencil, ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
 import { toLocalISODate } from "@/lib/hr/attendance-utils"
 import { StatusBadge, formatTime, labelSource } from "./status-badge"
@@ -70,7 +70,7 @@ export function DailyRosterView({ departments }: DailyRosterViewProps) {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const params = new URLSearchParams({ start_date: rosterDate, end_date: rosterDate })
+      const params = new URLSearchParams({ start_date: rosterDate, end_date: rosterDate, include_all: "1" })
       const res = await fetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load roster")
@@ -98,17 +98,31 @@ export function DailyRosterView({ departments }: DailyRosterViewProps) {
     if (!editRecord) return
     setSaving(true)
     try {
-      const body: Record<string, unknown> = {}
-      if (editForm.clock_in) body.clock_in = editForm.clock_in
-      if (editForm.clock_out) body.clock_out = editForm.clock_out
-      const res = await fetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      })
+      // Synthetic rows (employees with no record for the day) have no real id → create instead of update.
+      const isNew = editRecord.id.startsWith("missing-")
+      let res: Response
+      if (isNew) {
+        const body: Record<string, unknown> = { user_id: editRecord.user_id, date: editRecord.date }
+        if (editForm.clock_in) body.clock_in = editForm.clock_in
+        if (editForm.clock_out) body.clock_out = editForm.clock_out
+        res = await fetch(`/api/admin/hr/attendance/records`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      } else {
+        const body: Record<string, unknown> = {}
+        if (editForm.clock_in) body.clock_in = editForm.clock_in
+        if (editForm.clock_out) body.clock_out = editForm.clock_out
+        res = await fetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        })
+      }
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error ?? "Failed to save")
-      toast.success("Record updated")
+      toast.success(isNew ? "Record created" : "Record updated")
       setEditRecord(null)
       void load()
     } catch (err) {
@@ -122,7 +136,11 @@ export function DailyRosterView({ departments }: DailyRosterViewProps) {
     () => ({
       present: records.filter((r) => r.status === "present").length,
       late: records.filter((r) => r.status === "late").length,
-      issues: records.filter((r) => r.status === "incomplete" || (r.clock_in && !r.clock_out)).length,
+      half_day: records.filter((r) => r.status === "half_day").length,
+      incomplete: records.filter((r) => r.status === "incomplete").length,
+      absent: records.filter((r) => r.status === "absent").length,
+      exempted: records.filter((r) => r.status === "exempted").length,
+      waiver: records.filter((r) => r.status === "waiver").length,
     }),
     [records]
   )
@@ -236,8 +254,13 @@ export function DailyRosterView({ departments }: DailyRosterViewProps) {
       options: [
         { value: "present", label: "Present" },
         { value: "late", label: "Late" },
+        { value: "half_day", label: "Half Day" },
         { value: "incomplete", label: "Incomplete" },
         { value: "absent", label: "Absent" },
+        { value: "exempted", label: "Exempted" },
+        { value: "waiver", label: "Waiver" },
+        { value: "on_leave", label: "On Leave" },
+        { value: "holiday", label: "Holiday" },
       ],
       placeholder: "All Statuses",
     },
@@ -245,25 +268,55 @@ export function DailyRosterView({ departments }: DailyRosterViewProps) {
 
   const invalidTimeRange = Boolean(editForm.clock_in && editForm.clock_out && editForm.clock_out < editForm.clock_in)
 
+  const todayIso = toLocalISODate()
+  function shiftDate(deltaDays: number) {
+    setRosterDate((prev) => {
+      const d = new Date(`${prev}T00:00:00Z`)
+      d.setUTCDate(d.getUTCDate() + deltaDays)
+      const next = d.toISOString().slice(0, 10)
+      // Don't allow navigating into the future.
+      return next > todayIso ? prev : next
+    })
+  }
+
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
           <Label className="text-sm font-medium">Date</Label>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={() => shiftDate(-1)}
+            title="Previous day"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
           <input
             type="date"
             value={rosterDate}
-            max={toLocalISODate()}
+            max={todayIso}
             onChange={(e) => setRosterDate(e.target.value)}
             className="border-input bg-background rounded-md border px-3 py-1.5 text-sm"
           />
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={() => shiftDate(1)}
+            disabled={rosterDate >= todayIso}
+            title="Next day"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
         <Button variant="outline" size="sm" onClick={() => void load()}>
           Refresh
         </Button>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
         <StatCard
           title="Present"
           value={stats.present}
@@ -279,11 +332,39 @@ export function DailyRosterView({ departments }: DailyRosterViewProps) {
           iconColor="text-yellow-500"
         />
         <StatCard
-          title="Incomplete / Issues"
-          value={stats.issues}
+          title="Half Day"
+          value={stats.half_day}
+          icon={Clock}
+          iconBgColor="bg-orange-500/10"
+          iconColor="text-orange-500"
+        />
+        <StatCard
+          title="Incomplete"
+          value={stats.incomplete}
+          icon={AlertCircle}
+          iconBgColor="bg-cyan-500/10"
+          iconColor="text-cyan-500"
+        />
+        <StatCard
+          title="Absent"
+          value={stats.absent}
           icon={AlertCircle}
           iconBgColor="bg-red-500/10"
           iconColor="text-red-500"
+        />
+        <StatCard
+          title="Exempted"
+          value={stats.exempted}
+          icon={Users}
+          iconBgColor="bg-violet-500/10"
+          iconColor="text-violet-500"
+        />
+        <StatCard
+          title="Waiver"
+          value={stats.waiver}
+          icon={Users}
+          iconBgColor="bg-blue-500/10"
+          iconColor="text-blue-500"
         />
       </div>
 
@@ -303,7 +384,9 @@ export function DailyRosterView({ departments }: DailyRosterViewProps) {
       <Dialog open={editRecord !== null} onOpenChange={(open) => !open && setEditRecord(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>Edit Attendance Record</DialogTitle>
+            <DialogTitle>
+              {editRecord?.id.startsWith("missing-") ? "Add Attendance Record" : "Edit Attendance Record"}
+            </DialogTitle>
             <DialogDescription>
               {editRecord?.user_name} — {rosterDate}
             </DialogDescription>

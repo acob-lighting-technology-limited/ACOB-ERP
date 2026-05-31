@@ -28,7 +28,7 @@ import { PptxModeDialog } from "./_components/pptx-mode-dialog"
 import { DeleteReportDialog } from "./_components/delete-report-dialog"
 import { Button } from "@/components/ui/button"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
-import { downloadWeeklyReportPdf } from "@/lib/reports/export-download"
+import { downloadWeeklyReportDocx, downloadWeeklyReportPdf } from "@/lib/reports/export-download"
 import { Badge } from "@/components/ui/badge"
 
 interface AdminWeeklyReportsData {
@@ -650,11 +650,19 @@ export function WeeklyReportsContent({
           if (exportTarget.kind === "single") {
             const targetReport = exportTarget.report
             if (id === "pdf") {
-              void import("@/lib/export-utils").then(({ exportToPDF }) => exportToPDF(targetReport, meetingDate))
+              void downloadWeeklyReportPdf({
+                week: targetReport.week_number,
+                year: targetReport.year,
+                department: targetReport.department,
+              })
               return
             }
             if (id === "word") {
-              void import("@/lib/export-utils").then(({ exportToDocx }) => exportToDocx(targetReport, meetingDate))
+              void downloadWeeklyReportDocx({
+                week: targetReport.week_number,
+                year: targetReport.year,
+                department: targetReport.department,
+              })
               return
             }
             if (id === "excel") {
@@ -670,9 +678,7 @@ export function WeeklyReportsContent({
             return
           }
           if (id === "word") {
-            void import("@/lib/export-utils").then(({ exportAllToDocx }) =>
-              exportAllToDocx(reports, weekFilter, yearFilter, meetingDate)
-            )
+            void downloadWeeklyReportDocx({ week: weekFilter, year: yearFilter })
             return
           }
           if (id === "excel") {

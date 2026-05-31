@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from "npm:pdf-lib@1.17.1"
 import { writeEdgeAuditLog } from "../_shared/audit.ts"
 import { sendEmail } from "../_shared/email.ts"
-import { compareDepartments, normalizeDepartmentName } from "../../../shared/departments.ts"
+import { normalizeDepartmentName } from "../../../shared/departments.ts"
 import {
   buildMeetingDocumentFileName,
   formatMeetingDateLabel,
@@ -766,7 +766,11 @@ async function buildWeeklyReportPDF(
 
   const sorted = [...reports]
     .map((report) => ({ ...report, department: normalizeDepartmentName(report.department) }))
-    .sort((a, b) => compareDepartments(a.department, b.department))
+    .sort((a, b) =>
+      normalizeDepartmentName(a.department).localeCompare(normalizeDepartmentName(b.department), "en", {
+        sensitivity: "base",
+      })
+    )
 
   await addCoverPage(
     doc,

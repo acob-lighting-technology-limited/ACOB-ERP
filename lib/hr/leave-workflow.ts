@@ -18,6 +18,7 @@ type MinimalProfileRow = {
   id: string
   full_name: string | null
   company_email: string | null
+  additional_email: string | null
   department_id: string | null
 }
 
@@ -225,14 +226,20 @@ export async function resolveProfileByIdentifier(
   supabase: LeaveWorkflowClient,
   identifier: string,
   label: string
-): Promise<{ id: string; full_name: string | null; company_email: string | null; department_id: string | null }> {
+): Promise<{
+  id: string
+  full_name: string | null
+  company_email: string | null
+  additional_email: string | null
+  department_id: string | null
+}> {
   const input = identifier.trim()
   if (!input) throw new Error(`${label} is required`)
 
   if (isValidUUID(input)) {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, full_name, company_email, department_id")
+      .select("id, full_name, company_email, additional_email, department_id")
       .eq("id", input)
       .maybeSingle()
 
@@ -245,7 +252,7 @@ export async function resolveProfileByIdentifier(
   if (isEmail) {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, full_name, company_email, department_id")
+      .select("id, full_name, company_email, additional_email, department_id")
       .ilike("company_email", input)
 
     if (error) throw new Error(`Failed to resolve ${label}`)
@@ -256,7 +263,7 @@ export async function resolveProfileByIdentifier(
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, full_name, company_email, department_id")
+    .select("id, full_name, company_email, additional_email, department_id")
     .ilike("full_name", input)
 
   if (error) throw new Error(`Failed to resolve ${label}`)
@@ -279,7 +286,7 @@ export async function getSupervisorForUser(supabase: LeaveWorkflowClient, userId
 
   const { data: supervisor, error: supervisorError } = await supabase
     .from("profiles")
-    .select("id, full_name, company_email, department_id")
+    .select("id, full_name, company_email, additional_email, department_id")
     .eq("department_id", typedUserProfile.department_id)
     .eq("is_department_lead", true)
     .limit(1)

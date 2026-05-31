@@ -94,6 +94,28 @@ serve(async (req) => {
       return new Response("Recipient email disabled by preference/policy", { status: 200 })
     }
 
+    // Resolve sender name dynamically from the IT & Communications dept lead
+    const notificationSenderEmail = Deno.env.get("NOTIFICATION_SENDER_EMAIL") || "notifications@acoblighting.com"
+    let senderDeptName = "IT & Communications"
+    try {
+      // deno-lint-ignore no-explicit-any
+      const { data: ictLead } = await (supabase as any)
+        .from("profiles")
+        .select("lead_departments")
+        .eq("is_department_lead", true)
+        .eq("employment_status", "active")
+        .limit(1)
+        .maybeSingle()
+      const ictDept = (ictLead?.lead_departments as string[] | undefined)?.find(
+        (d: string) =>
+          d.toLowerCase().includes("ict") || d.toLowerCase().includes("it") || d.toLowerCase().includes("comm")
+      )
+      if (ictDept) senderDeptName = ictDept
+    } catch {
+      /* keep default */
+    }
+    const assetEmailSender = `ACOB ${senderDeptName} Department <${notificationSenderEmail}>`
+
     const mailAudience = notificationPayload.mail_audience === "oversight" ? "oversight" : "assignee"
     const oversightTargetRole = notificationPayload.oversight_target_role || "Oversight Recipient"
     const assignedEmployeeName = notificationPayload.assigned_employee_name || recipientName
@@ -416,6 +438,7 @@ serve(async (req) => {
       subject,
       html: emailHtml,
       moduleName: "Assets",
+      from: assetEmailSender,
     })
 
     return new Response(JSON.stringify({ success: true }), {

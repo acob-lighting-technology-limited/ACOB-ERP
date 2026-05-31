@@ -3,11 +3,7 @@ import "server-only"
 import { join } from "node:path"
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib"
 import type { ActionItem } from "@/lib/export-utils"
-import {
-  getActionPointsDepartmentHeading,
-  getCanonicalDepartmentOrder,
-  normalizeDepartmentName,
-} from "@/shared/departments"
+import { getActionPointsDepartmentHeading, normalizeDepartmentName } from "@/shared/departments"
 import { readFile } from "node:fs/promises"
 
 const PAGE_SIZE: [number, number] = [595, 842]
@@ -20,8 +16,7 @@ const HEADING_FONT_SIZE = 12
 const TITLE_FONT_SIZE = 14
 const DATE_FONT_SIZE = 12
 const TEXT_COLOR = rgb(0.16, 0.16, 0.16)
-const LOGO_FILE = join(process.cwd(), "public", "images", "acob-logo-light.png")
-const DEPARTMENT_ORDER = getCanonicalDepartmentOrder().filter((department) => department !== "Executive Management")
+const LOGO_FILE = join(process.cwd(), "public", "images", "signature", "acob-10th-anniversary.png")
 
 const wrapText = (text: string, maxWidth: number, font: PDFFontLike, fontSize: number) => {
   const words = String(text || "")
@@ -71,10 +66,7 @@ const groupActionItemsByDepartment = (actions: ActionItem[]) => {
     grouped[department].push({ ...action, department })
   })
 
-  const departments = DEPARTMENT_ORDER.filter((department) => grouped[department])
-  Object.keys(grouped).forEach((department) => {
-    if (!departments.includes(department)) departments.push(department)
-  })
+  const departments = Object.keys(grouped).sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }))
 
   return { grouped, departments }
 }

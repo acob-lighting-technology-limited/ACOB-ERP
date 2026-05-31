@@ -1,4 +1,4 @@
--- Rename employment status value and profile separation fields to neutral terminology
+-- Rename employment status value and profile separation fields to exit terminology
 
 DO $$
 BEGIN
@@ -9,7 +9,7 @@ BEGIN
     WHERE t.typname = 'employment_status'
       AND e.enumlabel = 'terminated'
   ) THEN
-    ALTER TYPE public.employment_status RENAME VALUE 'terminated' TO 'separated';
+    ALTER TYPE public.employment_status RENAME VALUE 'terminated' TO 'exited';
   END IF;
 END$$;
 
@@ -37,10 +37,10 @@ BEGIN
 END$$;
 
 COMMENT ON COLUMN public.profiles.employment_status IS
-  'Current employment status: active, suspended, separated, or on_leave';
+  'Current employment status: active, suspended, exited, or on_leave';
 
 COMMENT ON COLUMN public.profiles.separation_date IS
-  'Date of employee separation (if separated)';
+  'Date employee exited the organisation (if exited)';
 
 COMMENT ON COLUMN public.profiles.separation_reason IS
-  'Reason for employee separation (if separated)';
+  'Reason for employee exit (if exited)';

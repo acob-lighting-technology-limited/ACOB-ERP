@@ -44,6 +44,7 @@ export async function GET(request: NextRequest) {
     const startDate = searchParams.get("start_date")
     const endDate = searchParams.get("end_date")
     const userId = searchParams.get("user_id")
+    const includeAll = searchParams.get("include_all") === "1" || searchParams.get("include_all") === "true"
 
     const dataClient = getServiceRoleClientOrFallback(supabase)
 
@@ -198,6 +199,86 @@ export async function GET(request: NextRequest) {
         site_id: r.site_id ?? null,
       }
     })
+
+    // ── include_all: append every active in-scope employee with no record for the day ──
+    const singleDay = Boolean(startDate && endDate && startDate === endDate)
+    if (includeAll && singleDay && !userId) {
+      const day = startDate as string
+
+      let profileUniverseQuery = dataClient
+        .from("profiles")
+        .select("id, full_name, first_name, last_name, department, attendance_exempt")
+        .eq("employment_status", "active")
+      if (scopedUserIds !== null) profileUniverseQuery = profileUniverseQuery.in("id", scopedUserIds)
+      const { data: universeProfiles } = await profileUniverseQuery
+      const universe = universeProfiles ?? []
+
+      const haveRecord = new Set(records.map((r) => r.user_id))
+      const missing = universe.filter((p) => !haveRecord.has(p.id))
+
+      if (missing.length > 0) {
+        const missingIds = missing.map((p) => p.id)
+        const [dayHolidayRows, dayLeaveRows, dayExemptRows] = await Promise.all([
+          dataClient
+            .from("holiday_calendar")
+            .select("holiday_date")
+            .eq("holiday_date", day)
+            .then((r) => r.data ?? []),
+          dataClient
+            .from("leave_requests")
+            .select("user_id")
+            .in("user_id", missingIds)
+            .eq("status", "approved")
+            .lte("start_date", day)
+            .gte("end_date", day)
+            .then((r) => r.data ?? []),
+          dataClient
+            .from("attendance_exempt_periods")
+            .select("user_id")
+            .in("user_id", missingIds)
+            .lte("start_date", day)
+            .gte("end_date", day)
+            .then((r) => r.data ?? []),
+        ])
+        const isHoliday = dayHolidayRows.length > 0
+        const onLeaveSet = new Set((dayLeaveRows as { user_id: string }[]).map((r) => r.user_id))
+        const exemptPeriodSet = new Set((dayExemptRows as { user_id: string }[]).map((r) => r.user_id))
+
+        for (const p of missing) {
+          const name = p.full_name?.trim() || [p.first_name, p.last_name].filter(Boolean).join(" ") || "Unknown"
+          const derivedStatus = deriveUnifiedAttendanceStatus({
+            record: null,
+            isHoliday,
+            isOnLeave: onLeaveSet.has(p.id),
+            isExempted: Boolean(p.attendance_exempt) || exemptPeriodSet.has(p.id),
+            recordDate: day,
+          })
+          records.push({
+            id: `missing-${p.id}-${day}`,
+            user_id: p.id,
+            user_name: name,
+            department: p.department ?? "",
+            date: day,
+            clock_in: null,
+            clock_out: null,
+            total_hours: null,
+            status: derivedStatus,
+            source: null,
+            waived: false,
+            waiver_reason: null,
+            updated_at: null,
+            selfie_url: null,
+            selfie_out_url: null,
+            face_match_confidence: null,
+            face_verified: null,
+            location_verified: null,
+            latitude: null,
+            longitude: null,
+            site_id: null,
+          })
+        }
+      }
+    }
 
     return NextResponse.json({ records })
   } catch (error) {

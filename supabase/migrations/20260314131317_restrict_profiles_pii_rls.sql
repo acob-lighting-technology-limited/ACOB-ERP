@@ -112,7 +112,7 @@ SELECT
   created_at,
   updated_at
 FROM public.profiles
-WHERE employment_status::text NOT IN ('separated');
+WHERE employment_status::text NOT IN ('exited');
 
 GRANT SELECT ON public.employee_directory TO authenticated;
 

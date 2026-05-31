@@ -86,6 +86,11 @@ export async function PATCH(request: Request, { params }: RouteContext) {
     }
 
     if (status === "exited") {
+      profileUpdate.role = "visitor"
+      profileUpdate.is_admin = false
+      profileUpdate.is_department_lead = false
+      profileUpdate.lead_departments = []
+      profileUpdate.admin_domains = []
       if (separation_date) profileUpdate.separation_date = separation_date
       if (reason_code) profileUpdate.separation_reason = reason_code
     } else if (status === "on_leave") {

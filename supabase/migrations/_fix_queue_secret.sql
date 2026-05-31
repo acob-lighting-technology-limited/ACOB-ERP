@@ -5,7 +5,7 @@ AS $$
 DECLARE
   r RECORD;
   v_notification_id UUID;
-  v_service_key TEXT := current_setting('app.service_role_key', true);
+  v_service_key TEXT := NULLIF(current_setting('app.service_role_key', true), '');
   v_webhook_secret TEXT := 'acob_notification_trigger_secret_2026';
   v_safe_type TEXT;
 BEGIN
@@ -15,6 +15,11 @@ BEGIN
       AND (process_after IS NULL OR process_after <= now())
     LIMIT 20
   LOOP
+    IF v_service_key IS NULL THEN
+      RAISE NOTICE 'app.service_role_key is not configured; skipping notification queue processing';
+      RETURN;
+    END IF;
+
     v_safe_type := CASE
       WHEN r.type = 'asset_assignment' THEN 'asset_assigned'
       WHEN r.type = 'asset_transfer_incoming' THEN 'asset_transfer_incoming'

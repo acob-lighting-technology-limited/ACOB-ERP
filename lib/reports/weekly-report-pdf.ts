@@ -8,7 +8,9 @@
  */
 
 import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from "pdf-lib"
-import { compareDepartments } from "@/shared/departments"
+import { readFile } from "node:fs/promises"
+import { join } from "node:path"
+import { normalizeDepartmentName } from "@/shared/departments"
 
 // ─── Colour palette (mirrors edge function) ────────────────────────────────
 const GREEN = rgb(0.102, 0.478, 0.29)
@@ -116,10 +118,13 @@ async function drawLogoInHeader(
 
 // ─── Logo fetching ───────────────────────────────────────────────────────────
 
-const STORAGE_BASE = "https://itqegqxeqkeogwrvlzlj.supabase.co/storage/v1/object/public/assets/logos"
+const ANNIVERSARY_LOGO_PATH = "/images/signature/acob-10th-anniversary.png"
 
 export async function fetchLogoBytes(url: string): Promise<Uint8Array | null> {
   try {
+    if (url.startsWith("/")) {
+      return new Uint8Array(await readFile(join(process.cwd(), "public", url)))
+    }
     const res = await fetch(url)
     if (!res.ok) return null
     return new Uint8Array(await res.arrayBuffer())
@@ -133,8 +138,8 @@ export async function fetchLogoPair(): Promise<{
   headerLogoBytes: Uint8Array | null
 }> {
   const [coverLogoBytes, headerLogoBytes] = await Promise.all([
-    fetchLogoBytes(`${STORAGE_BASE}/acob-logo-light.png`),
-    fetchLogoBytes(`${STORAGE_BASE}/acob-logo-dark.png`),
+    fetchLogoBytes(ANNIVERSARY_LOGO_PATH),
+    fetchLogoBytes(ANNIVERSARY_LOGO_PATH),
   ])
   return { coverLogoBytes, headerLogoBytes }
 }
@@ -412,33 +417,137 @@ export async function buildWeeklyReportPDF(
   headerLogoBytes: Uint8Array | null
 ): Promise<Uint8Array> {
   const doc = await PDFDocument.create()
-  const bold = await doc.embedFont(StandardFonts.HelveticaBold)
-  const regular = await doc.embedFont(StandardFonts.Helvetica)
-
-  const sorted = [...reports].sort((a, b) => compareDepartments(a.department, b.department))
-
-  await addCoverPage(
-    doc,
-    bold,
-    regular,
-    meetingWeek,
-    meetingYear,
-    meetingDateLabel,
-    "",
-    "Weekly Report",
-    coverLogoBytes
+  const regular = await doc.embedFont(StandardFonts.TimesRoman)
+  const bold = await doc.embedFont(StandardFonts.TimesRomanBold)
+  const [pageWidth, pageHeight] = [595, 842]
+  const marginX = 54
+  const marginTop = 70
+  const marginBottom = 60
+  const contentWidth = pageWidth - marginX * 2
+  const lineGap = 16
+  const bodyFontSize = 11
+  const headingFontSize = 12
+  const titleFontSize = 14
+  const textColor = rgb(0.16, 0.16, 0.16)
+  const sorted = [...reports].sort((a, b) =>
+    normalizeDepartmentName(a.department).localeCompare(normalizeDepartmentName(b.department), "en", {
+      sensitivity: "base",
+    })
   )
-  await addTOCPage(
-    doc,
-    bold,
-    regular,
-    `Weekly Report — Week ${meetingWeek}, ${meetingYear}`,
-    sorted.map((r) => r.department),
-    headerLogoBytes
-  )
-  for (let i = 0; i < sorted.length; i++) {
-    await addWeeklyReportContentPage(doc, bold, regular, sorted[i].department, sorted[i], headerLogoBytes, i + 3)
+
+  let page = doc.addPage([pageWidth, pageHeight])
+  let cursorY = pageHeight - marginTop
+
+  const ensureSpace = (requiredHeight: number) => {
+    if (cursorY - requiredHeight >= marginBottom) return
+    page = doc.addPage([pageWidth, pageHeight])
+    cursorY = pageHeight - marginTop
   }
+
+  try {
+    const logo = await doc.embedPng(coverLogoBytes || headerLogoBytes || new Uint8Array())
+    const scaled = logo.scaleToFit(125, 39)
+    page.drawImage(logo, {
+      x: pageWidth / 2 - scaled.width / 2,
+      y: cursorY - scaled.height,
+      width: scaled.width,
+      height: scaled.height,
+    })
+    cursorY -= scaled.height + 18
+  } catch {
+    // Skip logo when unavailable.
+  }
+
+  page.drawText("WEEKLY REPORT", {
+    x: pageWidth / 2 - bold.widthOfTextAtSize("WEEKLY REPORT", titleFontSize) / 2,
+    y: cursorY,
+    size: titleFontSize,
+    font: bold,
+    color: textColor,
+  })
+  cursorY -= 24
+
+  const weekLabel = `Week ${meetingWeek} - ${meetingYear}`
+  page.drawText(weekLabel, {
+    x: pageWidth / 2 - bold.widthOfTextAtSize(weekLabel, 12) / 2,
+    y: cursorY,
+    size: 12,
+    font: bold,
+    color: textColor,
+  })
+  cursorY -= 20
+
+  page.drawText(`Date: ${meetingDateLabel}`, {
+    x: marginX,
+    y: cursorY,
+    size: 12,
+    font: bold,
+    color: textColor,
+  })
+  cursorY -= 26
+
+  const drawLines = (lines: string[]) => {
+    const bulletIndent = 14
+    const textWidth = contentWidth - bulletIndent
+    lines.forEach((line) => {
+      const wrapped = wrapText(sanitizeForPdf(line, regular), 92)
+      const requiredHeight = Math.max(lineGap * wrapped.length, lineGap) + 6
+      ensureSpace(requiredHeight)
+      wrapped.forEach((wrappedLine, index) => {
+        page.drawText(wrappedLine, {
+          x: marginX + (index === 0 ? 0 : bulletIndent),
+          y: cursorY - index * lineGap,
+          size: bodyFontSize,
+          font: regular,
+          color: textColor,
+          maxWidth: textWidth,
+        })
+      })
+      cursorY -= requiredHeight
+    })
+  }
+
+  const sectionLines = (text: string | null | undefined, fallback: string) =>
+    autoNumber(text || fallback)
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+
+  sorted.forEach((report, departmentIndex) => {
+    const department = normalizeDepartmentName(report.department)
+    ensureSpace(42)
+    const heading = `${departmentIndex + 1}. ${department.toUpperCase()}:`
+    page.drawText(heading, {
+      x: marginX,
+      y: cursorY,
+      size: headingFontSize,
+      font: bold,
+      color: textColor,
+    })
+    cursorY -= 22
+
+    const sections = [
+      ["WORK DONE", sectionLines(report.work_done, "No data provided.")],
+      ["TASKS FOR NEW WEEK", sectionLines(report.tasks_new_week, "No data provided.")],
+      ["CHALLENGES", sectionLines(report.challenges, "No challenges reported.")],
+    ] as const
+
+    sections.forEach(([sectionTitle, lines]) => {
+      ensureSpace(28)
+      page.drawText(sectionTitle, {
+        x: marginX,
+        y: cursorY,
+        size: bodyFontSize,
+        font: bold,
+        color: textColor,
+      })
+      cursorY -= 18
+      drawLines(lines)
+      cursorY -= 4
+    })
+
+    cursorY -= 10
+  })
 
   return doc.save()
 }

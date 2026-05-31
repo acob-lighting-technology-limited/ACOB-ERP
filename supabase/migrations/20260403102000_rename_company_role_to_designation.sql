@@ -204,7 +204,7 @@ SELECT
   created_at,
   updated_at
 FROM public.profiles
-WHERE employment_status::text NOT IN ('separated');
+WHERE employment_status::text NOT IN ('exited');
 
 CREATE OR REPLACE VIEW public.profiles_public AS
 SELECT

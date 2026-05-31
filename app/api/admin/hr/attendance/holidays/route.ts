@@ -6,9 +6,27 @@ import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const HolidaySchema = z.object({
   holiday_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  holiday_date_end: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
   name: z.string().trim().max(120).optional(),
   location: z.string().trim().max(120).optional(),
 })
+
+/** Returns every YYYY-MM-DD from start to end inclusive (capped to guard against huge ranges). */
+function expandDateRange(start: string, end: string): string[] {
+  const dates: string[] = []
+  const cursor = new Date(`${start}T00:00:00Z`)
+  const last = new Date(`${end}T00:00:00Z`)
+  let guard = 0
+  while (cursor.getTime() <= last.getTime() && guard < 366) {
+    dates.push(cursor.toISOString().slice(0, 10))
+    cursor.setUTCDate(cursor.getUTCDate() + 1)
+    guard++
+  }
+  return dates
+}
 
 async function ensureAdmin(request: NextRequest) {
   const rl = await rateLimit(`admin-attendance-holidays:${getClientId(request)}`, { limit: 20, windowSec: 60 })
@@ -55,14 +73,25 @@ export async function POST(request: NextRequest) {
   }
 
   const dataClient = getServiceRoleClientOrFallback(auth.supabase)
-  const holiday_date = parsed.data.holiday_date
+  const startDate = parsed.data.holiday_date
+  const endDate = parsed.data.holiday_date_end
   const location = (parsed.data.location || "all").trim() || "all"
   const name = (parsed.data.name || "Holiday").trim() || "Holiday"
 
-  const { error: insertError } = await dataClient.from("holiday_calendar").insert({ holiday_date, location, name })
+  if (endDate && endDate < startDate) {
+    return NextResponse.json({ error: "End date cannot be before start date" }, { status: 400 })
+  }
+
+  const dates = endDate ? expandDateRange(startDate, endDate) : [startDate]
+  const rows = dates.map((holiday_date) => ({ holiday_date, location, name }))
+
+  // Ignore days already marked as holidays so re-adding an overlapping range is safe.
+  const { error: insertError } = await dataClient
+    .from("holiday_calendar")
+    .upsert(rows, { onConflict: "holiday_date,location", ignoreDuplicates: true })
   if (insertError) return NextResponse.json({ error: insertError.message || "Failed to add holiday" }, { status: 500 })
 
-  return NextResponse.json({ message: "Holiday added" })
+  return NextResponse.json({ message: dates.length > 1 ? `${dates.length} holidays added` : "Holiday added" })
 }
 
 export async function DELETE(request: NextRequest) {
