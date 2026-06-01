@@ -3,6 +3,7 @@ import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { monthBounds } from "@/lib/hr/attendance-utils"
 
 const HolidaySchema = z.object({
   holiday_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -21,7 +22,10 @@ function expandDateRange(start: string, end: string): string[] {
   const last = new Date(`${end}T00:00:00Z`)
   let guard = 0
   while (cursor.getTime() <= last.getTime() && guard < 366) {
-    dates.push(cursor.toISOString().slice(0, 10))
+    const year = cursor.getUTCFullYear()
+    const month = String(cursor.getUTCMonth() + 1).padStart(2, "0")
+    const day = String(cursor.getUTCDate()).padStart(2, "0")
+    dates.push(`${year}-${month}-${day}`)
     cursor.setUTCDate(cursor.getUTCDate() + 1)
     guard++
   }
@@ -56,7 +60,8 @@ export async function GET(request: NextRequest) {
   let query = dataClient.from("holiday_calendar").select("*").order("holiday_date", { ascending: true })
   query = query.eq("location", location)
   if (/^\d{4}-\d{2}$/.test(month)) {
-    query = query.gte("holiday_date", `${month}-01`).lte("holiday_date", `${month}-31`)
+    const { start, end } = monthBounds(month)
+    query = query.gte("holiday_date", start).lte("holiday_date", end)
   }
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

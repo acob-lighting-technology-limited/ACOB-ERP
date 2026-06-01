@@ -1,11 +1,11 @@
 "use client"
 
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
-import { toLocalYearMonth } from "@/lib/hr/attendance-utils"
+import { dayCredit, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
 import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
 import type { AttendanceRecord } from "./page"
 
@@ -102,33 +102,89 @@ export function EmployeeCalendarView() {
     void load()
   }, [load])
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = toLocalISODate()
   const currentYearMonth = toLocalYearMonth()
   const cells = buildCalendarCells(calendarMonth)
   const daysByDate = new Map<string, UnifiedDay>((days ?? []).map((d) => [d.date, d]))
 
+  // Monthly attendance & absent rate for the selected calendar month
+  const { monthAttendanceRate, monthAbsentRate } = useMemo(() => {
+    if (!days || days.length === 0) return { monthAttendanceRate: null, monthAbsentRate: null }
+    const todayIso = toLocalISODate()
+    const scorable = days.filter((d) => {
+      const s = d.status
+      if (s === "weekend" || s === "holiday" || s === "on_leave" || s === "exempted" || s === "waiver") return false
+      // Exclude a day still in progress (clocked in today, not yet clocked out)
+      if (d.date === todayIso && d.record?.clock_in && !d.record?.clock_out) return false
+      return true
+    })
+    if (scorable.length === 0) return { monthAttendanceRate: null, monthAbsentRate: null }
+    let credits = 0
+    for (const d of scorable) {
+      credits += dayCredit(d.status, d.record?.clock_in ?? null, d.record?.clock_out ?? null)
+    }
+    const monthAttendanceRate = Math.round((credits / scorable.length) * 100)
+    const absentCount = scorable.filter((d) => d.status === "absent").length
+    const monthAbsentRate = Math.round((absentCount / scorable.length) * 100)
+    return { monthAttendanceRate, monthAbsentRate }
+  }, [days])
+
   return (
     <div>
-      {/* Month navigator */}
-      <div className="mb-4 flex items-center gap-1">
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => setCalendarMonth((m) => navigateMonth(m, -1))}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </Button>
-        <span className="min-w-36 text-center text-sm font-medium">{formatMonthLabel(calendarMonth)}</span>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => setCalendarMonth((m) => navigateMonth(m, 1))}
-          disabled={calendarMonth >= currentYearMonth}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
+      {/* Month navigator + monthly rate stats */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-1">
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setCalendarMonth((m) => navigateMonth(m, -1))}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="min-w-36 text-center text-sm font-medium">{formatMonthLabel(calendarMonth)}</span>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setCalendarMonth((m) => navigateMonth(m, 1))}
+            disabled={calendarMonth >= currentYearMonth}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+        {!loading && monthAttendanceRate !== null && (
+          <div className="flex items-center gap-3">
+            <div className="rounded-lg border px-3 py-1.5 text-center min-w-[90px]">
+              <p className="text-muted-foreground text-[11px] leading-none mb-1">Monthly Attendance</p>
+              <p
+                className={`text-sm font-semibold leading-none ${
+                  monthAttendanceRate >= 80
+                    ? "text-emerald-600"
+                    : monthAttendanceRate >= 60
+                      ? "text-yellow-600"
+                      : "text-red-600"
+                }`}
+              >
+                {monthAttendanceRate}%
+              </p>
+            </div>
+            <div className="rounded-lg border px-3 py-1.5 text-center min-w-[90px]">
+              <p className="text-muted-foreground text-[11px] leading-none mb-1">Monthly Absent</p>
+              <p
+                className={`text-sm font-semibold leading-none ${
+                  monthAbsentRate <= 10
+                    ? "text-emerald-600"
+                    : monthAbsentRate <= 25
+                      ? "text-yellow-600"
+                      : "text-red-600"
+                }`}
+              >
+                {monthAbsentRate}%
+              </p>
+            </div>
+          </div>
+        )}
       </div>
 
       {loading ? (

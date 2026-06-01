@@ -3,8 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
-import { toLocalISODate } from "@/lib/utils/date"
-import { isLate } from "@/lib/hr/attendance-utils"
+import { toLocalISODate, toLocalTimeString } from "@/lib/utils/date"
+import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 
 const log = logger("hr-attendance-clock-out")
 
@@ -26,10 +26,10 @@ export async function PATCH(_request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Use a single timestamp so date and time are from the same instant in UTC
+    // Use one timestamp and store the local WAT workday/time.
     const now = new Date()
     const today = toLocalISODate(now)
-    const clockOutTime = now.toISOString().split("T")[1].split(".")[0] // HH:MM:SS UTC
+    const clockOutTime = toLocalTimeString(now)
 
     const { data: record } = await supabase
       .from("attendance_records")
@@ -53,7 +53,10 @@ export async function PATCH(_request: NextRequest) {
     const breakDuration = record.break_duration || 0
     const workHours = totalHours - breakDuration / 60
 
-    const status = isLate(record.clock_in) ? "late" : "present"
+    const status = deriveUnifiedAttendanceStatus({
+      record: { clock_in: record.clock_in, clock_out: clockOutTime, waived: false },
+      recordDate: today,
+    })
 
     // Update attendance record
     const { data: updatedRecord, error } = await supabase
@@ -63,6 +66,7 @@ export async function PATCH(_request: NextRequest) {
         total_hours: workHours,
         status,
         source: "manual",
+        clock_out_source: "manual",
       })
       .eq("id", record.id)
       .select()

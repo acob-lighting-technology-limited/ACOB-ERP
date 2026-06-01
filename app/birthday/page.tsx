@@ -48,13 +48,13 @@ export default async function BirthdayPage() {
   }
 
   await Promise.all([
-    supabase.from("profiles").select("first_name, last_name, full_name").eq("first_name", "Bawa").maybeSingle(),
+    supabase.from("profiles").select("first_name, last_name, full_name").eq("first_name", "Philip").maybeSingle(),
   ])
 
   const celebrants: Celebrant[] = [
     {
-      displayName: "Mr. Bawa",
-      imageSrc: "/images/birthday/bawa-2.jpg",
+      displayName: "Mr. Philip",
+      imageSrc: "/images/birthday/philip.jpeg",
     },
   ]
   const celebrantCount = celebrants.length
@@ -83,7 +83,7 @@ export default async function BirthdayPage() {
 
           <div className="birthday-copy-stack">
             <p className="birthday-overline">Celebrating this week&apos;s birthdays</p>
-            <h1 className="birthday-title">Mr. Bawa</h1>
+            <h1 className="birthday-title">Mr. Philip</h1>
             <p className="birthday-subtitle">
               ACOB Family celebrates you today and appreciates your contributions to the growth of the organisation.
             </p>

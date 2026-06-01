@@ -85,7 +85,7 @@ export async function POST(request: Request) {
           is_admin: false,
           is_department_lead: false,
           lead_departments: [],
-          admin_domains: [],
+          admin_routes: [],
           separation_date: entry.exitDate || null,
           separation_reason: entry.reasonCode || null,
           status_changed_at: now,

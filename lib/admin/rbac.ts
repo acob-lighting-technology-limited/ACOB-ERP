@@ -6,6 +6,7 @@ import {
   normalizeDepartmentList as normalizeCanonicalDepartmentList,
   getDepartmentAliases,
 } from "@/shared/departments"
+import { GRANTABLE_ADMIN_ROUTES, type AdminRouteKeyV2 } from "@/lib/admin/policy-v2"
 
 export type AdminRole = "developer" | "super_admin" | "admin" | "employee" | "visitor" | string
 export type AdminDomain = "hr" | "finance" | "assets" | "reports" | "tasks" | "projects" | "communications"
@@ -43,7 +44,7 @@ export interface AdminScope {
   managedDepartmentIds: string[]
   managedOffices: string[]
   isAdminLike: boolean
-  adminDomains: AdminDomain[] | null
+  adminRoutes: AdminRouteKeyV2[] | null
   scopeMode: AdminScopeMode
 }
 
@@ -52,7 +53,7 @@ interface ProfileShape {
   department: string | null
   department_id: string | null
   office_location: string | null
-  admin_domains: string[] | null
+  admin_routes: string[] | null
   is_department_lead: boolean
   lead_departments: string[] | null
 }
@@ -62,29 +63,27 @@ interface DepartmentRow {
   name: string
 }
 
-const ADMIN_DOMAINS: AdminDomain[] = ["hr", "finance", "assets", "reports", "tasks", "projects", "communications"]
-function normalizeRoleValue(role: string | null | undefined): string | null {
-  if (!role) return null
-  const normalized = role.trim().toLowerCase()
-  return normalized.length > 0 ? normalized : null
-}
-const SECTION_TO_DOMAIN: Partial<Record<AdminSection, AdminDomain>> = {
-  hr: "hr",
-  "job-descriptions": "hr",
-  finance: "finance",
-  payments: "finance",
-  purchasing: "finance",
-  assets: "assets",
-  inventory: "assets",
-  reports: "reports",
-  "audit-logs": "reports",
-  tasks: "tasks",
-  projects: "projects",
-  employees: "hr",
-  documentation: "communications",
-  feedback: "communications",
-  notification: "communications",
-  onedrive: "communications",
+/** Section → representative route keys used for section-level access checks. */
+const SECTION_TO_ROUTES: Partial<Record<AdminSection, AdminRouteKeyV2[]>> = {
+  dev: ["dev.main"],
+  assets: ["assets.main", "assets.issues"],
+  "audit-logs": ["auditlogs.main"],
+  documentation: ["documentation.main"],
+  employees: ["hr.main"],
+  feedback: ["feedback.main"],
+  finance: ["finance.main"],
+  hr: ["hr.main"],
+  inventory: ["inventory.main"],
+  "job-descriptions": ["jobdescriptions.main"],
+  notification: ["notifications.main"],
+  onedrive: [],
+  payments: ["finance.main"],
+  projects: [],
+  purchasing: ["purchasing.main"],
+  reports: ["reports.weekly", "reports.other"],
+  settings: ["settings.main"],
+  tasks: ["tasks.main"],
+  admin: [],
 }
 
 function unique(values: string[]): string[] {
@@ -138,9 +137,9 @@ export function canAccessAdminSection(scope: AdminScope, section: AdminSection):
   if (role === "developer" || role === "super_admin") return true
   if (role === "admin") {
     if (section === "admin") return true
-    const domains = Array.isArray(scope.adminDomains) ? scope.adminDomains : []
-    const mapped = SECTION_TO_DOMAIN[section]
-    return Boolean(mapped && domains.includes(mapped))
+    const routes = Array.isArray(scope.adminRoutes) ? scope.adminRoutes : []
+    const sectionRoutes = SECTION_TO_ROUTES[section] ?? []
+    return sectionRoutes.some((route) => routes.includes(route))
   }
   // Pure department leads can no longer reach /admin (roleCanEnterAdmin no longer
   // passes them through). This branch only fires for admin+lead users in "lead"
@@ -173,11 +172,17 @@ export function scopeDepartmentIds(profile: ProfileShape, departmentIdsByName: M
   return Array.from(ids)
 }
 
-function normalizeAdminDomains(domains: string[] | null | undefined): AdminDomain[] | null {
-  if (!Array.isArray(domains)) return null
+function normalizeRoleValue(role: string | null | undefined): string | null {
+  if (!role) return null
+  const normalized = role.trim().toLowerCase()
+  return normalized.length > 0 ? normalized : null
+}
+
+function normalizeAdminRoutes(routes: string[] | null | undefined): AdminRouteKeyV2[] | null {
+  if (!Array.isArray(routes)) return null
   const normalized = Array.from(
     new Set(
-      domains
+      routes
         .map((v) =>
           String(v || "")
             .trim()
@@ -185,7 +190,7 @@ function normalizeAdminDomains(domains: string[] | null | undefined): AdminDomai
         )
         .filter(Boolean)
     )
-  ).filter((value): value is AdminDomain => ADMIN_DOMAINS.includes(value as AdminDomain))
+  ).filter((value): value is AdminRouteKeyV2 => GRANTABLE_ADMIN_ROUTES.includes(value as AdminRouteKeyV2))
   return normalized.length > 0 ? normalized : []
 }
 
@@ -212,7 +217,7 @@ async function resolveManagedOffices(
 export async function resolveAdminScope(supabase: SupabaseClient, userId: string): Promise<AdminScope | null> {
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, department, department_id, office_location, admin_domains, is_department_lead, lead_departments")
+    .select("role, department, department_id, office_location, admin_routes, is_department_lead, lead_departments")
     .eq("id", userId)
     .single<ProfileShape>()
 
@@ -223,6 +228,7 @@ export async function resolveAdminScope(supabase: SupabaseClient, userId: string
 
   const isAdminLike = isAdminLikeRole(normalizedRole)
   const leadScopedDepartments = scopeDepartments(profile)
+  void leadScopedDepartments
   // scopeMode is always "global" for admin users — the lead toggle has been removed.
   // Dept leads use their own /dept/[id]/ shell instead.
   const scopeMode: AdminScopeMode = "global"
@@ -255,8 +261,8 @@ export async function resolveAdminScope(supabase: SupabaseClient, userId: string
       : []
 
   const isDepartmentLead = Boolean(profile.is_department_lead)
-  const adminDomains = normalizeAdminDomains(profile.admin_domains)
-  if (normalizedRole === "admin" && (!adminDomains || adminDomains.length === 0) && !isDepartmentLead) {
+  const adminRoutes = normalizeAdminRoutes(profile.admin_routes)
+  if (normalizedRole === "admin" && (!adminRoutes || adminRoutes.length === 0) && !isDepartmentLead) {
     return null
   }
 
@@ -272,7 +278,7 @@ export async function resolveAdminScope(supabase: SupabaseClient, userId: string
     managedDepartmentIds,
     managedOffices,
     isAdminLike,
-    adminDomains,
+    adminRoutes,
     scopeMode,
   }
 }
@@ -284,10 +290,10 @@ export function getDepartmentScope(scope: AdminScope, domain: "finance" | "hr" |
   const role = normalizeRoleValue(scope.role)
   if (role === "developer" || role === "super_admin") return null
   if (role === "admin") {
-    const domains = Array.isArray(scope.adminDomains) ? scope.adminDomains : []
-    if (domain === "general" && domains.length > 0) return null
-    const requiredDomain = domain === "hr" ? "hr" : domain === "finance" ? "finance" : null
-    if (requiredDomain && domains.includes(requiredDomain)) return null
+    const routes = Array.isArray(scope.adminRoutes) ? scope.adminRoutes : []
+    if (domain === "general" && routes.length > 0) return null
+    const routeForDomain = domain === "hr" ? "hr.main" : domain === "finance" ? "finance.main" : null
+    if (routeForDomain && routes.includes(routeForDomain)) return null
   }
   if (!scope.isDepartmentLead) return []
   return scope.managedDepartments

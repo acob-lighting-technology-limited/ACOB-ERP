@@ -71,8 +71,8 @@ export async function PATCH(request: NextRequest) {
     const body = await request.json()
     const { firstName, lastName, otherNames, email, department, designation, phoneNumber, role, employeeNumber } = body
     const resolvedDesignation = String(designation ?? body?.companyRole ?? "").trim()
-    const adminDomains = Array.isArray(body?.admin_domains)
-      ? body.admin_domains
+    const adminRoutes = Array.isArray(body?.admin_routes)
+      ? body.admin_routes
           .map((value: unknown) =>
             String(value || "")
               .trim()
@@ -80,7 +80,7 @@ export async function PATCH(request: NextRequest) {
           )
           .filter(Boolean)
       : []
-    const allowedAdminDomains = ["hr", "finance", "assets", "reports", "tasks", "projects", "communications"]
+    const { GRANTABLE_ADMIN_ROUTES: allowedAdminRoutes } = await import("@/lib/admin/policy-v2")
 
     // Validate role if provided
     const allowedRoles = [...ASSIGNABLE_ROLES]
@@ -119,20 +119,20 @@ export async function PATCH(request: NextRequest) {
       )
     }
     if (targetRole === "admin") {
-      if (adminDomains.length === 0) {
+      if (adminRoutes.length === 0) {
         return NextResponse.json(
           {
             success: false,
-            error: "Admin role requires at least one admin domain.",
+            error: "Admin role requires at least one admin route.",
           },
           { status: 400 }
         )
       }
-      if (adminDomains.some((value: string) => !allowedAdminDomains.includes(value))) {
+      if (adminRoutes.some((value: string) => !allowedAdminRoutes.includes(value as never))) {
         return NextResponse.json(
           {
             success: false,
-            error: "Invalid admin domain supplied.",
+            error: "Invalid admin route supplied.",
           },
           { status: 400 }
         )
@@ -236,7 +236,7 @@ export async function PATCH(request: NextRequest) {
         designation: resolvedDesignation || null,
         phone_number: phoneNumber || null,
         role: targetRole,
-        admin_domains: targetRole === "admin" ? adminDomains : null,
+        admin_routes: targetRole === "admin" ? adminRoutes : null,
         is_department_lead: false,
         lead_departments: [],
         employment_status: "active", // Explicitly set employment status

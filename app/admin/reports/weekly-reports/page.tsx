@@ -36,7 +36,7 @@ export default async function WeeklyReportsPage() {
         department: scope.department,
         is_department_lead: scope.isDepartmentLead,
         lead_departments: scope.leadDepartments,
-        admin_domains: scope.adminDomains,
+        admin_routes: scope.adminRoutes,
       }}
     />
   )

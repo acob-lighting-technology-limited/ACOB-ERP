@@ -30,7 +30,7 @@ function adminScopeFromDeptScope(deptScope: DeptScope): AdminScope {
     managedDepartmentIds: [deptScope.deptId],
     managedOffices: [],
     isAdminLike: deptScope.isAdminLike,
-    adminDomains: [],
+    adminRoutes: [],
     scopeMode: "lead",
   }
 }
@@ -122,7 +122,7 @@ export async function resolveApiAdminScope(): Promise<AdminScope | null> {
     managedDepartmentIds: profile.department_id ? [profile.department_id] : [],
     managedOffices: [],
     isAdminLike: false,
-    adminDomains: [],
+    adminRoutes: [],
     scopeMode: "lead",
   }
 }

@@ -35,7 +35,7 @@ export default function UsersPage() {
   const searchParams = useSearchParams()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
-  const [formData, setFormData] = useState({ role: "", employment_status: "active", admin_domains: [] as string[] })
+  const [formData, setFormData] = useState({ role: "", employment_status: "active", admin_routes: [] as string[] })
   const [isInviteOpen, setIsInviteOpen] = useState(searchParams.get("invite") === "1")
   const [roleFilter, setRoleFilter] = useState<string>("all")
 
@@ -63,7 +63,7 @@ export default function UsersPage() {
     e.preventDefault()
     if (!editingUser) return
     try {
-      if (formData.role === "admin" && formData.admin_domains.length === 0) {
+      if (formData.role === "admin" && formData.admin_routes.length === 0) {
         throw new Error("Admin role requires at least one domain")
       }
       const response = await fetch("/api/admin/users/role", {
@@ -73,7 +73,7 @@ export default function UsersPage() {
           targetUserId: editingUser.id,
           role: formData.role,
           employment_status: formData.employment_status,
-          admin_domains: formData.role === "admin" ? formData.admin_domains : [],
+          admin_routes: formData.role === "admin" ? formData.admin_routes : [],
         }),
       })
       const result = await response.json()
@@ -91,7 +91,7 @@ export default function UsersPage() {
     setFormData({
       role: user.role,
       employment_status: user.employment_status || (user.is_active ? "active" : "suspended"),
-      admin_domains: Array.isArray(user.admin_domains) ? user.admin_domains : [],
+      admin_routes: Array.isArray(user.admin_routes) ? user.admin_routes : [],
     })
     setIsDialogOpen(true)
   }

@@ -1,4 +1,5 @@
 import { isLate } from "@/lib/hr/attendance-utils"
+import { toLocalISODate } from "@/lib/utils/date"
 
 export type UnifiedAttendanceStatus =
   | "holiday"
@@ -73,12 +74,14 @@ export function deriveUnifiedAttendanceStatus(input: {
   if (rec.waived) return "waiver"
   if (!rec.clock_in && !rec.clock_out) return "absent"
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = toLocalISODate()
   const isPastDate = Boolean(input.recordDate && input.recordDate < today)
 
-  // clock_in present, no clock_out — half day if past, incomplete if today
+  // clock_in present, no clock_out:
+  // - past day  → incomplete (no second punch on a finished day)
+  // - today (still in progress) → optimistic present/late based on 08:20 cutoff
   if (rec.clock_in && !rec.clock_out) {
-    return isPastDate ? "half_day" : "incomplete"
+    return isPastDate ? "incomplete" : isLate(rec.clock_in) ? "late" : "present"
   }
   if (!rec.clock_in) return "incomplete"
   // Same-second double-fire — treat as incomplete

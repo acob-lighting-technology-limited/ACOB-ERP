@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { formatWATDate } from "@/lib/utils/date"
-import { Clock, Download, UserCheck, AlertCircle, MapPin, BarChart3 } from "lucide-react"
+import { Clock, Download, UserCheck, MapPin, BarChart3, AlertCircle } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
@@ -12,7 +12,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import type { AttendanceRecord } from "./page"
 import { logger } from "@/lib/logger"
 import { RemoteCheckinModal } from "@/components/attendance/remote-checkin-modal"
-import { dayCredit, isLate, getWorkdaysInMonth, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
+import { dayCredit, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
 import {
   ATTENDANCE_STATUS_COLORS,
   ATTENDANCE_STATUS_LABELS,
@@ -90,6 +90,12 @@ function calculateHourBreakdown(clockIn: string | null | undefined, clockOut: st
   }
 }
 
+function getPrevMonth(yearMonth: string, n: number): string {
+  const [year, month] = yearMonth.split("-").map(Number)
+  const d = new Date(year, month - 1 - n, 1)
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+}
+
 function getClockOutLabel(row: Pick<AttendanceRow, "clock_in" | "clock_out" | "date">): string {
   if (row.clock_out) return row.clock_out
   if (row.clock_in && row.date === toLocalISODate()) return "In Progress"
@@ -114,6 +120,7 @@ export function AttendanceContent({
   const [todayRecord, setTodayRecord] = useState<AttendanceRecord | null>(initialTodayRecord)
   const [recentRecords, setRecentRecords] = useState<AttendanceRecord[]>(initialRecentRecords)
   const [unifiedDays, setUnifiedDays] = useState<UnifiedDay[] | null>(null)
+  const [filteredRows, setFilteredRows] = useState<AttendanceRow[]>([])
   const [remoteModalOpen, setRemoteModalOpen] = useState(false)
   const [remoteMode, setRemoteMode] = useState<"clock-in" | "clock-out">("clock-in")
 
@@ -121,14 +128,21 @@ export function AttendanceContent({
     try {
       const ym = toLocalYearMonth()
       const today = toLocalISODate()
-      const response = await fetch(`/api/hr/attendance/my-days?year_month=${ym}`, { cache: "no-store" })
-      const data = await response.json()
-      if (response.ok && data.data) {
-        setUnifiedDays(data.data as UnifiedDay[])
-        const todayRec = (data.data as UnifiedDay[]).find((row) => row.date === today)?.record || null
-        setTodayRecord(todayRec)
-        setRecentRecords((data.data as UnifiedDay[]).map((row) => row.record).filter(Boolean) as AttendanceRecord[])
-      }
+      // Fetch current month + 2 previous months so the log and filter show history
+      const months = [getPrevMonth(ym, 2), getPrevMonth(ym, 1), ym]
+      const results = await Promise.all(
+        months.map((m) =>
+          fetch(`/api/hr/attendance/my-days?year_month=${m}`, { cache: "no-store" })
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => (d?.data as UnifiedDay[]) ?? [])
+            .catch(() => [] as UnifiedDay[])
+        )
+      )
+      const allDays = results.flat()
+      setUnifiedDays(allDays)
+      const todayRec = allDays.find((row) => row.date === today)?.record ?? null
+      setTodayRecord(todayRec)
+      setRecentRecords(allDays.map((row) => row.record).filter(Boolean) as AttendanceRecord[])
     } catch (error) {
       log.error("Error fetching attendance:", error)
     }
@@ -140,22 +154,23 @@ export function AttendanceContent({
   }, [])
 
   const rows = useMemo<AttendanceRow[]>(() => {
-    if (unifiedDays === null) {
-      return []
-    }
-    const ym = toLocalYearMonth()
-    const todayIso = toLocalISODate()
-    const monthToDateWorkdays = getWorkdaysInMonth(ym).filter((d) => d <= todayIso)
-    const unifiedByDate = new Map(unifiedDays.map((d) => [d.date, d]))
-    const recordByDate = new Map(recentRecords.map((record) => [record.date, record]))
+    if (unifiedDays === null) return []
 
-    return monthToDateWorkdays
-      .map((workday) => {
-        const unified = unifiedByDate.get(workday)
-        const existing = unified?.record || recordByDate.get(workday)
-        const date = new Date(workday)
+    return unifiedDays
+      .map((unified) => {
+        const workday = unified.date
+        const existing = unified.record
+        // Use noon UTC so timezone conversion (WAT +1) never shifts the calendar date
+        const dateObj = new Date(`${workday}T12:00:00Z`)
+        // Month label: "June 2026" — use en-US without day to avoid "1 June 2026" from en-GB defaults
+        const monthLabel = dateObj.toLocaleDateString("en-US", {
+          month: "long",
+          year: "numeric",
+          timeZone: "Africa/Lagos",
+        })
+
         if (!existing) {
-          const normalizedStatus = unified?.status || "absent"
+          const normalizedStatus = (unified.status as AttendanceRow["normalizedStatus"]) || "absent"
           return {
             id: `missing-${workday}`,
             date: workday,
@@ -163,10 +178,10 @@ export function AttendanceContent({
             clock_out: null,
             total_hours: null,
             status: "no_record",
-            dayLabel: formatWATDate(date, { weekday: "long" }),
-            dateLabel: formatWATDate(date, { day: "2-digit", month: "long", year: "numeric" }),
+            dayLabel: formatWATDate(dateObj, { weekday: "long" }),
+            dateLabel: formatWATDate(dateObj, { day: "2-digit", month: "long", year: "numeric" }),
             periodLabel: "-",
-            monthLabel: formatWATDate(date, { month: "long", year: "numeric" }),
+            monthLabel,
             calculatedTotalHours: null,
             workHours: null,
             overtimeHours: null,
@@ -175,7 +190,8 @@ export function AttendanceContent({
           } as AttendanceRow
         }
 
-        const normalizedStatus = unified?.status || normalizeStatus(existing, workday)
+        const normalizedStatus =
+          (unified.status as AttendanceRow["normalizedStatus"]) || normalizeStatus(existing, workday)
         const breakdown = isCoveredStatus(normalizedStatus)
           ? { total: null, work: null, overtime: null, missed: null }
           : calculateHourBreakdown(existing.clock_in, existing.clock_out)
@@ -183,10 +199,10 @@ export function AttendanceContent({
         return {
           ...existing,
           total_hours: breakdown.total ?? existing.total_hours,
-          dayLabel: formatWATDate(date, { weekday: "long" }),
-          dateLabel: formatWATDate(date, { day: "2-digit", month: "long", year: "numeric" }),
+          dayLabel: formatWATDate(dateObj, { weekday: "long" }),
+          dateLabel: formatWATDate(dateObj, { day: "2-digit", month: "long", year: "numeric" }),
           periodLabel: `${existing.clock_in || "-"} - ${getClockOutLabel({ ...existing, date: workday })}`,
-          monthLabel: formatWATDate(date, { month: "long", year: "numeric" }),
+          monthLabel,
           calculatedTotalHours: breakdown.total,
           workHours: breakdown.work,
           overtimeHours: breakdown.overtime,
@@ -195,7 +211,12 @@ export function AttendanceContent({
         } as AttendanceRow
       })
       .sort((a, b) => b.date.localeCompare(a.date))
-  }, [recentRecords, unifiedDays])
+  }, [unifiedDays])
+
+  // Seed filteredRows with all rows on first load so stat cards show before any filter interaction
+  useEffect(() => {
+    if (rows.length > 0) setFilteredRows(rows)
+  }, [rows])
 
   const columns = useMemo<DataTableColumn<AttendanceRow>[]>(
     () => [
@@ -300,22 +321,23 @@ export function AttendanceContent({
   const todayIso = toLocalISODate()
   const todayHours = todayRecord?.total_hours ? `${todayRecord.total_hours.toFixed(2)} hrs` : "-"
   const todayStatus = todayRecord ? normalizeStatus(todayRecord, todayIso) : "absent"
-  const scorableRows = rows.filter((row) => {
-    if (isCoveredStatus(row.normalizedStatus)) return false
-    if (row.normalizedStatus === "incomplete" && row.date === todayIso) return false
-    return true
-  })
-  const attendanceRate = useMemo(() => {
+
+  // Rates are computed from whatever rows survive the active filter — "all time" when no filter is set
+  const { attendanceRate, absentRate } = useMemo(() => {
+    const scorable = filteredRows.filter((row) => {
+      if (isCoveredStatus(row.normalizedStatus)) return false
+      // Exclude a day still in progress (clocked in today, not yet clocked out)
+      if (row.date === todayIso && row.clock_in && !row.clock_out) return false
+      return true
+    })
+    if (scorable.length === 0) return { attendanceRate: 0, absentRate: 0 }
     let credits = 0
-    for (const row of scorableRows) {
-      credits += dayCredit(row.normalizedStatus, row.clock_in, row.clock_out)
-    }
-    return scorableRows.length > 0 ? Math.round((credits / scorableRows.length) * 100) : 0
-  }, [scorableRows])
-  const absentRate = useMemo(() => {
-    const absentDays = scorableRows.filter((row) => row.normalizedStatus === "absent").length
-    return scorableRows.length > 0 ? Math.round((absentDays / scorableRows.length) * 100) : 0
-  }, [scorableRows])
+    for (const row of scorable) credits += dayCredit(row.normalizedStatus, row.clock_in, row.clock_out)
+    const attendanceRate = Math.round((credits / scorable.length) * 100)
+    const absentDays = scorable.filter((r) => r.normalizedStatus === "absent").length
+    const absentRate = Math.round((absentDays / scorable.length) * 100)
+    return { attendanceRate, absentRate }
+  }, [filteredRows, todayIso])
 
   function exportCSV() {
     const headers = ["Date", "Day", "Clock In", "Clock Out", "Total Hours", "Work Hour", "Overtime", "Status"]
@@ -422,6 +444,8 @@ export function AttendanceContent({
             searchFn={(row, query) =>
               `${row.dayLabel} ${row.dateLabel} ${row.periodLabel} ${row.status}`.toLowerCase().includes(query)
             }
+            pagination={{ pageSize: 20 }}
+            onProcessedDataChange={(rows) => setFilteredRows(rows as AttendanceRow[])}
             isLoading={unifiedDays === null}
             emptyTitle={unifiedDays === null ? "Loading attendance..." : "No attendance records"}
             emptyDescription={

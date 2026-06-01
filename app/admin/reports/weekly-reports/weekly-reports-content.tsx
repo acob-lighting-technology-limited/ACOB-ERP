@@ -99,7 +99,7 @@ interface WeeklyReportsContentProps {
     department: string | null
     is_department_lead: boolean
     lead_departments?: string[]
-    admin_domains?: string[] | null
+    admin_routes?: string[] | null
   }
 }
 
@@ -151,8 +151,8 @@ export function WeeklyReportsContent({
     normalizedRole === "developer" ||
     normalizedRole === "super_admin" ||
     (normalizedRole === "admin" &&
-      Array.isArray(currentUser.admin_domains) &&
-      currentUser.admin_domains.includes("reports"))
+      Array.isArray(currentUser.admin_routes) &&
+      (currentUser.admin_routes.includes("reports.weekly") || currentUser.admin_routes.includes("reports.other")))
 
   const managedDepartments =
     editableDepartments.length > 0

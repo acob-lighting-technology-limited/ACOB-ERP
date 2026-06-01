@@ -100,7 +100,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
     const { data: upserted, error } = await supabase
       .from("attendance_records")
       .upsert(
-        { user_id: userId, date, clock_in: time, status, source: "hikvision" },
+        { user_id: userId, date, clock_in: time, status, source: "hikvision", clock_in_source: "hikvision" },
         { onConflict: "user_id,date", ignoreDuplicates: false }
       )
       .select("id")
@@ -134,7 +134,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
 
     const { error } = await supabase
       .from("attendance_records")
-      .update({ clock_out: time, total_hours: totalHours, source: "hikvision" })
+      .update({ clock_out: time, total_hours: totalHours, source: "hikvision", clock_out_source: "hikvision" })
       .eq("user_id", userId)
       .eq("date", date)
 

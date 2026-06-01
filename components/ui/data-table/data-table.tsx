@@ -277,6 +277,7 @@ export function DataTable<TData>({
   onProcessedDataChange,
   // Expandable
   expandable,
+  expandableColumnPosition = "start",
   // Actions
   rowActions,
   bulkActions,
@@ -301,6 +302,7 @@ export function DataTable<TData>({
   emptyTitle = "No results found",
   emptyDescription = "Try adjusting your search or filters.",
 }: DataTableProps<TData>) {
+  const expandAtStart = expandableColumnPosition !== "end"
   // ─── Column resize ─────────────────────────────────────────────────────────
   const initialColWidths = useMemo(() => {
     const map: Record<string, number> = {}
@@ -863,7 +865,7 @@ export function DataTable<TData>({
                     />
                   </TableHead>
                 )}
-                {expandable && <TableHead className="w-10" />}
+                {expandable && expandAtStart && <TableHead className="w-10" />}
                 {showRowNumbers && <TableHead className="w-14">S/N</TableHead>}
                 {visibleColumns.map((col) => (
                   <SortableColHead
@@ -881,6 +883,7 @@ export function DataTable<TData>({
                     onResizeStart={(clientX, currentW) => startResize(col.key, clientX, currentW)}
                   />
                 ))}
+                {expandable && !expandAtStart && <TableHead className="w-10" />}
                 {rowActions && rowActions.length > 0 && <TableHead className="text-right">Action</TableHead>}
               </TableRow>
             </SortableContext>
@@ -927,7 +930,7 @@ export function DataTable<TData>({
                           />
                         </TableCell>
                       )}
-                      {expandable && (
+                      {expandable && expandAtStart && (
                         <TableCell>
                           {canExpand ? (
                             <Button
@@ -958,6 +961,22 @@ export function DataTable<TData>({
                           {col.render ? col.render(row, globalIndex) : col.accessor ? (col.accessor(row) ?? "-") : "-"}
                         </TableCell>
                       ))}
+                      {expandable && !expandAtStart && (
+                        <TableCell>
+                          {canExpand ? (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => toggleExpand(rowId)}
+                              aria-label={isExpanded ? "Collapse row" : "Expand row"}
+                              aria-expanded={isExpanded}
+                            >
+                              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                            </Button>
+                          ) : null}
+                        </TableCell>
+                      )}
                       {rowActions && rowActions.length > 0 && (
                         <TableCell className="text-right">
                           {(() => {

@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SearchableSelect } from "@/components/ui/searchable-select"
-import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select"
+import { AdminRoutesPicker } from "@/components/ui/admin-routes-picker"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
@@ -37,7 +37,7 @@ import type { EmployeeAssignedItems, EmployeeProfile, EmployeeStatusSummary, Emp
 
 interface EditForm {
   role: UserRole
-  admin_domains: string[]
+  admin_routes: string[]
   is_department_lead: boolean
   department: string
   office_location: string
@@ -547,7 +547,7 @@ export function EmployeeViewModal({
                       setEditForm((prev) => ({
                         ...prev,
                         role: value,
-                        admin_domains: value === "admin" ? prev.admin_domains : [],
+                        admin_routes: value === "admin" ? prev.admin_routes : [],
                       }))
                     }}
                   >
@@ -569,23 +569,12 @@ export function EmployeeViewModal({
                   </p>
                   {editForm.role === "admin" && (
                     <div className="mt-3 space-y-2">
-                      <Label>Admin Domains *</Label>
-                      <SearchableMultiSelect
-                        label="Admin Domains"
-                        values={editForm.admin_domains}
-                        onChange={(values) => setEditForm((prev) => ({ ...prev, admin_domains: values }))}
-                        options={[
-                          { value: "hr", label: "HR" },
-                          { value: "finance", label: "Finance" },
-                          { value: "assets", label: "Assets" },
-                          { value: "reports", label: "Reports" },
-                          { value: "tasks", label: "Tasks" },
-                          { value: "projects", label: "Projects" },
-                          { value: "communications", label: "Communications" },
-                        ]}
-                        placeholder="Select at least one admin domain"
+                      <Label>Admin Routes *</Label>
+                      <AdminRoutesPicker
+                        values={editForm.admin_routes}
+                        onChange={(values) => setEditForm((prev) => ({ ...prev, admin_routes: values }))}
                       />
-                      <p className="text-muted-foreground text-xs">Admin must have one or more domains.</p>
+                      <p className="text-muted-foreground text-xs">Admin must have at least one route.</p>
                     </div>
                   )}
                 </div>

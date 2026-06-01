@@ -12,23 +12,23 @@ import { logger } from "@/lib/logger"
 import { syncEmploymentStatusToAuth } from "@/lib/supabase/admin"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { GRANTABLE_ADMIN_ROUTES } from "@/lib/admin/policy-v2"
 
 const log = logger("admin-users-role")
-const ALLOWED_ADMIN_DOMAINS = ["hr", "finance", "assets", "reports", "tasks", "projects", "communications"] as const
 
 const UpdateUserRoleSchema = z
   .object({
     targetUserId: z.string().trim().min(1, "Missing targetUserId or role"),
     role: z.enum(ASSIGNABLE_ROLES, { errorMap: () => ({ message: "Invalid role supplied" }) }),
-    admin_domains: z.array(z.enum(ALLOWED_ADMIN_DOMAINS)).optional(),
+    admin_routes: z.array(z.enum(GRANTABLE_ADMIN_ROUTES as unknown as [string, ...string[]])).optional(),
     employment_status: z.string().trim().nullable().optional(),
   })
   .superRefine((value, ctx) => {
-    if (value.role === "admin" && (!value.admin_domains || value.admin_domains.length === 0)) {
+    if (value.role === "admin" && (!value.admin_routes || value.admin_routes.length === 0)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "Admin role requires at least one admin domain.",
-        path: ["admin_domains"],
+        message: "Admin role requires at least one admin route.",
+        path: ["admin_routes"],
       })
     }
   })
@@ -58,7 +58,7 @@ export async function PATCH(request: Request) {
 
     const targetUserId = parsed.data.targetUserId
     const targetRole = parsed.data.role
-    const adminDomains = parsed.data.admin_domains ?? []
+    const adminRoutes = parsed.data.admin_routes ?? []
     const employmentStatus = parsed.data.employment_status ?? null
 
     if (targetUserId === user.id) {
@@ -136,7 +136,7 @@ export async function PATCH(request: Request) {
     // Role changes do NOT affect department lead status — those are independent
     const payload: Record<string, unknown> = {
       role: targetRole,
-      admin_domains: targetRole === "admin" ? adminDomains : null,
+      admin_routes: targetRole === "admin" ? adminRoutes : null,
     }
 
     if (employmentStatus) {
@@ -164,7 +164,7 @@ export async function PATCH(request: Request) {
         context: { actorId: user.id, source: "api" as const },
         newValues: {
           role: targetRole,
-          admin_domains: targetRole === "admin" ? adminDomains : null,
+          admin_routes: targetRole === "admin" ? adminRoutes : null,
           ...(employmentStatus ? { employment_status: employmentStatus } : {}),
         },
         oldValues: { role: targetProfile.role },

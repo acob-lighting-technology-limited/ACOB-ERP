@@ -6,7 +6,7 @@ export interface AccessScopeInputV2 {
   role: string
   isDepartmentLead: boolean
   isAdminLike: boolean
-  adminDomains: AdminDomain[] | null
+  adminRoutes: AdminRouteKeyV2[] | null
   scopeMode: "global" | "lead"
   managedDepartments: string[]
 }
@@ -45,11 +45,37 @@ export type AdminRouteKeyV2 =
   | "tools.main"
   | "unknown"
 
+/** Routes that can be explicitly granted to an admin user. Excludes system-only routes. */
+export const GRANTABLE_ADMIN_ROUTES: AdminRouteKeyV2[] = [
+  "hr.main",
+  "hr.fleet",
+  "hr.resources",
+  "hr.pms.cbt.manage",
+  "jobdescriptions.main",
+  "finance.main",
+  "purchasing.main",
+  "assets.main",
+  "assets.issues",
+  "inventory.main",
+  "reports.weekly",
+  "reports.other",
+  "tasks.main",
+  "communications.main",
+  "communications.broadcast",
+  "communications.meetings",
+  "correspondence.main",
+  "documentation.main",
+  "feedback.main",
+  "helpdesk.main",
+  "notifications.main",
+  "tools.main",
+]
+
 export interface AccessContextV2 {
   baseRole: string
   isDepartmentLead: boolean
   isAdminLike: boolean
-  adminDomains: AdminDomain[] | null
+  adminRoutes: AdminRouteKeyV2[] | null
   actingContext: ActingContextV2
   managedDepartments: string[]
 }
@@ -85,7 +111,7 @@ export function buildAccessContextV2(scope: AccessScopeInputV2): AccessContextV2
     baseRole,
     isDepartmentLead: scope.isDepartmentLead,
     isAdminLike,
-    adminDomains: scope.adminDomains,
+    adminRoutes: scope.adminRoutes,
     actingContext,
     managedDepartments: normalizeDepartmentList(scope.managedDepartments || []),
   }
@@ -183,11 +209,10 @@ export function getRoutePolicyV2(route: AdminRouteKeyV2): RoutePolicyV2 {
   }
 }
 
-function adminHasDomain(context: AccessContextV2, domain: AdminDomain | null) {
-  if (!domain) return true
+function adminHasRoute(context: AccessContextV2, route: AdminRouteKeyV2): boolean {
   if (context.baseRole === "developer" || context.baseRole === "super_admin") return true
   if (context.baseRole !== "admin") return false
-  return Array.isArray(context.adminDomains) && context.adminDomains.includes(domain)
+  return Array.isArray(context.adminRoutes) && context.adminRoutes.includes(route)
 }
 
 function isDepartmentManaged(context: AccessContextV2, department: string) {
@@ -200,11 +225,14 @@ export function canAccessRouteV2(context: AccessContextV2, route: AdminRouteKeyV
   const isGlobalAdminContext = context.actingContext === "global_admin" && context.isAdminLike
 
   if (isGlobalAdminContext) {
-    if (route === "auditlogs.main") {
+    // System-only routes: always restricted to developer/super_admin regardless of granted routes
+    if (route === "auditlogs.main" || route === "settings.main" || route === "dev.main") {
       return context.baseRole === "developer" || context.baseRole === "super_admin"
     }
-    if (policy.adminOnly) return adminHasDomain(context, policy.domain)
-    return adminHasDomain(context, policy.domain)
+    // Dashboard is always accessible to any admin-like role
+    if (route === "admin.dashboard") return true
+    // All other routes: check route-level grant
+    return adminHasRoute(context, route)
   }
 
   if (!context.isDepartmentLead) return false
@@ -234,10 +262,9 @@ export function canMutateV2(
   const policy = getRoutePolicyV2(route)
   const isGlobalAdminContext = context.actingContext === "global_admin" && context.isAdminLike
   if (isGlobalAdminContext) {
-    if (route === "reports.other") {
-      return adminHasDomain(context, policy.domain)
-    }
-    return policy.mutations !== "none" && adminHasDomain(context, policy.domain)
+    // reports.other has mutations:"none" in policy but admin access implies write access
+    if (route === "reports.other") return true
+    return policy.mutations !== "none"
   }
 
   if (policy.adminOnly || policy.mutations === "none") return false

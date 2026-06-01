@@ -4,8 +4,9 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
-import { toLocalISODate } from "@/lib/utils/date"
-import { isLate, distanceMetres } from "@/lib/hr/attendance-utils"
+import { toLocalISODate, toLocalTimeString, toLocalYearMonth } from "@/lib/utils/date"
+import { distanceMetres } from "@/lib/hr/attendance-utils"
+import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { matchSelfieToReference } from "@/lib/azure/face"
 import { getOneDriveService } from "@/lib/onedrive"
 
@@ -142,9 +143,8 @@ export async function POST(request: NextRequest) {
     // ── Upload clock-out selfie to OneDrive ──────────────────────────────────
     let selfieOutUrl: string | null = null
     const now = new Date()
-    const yyyy = now.getFullYear()
-    const mm = String(now.getMonth() + 1).padStart(2, "0")
-    const clockOutTime = now.toISOString().split("T")[1].split(".")[0]
+    const [yyyy, mm] = toLocalYearMonth(now).split("-")
+    const clockOutTime = toLocalTimeString(now)
 
     try {
       const od = getOneDriveService()
@@ -156,15 +156,19 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Calculate total_hours & status ───────────────────────────────────────
-    const inMs = new Date(`${today}T${record.clock_in}Z`).getTime()
-    const outMs = new Date(`${today}T${clockOutTime}Z`).getTime()
+    const inMs = new Date(`${today}T${record.clock_in}`).getTime()
+    const outMs = new Date(`${today}T${clockOutTime}`).getTime()
     const total_hours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
-    const status = isLate(record.clock_in) ? "late" : "present"
+    const status = deriveUnifiedAttendanceStatus({
+      record: { clock_in: record.clock_in, clock_out: clockOutTime, waived: false },
+      recordDate: today,
+    })
 
     const updateData: Record<string, unknown> = {
       clock_out: clockOutTime,
       total_hours,
       status,
+      clock_out_source: "remote_web",
       selfie_out_url: selfieOutUrl,
       // Merge face confidence — take the lower of the two (more conservative)
       face_match_confidence: faceMatchConfidence,

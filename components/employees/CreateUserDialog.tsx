@@ -16,7 +16,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select"
+import { AdminRoutesPicker } from "@/components/ui/admin-routes-picker"
 import { Plus } from "lucide-react"
 import { useDepartments } from "@/hooks/use-departments"
 import type { UserRole } from "@/types/database"
@@ -33,7 +33,7 @@ const createUserSchema = z.object({
   companyRole: z.string(),
   phoneNumber: z.string(),
   role: z.string(),
-  admin_domains: z.array(z.string()),
+  admin_routes: z.array(z.string()),
   employeeNumber: z.string(),
 })
 
@@ -48,7 +48,7 @@ interface CreateUserForm {
   companyRole: string
   phoneNumber: string
   role: UserRole
-  admin_domains: string[]
+  admin_routes: string[]
   employeeNumber: string
 }
 
@@ -86,7 +86,7 @@ export function CreateUserDialog({
       companyRole: parentForm.companyRole,
       phoneNumber: parentForm.phoneNumber,
       role: parentForm.role,
-      admin_domains: parentForm.admin_domains,
+      admin_routes: parentForm.admin_routes,
       employeeNumber: parentForm.employeeNumber,
     },
   })
@@ -110,7 +110,7 @@ export function CreateUserDialog({
         companyRole: values.companyRole ?? "",
         phoneNumber: values.phoneNumber ?? "",
         role: (values.role ?? "employee") as UserRole,
-        admin_domains: (values.admin_domains ?? []).filter((value): value is string => Boolean(value)),
+        admin_routes: (values.admin_routes ?? []).filter((value): value is string => Boolean(value)),
         employeeNumber: values.employeeNumber ?? "",
       })
     })
@@ -129,7 +129,7 @@ export function CreateUserDialog({
         companyRole: parentForm.companyRole,
         phoneNumber: parentForm.phoneNumber,
         role: parentForm.role,
-        admin_domains: parentForm.admin_domains,
+        admin_routes: parentForm.admin_routes,
         employeeNumber: parentForm.employeeNumber,
       })
     }
@@ -257,7 +257,7 @@ export function CreateUserDialog({
                 onValueChange={(value: string) => {
                   setValue("role", value)
                   if (value !== "admin") {
-                    setValue("admin_domains", [])
+                    setValue("admin_routes", [])
                   }
                 }}
               >
@@ -276,23 +276,12 @@ export function CreateUserDialog({
           </div>
           {roleValue === "admin" && (
             <div>
-              <Label>Admin Domains *</Label>
-              <SearchableMultiSelect
-                label="Admin Domains"
-                values={watch("admin_domains")}
-                onChange={(values) => setValue("admin_domains", values)}
-                options={[
-                  { value: "hr", label: "HR" },
-                  { value: "finance", label: "Finance" },
-                  { value: "assets", label: "Assets" },
-                  { value: "reports", label: "Reports" },
-                  { value: "tasks", label: "Tasks" },
-                  { value: "projects", label: "Projects" },
-                  { value: "communications", label: "Communications" },
-                ]}
-                placeholder="Select at least one admin domain"
+              <Label>Admin Routes *</Label>
+              <AdminRoutesPicker
+                values={watch("admin_routes")}
+                onChange={(values) => setValue("admin_routes", values)}
               />
-              <p className="text-muted-foreground mt-1 text-xs">Admin must have one or more domains.</p>
+              <p className="text-muted-foreground mt-1 text-xs">Admin must have at least one route.</p>
             </div>
           )}
 

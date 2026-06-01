@@ -40,7 +40,7 @@ import { logger } from "@/lib/logger"
 import { getWorkdaysInMonth, monthBounds, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
-import { StatusBadge } from "./_components/status-badge"
+import { StatusBadge, labelSource } from "./_components/status-badge"
 
 const log = logger("hr-attendance-reports")
 
@@ -77,6 +77,8 @@ interface DayRecord {
   total_hours: number | null
   status: string
   source: string | null
+  clock_in_source?: string | null
+  clock_out_source?: string | null
   waived: boolean
   waiver_reason: string | null
   updated_at?: string | null
@@ -133,7 +135,7 @@ function quarterBounds(year: number, quarter: "Q1" | "Q2" | "Q3" | "Q4") {
   const monthStart = quarter === "Q1" ? 1 : quarter === "Q2" ? 4 : quarter === "Q3" ? 7 : 10
   const start = `${year}-${String(monthStart).padStart(2, "0")}-01`
   const monthEnd = monthStart + 2
-  const endDate = new Date(Date.UTC(year, monthEnd, 0)).toISOString().slice(0, 10)
+  const endDate = toLocalISODate(new Date(Date.UTC(year, monthEnd, 0)))
   return { start, end: endDate }
 }
 
@@ -193,12 +195,6 @@ function getHourBreakdown(record: DayRecord | null, status?: string) {
   return { total, work, overtime, missed }
 }
 
-function labelSource(source: string | null | undefined) {
-  const value = String(source || "").toLowerCase()
-  if (value === "hikvision") return "Automated"
-  if (!value) return "Manual"
-  return value === "manual" ? "Manual" : value.charAt(0).toUpperCase() + value.slice(1)
-}
 
 interface EmployeeExpandProps {
   report: AttendanceReport
@@ -391,7 +387,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
               <span className="text-xs">
                 {hours.overtime != null && hours.overtime >= 0.05 ? formatHours(hours.overtime) : "—"}
               </span>
-              <span className="text-xs">{labelSource(day.record?.source)}</span>
+              <span className="text-xs">{labelSource(day.record)}</span>
               <div className="flex items-center justify-end gap-1">
                 <Button
                   variant="ghost"
@@ -989,17 +985,6 @@ export function AttendanceReportsPage({ backLinkHref }: { backLinkHref?: string 
       placeholder: "All Cycles",
     },
     {
-      key: "period_label",
-      label: "Month",
-      options: [
-        {
-          value: periodMode === "month" ? yearMonth : `${quarter} ${quarterYear}`,
-          label: periodMode === "month" ? yearMonth : `${quarter} ${quarterYear}`,
-        },
-      ],
-      placeholder: "All Months",
-    },
-    {
       key: "rate_band",
       label: "Attendance Band",
       options: [
@@ -1040,6 +1025,16 @@ export function AttendanceReportsPage({ backLinkHref }: { backLinkHref?: string 
       onTabChange={(t) => setActiveTab(t as AttendanceTab)}
       actions={
         <div className="flex items-center gap-2">
+          {activeTab === "summary" && (
+            <input
+              type="month"
+              value={yearMonth}
+              max={currentYearMonth()}
+              onChange={(e) => e.target.value && setYearMonth(e.target.value)}
+              className="border-input bg-background h-9 rounded-md border px-3 py-1.5 text-sm"
+              aria-label="Select report month"
+            />
+          )}
           <Button variant="outline" onClick={() => setManagerOpen(true)} size="sm">
             <Users className="mr-2 h-4 w-4" />
             Exemption Manager

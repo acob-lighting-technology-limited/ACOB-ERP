@@ -1,22 +1,3 @@
-/**
- * Returns the local-time YYYY-MM-DD string for a date (defaults to now).
- * Use instead of date.toISOString().split("T")[0] which returns UTC and
- * shifts dates by -1 day in WAT (UTC+1).
- */
-export function toLocalISODate(date: Date = new Date()): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, "0")
-  const d = String(date.getDate()).padStart(2, "0")
-  return `${y}-${m}-${d}`
-}
-
-/** Returns the local-time YYYY-MM string for a date (defaults to now). */
-export function toLocalYearMonth(date: Date = new Date()): string {
-  const y = date.getFullYear()
-  const m = String(date.getMonth() + 1).padStart(2, "0")
-  return `${y}-${m}`
-}
-
 // ─── WAT (West Africa Time, UTC+1, Africa/Lagos) formatters ─────────────────
 //
 // All user-facing date and time display must use these helpers so timestamps
@@ -24,6 +5,65 @@ export function toLocalYearMonth(date: Date = new Date()): string {
 // the user's browser locale.
 
 const WAT = "Africa/Lagos" as const
+
+function getWATDateParts(date: Date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: WAT,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date)
+  const value = (type: string) => parts.find((part) => part.type === type)?.value || ""
+  return {
+    year: value("year"),
+    month: value("month"),
+    day: value("day"),
+  }
+}
+
+function getWATTimeParts(date: Date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: WAT,
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date)
+  const value = (type: string) => parts.find((part) => part.type === type)?.value || "00"
+  return {
+    hour: value("hour"),
+    minute: value("minute"),
+    second: value("second"),
+  }
+}
+
+/**
+ * Returns the WAT YYYY-MM-DD string for a date (defaults to now).
+ * Use instead of date.toISOString().split("T")[0] which returns UTC.
+ */
+export function toLocalISODate(date: Date = new Date()): string {
+  const { year, month, day } = getWATDateParts(date)
+  return `${year}-${month}-${day}`
+}
+
+/** Returns the WAT YYYY-MM string for a date (defaults to now). */
+export function toLocalYearMonth(date: Date = new Date()): string {
+  const { year, month } = getWATDateParts(date)
+  return `${year}-${month}`
+}
+
+/** Returns the WAT HH:mm:ss string for a date (defaults to now). */
+export function toLocalTimeString(date: Date = new Date()): string {
+  const { hour, minute, second } = getWATTimeParts(date)
+  return `${hour}:${minute}:${second}`
+}
+
+/** Returns the WAT YYYY-MM-DDTHH:mm value expected by datetime-local inputs. */
+export function toLocalDateTimeInput(date: Date = new Date()): string {
+  const { year, month, day } = getWATDateParts(date)
+  const { hour, minute } = getWATTimeParts(date)
+  return `${year}-${month}-${day}T${hour}:${minute}`
+}
 
 /**
  * Format a timestamp as a date string in WAT.

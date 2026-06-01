@@ -67,7 +67,7 @@ export interface Employee {
   department: string
   designation: string | null
   role: UserRole
-  admin_domains?: string[] | null
+  admin_routes?: string[] | null
   phone_number: string | null
   additional_phone: string | null
   gender?: EmployeeGender | null
@@ -159,7 +159,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
 
   const [editForm, setEditForm] = useState({
     role: "employee" as UserRole,
-    admin_domains: [] as string[],
+    admin_routes: [] as string[],
     is_department_lead: false,
     department: "",
     office_location: "",
@@ -218,7 +218,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           const normalizedDepartment = fullProfile.department || ""
           setEditForm({
             role: (fullProfile.role as UserRole) || "employee",
-            admin_domains: Array.isArray(fullProfile.admin_domains) ? fullProfile.admin_domains : [],
+            admin_routes: Array.isArray(fullProfile.admin_routes) ? fullProfile.admin_routes : [],
             is_department_lead: isDepartmentLead,
             department: normalizedDepartment,
             office_location: fullProfile.office_location || "",
@@ -324,7 +324,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
 
       const updateData: Database["public"]["Tables"]["profiles"]["Update"] = {
         role: editForm.role,
-        admin_domains: editForm.role === "admin" ? editForm.admin_domains : null,
+        admin_routes: editForm.role === "admin" ? editForm.admin_routes : null,
         department: editForm.department,
         office_location: editForm.office_location || null,
         designation: editForm.designation || null,

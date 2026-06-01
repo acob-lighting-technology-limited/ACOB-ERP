@@ -53,6 +53,8 @@ interface AttendanceRecord {
   total_hours: number | null
   status: string
   source: string | null
+  clock_in_source?: string | null
+  clock_out_source?: string | null
 }
 
 interface DailyRosterViewProps {
@@ -227,7 +229,7 @@ export function DailyRosterView({ departments }: DailyRosterViewProps) {
       key: "source",
       label: "Source",
       accessor: (r) => r.source ?? "",
-      render: (r) => <span className="text-muted-foreground text-xs">{labelSource(r.source)}</span>,
+      render: (r) => <span className="text-muted-foreground text-xs">{labelSource(r)}</span>,
       hideOnMobile: true,
     },
     {
@@ -273,7 +275,7 @@ export function DailyRosterView({ departments }: DailyRosterViewProps) {
     setRosterDate((prev) => {
       const d = new Date(`${prev}T00:00:00Z`)
       d.setUTCDate(d.getUTCDate() + deltaDays)
-      const next = d.toISOString().slice(0, 10)
+      const next = toLocalISODate(d)
       // Don't allow navigating into the future.
       return next > todayIso ? prev : next
     })

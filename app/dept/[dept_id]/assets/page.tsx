@@ -40,7 +40,7 @@ export default async function DeptAssetsPage({ params }: DeptAssetsPageProps) {
 
   const userProfile: UserProfile = {
     role: scope.role,
-    admin_domains: [],
+    admin_routes: [],
     is_department_lead: true,
     lead_departments: [scope.deptName],
     managed_departments: [deptName],

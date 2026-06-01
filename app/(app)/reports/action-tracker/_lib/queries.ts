@@ -19,7 +19,7 @@ export interface ActionTrackerMetadata {
     department?: string | null
     is_department_lead?: boolean | null
     lead_departments?: string[] | null
-    admin_domains?: string[] | null
+    admin_routes?: string[] | null
   } | null
   allDepartments: string[]
 }

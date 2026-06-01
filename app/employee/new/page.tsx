@@ -18,6 +18,7 @@ import Image from "next/image"
 import { PageHeader } from "@/components/layout/page-header"
 
 import { logger } from "@/lib/logger"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("employee-new")
 
@@ -308,7 +309,7 @@ export default function EmployeeOnboardingForm() {
                     <Input
                       className="h-11"
                       type="date"
-                      max={new Date().toISOString().split("T")[0]}
+                      max={toLocalISODate()}
                       {...register("date_of_birth")}
                     />
                     {errors.date_of_birth && (

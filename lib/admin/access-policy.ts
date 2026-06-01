@@ -1,37 +1,18 @@
-import type { AdminDomain, AdminScopeMode } from "@/lib/admin/rbac"
+import type { AdminScopeMode } from "@/lib/admin/rbac"
 import {
   buildAccessContextV2,
   canAccessRouteV2,
   resolveAdminRouteKeyV2,
   type AccessContextV2,
+  type AdminRouteKeyV2,
 } from "@/lib/admin/policy-v2"
 
 export interface AdminAccessScope {
   role: string | null | undefined
   isDepartmentLead: boolean
   isAdminLike: boolean
-  adminDomains: AdminDomain[] | null
+  adminRoutes: AdminRouteKeyV2[] | null
   scopeMode: AdminScopeMode
-}
-
-export function getDomainForAdminPath(path: string): AdminDomain | null {
-  if (path.startsWith("/admin/hr")) return "hr"
-  if (path.startsWith("/admin/finance") || path.startsWith("/admin/purchasing")) return "finance"
-  if (path.startsWith("/admin/assets") || path.startsWith("/admin/inventory")) return "assets"
-  if (path.startsWith("/admin/reports") || path.startsWith("/admin/audit-logs")) return "reports"
-  if (path.startsWith("/admin/tasks")) return "tasks"
-  if (
-    path.startsWith("/admin/documentation") ||
-    path.startsWith("/admin/feedback") ||
-    path.startsWith("/admin/notifications") ||
-    path.startsWith("/admin/communications") ||
-    path.startsWith("/admin/correspondence") ||
-    path.startsWith("/admin/tools") ||
-    path.startsWith("/admin/help-desk")
-  ) {
-    return "communications"
-  }
-  return null
 }
 
 export function canAccessAdminPath(scope: AdminAccessScope, path: string): boolean {
@@ -40,7 +21,7 @@ export function canAccessAdminPath(scope: AdminAccessScope, path: string): boole
     isDepartmentLead: scope.isDepartmentLead,
     isAdminLike: scope.isAdminLike,
     managedDepartments: [],
-    adminDomains: scope.adminDomains,
+    adminRoutes: scope.adminRoutes,
     scopeMode: scope.scopeMode,
   })
 

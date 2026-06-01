@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/dialog"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
-import { toLocalYearMonth } from "@/lib/hr/attendance-utils"
+import { toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
 import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
 import { formatTime } from "./status-badge"
 
@@ -200,7 +200,7 @@ export function CalendarView({ employees }: CalendarViewProps) {
     }
   }
 
-  const today = new Date().toISOString().slice(0, 10)
+  const today = toLocalISODate()
   const currentYearMonth = toLocalYearMonth()
   const cells = buildCalendarCells(calendarMonth)
   const daysByDate = new Map<string, UnifiedDay>((days ?? []).map((d) => [d.date, d]))

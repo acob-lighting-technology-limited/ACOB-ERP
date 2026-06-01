@@ -23,7 +23,7 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select"
+import { AdminRoutesPicker } from "@/components/ui/admin-routes-picker"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   UserPlus,
@@ -114,7 +114,7 @@ const createSchema = z.object({
   companyRole: z.string(),
   phoneNumber: z.string(),
   role: z.string(),
-  admin_domains: z.array(z.string()),
+  admin_routes: z.array(z.string()),
   employeeNumber: z.string(),
 })
 type CreateFormValues = z.infer<typeof createSchema>
@@ -166,7 +166,7 @@ export function ManageUsersDialog({
       companyRole: "",
       phoneNumber: "",
       role: "employee",
-      admin_domains: [],
+      admin_routes: [],
       employeeNumber: "",
     },
   })
@@ -204,7 +204,7 @@ export function ManageUsersDialog({
           companyRole: v.companyRole,
           phoneNumber: v.phoneNumber,
           role: v.role,
-          admin_domains: v.admin_domains,
+          admin_routes: v.admin_routes,
           employeeNumber: v.employeeNumber,
         }),
       })
@@ -626,7 +626,7 @@ export function ManageUsersDialog({
                         value={roleValue}
                         onValueChange={(v) => {
                           setValue("role", v)
-                          if (v !== "admin") setValue("admin_domains", [])
+                          if (v !== "admin") setValue("admin_routes", [])
                         }}
                       >
                         <SelectTrigger className="mt-1.5">
@@ -645,23 +645,13 @@ export function ManageUsersDialog({
                   {roleValue === "admin" && (
                     <div>
                       <Label>
-                        Admin Domains <span className="text-destructive">*</span>
+                        Admin Routes <span className="text-destructive">*</span>
                       </Label>
-                      <SearchableMultiSelect
-                        label="Admin Domains"
-                        values={watch("admin_domains")}
-                        onChange={(vals) => setValue("admin_domains", vals)}
-                        options={[
-                          { value: "hr", label: "HR" },
-                          { value: "finance", label: "Finance" },
-                          { value: "assets", label: "Assets" },
-                          { value: "reports", label: "Reports" },
-                          { value: "tasks", label: "Tasks" },
-                          { value: "projects", label: "Projects" },
-                          { value: "communications", label: "Communications" },
-                        ]}
-                        placeholder="Select at least one admin domain"
+                      <AdminRoutesPicker
+                        values={watch("admin_routes")}
+                        onChange={(vals) => setValue("admin_routes", vals)}
                       />
+                      <p className="text-muted-foreground mt-1 text-xs">Admin must have at least one route.</p>
                     </div>
                   )}
                   <div>

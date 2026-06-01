@@ -4,8 +4,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
-import { isLate } from "@/lib/hr/attendance-utils"
-import { DB_WRITABLE_STATUSES, isEarlyDeparture } from "@/lib/hr/attendance-status"
+import { DB_WRITABLE_STATUSES, deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { requireApiAdminScope } from "@/lib/admin/api-scope"
 
 const log = logger("admin-hr-attendance-record-patch")
@@ -55,6 +54,10 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const updates: Record<string, unknown> = { ...parsed.data }
 
+    // Any manually-changed punch is attributed to "manual" so the source label can show Mixed
+    if (parsed.data.clock_in !== undefined) updates.clock_in_source = "manual"
+    if (parsed.data.clock_out !== undefined) updates.clock_out_source = "manual"
+
     // Recalculate total_hours if both times are known after update
     const clockIn = parsed.data.clock_in ?? record.clock_in
     const clockOut = parsed.data.clock_out ?? record.clock_out
@@ -72,30 +75,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       const outMs = new Date(`${record.date}T${clockOut}Z`).getTime()
       updates.total_hours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
     }
+    // Re-derive status through the single shared deriver whenever times or the waiver toggle change
     if (parsed.data.waived === true) {
       updates.status = "waiver"
-    } else if (parsed.data.clock_in !== undefined || parsed.data.clock_out !== undefined) {
-      if (!clockIn && !clockOut) {
-        updates.status = "absent"
-      } else if (clockIn && !clockOut) {
-        const today = new Date().toISOString().slice(0, 10)
-        updates.status = record.date < today ? "half_day" : "incomplete"
-      } else if (clockIn && clockOut && clockOut > clockIn) {
-        updates.status = isEarlyDeparture(clockOut) ? "half_day" : isLate(clockIn) ? "late" : "present"
-      } else {
-        updates.status = "incomplete"
-      }
-    } else if (parsed.data.waived === false) {
-      if (!clockIn && !clockOut) {
-        updates.status = "absent"
-      } else if (clockIn && !clockOut) {
-        const today = new Date().toISOString().slice(0, 10)
-        updates.status = record.date < today ? "half_day" : "incomplete"
-      } else if (clockIn && clockOut && clockOut > clockIn) {
-        updates.status = isEarlyDeparture(clockOut) ? "half_day" : isLate(clockIn) ? "late" : "present"
-      } else {
-        updates.status = "incomplete"
-      }
+    } else if (
+      parsed.data.clock_in !== undefined ||
+      parsed.data.clock_out !== undefined ||
+      parsed.data.waived === false
+    ) {
+      updates.status = deriveUnifiedAttendanceStatus({
+        record: { clock_in: clockIn, clock_out: clockOut, waived: false },
+        recordDate: record.date,
+      })
     }
 
     const { data: updated, error } = await dataClient

@@ -21,7 +21,7 @@ export interface Employee {
   department: string
   designation: string | null
   role: UserRole
-  admin_domains?: string[] | null
+  admin_routes?: string[] | null
   phone_number: string | null
   additional_phone: string | null
   residential_address: string | null
