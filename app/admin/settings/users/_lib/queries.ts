@@ -7,7 +7,7 @@ export interface User {
   first_name: string | null
   last_name: string | null
   role: string
-  admin_domains?: string[] | null
+  admin_routes?: string[] | null
   department: string | null
   is_active: boolean
   employment_status: string
@@ -24,7 +24,7 @@ export async function fetchUsersSettingsData(): Promise<UsersSettingsData> {
   const supabase = createClient()
   const { data, error } = await supabase
     .from("profiles")
-    .select("id, company_email, first_name, last_name, role, admin_domains, department, employment_status, created_at")
+    .select("id, company_email, first_name, last_name, role, admin_routes, department, employment_status, created_at")
     .order("created_at", { ascending: false })
 
   if (error) throw new Error(error.message)

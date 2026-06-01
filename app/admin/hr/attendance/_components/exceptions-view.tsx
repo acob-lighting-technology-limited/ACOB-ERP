@@ -32,6 +32,8 @@ interface AttendanceRecord {
   total_hours: number | null
   status: string
   source: string | null
+  clock_in_source?: string | null
+  clock_out_source?: string | null
 }
 
 interface ExceptionsViewProps {
@@ -181,7 +183,7 @@ export function ExceptionsView({ departments }: ExceptionsViewProps) {
       key: "source",
       label: "Source",
       accessor: (r) => r.source ?? "",
-      render: (r) => <span className="text-muted-foreground text-xs">{labelSource(r.source)}</span>,
+      render: (r) => <span className="text-muted-foreground text-xs">{labelSource(r)}</span>,
       hideOnMobile: true,
     },
     {

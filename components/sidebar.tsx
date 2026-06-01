@@ -90,6 +90,7 @@ const navigation: NavItemDef[] = [
           { name: "Weekly Reports", href: "/reports/general-meeting/weekly-reports" },
         ],
       },
+      { name: "Daily Activity", href: "/reports/daily-activity" },
     ],
   },
   { name: "Assets", href: "/assets", icon: Package },

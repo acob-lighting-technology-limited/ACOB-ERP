@@ -29,7 +29,7 @@ interface DeptLayoutProps {
     department?: string
     role?: UserRole
     is_department_lead?: boolean
-    admin_domains?: string[] | null
+    admin_routes?: string[] | null
     lead_departments?: string[]
   }
   /** The dept name — shown in the context ribbon. */

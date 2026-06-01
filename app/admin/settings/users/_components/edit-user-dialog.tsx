@@ -4,13 +4,14 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { FormFieldGroup } from "@/components/ui/patterns"
+import { AdminRoutesPicker } from "@/components/ui/admin-routes-picker"
 import { getRoleOptions } from "../_lib/role-helpers"
 import type { User } from "../_lib/queries"
 
 interface EditUserFormData {
   role: string
   employment_status: string
-  admin_domains: string[]
+  admin_routes: string[]
 }
 
 interface EditUserDialogProps {
@@ -23,8 +24,6 @@ interface EditUserDialogProps {
   currentUserRole: string
 }
 
-const ADMIN_DOMAIN_OPTIONS = ["hr", "finance", "assets", "reports", "tasks", "projects", "communications"] as const
-
 export function EditUserDialog({
   open,
   onOpenChange,
@@ -34,15 +33,6 @@ export function EditUserDialog({
   onSubmit,
   currentUserRole,
 }: EditUserDialogProps) {
-  function toggleAdminDomain(domain: string, checked: boolean) {
-    onFormDataChange({
-      ...formData,
-      admin_domains: checked
-        ? Array.from(new Set([...formData.admin_domains, domain]))
-        : formData.admin_domains.filter((d) => d !== domain),
-    })
-  }
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] w-[95vw] max-w-lg overflow-y-auto">
@@ -61,7 +51,7 @@ export function EditUserDialog({
                   onFormDataChange({
                     ...formData,
                     role: v,
-                    admin_domains: v === "admin" ? formData.admin_domains : [],
+                    admin_routes: v === "admin" ? formData.admin_routes : [],
                   })
                 }
               >
@@ -77,29 +67,17 @@ export function EditUserDialog({
                 </SelectContent>
               </Select>
             </FormFieldGroup>
+
             {formData.role === "admin" && (
-              <FormFieldGroup label="Admin Domains">
-                <div className="grid grid-cols-2 gap-2">
-                  {ADMIN_DOMAIN_OPTIONS.map((domain) => {
-                    const checked = formData.admin_domains.includes(domain)
-                    return (
-                      <label
-                        key={domain}
-                        className="flex cursor-pointer items-center gap-2 rounded-md border p-2 text-sm capitalize"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => toggleAdminDomain(domain, e.target.checked)}
-                        />
-                        {domain}
-                      </label>
-                    )
-                  })}
-                </div>
-                <p className="text-muted-foreground text-xs">At least one domain is required for admin users.</p>
+              <FormFieldGroup label="Admin Routes">
+                <AdminRoutesPicker
+                  values={formData.admin_routes}
+                  onChange={(routes) => onFormDataChange({ ...formData, admin_routes: routes })}
+                />
+                <p className="text-muted-foreground mt-1 text-xs">At least one route is required for admin users.</p>
               </FormFieldGroup>
             )}
+
             <FormFieldGroup label="Employment Status">
               <div className="flex justify-end">
                 <Select

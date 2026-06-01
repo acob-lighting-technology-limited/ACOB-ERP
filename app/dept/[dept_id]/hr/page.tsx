@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Users, Calendar, Clock, MapPin, Award, FileText } from "lucide-react"
 import Link from "next/link"
+import { toLocalISODate } from "@/lib/utils/date"
 
 interface Props {
   params: Promise<{ dept_id: string }>
@@ -47,7 +48,7 @@ export default async function DeptHrPage({ params }: Props) {
       ? dataClient
           .from("attendance_records")
           .select("*", { count: "exact", head: true })
-          .eq("date", new Date().toISOString().split("T")[0])
+          .eq("date", toLocalISODate())
           .in(
             "user_id",
             await dataClient

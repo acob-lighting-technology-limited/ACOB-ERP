@@ -25,7 +25,7 @@ export default async function DeptLayoutPage({ children, params }: DeptLayoutPag
   const { data: profile } = authData?.user
     ? await supabase
         .from("profiles")
-        .select("first_name, last_name, department, role, is_department_lead, admin_domains, lead_departments")
+        .select("first_name, last_name, department, role, is_department_lead, admin_routes, lead_departments")
         .eq("id", authData.user.id)
         .single()
     : { data: null }
@@ -57,7 +57,7 @@ export default async function DeptLayoutPage({ children, params }: DeptLayoutPag
         department: scope.deptName, // always show the dept this console is for
         role: (profile.role ?? "employee") as UserRole,
         is_department_lead: true,
-        admin_domains: (profile.admin_domains as string[] | null) ?? null,
+        admin_routes: (profile.admin_routes as string[] | null) ?? null,
         lead_departments: [scope.deptName],
       }
     : undefined

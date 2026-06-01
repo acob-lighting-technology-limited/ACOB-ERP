@@ -3,6 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { getRoleBadgeColor, getRoleDisplayName } from "@/lib/permissions"
 import type { UserRole } from "@/types/database"
+import { BriefcaseBusiness, Building2, CalendarDays, Cake, Home, Mail, MapPin, Phone, ShieldCheck } from "lucide-react"
 
 interface ContactInfoCardProps {
   profile: {
@@ -24,84 +25,134 @@ interface ContactInfoCardProps {
   }
 }
 
-interface FieldProps {
+interface DetailItemProps {
+  icon: React.ComponentType<{ className?: string }>
   label: string
   children: React.ReactNode
-  full?: boolean
 }
 
-function Field({ label, children, full }: FieldProps) {
+function DetailItem({ icon: Icon, label, children }: DetailItemProps) {
   return (
-    <div className={`space-y-1 ${full ? "sm:col-span-2" : ""}`}>
-      <dt className="text-muted-foreground text-[11px] font-medium tracking-wide uppercase">{label}</dt>
-      <dd className="text-sm font-medium">{children}</dd>
+    <div className="group flex min-w-0 gap-3 rounded-md border bg-background/60 p-3 transition-colors hover:bg-muted/40">
+      <div className="bg-primary/10 text-primary mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md">
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 space-y-1">
+        <dt className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">{label}</dt>
+        <dd className="text-sm leading-5 font-medium break-words">{children}</dd>
+      </div>
     </div>
   )
+}
+
+function formatBirthdayLabel(value: string | null | undefined): string | null {
+  if (!value) return null
+
+  const match = value.trim().match(/^(\d{1,2})-(\d{1,2})$/)
+  if (!match) return null
+
+  const first = Number(match[1])
+  const second = Number(match[2])
+  const month = first > 12 ? second : first
+  const day = first > 12 ? first : second
+  if (!Number.isInteger(month) || !Number.isInteger(day) || month < 1 || month > 12 || day < 1 || day > 31) {
+    return null
+  }
+
+  return new Intl.DateTimeFormat("en-GB", {
+    month: "long",
+    day: "numeric",
+    timeZone: "Africa/Lagos",
+  }).format(new Date(Date.UTC(2000, month - 1, day, 12)))
 }
 
 export function ContactInfoCard({ profile }: ContactInfoCardProps) {
   const employmentDate = profile.employment_date ? new Date(profile.employment_date) : null
   const daysAtAcob = employmentDate ? Math.floor((Date.now() - employmentDate.getTime()) / (1000 * 60 * 60 * 24)) : null
 
-  // birthday is stored as MM-DD (no year) — format to "Month Day"
-  let birthdayLabel: string | null = null
-  if (profile.birthday) {
-    const [mm, dd] = profile.birthday.split("-").map((n) => parseInt(n, 10))
-    if (mm >= 1 && mm <= 12 && dd >= 1 && dd <= 31) {
-      birthdayLabel = formatWATDate(new Date(2000, mm - 1, dd), { month: "long", day: "numeric" })
-    }
-  }
+  const birthdayLabel = formatBirthdayLabel(profile.birthday)
 
   return (
-    <Card>
-      <CardHeader className="pt-4 pb-1">
-        <CardTitle className="text-sm">Contact Information</CardTitle>
-      </CardHeader>
-      <CardContent className="pb-4">
-        <dl className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-          {profile.designation && <Field label="Designation">{profile.designation}</Field>}
-          {profile.department && <Field label="Department">{profile.department}</Field>}
-          <Field label="Role">
-            <div className="flex flex-wrap gap-1.5">
-              <Badge variant="outline" className={getRoleBadgeColor(profile.role as UserRole)}>
-                {getRoleDisplayName(profile.role as UserRole)}
+    <Card className="overflow-hidden">
+      <CardHeader className="border-b bg-muted/30 px-4 py-4 sm:px-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className="text-base">Profile Details</CardTitle>
+            <p className="text-muted-foreground mt-1 text-sm">Role, contact, workplace and personal information.</p>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            <Badge variant="outline" className={getRoleBadgeColor(profile.role as UserRole)}>
+              {getRoleDisplayName(profile.role as UserRole)}
+            </Badge>
+            {profile.is_department_lead && (
+              <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-600">
+                Dept Lead
               </Badge>
-              {profile.is_department_lead && (
-                <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-600">
-                  Dept Lead
-                </Badge>
-              )}
-            </div>
-          </Field>
+            )}
+          </div>
+        </div>
+      </CardHeader>
+      <CardContent className="p-4 sm:p-5">
+        <dl className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+          {profile.designation && (
+            <DetailItem icon={BriefcaseBusiness} label="Designation">
+              {profile.designation}
+            </DetailItem>
+          )}
+          {profile.department && (
+            <DetailItem icon={Building2} label="Department">
+              {profile.department}
+            </DetailItem>
+          )}
+          <DetailItem icon={ShieldCheck} label="Access Level">
+            <span>{getRoleDisplayName(profile.role as UserRole)}</span>
+            {profile.is_department_lead && <span className="text-muted-foreground ml-1.5 text-xs">Department Lead</span>}
+          </DetailItem>
           {profile.company_email && (
-            <Field label="Email" full>
-              <span className="break-all">{profile.company_email}</span>
+            <DetailItem icon={Mail} label="Email">
+              <a className="hover:text-primary break-all transition-colors" href={`mailto:${profile.company_email}`}>
+                {profile.company_email}
+              </a>
               {profile.additional_email && (
-                <span className="text-muted-foreground ml-1.5 text-xs break-all">({profile.additional_email})</span>
+                <span className="text-muted-foreground block text-xs break-all">{profile.additional_email}</span>
               )}
-            </Field>
+            </DetailItem>
           )}
           {profile.phone_number && (
-            <Field label="Phone">
-              {profile.phone_number}
+            <DetailItem icon={Phone} label="Phone">
+              <a className="hover:text-primary transition-colors" href={`tel:${profile.phone_number}`}>
+                {profile.phone_number}
+              </a>
               {profile.additional_phone && (
-                <span className="text-muted-foreground ml-1.5 text-xs">({profile.additional_phone})</span>
+                <span className="text-muted-foreground block text-xs">{profile.additional_phone}</span>
               )}
-            </Field>
+            </DetailItem>
           )}
-          {birthdayLabel && <Field label="Birthday">{birthdayLabel}</Field>}
-          {profile.office_location && <Field label="Office">{profile.office_location}</Field>}
+          {birthdayLabel && (
+            <DetailItem icon={Cake} label="Birthday">
+              {birthdayLabel}
+            </DetailItem>
+          )}
+          {profile.office_location && (
+            <DetailItem icon={MapPin} label="Office">
+              {profile.office_location}
+            </DetailItem>
+          )}
           {profile.residential_address && (
-            <Field label="Address" full>
+            <DetailItem icon={Home} label="Address">
               {profile.residential_address}
-            </Field>
+            </DetailItem>
           )}
           {employmentDate && (
-            <Field label="Joined">
+            <DetailItem icon={CalendarDays} label="Joined">
               {formatWATDate(employmentDate, { month: "long", day: "numeric", year: "numeric" })}
-            </Field>
+            </DetailItem>
           )}
-          {daysAtAcob !== null && <Field label="Tenure">{daysAtAcob} days</Field>}
+          {daysAtAcob !== null && (
+            <DetailItem icon={CalendarDays} label="Tenure">
+              {daysAtAcob.toLocaleString()} days
+            </DetailItem>
+          )}
         </dl>
       </CardContent>
     </Card>

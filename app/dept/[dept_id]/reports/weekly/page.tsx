@@ -33,7 +33,7 @@ export default async function DeptWeeklyReportsPage({ params }: DeptWeeklyReport
         department: scope.deptName,
         is_department_lead: true,
         lead_departments: [scope.deptName],
-        admin_domains: [],
+        admin_routes: [],
       }}
     />
   )

@@ -51,7 +51,7 @@ import type { UserRole } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
 import { motion } from "framer-motion"
 import { normalizeDepartmentName } from "@/shared/departments"
-import { canAccessRouteV2, resolveAdminRouteKeyV2, type AccessContextV2, type AdminDomain } from "@/lib/admin/policy-v2"
+import { canAccessRouteV2, resolveAdminRouteKeyV2, GRANTABLE_ADMIN_ROUTES, type AccessContextV2, type AdminRouteKeyV2 } from "@/lib/admin/policy-v2"
 
 interface AdminSidebarProps {
   user?: {
@@ -67,7 +67,7 @@ interface AdminSidebarProps {
     department?: string
     role?: UserRole
     is_department_lead?: boolean
-    admin_domains?: string[] | null
+    admin_routes?: string[] | null
     lead_departments?: string[]
   }
   adminScopeMode?: "global" | "lead"
@@ -113,6 +113,7 @@ function buildDeptNavigation(deptId: string): NavItem[] {
           href: `${base}/hr/attendance`,
           children: [{ name: "Records", href: `${base}/hr/attendance/records` }],
         },
+        { name: "Daily Activity", href: `${base}/hr/reports/daily-activity` },
         { name: "Leave", href: `${base}/hr/leave` },
         { name: "Departments", href: `${base}/hr/departments` },
         { name: "Office Location", href: `${base}/hr/office-location` },
@@ -214,13 +215,11 @@ function buildDeptNavigation(deptId: string): NavItem[] {
   ]
 }
 
-const ADMIN_DOMAINS: AdminDomain[] = ["hr", "finance", "assets", "reports", "tasks", "communications"]
-
-function normalizeAdminDomains(domains: string[] | null | undefined): AdminDomain[] {
-  if (!Array.isArray(domains)) return []
-  const normalized = Array.from(
+function normalizeAdminRoutes(routes: string[] | null | undefined): AdminRouteKeyV2[] {
+  if (!Array.isArray(routes)) return []
+  return Array.from(
     new Set(
-      domains
+      routes
         .map((value) =>
           String(value || "")
             .trim()
@@ -228,8 +227,7 @@ function normalizeAdminDomains(domains: string[] | null | undefined): AdminDomai
         )
         .filter(Boolean)
     )
-  ).filter((value): value is AdminDomain => ADMIN_DOMAINS.includes(value as AdminDomain))
-  return normalized
+  ).filter((value): value is AdminRouteKeyV2 => GRANTABLE_ADMIN_ROUTES.includes(value as AdminRouteKeyV2))
 }
 
 type NavSubChild = { name: string; href: string }
@@ -539,7 +537,7 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global", deptId,
     router.push("/auth/login")
   }
 
-  const adminDomains = useMemo(() => normalizeAdminDomains(profile?.admin_domains), [profile?.admin_domains])
+  const adminRoutes = useMemo(() => normalizeAdminRoutes(profile?.admin_routes), [profile?.admin_routes])
   const accessContext = useMemo<AccessContextV2 | null>(() => {
     if (!profile?.role) return null
     const managedDepartmentSet = new Set<string>()
@@ -554,7 +552,7 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global", deptId,
       baseRole: String(profile.role).toLowerCase(),
       isDepartmentLead: Boolean(profile.is_department_lead),
       isAdminLike: ["developer", "admin", "super_admin"].includes(String(profile.role).toLowerCase()),
-      adminDomains,
+      adminRoutes,
       actingContext:
         adminScopeMode === "lead" ||
         (!["developer", "admin", "super_admin"].includes(String(profile.role).toLowerCase()) &&
@@ -564,7 +562,7 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global", deptId,
       managedDepartments: Array.from(managedDepartmentSet),
     }
   }, [
-    adminDomains,
+    adminRoutes,
     adminScopeMode,
     profile?.department,
     profile?.is_department_lead,

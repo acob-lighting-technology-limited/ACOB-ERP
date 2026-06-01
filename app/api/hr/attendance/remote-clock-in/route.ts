@@ -4,7 +4,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
-import { toLocalISODate } from "@/lib/utils/date"
+import { toLocalISODate, toLocalTimeString, toLocalYearMonth } from "@/lib/utils/date"
 import { isLate, distanceMetres } from "@/lib/hr/attendance-utils"
 import { matchSelfieToReference } from "@/lib/azure/face"
 import { getOneDriveService } from "@/lib/onedrive"
@@ -144,9 +144,8 @@ export async function POST(request: NextRequest) {
     // ── Upload selfie to OneDrive ────────────────────────────────────────────
     let selfieUrl: string | null = null
     const now = new Date()
-    const yyyy = now.getFullYear()
-    const mm = String(now.getMonth() + 1).padStart(2, "0")
-    const clockInTime = now.toISOString().split("T")[1].split(".")[0]
+    const [yyyy, mm] = toLocalYearMonth(now).split("-")
+    const clockInTime = toLocalTimeString(now)
 
     try {
       const od = getOneDriveService()
@@ -164,6 +163,7 @@ export async function POST(request: NextRequest) {
       clock_in: clockInTime,
       status: "incomplete",
       source: "remote_web",
+      clock_in_source: "remote_web",
       latitude: lat,
       longitude: lng,
       location_verified: locationVerified,

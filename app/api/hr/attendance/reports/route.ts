@@ -3,14 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
 import { normalizeDepartmentName } from "@/shared/departments"
-import {
-  isLate,
-  missedHours,
-  dayCredit,
-  toLocalISODate,
-  toLocalYearMonth,
-  getWorkdaysInMonth,
-} from "@/lib/hr/attendance-utils"
+import { missedHours, dayCredit, toLocalISODate, toLocalYearMonth, getWorkdaysInMonth } from "@/lib/hr/attendance-utils"
+import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { logger } from "@/lib/logger"
 
 const log = logger("hr-attendance-reports-api")
@@ -49,21 +43,6 @@ type ExemptPeriodRow = {
   user_id: string
   start_date: string
   end_date: string
-}
-
-function deriveStatusFromTimes(
-  rec: AttendanceRow | undefined,
-  recordDate?: string
-): "waiver" | "present" | "late" | "incomplete" | "half_day" | "absent" {
-  if (!rec) return "absent"
-  if (rec.waived) return "waiver"
-  if (!rec.clock_in && !rec.clock_out) return "absent"
-  if (rec.clock_in && !rec.clock_out) {
-    const today = new Date().toISOString().slice(0, 10)
-    return recordDate && recordDate < today ? "half_day" : "incomplete"
-  }
-  if (!rec.clock_in && rec.clock_out) return "incomplete"
-  return isLate(rec.clock_in) ? "late" : "present"
 }
 
 export async function GET(request: NextRequest) {
@@ -253,6 +232,10 @@ export async function GET(request: NextRequest) {
           attendance_credits += 1.0
           continue
         }
+        const rec = empRecords.get(workday)
+        // Skip today if still in progress (clocked in, not yet out) — don't score an unfinished day
+        if (workday === todayIso && rec?.clock_in && !rec?.clock_out) continue
+
         available_days++
         const isExempted = Boolean(profile.attendance_exempt) || exemptPeriodSet.has(`${profile.id}:${workday}`)
         if (isExempted) {
@@ -261,8 +244,7 @@ export async function GET(request: NextRequest) {
           continue
         }
 
-        const rec = empRecords.get(workday)
-        const derived = deriveStatusFromTimes(rec, workday)
+        const derived = deriveUnifiedAttendanceStatus({ record: rec, recordDate: workday })
         if (!rec) {
           absent_days++
           total_missed_hours += 9

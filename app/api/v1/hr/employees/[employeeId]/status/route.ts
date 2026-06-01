@@ -5,6 +5,7 @@ import { canAccessAdminSection, resolveAdminScope } from "@/lib/admin/rbac"
 import { getExitBlockers } from "@/lib/hr/exit-blockers"
 import { logger } from "@/lib/logger"
 import type { EmploymentStatus } from "@/types/database"
+import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("api-employee-status")
 
@@ -90,7 +91,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       profileUpdate.is_admin = false
       profileUpdate.is_department_lead = false
       profileUpdate.lead_departments = []
-      profileUpdate.admin_domains = []
+      profileUpdate.admin_routes = []
       if (separation_date) profileUpdate.separation_date = separation_date
       if (reason_code) profileUpdate.separation_reason = reason_code
     } else if (status === "on_leave") {
@@ -122,7 +123,7 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         employee_id: ctx.employeeId,
         suspended_by: ctx.user.id,
         reason: reason_label || reason_code || "No reason provided",
-        start_date: new Date().toISOString().slice(0, 10),
+        start_date: toLocalISODate(),
         end_date: suspension_end_date || null,
         is_active: true,
       })

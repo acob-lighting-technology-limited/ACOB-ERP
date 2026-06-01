@@ -150,6 +150,8 @@ export interface DataTableProps<TData> {
 
   // ── Expandable ───────────────────────────────────────────────────────────
   expandable?: ExpandableConfig<TData>
+  /** Position of the expand control column */
+  expandableColumnPosition?: "start" | "end"
 
   // ── Row Actions ──────────────────────────────────────────────────────────
   rowActions?: RowAction<TData>[]

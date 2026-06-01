@@ -12,7 +12,7 @@ const leadContext: AccessContextV2 = {
   baseRole: "employee",
   isDepartmentLead: true,
   isAdminLike: false,
-  adminDomains: null,
+  adminRoutes: null,
   actingContext: "department_lead",
   managedDepartments: ["accounts", "it"],
 }
@@ -21,7 +21,7 @@ const adminReportsContext: AccessContextV2 = {
   baseRole: "admin",
   isDepartmentLead: false,
   isAdminLike: true,
-  adminDomains: ["reports"],
+  adminRoutes: ["reports.weekly", "reports.other"],
   actingContext: "global_admin",
   managedDepartments: [],
 }
@@ -30,7 +30,7 @@ const adminGlobalContext: AccessContextV2 = {
   baseRole: "admin",
   isDepartmentLead: false,
   isAdminLike: true,
-  adminDomains: ["reports", "hr"],
+  adminRoutes: ["reports.weekly", "reports.other", "hr.main", "jobdescriptions.main", "hr.fleet", "hr.resources", "hr.pms.cbt.manage"],
   actingContext: "global_admin",
   managedDepartments: [],
 }
@@ -39,7 +39,7 @@ const superAdminContext: AccessContextV2 = {
   baseRole: "super_admin",
   isDepartmentLead: true,
   isAdminLike: true,
-  adminDomains: null,
+  adminRoutes: null,
   actingContext: "global_admin",
   managedDepartments: ["accounts"],
 }
@@ -71,7 +71,7 @@ test("lead gets department-scoped CRUD on tasks", () => {
   assert.equal(canMutateV2(leadContext, "tasks.main", "legal"), false)
 })
 
-test("domain-limited admin only accesses configured domain", () => {
+test("route-limited admin only accesses granted routes", () => {
   assert.equal(canAccessRouteV2(adminReportsContext, "auditlogs.main"), false)
   assert.equal(canAccessRouteV2(adminReportsContext, "reports.other"), true)
   assert.equal(canAccessRouteV2(adminReportsContext, "finance.main"), false)

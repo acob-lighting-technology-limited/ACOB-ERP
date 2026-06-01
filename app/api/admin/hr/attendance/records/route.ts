@@ -5,9 +5,9 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { writeAuditLog } from "@/lib/audit/write-audit"
-import { isLate, toLocalISODate } from "@/lib/hr/attendance-utils"
+import { toLocalISODate } from "@/lib/hr/attendance-utils"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
-import { DB_WRITABLE_STATUSES, isEarlyDeparture, deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import { DB_WRITABLE_STATUSES, deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 
 const CreateSchema = z.object({
   user_id: z.string().uuid(),
@@ -60,7 +60,7 @@ export async function GET(request: NextRequest) {
     let attendanceQuery = dataClient
       .from("attendance_records")
       .select(
-        "id, user_id, date, clock_in, clock_out, total_hours, status, source, waived, waiver_reason, updated_at, selfie_url, selfie_out_url, face_match_confidence, face_verified, location_verified, latitude, longitude, site_id"
+        "id, user_id, date, clock_in, clock_out, total_hours, status, source, clock_in_source, clock_out_source, waived, waiver_reason, updated_at, selfie_url, selfie_out_url, face_match_confidence, face_verified, location_verified, latitude, longitude, site_id"
       )
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
@@ -186,6 +186,8 @@ export async function GET(request: NextRequest) {
         total_hours: r.total_hours,
         status: derivedStatus,
         source: r.source,
+        clock_in_source: r.clock_in_source ?? null,
+        clock_out_source: r.clock_out_source ?? null,
         waived: r.waived,
         waiver_reason: r.waiver_reason,
         updated_at: r.updated_at,
@@ -264,6 +266,8 @@ export async function GET(request: NextRequest) {
             total_hours: null,
             status: derivedStatus,
             source: null,
+            clock_in_source: null,
+            clock_out_source: null,
             waived: false,
             waiver_reason: null,
             updated_at: null,
@@ -328,22 +332,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "A record already exists for this date" }, { status: 409 })
     }
 
-    // Auto-determine status from times
-    let status = parsed.data.status
-    if (!status) {
-      if (waived) {
-        status = "waiver"
-      } else if (!clock_in && !clock_out) {
-        status = "absent"
-      } else if (clock_in && !clock_out) {
-        const today = new Date().toISOString().slice(0, 10)
-        status = date < today ? "half_day" : "incomplete"
-      } else if (clock_in && clock_out && clock_out > clock_in) {
-        status = isEarlyDeparture(clock_out) ? "half_day" : isLate(clock_in) ? "late" : "present"
-      } else {
-        status = "incomplete"
-      }
-    }
+    // Auto-determine status via the single shared deriver (unless an explicit status was provided)
+    const status =
+      parsed.data.status ??
+      (waived
+        ? "waiver"
+        : deriveUnifiedAttendanceStatus({
+            record: { clock_in, clock_out, waived: false },
+            recordDate: date,
+          }))
 
     if (clock_in && clock_out && clock_out <= clock_in) {
       return NextResponse.json({ error: "Clock out must be after clock in" }, { status: 400 })
@@ -356,8 +353,14 @@ export async function POST(request: NextRequest) {
     }
 
     const insert: Record<string, unknown> = { user_id, date, status, source: "manual" }
-    if (clock_in) insert.clock_in = clock_in
-    if (clock_out) insert.clock_out = clock_out
+    if (clock_in) {
+      insert.clock_in = clock_in
+      insert.clock_in_source = "manual"
+    }
+    if (clock_out) {
+      insert.clock_out = clock_out
+      insert.clock_out_source = "manual"
+    }
     if (waived !== undefined) insert.waived = waived
     if (waiver_reason !== undefined) insert.waiver_reason = waiver_reason
 

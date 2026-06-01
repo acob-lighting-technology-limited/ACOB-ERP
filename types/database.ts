@@ -33,6 +33,7 @@ export type Database = {
           is_admin: boolean
           role: Database["public"]["Enums"]["user_role"]
           admin_domains: string[] | null
+          admin_routes: string[] | null
           is_department_lead: boolean
           lead_departments: string[]
           job_description: string | null
@@ -76,6 +77,7 @@ export type Database = {
           is_admin?: boolean
           role?: Database["public"]["Enums"]["user_role"]
           admin_domains?: string[] | null
+          admin_routes?: string[] | null
           is_department_lead?: boolean
           lead_departments?: string[]
           job_description?: string | null
@@ -112,6 +114,7 @@ export type Database = {
           is_admin?: boolean
           role?: Database["public"]["Enums"]["user_role"]
           admin_domains?: string[] | null
+          admin_routes?: string[] | null
           is_department_lead?: boolean
           lead_departments?: string[]
           job_description?: string | null
@@ -318,6 +321,7 @@ export interface Profile {
   is_admin: boolean
   role: UserRole
   admin_domains?: string[] | null
+  admin_routes?: string[] | null
   is_department_lead: boolean
   lead_departments: string[]
   job_description?: string

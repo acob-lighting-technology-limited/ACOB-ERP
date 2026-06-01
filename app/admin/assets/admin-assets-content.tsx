@@ -47,7 +47,7 @@ import {
   exportEmployeeReportToPDF,
   exportEmployeeReportToWord,
 } from "@/lib/assets/asset-export"
-import { toLocalISODate } from "@/lib/utils/date"
+import { toLocalDateTimeInput, toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("assets-admin-assets-content")
 
@@ -189,7 +189,7 @@ const currentYear = new Date().getFullYear()
 
 export interface UserProfile {
   role: string
-  admin_domains?: string[] | null
+  admin_routes?: string[] | null
   is_department_lead?: boolean
   lead_departments?: string[]
   managed_departments?: string[]
@@ -215,13 +215,13 @@ export function AdminAssetsContent({
   const normalizedRole = String(userProfile?.role || "")
     .trim()
     .toLowerCase()
-  const adminDomains = Array.isArray(userProfile?.admin_domains)
-    ? userProfile.admin_domains.map((domain) => String(domain).trim().toLowerCase())
+  const adminRoutes = Array.isArray(userProfile?.admin_routes)
+    ? userProfile.admin_routes.map((r) => String(r).trim().toLowerCase())
     : []
   const canCreateAssetType =
     normalizedRole === "developer" ||
     normalizedRole === "super_admin" ||
-    (normalizedRole === "admin" && adminDomains.includes("assets"))
+    (normalizedRole === "admin" && (adminRoutes.includes("assets.main") || adminRoutes.includes("assets.issues")))
   const [assets, setAssets] = useState<Asset[]>(initialAssets)
   const [employees, setEmployees] = useState<Employee[]>(initialEmployees)
   const activeEmployees = employees.filter((member) => isAssignableProfile(member, { allowLegacyNullStatus: false }))
@@ -731,7 +731,7 @@ export function AdminAssetsContent({
         if (data) {
           assignmentDetails = {
             assigned_by: data.assigned_by || "",
-            assigned_at: data.assigned_at ? new Date(data.assigned_at).toISOString().slice(0, 16) : "",
+            assigned_at: data.assigned_at ? toLocalDateTimeInput(new Date(data.assigned_at)) : "",
             assigned_to: data.assigned_to || "",
             department: data.department || "",
             office_location: data.office_location || "",
@@ -796,7 +796,7 @@ export function AdminAssetsContent({
         office_location: "",
         assignment_notes: "",
         assigned_by: user?.id || "",
-        assigned_at: new Date().toISOString().slice(0, 16),
+        assigned_at: toLocalDateTimeInput(),
       })
       setOriginalAssetForm({
         asset_type: "",
@@ -812,7 +812,7 @@ export function AdminAssetsContent({
         office_location: "",
         assignment_notes: "",
         assigned_by: user?.id || "",
-        assigned_at: new Date().toISOString().slice(0, 16),
+        assigned_at: toLocalDateTimeInput(),
       })
     }
     setIsAssetDialogOpen(true)
@@ -1043,7 +1043,7 @@ export function AdminAssetsContent({
 
     let assignmentState: AssetAssignment | null = null
     let assignedBy = ""
-    let assignedAt = new Date().toISOString().slice(0, 16)
+    let assignedAt = toLocalDateTimeInput()
     const assignmentNotes = ""
 
     try {
@@ -1056,7 +1056,7 @@ export function AdminAssetsContent({
 
       if (assignment) {
         assignmentState = assignment
-        assignedAt = assignment.assigned_at ? new Date(assignment.assigned_at).toISOString().slice(0, 16) : assignedAt
+        assignedAt = assignment.assigned_at ? toLocalDateTimeInput(new Date(assignment.assigned_at)) : assignedAt
       }
     } catch (error) {
       log.error("Error loading current assignment:", error)

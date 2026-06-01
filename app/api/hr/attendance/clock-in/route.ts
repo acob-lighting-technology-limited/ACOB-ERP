@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
-import { toLocalISODate } from "@/lib/utils/date"
+import { toLocalISODate, toLocalTimeString } from "@/lib/utils/date"
 
 const log = logger("hr-attendance-clock-in")
 
@@ -24,10 +24,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Use a single timestamp so date and time are from the same instant in UTC
+    // Use one timestamp and store the local WAT workday/time.
     const now = new Date()
     const today = toLocalISODate(now)
-    const clockInTime = now.toISOString().split("T")[1].split(".")[0] // HH:MM:SS UTC
+    const clockInTime = toLocalTimeString(now)
 
     const { data: existingRecord } = await supabase
       .from("attendance_records")
@@ -50,6 +50,7 @@ export async function POST(request: NextRequest) {
         clock_in: clockInTime,
         status,
         source: "manual",
+        clock_in_source: "manual",
       })
       .select()
       .single()

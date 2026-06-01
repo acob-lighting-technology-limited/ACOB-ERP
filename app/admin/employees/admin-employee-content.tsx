@@ -43,7 +43,7 @@ export interface Employee {
   department: string
   designation: string | null
   role: UserRole
-  admin_domains?: string[] | null
+  admin_routes?: string[] | null
   phone_number: string | null
   additional_phone: string | null
   residential_address: string | null
@@ -169,14 +169,14 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     companyRole: "",
     phoneNumber: "",
     role: "employee" as UserRole,
-    admin_domains: [] as string[],
+    admin_routes: [] as string[],
     employeeNumber: "",
   })
 
   // Edit form state (matches EmployeeViewModal's EditForm shape)
   const [editForm, setEditForm] = useState({
     role: "employee" as UserRole,
-    admin_domains: [] as string[],
+    admin_routes: [] as string[],
     is_department_lead: false,
     department: "",
     office_location: "",
@@ -240,7 +240,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       if (fullProfile) {
         setEditForm({
           role: fullProfile.role || "employee",
-          admin_domains: Array.isArray(fullProfile.admin_domains) ? fullProfile.admin_domains : [],
+          admin_routes: Array.isArray(fullProfile.admin_routes) ? fullProfile.admin_routes : [],
           is_department_lead: Boolean(fullProfile.is_department_lead),
           department: fullProfile.department || "",
           office_location: fullProfile.office_location || "",
@@ -266,7 +266,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       } else {
         setEditForm({
           role: employee.role,
-          admin_domains: Array.isArray(employee.admin_domains) ? employee.admin_domains : [],
+          admin_routes: Array.isArray(employee.admin_routes) ? employee.admin_routes : [],
           is_department_lead: Boolean(employee.is_department_lead),
           department: employee.department,
           office_location: employee.office_location || "",
@@ -422,7 +422,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         return
       }
 
-      if (editForm.role === "admin" && editForm.admin_domains.length === 0) {
+      if (editForm.role === "admin" && editForm.admin_routes.length === 0) {
         toast.error("Admin role requires at least one admin domain")
         setIsSaving(false)
         return
@@ -477,7 +477,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const updateData: any = {
         role: editForm.role,
-        admin_domains: editForm.role === "admin" ? editForm.admin_domains : null,
+        admin_routes: editForm.role === "admin" ? editForm.admin_routes : null,
         department: editForm.department,
         office_location: editForm.office_location || null,
         designation: editForm.designation || null,
@@ -568,7 +568,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         return
       }
 
-      if (createUserForm.role === "admin" && createUserForm.admin_domains.length === 0) {
+      if (createUserForm.role === "admin" && createUserForm.admin_routes.length === 0) {
         toast.error("Admin role requires at least one admin domain")
         setIsCreatingUser(false)
         return
@@ -597,7 +597,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         companyRole: "",
         phoneNumber: "",
         role: "employee",
-        admin_domains: [],
+        admin_routes: [],
         employeeNumber: "",
       })
       loadData()

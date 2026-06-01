@@ -50,7 +50,7 @@ async function getAdminAssetsData() {
 
   const userProfile: UserProfile = {
     role: scope.role,
-    admin_domains: scope.adminDomains,
+    admin_routes: scope.adminRoutes,
     is_department_lead: scope.isDepartmentLead,
     lead_departments: scope.leadDepartments,
     managed_departments: scope.managedDepartments,
