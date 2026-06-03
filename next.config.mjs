@@ -70,6 +70,35 @@ const securityHeaders = [
 const nextConfig = {
   transpilePackages: ["xlsx", "jspdf", "jspdf-autotable", "docx", "file-saver"],
 
+  // ---------------------------------------------------------------------------
+  // Turbopack (dev only — `next dev --turbopack`). Production build still uses
+  // webpack via `next build --webpack`, so the `webpack()` config below remains
+  // the source of truth for prod bundling. These aliases mirror the canvas /
+  // node-core stubs that the webpack config applies, so export libs (jspdf,
+  // xlsx, docx) resolve in the browser during dev.
+  // ---------------------------------------------------------------------------
+  turbopack: {
+    resolveAlias: {
+      // jsPDF optional deps that must not resolve in the browser
+      canvas: { browser: "./lib/empty-module.js" },
+      encoding: { browser: "./lib/empty-module.js" },
+      // node: scheme + bare node-core imports pulled in by export libs
+      "node:fs": { browser: "./lib/empty-module.js" },
+      "node:net": { browser: "./lib/empty-module.js" },
+      "node:tls": { browser: "./lib/empty-module.js" },
+      "node:path": { browser: "./lib/empty-module.js" },
+      "node:stream": { browser: "./lib/empty-module.js" },
+      "node:crypto": { browser: "./lib/empty-module.js" },
+      "node:http": { browser: "./lib/empty-module.js" },
+      "node:https": { browser: "./lib/empty-module.js" },
+      fs: { browser: "./lib/empty-module.js" },
+      net: { browser: "./lib/empty-module.js" },
+      tls: { browser: "./lib/empty-module.js" },
+      http: { browser: "./lib/empty-module.js" },
+      https: { browser: "./lib/empty-module.js" },
+    },
+  },
+
   // Ensure build fails on TypeScript errors (matches Vercel behavior)
   typescript: {
     ignoreBuildErrors: false,
