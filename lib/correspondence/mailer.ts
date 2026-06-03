@@ -1,5 +1,5 @@
 import { sendNotificationEmail } from "@/lib/notifications/email-gateway"
-import { ORG_PRIMARY_DOMAIN } from "@/lib/org-config"
+import { ORG_EMAIL_SENDERS } from "@/lib/org-config"
 
 export interface CorrespondenceApprovalEmailPayload {
   to: string[]
@@ -145,7 +145,7 @@ export async function sendCorrespondenceDecisionEmail(payload: CorrespondenceDec
   const typeLabel = getTypeLabel(payload.letterType)
   const decisionLabel = getDecisionLabel(payload.decision)
   await sendNotificationEmail({
-    from: `ACOB Correspondence System <notifications@${ORG_PRIMARY_DOMAIN}>`,
+    from: ORG_EMAIL_SENDERS.correspondence,
     to: recipients,
     subject: `${typeLabel} Correspondence ${decisionLabel}: ${payload.referenceNumber}`,
     html: buildHtml(payload),

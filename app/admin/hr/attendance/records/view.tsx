@@ -68,7 +68,10 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-export function AdminAttendanceRecordsPage({ backLinkHref }: { backLinkHref?: string } = {}) {
+export function AdminAttendanceRecordsPage({
+  backLinkHref,
+  lockedDepartment,
+}: { backLinkHref?: string; lockedDepartment?: string } = {}) {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState({
@@ -86,6 +89,7 @@ export function AdminAttendanceRecordsPage({ backLinkHref }: { backLinkHref?: st
     setLoading(true)
     try {
       const params = new URLSearchParams({ start_date: filters.start_date, end_date: filters.end_date })
+      if (lockedDepartment) params.set("department", lockedDepartment)
       const res = await fetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load records")
@@ -96,7 +100,7 @@ export function AdminAttendanceRecordsPage({ backLinkHref }: { backLinkHref?: st
     } finally {
       setLoading(false)
     }
-  }, [filters.start_date, filters.end_date])
+  }, [filters.start_date, filters.end_date, lockedDepartment])
 
   useEffect(() => {
     void load()
@@ -362,6 +366,7 @@ export function AdminAttendanceRecordsPage({ backLinkHref }: { backLinkHref?: st
           columns={columns}
           filters={tableFilters}
           getRowId={(r) => r.id}
+          pagination={{ pageSize: 50 }}
           searchPlaceholder="Search employee or department..."
           searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
           isLoading={loading}

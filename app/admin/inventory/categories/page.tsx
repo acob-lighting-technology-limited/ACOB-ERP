@@ -345,6 +345,7 @@ export default function CategoriesPage() {
         columns={columns}
         filters={filters}
         getRowId={(category) => category.id}
+        pagination={{ pageSize: 20 }}
         searchPlaceholder="Search category name or description..."
         searchFn={(category, query) => {
           const normalizedQuery = query.toLowerCase()

@@ -476,6 +476,7 @@ export default function AdminPmsCbtQuestionPage() {
         columns={columns}
         filters={filters}
         getRowId={(question) => question.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search question text, options, explanation, or answer..."
         searchFn={(question, query) =>
           [

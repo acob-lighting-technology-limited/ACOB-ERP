@@ -533,6 +533,7 @@ export function AdminTasksContent({
         data={tasks}
         columns={columns}
         getRowId={(r) => r.id}
+        pagination={{ pageSize: 50 }}
         isLoading={isLoading}
         onRetry={loadData}
         searchPlaceholder="Search task title, description, or assigned user..."

@@ -33,6 +33,9 @@ export type AdminRouteKeyV2 =
   | "hr.main"
   | "hr.fleet"
   | "hr.resources"
+  | "hr.leave"
+  | "hr.attendance"
+  | "hr.pms"
   | "hr.pms.cbt.manage"
   | "inventory.main"
   | "jobdescriptions.main"
@@ -50,6 +53,9 @@ export const GRANTABLE_ADMIN_ROUTES: AdminRouteKeyV2[] = [
   "hr.main",
   "hr.fleet",
   "hr.resources",
+  "hr.leave",
+  "hr.attendance",
+  "hr.pms",
   "hr.pms.cbt.manage",
   "jobdescriptions.main",
   "finance.main",
@@ -69,6 +75,8 @@ export const GRANTABLE_ADMIN_ROUTES: AdminRouteKeyV2[] = [
   "helpdesk.main",
   "notifications.main",
   "tools.main",
+  "settings.main",
+  "auditlogs.main",
 ]
 
 export interface AccessContextV2 {
@@ -135,8 +143,12 @@ export function resolveAdminRouteKeyV2(pathname: string): AdminRouteKeyV2 {
   if (pathname.startsWith("/admin/help-desk")) return "helpdesk.main"
   if (pathname.startsWith("/admin/hr/pms/cbt/question")) return "hr.pms.cbt.manage"
   if (/^\/admin\/hr\/pms\/cbt\/[^/]+$/.test(pathname)) return "hr.pms.cbt.manage"
+  if (pathname.startsWith("/admin/hr/pms")) return "hr.pms"
+  if (pathname.startsWith("/admin/hr/leave")) return "hr.leave"
+  if (pathname.startsWith("/admin/hr/attendance")) return "hr.attendance"
+  // Fleet and Resources are the same "Resource Booking" feature — both gate on hr.fleet.
   if (pathname.startsWith("/admin/hr/fleet")) return "hr.fleet"
-  if (pathname.startsWith("/admin/hr/resources")) return "hr.resources"
+  if (pathname.startsWith("/admin/hr/resources")) return "hr.fleet"
   if (pathname.startsWith("/admin/hr")) return "hr.main"
   if (pathname.startsWith("/admin/inventory")) return "inventory.main"
   if (pathname.startsWith("/admin/job-descriptions")) return "jobdescriptions.main"
@@ -167,6 +179,10 @@ export function getRoutePolicyV2(route: AdminRouteKeyV2): RoutePolicyV2 {
       return { visibility: "none", mutations: "none", adminOnly: true, domain: "hr" }
     case "hr.pms.cbt.manage":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: "hr" }
+    case "hr.pms":
+    case "hr.leave":
+    case "hr.attendance":
+      return { visibility: "dept", mutations: "dept", adminOnly: false, domain: "hr" }
     case "reports.weekly":
       return { visibility: "global_view", mutations: "dept", adminOnly: false, domain: "reports" }
     case "reports.other":
@@ -225,13 +241,44 @@ export function canAccessRouteV2(context: AccessContextV2, route: AdminRouteKeyV
   const isGlobalAdminContext = context.actingContext === "global_admin" && context.isAdminLike
 
   if (isGlobalAdminContext) {
-    // System-only routes: always restricted to developer/super_admin regardless of granted routes
-    if (route === "auditlogs.main" || route === "settings.main" || route === "dev.main") {
-      return context.baseRole === "developer" || context.baseRole === "super_admin"
+    // Dev tooling is developer-only (matches canAccessAdminSection). super_admin
+    // and admin never see /admin/dev, regardless of granted routes.
+    if (route === "dev.main") {
+      return context.baseRole === "developer"
     }
     // Dashboard is always accessible to any admin-like role
     if (route === "admin.dashboard") return true
-    // All other routes: check route-level grant
+    // Leave, Attendance, Resource Booking (Fleet/Resources) and PMS are grantable
+    // on their own, but full "Employees & HR" (hr.main) also includes them — so
+    // admins who already had HR keep access (no lockout). CBT folds into PMS.
+    if (route === "hr.leave") {
+      return adminHasRoute(context, "hr.leave") || adminHasRoute(context, "hr.main")
+    }
+    if (route === "hr.attendance") {
+      return adminHasRoute(context, "hr.attendance") || adminHasRoute(context, "hr.main")
+    }
+    if (route === "hr.fleet" || route === "hr.resources") {
+      return (
+        adminHasRoute(context, "hr.fleet") ||
+        adminHasRoute(context, "hr.resources") ||
+        adminHasRoute(context, "hr.main")
+      )
+    }
+    if (route === "hr.pms") {
+      return adminHasRoute(context, "hr.pms") || adminHasRoute(context, "hr.main")
+    }
+    if (route === "hr.pms.cbt.manage") {
+      // CBT is part of PMS now — granting PMS (or full HR) covers it.
+      return (
+        adminHasRoute(context, "hr.pms.cbt.manage") ||
+        adminHasRoute(context, "hr.pms") ||
+        adminHasRoute(context, "hr.main")
+      )
+    }
+    // Everything else — including Settings and Audit Logs — is assignment-driven:
+    //   - developer / super_admin: full access (adminHasRoute returns true)
+    //   - admin: only routes explicitly granted to them (admin_routes)
+    // i.e. an admin is a super_admin scoped to their assigned routes.
     return adminHasRoute(context, route)
   }
 

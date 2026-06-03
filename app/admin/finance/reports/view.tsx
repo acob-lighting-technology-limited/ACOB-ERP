@@ -401,6 +401,7 @@ export function FinanceReportsPage({ backLinkHref }: { backLinkHref?: string } =
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search title, department, or category..."
         searchFn={(row, query) => {
           const normalizedQuery = query.toLowerCase()

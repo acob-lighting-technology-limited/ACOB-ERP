@@ -94,6 +94,9 @@ test("route resolver maps critical override routes", () => {
   assert.equal(resolveAdminRouteKeyV2("/admin/communications/meetings/mail"), "communications.meetings")
   assert.equal(resolveAdminRouteKeyV2("/admin/hr/pms/cbt/question"), "hr.pms.cbt.manage")
   assert.equal(resolveAdminRouteKeyV2("/admin/hr/pms/cbt/abc123"), "hr.pms.cbt.manage")
-  assert.equal(resolveAdminRouteKeyV2("/admin/hr/resources"), "hr.resources")
+  // Leave & Attendance are split out of hr.main; Resources folds into the Resource Booking grant (hr.fleet).
+  assert.equal(resolveAdminRouteKeyV2("/admin/hr/leave"), "hr.leave")
+  assert.equal(resolveAdminRouteKeyV2("/admin/hr/attendance"), "hr.attendance")
+  assert.equal(resolveAdminRouteKeyV2("/admin/hr/resources"), "hr.fleet")
   assert.equal(resolveAdminRouteKeyV2("/admin/reports/general-meeting/weekly-reports"), "reports.weekly")
 })

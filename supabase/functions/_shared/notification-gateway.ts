@@ -1,8 +1,7 @@
 import { sendEmail } from "./email.ts"
+import { EDGE_SENDERS } from "./senders.ts"
 
-const notificationSenderEmail = Deno.env.get("NOTIFICATION_SENDER_EMAIL") || "notifications@acoblighting.com"
-
-export const DEFAULT_NOTIFICATION_SENDER = `ACOB Notification System <${notificationSenderEmail}>`
+export const DEFAULT_NOTIFICATION_SENDER = EDGE_SENDERS.notification
 
 export type NotificationModule =
   | "Onboarding"

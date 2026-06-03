@@ -271,6 +271,7 @@ export default function SiteLocationsPage() {
           data={sites}
           columns={columns}
           getRowId={(s) => s.id}
+          pagination={{ pageSize: 20 }}
           searchPlaceholder="Search by name or address…"
           searchFn={(s, q) => [s.name, s.address ?? ""].join(" ").toLowerCase().includes(q.toLowerCase())}
           isLoading={isLoading}

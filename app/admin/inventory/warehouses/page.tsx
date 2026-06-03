@@ -366,6 +366,7 @@ export default function WarehousesPage() {
         columns={columns}
         filters={filters}
         getRowId={(warehouse) => warehouse.id}
+        pagination={{ pageSize: 20 }}
         searchPlaceholder="Search warehouse name, code, or address..."
         searchFn={(warehouse, query) => {
           const normalizedQuery = query.toLowerCase()

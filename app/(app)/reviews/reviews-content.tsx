@@ -295,6 +295,7 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
         columns={columns}
         getRowId={(r) => r.id}
         filters={filters}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search reviewer or cycle..."
         searchFn={(r, q) =>
           `${getQuarterLabel(r)} ${r.reviewer?.first_name} ${r.reviewer?.last_name}`.toLowerCase().includes(q)

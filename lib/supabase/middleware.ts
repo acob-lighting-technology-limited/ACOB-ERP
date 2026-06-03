@@ -5,6 +5,7 @@ import type { EmploymentStatus } from "@/types/database"
 import { resolveAdminScope, roleCanEnterAdmin, isAdminLikeRole } from "@/lib/admin/rbac"
 import { resolveDeptScope } from "@/lib/dept/scope"
 import { buildAccessContextV2, canAccessRouteV2, resolveAdminRouteKeyV2 } from "@/lib/admin/policy-v2"
+import { resolveCookieMaxAge } from "@/lib/supabase/cookie-policy"
 
 // ---------------------------------------------------------------------------
 // Maintenance-mode in-memory cache (30 s TTL).
@@ -79,7 +80,15 @@ export async function updateSession(request: NextRequest) {
             request,
           })
           supabaseResponse.headers.set("x-request-id", requestId)
-          cookiesToSet.forEach(({ name, value, options }) => supabaseResponse.cookies.set(name, value, options))
+          cookiesToSet.forEach(({ name, value, options }) => {
+            // Cap server-set auth cookies to the uniform 7-day window so every
+            // browser expires the session at the same point (see cookie-policy.ts).
+            const isDeletion = value === "" || options?.maxAge === 0
+            supabaseResponse.cookies.set(name, value, {
+              ...options,
+              maxAge: resolveCookieMaxAge(options?.maxAge, isDeletion),
+            })
+          })
         },
       },
     }

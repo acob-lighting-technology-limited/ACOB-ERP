@@ -272,6 +272,7 @@ export default function PurchaseOrdersPage() {
         columns={columns}
         filters={filters}
         getRowId={(order) => order.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search purchase order or supplier..."
         searchFn={(order, query) => {
           const normalizedQuery = query.toLowerCase()

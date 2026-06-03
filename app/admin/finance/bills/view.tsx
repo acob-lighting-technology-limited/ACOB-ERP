@@ -17,7 +17,7 @@ import { logger } from "@/lib/logger"
 
 const log = logger("finance-bills")
 
-interface Bill {
+export interface Bill {
   id: string
   bill_number: string
   supplier_name: string
@@ -78,7 +78,11 @@ function getDateBand(bill: Bill) {
   return "Future"
 }
 
-export function BillsPage({ backLinkHref, financeBasePath }: { backLinkHref?: string; financeBasePath?: string } = {}) {
+export function BillsPage({
+  backLinkHref,
+  financeBasePath,
+  initialBills,
+}: { backLinkHref?: string; financeBasePath?: string; initialBills?: Bill[] } = {}) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
@@ -92,6 +96,7 @@ export function BillsPage({ backLinkHref, financeBasePath }: { backLinkHref?: st
   } = useQuery({
     queryKey: QUERY_KEYS.adminBills(),
     queryFn: fetchBillsList,
+    initialData: initialBills,
   })
 
   const supplierOptions = useMemo(
@@ -291,6 +296,7 @@ export function BillsPage({ backLinkHref, financeBasePath }: { backLinkHref?: st
         columns={columns}
         filters={filters}
         getRowId={(bill) => bill.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search bill number or supplier..."
         searchFn={(bill, query) => {
           const normalizedQuery = query.toLowerCase()

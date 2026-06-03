@@ -166,6 +166,7 @@ export function RoleEscalationsContent({ rows, error }: { rows: AuditLogRow[]; e
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search action, entity, actor, or changed values..."
         searchFn={(row, query) => {
           const normalizedQuery = query.toLowerCase()

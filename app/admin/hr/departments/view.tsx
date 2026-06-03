@@ -31,13 +31,7 @@ import { formatWATDate } from "@/lib/utils/date"
 
 const log = logger("hr-departments")
 
-interface DepartmentsData {
-  departments: Department[]
-  departmentEmployees: Record<string, DepartmentEmployee[]>
-  canManageDepartments: boolean
-}
-
-interface Department {
+export interface Department {
   id: string
   name: string
   description: string | null
@@ -50,7 +44,7 @@ interface Department {
   employee_count?: number
 }
 
-interface DepartmentEmployee {
+export interface DepartmentEmployee {
   id: string
   first_name: string | null
   last_name: string | null
@@ -59,6 +53,12 @@ interface DepartmentEmployee {
   designation: string | null
   employment_status: string | null
   department: string | null
+}
+
+export interface DepartmentsData {
+  departments: Department[]
+  departmentEmployees: Record<string, DepartmentEmployee[]>
+  canManageDepartments: boolean
 }
 
 async function fetchDepartmentsData(): Promise<DepartmentsData> {
@@ -152,7 +152,8 @@ function DepartmentCard({ department, onEdit }: { department: Department; onEdit
 export function DepartmentsPage({
   backLinkHref,
   employeesBasePath,
-}: { backLinkHref?: string; employeesBasePath?: string } = {}) {
+  initialData,
+}: { backLinkHref?: string; employeesBasePath?: string; initialData?: DepartmentsData } = {}) {
   const queryClient = useQueryClient()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null)
@@ -169,6 +170,7 @@ export function DepartmentsPage({
   const { data, isLoading, error } = useQuery({
     queryKey: QUERY_KEYS.adminDepartmentsPage(),
     queryFn: fetchDepartmentsData,
+    initialData,
   })
 
   const departments = data?.departments ?? []
@@ -550,6 +552,7 @@ export function DepartmentsPage({
         columns={columns}
         filters={filters}
         getRowId={(department) => department.id}
+        pagination={{ pageSize: 20 }}
         searchPlaceholder="Search department name or description..."
         searchFn={(department, query) =>
           [department.name, department.description || "", department.department_code || ""]

@@ -240,6 +240,7 @@ export default function ReceiptsPage() {
         columns={columns}
         filters={filters}
         getRowId={(receipt) => receipt.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search receipt number, PO, or supplier..."
         searchFn={(receipt, query) => {
           const normalizedQuery = query.toLowerCase()

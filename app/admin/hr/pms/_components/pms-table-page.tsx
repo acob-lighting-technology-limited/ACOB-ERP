@@ -193,6 +193,7 @@ export function PmsTablePage({
         columns={tableColumns}
         filters={filters}
         getRowId={(row) => row.__rowId || normalizeCell(row[firstColumnKey])}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder={searchPlaceholder}
         searchFn={(row, query) =>
           columns.some((column) => normalizeCell(row[column.key]).toLowerCase().includes(query))

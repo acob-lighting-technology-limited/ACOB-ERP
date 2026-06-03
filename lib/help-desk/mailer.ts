@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { sendNotificationEmail } from "@/lib/notifications/email-gateway"
-import { ORG_PRIMARY_DOMAIN } from "@/lib/org-config"
+import { ORG_EMAIL_SENDERS } from "@/lib/org-config"
 import { withSubjectPrefix } from "@/lib/notifications/subject-policy"
 import { isSystemNotificationChannelEnabled, resolveChannelEligibleUserIds } from "@/lib/notifications/delivery-policy"
 
@@ -80,7 +80,7 @@ export async function sendHelpDeskMail(payload: HelpDeskMailPayload) {
     if (!systemEnabled) return
 
     await sendNotificationEmail({
-      from: `ACOB Help Desk <notifications@${ORG_PRIMARY_DOMAIN}>`,
+      from: ORG_EMAIL_SENDERS.helpDesk,
       to: [overrideRecipient],
       subject: withSubjectPrefix("Help Desk", payload.subject),
       html: buildEmailHtml(payload),
@@ -116,7 +116,7 @@ export async function sendHelpDeskMail(payload: HelpDeskMailPayload) {
   if (!recipients.length) return
 
   await sendNotificationEmail({
-    from: `ACOB Help Desk <notifications@${ORG_PRIMARY_DOMAIN}>`,
+    from: ORG_EMAIL_SENDERS.helpDesk,
     to: recipients,
     subject: withSubjectPrefix("Help Desk", payload.subject),
     html: buildEmailHtml(payload),

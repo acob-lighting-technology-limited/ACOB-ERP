@@ -288,6 +288,7 @@ export default function RemoteAccessPage() {
           columns={columns}
           filters={tableFilters}
           getRowId={(e) => e.user_id}
+          pagination={{ pageSize: 50 }}
           searchPlaceholder="Search by name or employee number…"
           searchFn={(e, q) =>
             [e.user_name, e.employee_number, e.department].join(" ").toLowerCase().includes(q.toLowerCase())

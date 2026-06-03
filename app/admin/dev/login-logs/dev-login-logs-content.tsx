@@ -252,6 +252,7 @@ export function DevLoginLogsContent() {
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search person, email, IP address, or user agent..."
         searchFn={(row, query) => {
           const normalizedQuery = query.toLowerCase()

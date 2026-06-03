@@ -122,7 +122,7 @@ export async function GET(request: NextRequest) {
       if (!contextResult.ok) {
         return contextResult.response
       }
-      const routeAccess = enforceRouteAccessV2(contextResult.context, "hr.main")
+      const routeAccess = enforceRouteAccessV2(contextResult.context, "hr.leave")
       if (!routeAccess.ok) {
         return routeAccess.response
       }

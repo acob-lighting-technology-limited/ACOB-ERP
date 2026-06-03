@@ -464,6 +464,7 @@ export function WeeklyReportsContent({
         columns={columns}
         filters={filters}
         getRowId={(report) => report.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search department or work done..."
         searchFn={(report, query) => {
           const normalizedQuery = query.toLowerCase()

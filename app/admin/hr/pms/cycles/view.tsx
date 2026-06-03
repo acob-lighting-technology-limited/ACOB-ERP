@@ -365,6 +365,7 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
         columns={columns}
         filters={filters}
         getRowId={(cycle) => cycle.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search cycle name, type, status…"
         searchFn={(cycle, query) => {
           const name = cycle.name.toLowerCase()

@@ -535,10 +535,46 @@ try {
 
 Always wrap both calls in separate `try/catch` blocks. Notification failure must never crash the parent operation, and email failure must not prevent the notification.
 
-### Known exception — Supabase Edge Functions
+### Supabase Edge Functions — same parity rule applies
 
-Edge functions under `supabase/functions/` run outside the Next.js process. They currently send emails only (`send-weekly-report`, `send-meeting-reminder`, `send-communications-mail`). Adding in-app notifications from edge functions requires calling the Supabase REST API directly with the service-role key — do not attempt this inside a Next.js route handler. Track as a separate task and document when complete.
+Edge functions under `supabase/functions/` run outside the Next.js process, but they are created with a **service-role** Supabase client, so they can and **must** insert the matching in-app notification directly into the `notifications` table after sending an email. The rule is identical: no user-facing email without an in-app notification.
+
+Insert directly (the `create_notification` RPC is also callable, but a plain insert is simplest from Deno):
+
+```ts
+const { error: notifyError } = await supabase.from("notifications").insert({
+  user_id: profile.id,          // the ERP user the email went to
+  type: "announcement",          // type from the mapping table above
+  category: "system",
+  priority: "normal",
+  title: "...",
+  message: "...",
+  link_url: null,
+})
+if (notifyError) console.error(`[fn] in-app notification failed: ${notifyError.message}`)
+```
+
+Wrap it so a notification failure never aborts the email loop. Reference implementations: `send-birthday-emails` (per-recipient inside the send loop) and the exit flow in `app/api/v1/hr/employees/[employeeId]/exit-notification/route.ts`.
+
+When the email targets an external address that maps to a person, resolve their ERP `user_id` (e.g. via `profiles`) and notify that id.
+
+**Never hardcode a person's name as the signatory in any email body or footer.** Choose by send type:
+- **Automated/system mail** (cron, triggers — e.g. birthday, meeting-reminder fallback, IT notifications): use a generic **department** signature with no individual ("Admin & HR Department", "IT & Communications"). No person means nothing goes stale when someone exits. See `send-birthday-emails`.
+- **Admin-composed mail** (broadcasts, meeting reminders, weekly summaries, communications): let the admin **select** the "Prepared by" person per send (see `BroadcastForm`/`MeetingReminderForm`), or resolve it live from the DB so an exited employee is never credited (see `lib/hr/exit-mailer.ts`).
+
+Remaining edge functions still email-only and pending parity work: `send-weekly-report`, `send-meeting-reminder`, `send-communications-mail` (these already insert some notifications — verify per-recipient coverage).
 
 ### Leave system — use `notifyUsers`, not raw RPC
 
 For any leave workflow event, always use `notifyUsers` from `lib/hr/leave-workflow.ts`. It handles delivery policy resolution, channel eligibility, and both email and in-app in one call. Pass `emailEvent` so the correct `p_type` is set per the mapping above.
+
+## Email Sender Identity — Single Source of Truth
+
+**Never hardcode an email "From" display name as a string literal.** All sender names live in one place per runtime so they can never drift (e.g. "HR" vs "Admin & HR"):
+
+- **Next app** (`lib/`, `app/api/`): import from `ORG_EMAIL_SENDERS` in `lib/org-config.ts` (`.notification`, `.hr`, `.helpDesk`, `.correspondence`). Add a new key there rather than writing `` `ACOB X <notifications@...>` `` inline.
+- **Edge functions** (`supabase/functions/`, Deno — cannot import `lib/`): import from `EDGE_SENDERS` / `edgeDepartmentSender()` / `edgeDepartmentSenderBare()` in `supabase/functions/_shared/senders.ts`.
+
+The canonical HR/People sender is **`ACOB Admin & HR Department`** — never "ACOB HR ...". Department-derived senders (exit, asset, broadcast) resolve the label from the lead's `lead_departments` (which is "Admin & HR"), so they already produce the correct name.
+
+Edge functions are excluded from `tsc`/`eslint` and can't be validated locally without Deno — **smoke-test any sender change on deploy**.

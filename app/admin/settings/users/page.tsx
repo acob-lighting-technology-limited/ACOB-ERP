@@ -286,6 +286,7 @@ export default function UsersPage() {
         data={users}
         columns={columns}
         getRowId={(u) => u.id}
+        pagination={{ pageSize: 50 }}
         isLoading={isLoading}
         error={error instanceof Error ? error.message : null}
         onRetry={refetch}

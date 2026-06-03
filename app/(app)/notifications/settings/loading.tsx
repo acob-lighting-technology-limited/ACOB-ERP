@@ -1,3 +1,5 @@
+import { FormPageSkeleton } from "@/components/skeletons"
+
 export default function NotificationSettingsLoading() {
-  return <div className="text-muted-foreground p-6 text-sm">Loading notification settings...</div>
+  return <FormPageSkeleton sections={3} fieldsPerSection={4} showSidebar={false} />
 }

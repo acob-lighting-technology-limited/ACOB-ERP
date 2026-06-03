@@ -518,6 +518,7 @@ export default function AdminPmsCbtPage() {
           columns={individualColumns}
           filters={individualFilters}
           getRowId={(row) => row.id}
+          pagination={{ pageSize: 50 }}
           searchPlaceholder="Search employee, department, cycle, or score..."
           searchFn={(row, query) =>
             [row.employee, row.department, row.cycle, scoreLabel(row.cbt_score)].join(" ").toLowerCase().includes(query)
@@ -558,6 +559,7 @@ export default function AdminPmsCbtPage() {
           columns={departmentColumns}
           filters={departmentFilters}
           getRowId={(row) => row.id}
+          pagination={{ pageSize: 50 }}
           searchPlaceholder="Search department, cycle, or average score..."
           searchFn={(row, query) =>
             [row.department, row.cycle, scoreLabel(row.average_score)].join(" ").toLowerCase().includes(query)
@@ -598,6 +600,7 @@ export default function AdminPmsCbtPage() {
           columns={cycleColumns}
           filters={cycleFilters}
           getRowId={(row) => row.id}
+          pagination={{ pageSize: 50 }}
           searchPlaceholder="Search cycle or review type..."
           searchFn={(row, query) => [row.cycle, row.review_type].join(" ").toLowerCase().includes(query)}
           isLoading={isInitialLoading}

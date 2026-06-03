@@ -292,6 +292,7 @@ export default function MovementsPage() {
         columns={columns}
         filters={filters}
         getRowId={(movement) => movement.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search product, reference, note, or operator..."
         searchFn={(movement, query) => {
           const normalizedQuery = query.toLowerCase()

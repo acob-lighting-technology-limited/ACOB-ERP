@@ -1509,6 +1509,7 @@ export function AdminAssetsContent({
         filters={assetFilters}
         onProcessedDataChange={setFilteredAssetsForExport}
         getRowId={(asset) => asset.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search asset code, type, model, assignee, office, or creator..."
         searchFn={(asset, query) =>
           [

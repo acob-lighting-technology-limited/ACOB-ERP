@@ -445,7 +445,18 @@ export function AttendanceContent({
               `${row.dayLabel} ${row.dateLabel} ${row.periodLabel} ${row.status}`.toLowerCase().includes(query)
             }
             pagination={{ pageSize: 20 }}
-            onProcessedDataChange={(rows) => setFilteredRows(rows as AttendanceRow[])}
+            onProcessedDataChange={(processed) =>
+              setFilteredRows((prev) => {
+                const next = processed as AttendanceRow[]
+                // Bail out when the processed set is unchanged so we never set a
+                // new array reference on every render — that loop is what threw
+                // React #185 ("maximum update depth exceeded") when filtering.
+                if (prev.length === next.length && prev.every((row, i) => row.id === next[i]?.id)) {
+                  return prev
+                }
+                return next
+              })
+            }
             isLoading={unifiedDays === null}
             emptyTitle={unifiedDays === null ? "Loading attendance..." : "No attendance records"}
             emptyDescription={

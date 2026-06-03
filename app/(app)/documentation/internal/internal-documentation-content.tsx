@@ -285,6 +285,7 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search title, content, tags, or category..."
         searchFn={(row, query) =>
           `${row.title} ${row.content} ${(row.tags || []).join(" ")} ${row.category || ""}`

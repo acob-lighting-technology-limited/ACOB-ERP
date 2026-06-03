@@ -252,6 +252,7 @@ export default function SuppliersPage() {
         columns={columns}
         filters={filters}
         getRowId={(supplier) => supplier.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search supplier name, code, contact, or email..."
         searchFn={(supplier, query) => {
           const normalizedQuery = query.toLowerCase()

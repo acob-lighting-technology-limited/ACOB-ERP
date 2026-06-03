@@ -225,6 +225,7 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search asset name, code, model, serial, or assignment..."
         searchFn={(row, query) => {
           const q = query.toLowerCase()

@@ -521,6 +521,7 @@ export function LeaveApprovePage({ backLinkHref }: { backLinkHref?: string } = {
           data={activeData}
           columns={columns}
           getRowId={(r) => r.id}
+          pagination={{ pageSize: 50 }}
           isLoading={isLoading}
           error={error instanceof Error ? error.message : null}
           onRetry={refetch}

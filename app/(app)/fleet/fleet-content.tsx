@@ -365,6 +365,7 @@ export function FleetContent() {
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search resource, reason, or schedule..."
         searchFn={(row, query) => `${row.resourceName} ${row.reason} ${row.timeRange}`.toLowerCase().includes(query)}
         isLoading={isLoading}

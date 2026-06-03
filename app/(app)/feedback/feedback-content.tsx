@@ -231,6 +231,7 @@ export function FeedbackContent({ initialFeedback }: FeedbackContentProps) {
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search title, description, type, or status..."
         searchFn={(row, query) =>
           `${row.title} ${row.description || ""} ${row.feedback_type} ${row.status}`.toLowerCase().includes(query)

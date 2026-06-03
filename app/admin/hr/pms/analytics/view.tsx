@@ -382,6 +382,7 @@ export function PmsAnalyticsPage({ backLinkHref }: { backLinkHref?: string } = {
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search employee, department, quarter, or review type…"
         searchFn={(row, query) =>
           [row.employee, row.department, row.cycle, row.reviewType, row.tier, row.status]

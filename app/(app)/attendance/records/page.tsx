@@ -245,6 +245,7 @@ export default function AttendanceRecordsPage() {
         data={records}
         columns={columns}
         filters={tableFilters}
+        pagination={{ pageSize: 50 }}
         expandable={expandable}
         getRowId={(r) => r.id}
         searchPlaceholder="Search date or status..."
