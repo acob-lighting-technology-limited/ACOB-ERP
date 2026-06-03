@@ -52,7 +52,10 @@ function formatDate(dateString: string) {
   return formatWATDate(dateString, { weekday: "short", month: "short", day: "numeric", year: "numeric" })
 }
 
-export function AdminDailyActivityPage({ backLinkHref }: { backLinkHref?: string } = {}) {
+export function AdminDailyActivityPage({
+  backLinkHref,
+  lockedDepartment,
+}: { backLinkHref?: string; lockedDepartment?: string } = {}) {
   const [reports, setReports] = useState<DailyReport[]>([])
   const [loading, setLoading] = useState(false)
   const [acking, setAcking] = useState<string | null>(null)
@@ -65,6 +68,7 @@ export function AdminDailyActivityPage({ backLinkHref }: { backLinkHref?: string
     setLoading(true)
     try {
       const params = new URLSearchParams({ start_date: filters.start_date, end_date: filters.end_date })
+      if (lockedDepartment) params.set("department", lockedDepartment)
       const res = await fetch(`/api/admin/hr/reports/daily-activity?${params}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load reports")
@@ -75,7 +79,7 @@ export function AdminDailyActivityPage({ backLinkHref }: { backLinkHref?: string
     } finally {
       setLoading(false)
     }
-  }, [filters.start_date, filters.end_date])
+  }, [filters.start_date, filters.end_date, lockedDepartment])
 
   useEffect(() => {
     void load()
@@ -101,7 +105,16 @@ export function AdminDailyActivityPage({ backLinkHref }: { backLinkHref?: string
   }
 
   function downloadCSV() {
-    const headers = ["Date", "Employee", "Department", "Total Completed", "Unforeseen Completed", "Tasks", "Status", "Acknowledged"]
+    const headers = [
+      "Date",
+      "Employee",
+      "Department",
+      "Total Completed",
+      "Unforeseen Completed",
+      "Tasks",
+      "Status",
+      "Acknowledged",
+    ]
     const rows = reports.map((r) => [
       formatDate(r.report_date),
       r.user_name,
@@ -127,9 +140,9 @@ export function AdminDailyActivityPage({ backLinkHref }: { backLinkHref?: string
   const pendingCount = reports.filter((r) => r.status === "submitted" && !r.acknowledged).length
 
   const departmentOptions = useMemo(() => {
-    const set = new Set(reports.map((r) => r.department).filter(Boolean))
+    const set = new Set(lockedDepartment ? [lockedDepartment] : reports.map((r) => r.department).filter(Boolean))
     return [...set].sort().map((d) => ({ value: d, label: d }))
-  }, [reports])
+  }, [reports, lockedDepartment])
 
   const columns: DataTableColumn<DailyReport>[] = [
     {

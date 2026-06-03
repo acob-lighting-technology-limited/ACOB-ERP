@@ -6,6 +6,8 @@ import { DepartmentsPage, type Department, type DepartmentEmployee, type Departm
 
 const log = logger("departments-page")
 
+export const dynamic = "force-dynamic"
+
 async function getInitialData(): Promise<DepartmentsData | undefined> {
   try {
     const supabase = await createClient()

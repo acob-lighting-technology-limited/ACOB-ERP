@@ -71,8 +71,8 @@ async function run() {
   )
   checkContains(
     checks,
-    "app/admin/finance/page.tsx",
-    'href="/admin/finance/payments"',
+    "app/admin/finance/finance-dashboard-content.tsx",
+    /\/finance\/payments/,
     "Finance dashboard department entry points to finance payments"
   )
 
@@ -356,7 +356,8 @@ async function run() {
     lines.push("")
   }
 
-  const reportPath = path.join(root, "RBAC_DEEP_TEST_REPORT.md")
+  const reportPath = path.join(root, "test-results", "rbac-deep-audit-report.md")
+  fs.mkdirSync(path.dirname(reportPath), { recursive: true })
   fs.writeFileSync(reportPath, lines.join("\n"))
 
   console.log(`Report written to: ${reportPath}`)

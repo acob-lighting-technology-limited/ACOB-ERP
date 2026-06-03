@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { StatCard } from "@/components/ui/stat-card"
 import { logger } from "@/lib/logger"
+import { normalizeDepartmentName } from "@/shared/departments"
 
 const log = logger("assets-issues")
 
@@ -51,6 +52,7 @@ interface AssetIssue {
       user?: {
         first_name: string
         last_name: string
+        department?: string | null
       }
     }
   }
@@ -64,7 +66,7 @@ interface AssetIssue {
   }
 }
 
-async function fetchAssetIssues(): Promise<AssetIssue[]> {
+async function fetchAssetIssues(lockedDepartment?: string): Promise<AssetIssue[]> {
   const supabase = createClient()
   const { data: issuesData, error: issuesError } = await supabase
     .from("asset_issues")
@@ -93,7 +95,7 @@ async function fetchAssetIssues(): Promise<AssetIssue[]> {
           if (assignment.assigned_to) {
             const { data: userData } = await supabase
               .from("profiles")
-              .select("first_name, last_name")
+              .select("first_name, last_name, department")
               .eq("id", assignment.assigned_to)
               .single()
             assignmentData = {
@@ -135,7 +137,16 @@ async function fetchAssetIssues(): Promise<AssetIssue[]> {
     })
   )
 
-  return issuesWithDetails as AssetIssue[]
+  const issues = issuesWithDetails as AssetIssue[]
+  if (!lockedDepartment) return issues
+
+  const locked = normalizeDepartmentName(lockedDepartment)
+  return issues.filter((issue) => {
+    const assetDepartment = normalizeDepartmentName(issue.asset?.department || "")
+    const assignmentDepartment = normalizeDepartmentName(issue.asset?.current_assignment?.department || "")
+    const assignedUserDepartment = normalizeDepartmentName(issue.asset?.current_assignment?.user?.department || "")
+    return [assetDepartment, assignmentDepartment, assignedUserDepartment].includes(locked)
+  })
 }
 
 function assignedTo(issue: AssetIssue) {
@@ -199,7 +210,10 @@ function IssueCard({
   )
 }
 
-export function AssetIssuesPage({ backLinkHref }: { backLinkHref?: string } = {}) {
+export function AssetIssuesPage({
+  backLinkHref,
+  lockedDepartment,
+}: { backLinkHref?: string; lockedDepartment?: string } = {}) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
   const queryClient = useQueryClient()
 
@@ -208,8 +222,8 @@ export function AssetIssuesPage({ backLinkHref }: { backLinkHref?: string } = {}
     isLoading,
     error,
   } = useQuery({
-    queryKey: QUERY_KEYS.adminAssetIssues(),
-    queryFn: fetchAssetIssues,
+    queryKey: [...QUERY_KEYS.adminAssetIssues(), lockedDepartment ?? "all"],
+    queryFn: () => fetchAssetIssues(lockedDepartment),
   })
 
   async function handleToggleResolved(issue: AssetIssue) {

@@ -195,7 +195,6 @@ function getHourBreakdown(record: DayRecord | null, status?: string) {
   return { total, work, overtime, missed }
 }
 
-
 interface EmployeeExpandProps {
   report: AttendanceReport
   yearMonth: string
@@ -556,7 +555,7 @@ export function AttendanceReportsPage({
   const [periodMode, setPeriodMode] = useState<"month" | "quarter">("month")
   const [quarter, setQuarter] = useState<"Q1" | "Q2" | "Q3" | "Q4">("Q1")
   const [quarterYear, setQuarterYear] = useState(new Date().getFullYear())
-  const [department, setDepartment] = useState(lockedDepartment || "all")
+  const reportDepartment = lockedDepartment || "all"
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [holidayOpen, setHolidayOpen] = useState(false)
   const [holidayDate, setHolidayDate] = useState("")
@@ -592,7 +591,12 @@ export function AttendanceReportsPage({
     async (userId: string) => {
       try {
         const { start, end } = periodMode === "month" ? monthBounds(yearMonth) : quarterBounds(quarterYear, quarter)
-        const params = new URLSearchParams({ start_date: start, end_date: end, department, user_id: userId })
+        const params = new URLSearchParams({
+          start_date: start,
+          end_date: end,
+          department: reportDepartment,
+          user_id: userId,
+        })
         const response = await fetch(`/api/hr/attendance/reports?${params.toString()}`, { cache: "no-store" })
         const payload = (await response.json().catch(() => null)) as {
           data?: AttendanceReport[]
@@ -619,14 +623,14 @@ export function AttendanceReportsPage({
         log.error("Failed to refresh single employee summary:", error)
       }
     },
-    [department, periodMode, quarter, quarterYear, yearMonth]
+    [periodMode, quarter, quarterYear, reportDepartment, yearMonth]
   )
 
   const generateReport = useCallback(async () => {
     setLoading(true)
     try {
       const { start, end } = periodMode === "month" ? monthBounds(yearMonth) : quarterBounds(quarterYear, quarter)
-      const params = new URLSearchParams({ start_date: start, end_date: end, department })
+      const params = new URLSearchParams({ start_date: start, end_date: end, department: reportDepartment })
       const response = await fetch(`/api/hr/attendance/reports?${params.toString()}`, { cache: "no-store" })
       const payload = (await response.json().catch(() => null)) as {
         data?: AttendanceReport[]
@@ -643,14 +647,14 @@ export function AttendanceReportsPage({
           cycle_label: activeCycleLabel,
         }))
       )
-      setDepartments(payload?.departments ?? [])
+      setDepartments(lockedDepartment ? [lockedDepartment] : (payload?.departments ?? []))
     } catch (error) {
       log.error("Error generating report:", error)
       setReports([])
     } finally {
       setLoading(false)
     }
-  }, [yearMonth, department, periodMode, quarter, quarterYear])
+  }, [yearMonth, reportDepartment, periodMode, quarter, quarterYear, lockedDepartment])
 
   const loadHolidays = useCallback(async () => {
     const response = await fetch(`/api/admin/hr/attendance/holidays?month=${yearMonth}`, { cache: "no-store" })
@@ -976,7 +980,7 @@ export function AttendanceReportsPage({
       key: "department",
       label: "Department",
       options: departmentOptions,
-      placeholder: "All Departments",
+      placeholder: lockedDepartment || "All Departments",
     },
     {
       key: "cycle_label",
@@ -1080,9 +1084,9 @@ export function AttendanceReportsPage({
         ) : undefined
       }
     >
-      {activeTab === "daily" && <DailyRosterView departments={departments} />}
+      {activeTab === "daily" && <DailyRosterView departments={departments} lockedDepartment={lockedDepartment} />}
       {activeTab === "calendar" && <CalendarView employees={employeeOptions} />}
-      {activeTab === "exceptions" && <ExceptionsView departments={departments} />}
+      {activeTab === "exceptions" && <ExceptionsView departments={departments} lockedDepartment={lockedDepartment} />}
       {activeTab === "summary" && (
         <DataTable<AttendanceReport>
           data={reports}

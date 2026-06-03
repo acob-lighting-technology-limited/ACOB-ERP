@@ -28,18 +28,22 @@ interface FinancePayment {
   payment_type?: string | null
 }
 
-async function fetchPayments(): Promise<FinancePayment[]> {
-  const response = await fetch("/api/payments")
+async function fetchPayments(departmentId?: string): Promise<FinancePayment[]> {
+  const endpoint = departmentId ? `/api/payments?department_id=${encodeURIComponent(departmentId)}` : "/api/payments"
+  const response = await fetch(endpoint)
   if (!response.ok) throw new Error("Failed to load finance data")
   const payload = await response.json()
   return payload.data || []
 }
 
-export function FinanceDashboardContent({ basePath }: { basePath?: string } = {}) {
+export function FinanceDashboardContent({
+  basePath,
+  lockedDepartmentId,
+}: { basePath?: string; lockedDepartmentId?: string } = {}) {
   const base = basePath ?? "/admin"
   const { data: allPayments = [] } = useQuery({
-    queryKey: QUERY_KEYS.payments(),
-    queryFn: fetchPayments,
+    queryKey: [...QUERY_KEYS.payments(), lockedDepartmentId ?? "all"],
+    queryFn: () => fetchPayments(lockedDepartmentId),
   })
 
   const stats: FinanceStats = {

@@ -7,6 +7,6 @@ interface Props {
 
 export default async function DeptDailyActivityPage({ params }: Props) {
   const { dept_id } = await params
-  await requireDeptScope(dept_id)
-  return <AdminDailyActivityPage backLinkHref={`/dept/${dept_id}/hr`} />
+  const scope = await requireDeptScope(dept_id)
+  return <AdminDailyActivityPage backLinkHref={`/dept/${dept_id}/hr`} lockedDepartment={scope.deptName} />
 }

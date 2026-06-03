@@ -9,18 +9,7 @@ import { CalendarCheck2, CheckCircle2, Paperclip, Plus, XCircle, Box } from "luc
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { StatCard } from "@/components/ui/stat-card"
-import { Textarea } from "@/components/ui/textarea"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import {
   DataTablePage,
@@ -29,36 +18,9 @@ import {
   type DataTableFilter,
   type DataTableTab,
 } from "@/components/ui/data-table"
-
-type FleetResource = {
-  id: string
-  name: string
-  resource_type: string
-  description?: string | null
-  is_active: boolean
-}
-
-type FleetBooking = {
-  id: string
-  resource_id: string
-  start_at: string
-  end_at: string
-  reason: string
-  status: "pending" | "approved" | "rejected" | "cancelled"
-  admin_note?: string | null
-  requester?: { id: string; full_name?: string | null; company_email?: string | null } | null
-  reviewer?: { id: string; full_name?: string | null } | null
-  resource?: FleetResource | null
-  attachment_count?: number
-}
-
-type FleetAttachment = {
-  id: string
-  file_name: string
-  mime_type: string
-  file_size: number
-  signed_url?: string | null
-}
+import { BookingReviewDialog } from "./_components/booking-review-dialog"
+import { ResourceDialog } from "./_components/resource-dialog"
+import type { FleetAttachment, FleetBooking, FleetResource } from "./_components/fleet-types"
 
 function formatDateTime(value: string) {
   const parsed = new Date(value)
@@ -479,121 +441,29 @@ export default function AdminFleetPage() {
         />
       )}
 
-      <Dialog open={isResourceDialogOpen} onOpenChange={setIsResourceDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>New Resource</DialogTitle>
-            <DialogDescription>Create additional bookable items for shared resource booking.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input
-                value={resourceName}
-                onChange={(e) => setResourceName(e.target.value)}
-                placeholder="Delivery Car"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label>Type</Label>
-              <Input value={resourceType} onChange={(e) => setResourceType(e.target.value)} placeholder="vehicle" />
-            </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
-              <Textarea
-                value={resourceDescription}
-                onChange={(e) => setResourceDescription(e.target.value)}
-                placeholder="Optional description"
-                rows={3}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsResourceDialogOpen(false)} disabled={savingResource}>
-              Cancel
-            </Button>
-            <Button onClick={createResource} disabled={savingResource || resourceName.trim().length < 2}>
-              {savingResource ? "Saving..." : "Create Resource"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ResourceDialog
+        open={isResourceDialogOpen}
+        onOpenChange={setIsResourceDialogOpen}
+        resourceName={resourceName}
+        onResourceNameChange={setResourceName}
+        resourceType={resourceType}
+        onResourceTypeChange={setResourceType}
+        resourceDescription={resourceDescription}
+        onResourceDescriptionChange={setResourceDescription}
+        savingResource={savingResource}
+        onCreateResource={() => void createResource()}
+      />
 
-      <Dialog open={Boolean(selectedBooking)} onOpenChange={(open) => (!open ? setSelectedBooking(null) : null)}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Review Resource Booking</DialogTitle>
-            <DialogDescription>Confirm the reason and supporting files before approval.</DialogDescription>
-          </DialogHeader>
-
-          {selectedBooking ? (
-            <div className="space-y-4 py-2">
-              <div className="bg-muted/30 rounded border p-3">
-                <p className="font-medium">{selectedBooking.resource?.name || "Resource"}</p>
-                <p className="text-muted-foreground text-xs">
-                  {formatDateTime(selectedBooking.start_at)} - {formatDateTime(selectedBooking.end_at)}
-                </p>
-                <p className="mt-2 text-sm">{selectedBooking.reason}</p>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Attachments</Label>
-                {attachments.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">No attachments provided.</p>
-                ) : null}
-                {attachments.map((file) => (
-                  <div key={file.id} className="flex items-center justify-between rounded border p-2 text-sm">
-                    <div>
-                      <p>{file.file_name}</p>
-                      <p className="text-muted-foreground text-xs">
-                        {file.mime_type} • {(file.file_size / 1024).toFixed(1)} KB
-                      </p>
-                    </div>
-                    {file.signed_url ? (
-                      <a
-                        href={file.signed_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary text-sm hover:underline"
-                      >
-                        Open
-                      </a>
-                    ) : (
-                      <span className="text-muted-foreground text-xs">Unavailable</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-2">
-                <Label>Admin Note</Label>
-                <Textarea
-                  value={adminNote}
-                  onChange={(e) => setAdminNote(e.target.value)}
-                  rows={3}
-                  placeholder="Add a note to explain your decision..."
-                />
-              </div>
-            </div>
-          ) : null}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setSelectedBooking(null)}>
-              Close
-            </Button>
-            {selectedBooking?.status === "pending" ? (
-              <>
-                <Button variant="destructive" onClick={() => review("reject")} disabled={reviewing}>
-                  Reject
-                </Button>
-                <Button onClick={() => review("approve")} disabled={reviewing}>
-                  Approve
-                </Button>
-              </>
-            ) : null}
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <BookingReviewDialog
+        selectedBooking={selectedBooking}
+        attachments={attachments}
+        adminNote={adminNote}
+        reviewing={reviewing}
+        formatDateTime={formatDateTime}
+        onAdminNoteChange={setAdminNote}
+        onClose={() => setSelectedBooking(null)}
+        onReview={(action) => void review(action)}
+      />
     </DataTablePage>
   )
 }

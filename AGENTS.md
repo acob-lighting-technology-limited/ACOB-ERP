@@ -100,6 +100,33 @@ Preferred patterns:
 
 ---
 
+## Department Console Scoping Standard — Mandatory for Every `app/dept/[dept_id]/*` Route
+
+Department console pages are not mini-admin shortcuts. They are single-department
+surfaces. Every page under `app/dept/[dept_id]/*` must stay locked to the
+requested department across server queries, client fetches, filters, exports,
+stats, expandable rows, dialogs, and child tabs.
+
+### Required pattern
+
+- Call `requireDeptScope(dept_id)` at the top of every dept page.
+- Use `scope.deptName` and `scope.deptId` as the only allowed department scope.
+- If reusing an admin component, pass explicit locking props such as
+  `lockedDepartment`, `lockedDepartmentId`, `scopedDepartments`, or equivalent.
+- Any child component that fetches data must receive and forward the same locked
+  department value to its API call.
+- Empty result sets must stay empty. They must not fall back to all departments.
+
+### Hard prohibitions
+
+- ❌ Reusing an admin client component in `/dept/[dept_id]` without a lock prop
+- ❌ Fetching `/api/admin/*`, `/api/hr/*`, or `/api/payments` from a dept page without a department constraint
+- ❌ Defaulting dept tabs or subviews to `"all"` after the wrapper already scoped the page
+- ❌ Showing filter options for departments outside `scope.deptName`
+- ❌ Letting exports include rows outside the active dept console
+
+---
+
 ## Admin Route Scoping Standard — Mandatory for Every `app/admin/*` Page and API Route
 
 All admin pages and their backing API routes must enforce department-level scoping via the
@@ -404,11 +431,35 @@ table or filter bar. Use `ExportOptionsDialog` from
 ### Hard prohibitions
 
 - ❌ Raw `<Table>` / `<TableHeader>` inside a page component
+- ❌ `<DialogContent>` inside a page component; move dialogs to `_components/`
 - ❌ Inline search or filter state in a page — all handled by `DataTable`
 - ❌ `<Loader2>` spinner for table loading — skeletons are automatic
 - ❌ Fewer than 2 filter options on any table page
 - ❌ A table page without stats cards
 - ❌ A table page without `DataTablePage` as the root wrapper
+
+### Route `loading.tsx` skeletons
+
+Loading routes must mirror the real page shape. Use the canonical skeletons from
+`@/components/skeletons`:
+
+- `TablePageSkeleton` for `DataTablePage` routes
+- `DashboardSkeleton` for dashboard and overview routes
+- `CardGridPageSkeleton` for module landing pages and card-grid pages
+- `DetailPageSkeleton` for detail/view pages
+- `FormPageSkeleton` for create/edit form pages
+
+Do not hand-roll a single bar or generic card placeholder for a table page. Match
+the expected stats count, tabs, filter count, action count, and table density.
+
+### UI audit tooling
+
+- Run `npm run ui:audit` after table, skeleton, or page-shell changes.
+- Run `npm run ui:ensure-loading` only when intentionally adding missing route
+  loading files.
+- Review generated loading files manually before committing them.
+- UI audit scripts must normalize Windows paths with `toPosix()` before route
+  matching.
 
 ---
 
