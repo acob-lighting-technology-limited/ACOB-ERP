@@ -17,7 +17,7 @@ import { logger } from "@/lib/logger"
 
 const log = logger("finance-invoices")
 
-interface Invoice {
+export interface Invoice {
   id: string
   invoice_number: string
   customer_name: string
@@ -80,7 +80,8 @@ function getDueWindow(invoice: Invoice) {
 export function InvoicesPage({
   backLinkHref,
   financeBasePath,
-}: { backLinkHref?: string; financeBasePath?: string } = {}) {
+  initialInvoices,
+}: { backLinkHref?: string; financeBasePath?: string; initialInvoices?: Invoice[] } = {}) {
   const router = useRouter()
   const queryClient = useQueryClient()
   const searchParams = useSearchParams()
@@ -94,6 +95,7 @@ export function InvoicesPage({
   } = useQuery({
     queryKey: QUERY_KEYS.adminInvoices(),
     queryFn: fetchInvoicesList,
+    initialData: initialInvoices,
   })
 
   const customerOptions = useMemo(
@@ -304,6 +306,7 @@ export function InvoicesPage({
         columns={columns}
         filters={filters}
         getRowId={(invoice) => invoice.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search invoice number, customer, or email..."
         searchFn={(invoice, query) => {
           const normalizedQuery = query.toLowerCase()

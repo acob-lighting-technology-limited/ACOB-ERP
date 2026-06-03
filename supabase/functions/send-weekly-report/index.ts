@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from "npm:pdf-lib@1.17.1"
 import { writeEdgeAuditLog } from "../_shared/audit.ts"
 import { sendEmail } from "../_shared/email.ts"
+import { EDGE_SENDERS } from "../_shared/senders.ts"
 import { normalizeDepartmentName } from "../../../shared/departments.ts"
 import {
   buildMeetingDocumentFileName,
@@ -29,8 +30,7 @@ const SLATE = rgb(0.2, 0.255, 0.333)
 const MUTED = rgb(0.392, 0.455, 0.545)
 const BLUE = rgb(0.114, 0.416, 0.588)
 const RED = rgb(0.725, 0.11, 0.11)
-const DEFAULT_SENDER_EMAIL = Deno.env.get("NOTIFICATION_SENDER_EMAIL") || "notifications@acoblighting.com"
-const DEFAULT_SENDER = `ACOB Reporting System <${DEFAULT_SENDER_EMAIL}>`
+const DEFAULT_SENDER = EDGE_SENDERS.reporting
 const MEETING_DOCS_BUCKET = "meeting_documents"
 // Anchor day is read from _shared/meeting-date.ts (populated by initOfficeYearAnchors).
 

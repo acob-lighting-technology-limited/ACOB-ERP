@@ -450,6 +450,7 @@ export function AdminCompetenciesPage({ backLinkHref }: { backLinkHref?: string 
         columns={columns}
         filters={filters}
         getRowId={(competency) => competency.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search competency label, key, or description…"
         searchFn={(competency, query) => {
           return [competency.label, competency.key, competency.description || "", competency.category]

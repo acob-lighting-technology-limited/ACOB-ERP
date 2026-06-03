@@ -168,6 +168,7 @@ export function SecurityEventsContent({ rows, error }: { rows: AuditLogRow[]; er
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search action, status, entity, actor, or metadata..."
         searchFn={(row, query) => {
           const normalizedQuery = query.toLowerCase()

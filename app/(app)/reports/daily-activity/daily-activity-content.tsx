@@ -364,10 +364,10 @@ export function DailyActivityContent() {
       initialWidth: 200,
     },
     { key: "completedCount", label: "Done", sortable: true, accessor: (r) => r.completedCount, align: "center" },
-    { key: "inProgressCount", label: "In Progress", sortable: true, accessor: (r) => r.inProgressCount, align: "center" },
-    { key: "notStartedCount", label: "Not Started", sortable: true, accessor: (r) => r.notStartedCount, align: "center" },
-    { key: "plannedCount", label: "Planned", sortable: true, accessor: (r) => r.plannedCount, align: "center" },
-    { key: "unforeseenCount", label: "Unforeseen", sortable: true, accessor: (r) => r.unforeseenCount, align: "center" },
+    { key: "inProgressCount", label: "In Progress", sortable: true, accessor: (r) => r.inProgressCount, align: "center", hideOnMobile: true },
+    { key: "notStartedCount", label: "Not Started", sortable: true, accessor: (r) => r.notStartedCount, align: "center", hideOnMobile: true },
+    { key: "plannedCount", label: "Planned", sortable: true, accessor: (r) => r.plannedCount, align: "center", hideOnMobile: true },
+    { key: "unforeseenCount", label: "Unforeseen", sortable: true, accessor: (r) => r.unforeseenCount, align: "center", hideOnMobile: true },
     {
       key: "status",
       label: "Report",
@@ -497,6 +497,26 @@ export function DailyActivityContent() {
               <ExpandedDayTasks row={row} onSave={saveInlineDayTasks} />
             ),
           }}
+          viewToggle
+          cardRenderer={(row) => (
+            <div className="space-y-2 p-1">
+              <div className="font-medium">{formatDate(row.report_date)}</div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+                <span>Done: {row.completedCount}</span>
+                <span>In Progress: {row.inProgressCount}</span>
+                <span>Not Started: {row.notStartedCount}</span>
+                <span>Planned: {row.plannedCount}</span>
+                <span>Unforeseen: {row.unforeseenCount}</span>
+              </div>
+              {row.report && (
+                <Badge variant="outline" className="text-xs">
+                  {row.report.acknowledged
+                    ? `${DAILY_REPORT_STATUS_LABELS[row.report.status] ?? row.report.status} (Acknowledged)`
+                    : (DAILY_REPORT_STATUS_LABELS[row.report.status] ?? row.report.status)}
+                </Badge>
+              )}
+            </div>
+          )}
         />
       </DataTablePage>
 
@@ -554,69 +574,65 @@ export function DailyActivityContent() {
             </datalist>
 
             <div className="overflow-hidden rounded-md border">
-              <div className="bg-muted/40 grid grid-cols-12 gap-2 border-b px-2 py-2 text-[11px] font-semibold tracking-wide uppercase">
-                <div className="col-span-1">S/N</div>
-                <div className="col-span-5">Task</div>
-                <div className="col-span-2">Status</div>
-                <div className="col-span-2">Type</div>
-                <div className="col-span-2">Comments</div>
-              </div>
               {tasks.map((task, index) => (
-                <div key={index} className="grid grid-cols-12 items-center gap-2 border-b px-2 py-2 last:border-b-0">
-                  <div className="text-muted-foreground col-span-1 text-sm">{index + 1}</div>
-                  <div className="col-span-5">
+                <div key={index} className="space-y-2 border-b p-3 last:border-b-0">
+                  <div className="flex items-center gap-2">
+                    <span className="min-w-[1.5rem] text-sm text-muted-foreground">{index + 1}.</span>
                     <Input
                       value={task.description}
                       disabled={acknowledged}
                       list="daily-task-suggestions"
                       placeholder="Type a task or choose from previous tasks"
                       onChange={(e) => updateTask(index, { description: e.target.value })}
-                      className="h-8"
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Select
-                      value={task.status}
-                      disabled={acknowledged}
-                      onValueChange={(v) => updateTask(index, { status: v as DailyTaskStatus })}
-                    >
-                      <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {(Object.keys(DAILY_TASK_STATUS_LABELS) as DailyTaskStatus[]).map((s) => (
-                          <SelectItem key={s} value={s}>
-                            {DAILY_TASK_STATUS_LABELS[s]}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-2">
-                    <Select
-                      value={task.task_type ?? NONE_TYPE}
-                      disabled={acknowledged}
-                      onValueChange={(v) => updateTask(index, { task_type: v === NONE_TYPE ? null : (v as "planned" | "unforeseen") })}
-                    >
-                      <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NONE_TYPE}>No Type</SelectItem>
-                        <SelectItem value="planned">{DAILY_TASK_TYPE_LABELS.planned}</SelectItem>
-                        <SelectItem value="unforeseen">{DAILY_TASK_TYPE_LABELS.unforeseen}</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="col-span-2 flex items-center gap-2">
-                    <Input
-                      value={task.comments}
-                      disabled={acknowledged}
-                      placeholder="-"
-                      onChange={(e) => updateTask(index, { comments: e.target.value })}
-                      className="h-8"
+                      className="h-8 flex-1"
                     />
                     {!acknowledged && (
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeRow(index)} title="Remove task" className="h-8 w-8">
+                      <Button type="button" variant="ghost" size="icon" onClick={() => removeRow(index)} title="Remove task" className="h-8 w-8 shrink-0">
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
                     )}
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pl-7 sm:grid-cols-3">
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Status</p>
+                      <Select
+                        value={task.status}
+                        disabled={acknowledged}
+                        onValueChange={(v) => updateTask(index, { status: v as DailyTaskStatus })}
+                      >
+                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {(Object.keys(DAILY_TASK_STATUS_LABELS) as DailyTaskStatus[]).map((s) => (
+                            <SelectItem key={s} value={s}>{DAILY_TASK_STATUS_LABELS[s]}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1">
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Type</p>
+                      <Select
+                        value={task.task_type ?? NONE_TYPE}
+                        disabled={acknowledged}
+                        onValueChange={(v) => updateTask(index, { task_type: v === NONE_TYPE ? null : (v as "planned" | "unforeseen") })}
+                      >
+                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={NONE_TYPE}>No Type</SelectItem>
+                          <SelectItem value="planned">{DAILY_TASK_TYPE_LABELS.planned}</SelectItem>
+                          <SelectItem value="unforeseen">{DAILY_TASK_TYPE_LABELS.unforeseen}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="col-span-2 space-y-1 sm:col-span-1">
+                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Comments</p>
+                      <Input
+                        value={task.comments}
+                        disabled={acknowledged}
+                        placeholder="-"
+                        onChange={(e) => updateTask(index, { comments: e.target.value })}
+                        className="h-8"
+                      />
+                    </div>
                   </div>
                 </div>
               ))}
@@ -722,54 +738,51 @@ function ExpandedDayTasks({ row, onSave }: ExpandedDayTasksProps) {
 
   return (
     <div className="space-y-2">
-      <div className="grid grid-cols-12 gap-2 px-2 text-[11px] font-semibold text-muted-foreground">
-        <div className="col-span-1">S/N</div>
-        <div className="col-span-5">Task</div>
-        <div className="col-span-2">Status</div>
-        <div className="col-span-2">Type</div>
-        <div className="col-span-2">Comments</div>
-      </div>
       <div className="overflow-hidden rounded-md border">
         {items.map((task, index) => (
-          <div
-            key={`${row.id}-${index}`}
-            className="grid grid-cols-12 items-center gap-2 px-2 py-1.5 text-sm not-last:border-b"
-          >
-            <div className="col-span-1 text-muted-foreground">{index + 1}</div>
-            <div className="col-span-5 leading-tight">{task.description}</div>
-          <div className="col-span-2">
-            <Select value={task.status} disabled={readOnly} onValueChange={(v) => updateItem(index, { status: v as DailyTaskStatus })}>
-              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {(Object.keys(DAILY_TASK_STATUS_LABELS) as DailyTaskStatus[]).map((s) => (
-                  <SelectItem key={s} value={s}>{DAILY_TASK_STATUS_LABELS[s]}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="col-span-2">
-            <Select
-              value={task.task_type ?? NONE_TYPE}
-              disabled={readOnly}
-              onValueChange={(v) => updateItem(index, { task_type: v === NONE_TYPE ? null : (v as "planned" | "unforeseen") })}
-            >
-              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NONE_TYPE}>No Type</SelectItem>
-                <SelectItem value="planned">{DAILY_TASK_TYPE_LABELS.planned}</SelectItem>
-                <SelectItem value="unforeseen">{DAILY_TASK_TYPE_LABELS.unforeseen}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="col-span-2">
-            <Input
-              className="h-7 text-xs"
-              value={task.comments}
-              disabled={readOnly}
-              placeholder="-"
-              onChange={(e) => updateItem(index, { comments: e.target.value })}
-            />
-          </div>
+          <div key={`${row.id}-${index}`} className="space-y-2 border-b p-3 last:border-0">
+            <div className="flex items-start gap-2">
+              <span className="mt-0.5 min-w-[1.5rem] text-xs text-muted-foreground">{index + 1}.</span>
+              <span className="flex-1 text-sm leading-snug">{task.description}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 pl-5 sm:grid-cols-3">
+              <div className="space-y-1">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Status</p>
+                <Select value={task.status} disabled={readOnly} onValueChange={(v) => updateItem(index, { status: v as DailyTaskStatus })}>
+                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(DAILY_TASK_STATUS_LABELS) as DailyTaskStatus[]).map((s) => (
+                      <SelectItem key={s} value={s}>{DAILY_TASK_STATUS_LABELS[s]}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Type</p>
+                <Select
+                  value={task.task_type ?? NONE_TYPE}
+                  disabled={readOnly}
+                  onValueChange={(v) => updateItem(index, { task_type: v === NONE_TYPE ? null : (v as "planned" | "unforeseen") })}
+                >
+                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE_TYPE}>No Type</SelectItem>
+                    <SelectItem value="planned">{DAILY_TASK_TYPE_LABELS.planned}</SelectItem>
+                    <SelectItem value="unforeseen">{DAILY_TASK_TYPE_LABELS.unforeseen}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="col-span-2 space-y-1 sm:col-span-1">
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Comments</p>
+                <Input
+                  className="h-7 text-xs"
+                  value={task.comments}
+                  disabled={readOnly}
+                  placeholder="-"
+                  onChange={(e) => updateItem(index, { comments: e.target.value })}
+                />
+              </div>
+            </div>
           </div>
         ))}
       </div>

@@ -359,6 +359,7 @@ export default function ActionTrackerPortal() {
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search department or action points..."
         searchFn={(row, query) => {
           const normalizedQuery = query.toLowerCase()

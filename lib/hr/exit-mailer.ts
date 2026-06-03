@@ -1,5 +1,5 @@
 import { sendNotificationEmailsIndividuallyWithRetry } from "@/lib/notifications/email-gateway"
-import { ORG_PRIMARY_DOMAIN } from "@/lib/org-config"
+import { ORG_EMAIL_SENDERS } from "@/lib/org-config"
 import { logger } from "@/lib/logger"
 
 const log = logger("hr-exit-mailer")
@@ -164,7 +164,7 @@ export async function sendExitNotificationEmail(payload: ExitNotificationPayload
 
   try {
     const result = await sendNotificationEmailsIndividuallyWithRetry({
-      from: payload.from ?? `ACOB Admin & HR Department <notifications@${ORG_PRIMARY_DOMAIN}>`,
+      from: payload.from ?? ORG_EMAIL_SENDERS.hr,
       to: recipients,
       subject,
       html,

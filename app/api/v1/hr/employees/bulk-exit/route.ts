@@ -4,7 +4,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { canAccessAdminSection, resolveAdminScope } from "@/lib/admin/rbac"
 import { sendExitNotificationEmail } from "@/lib/hr/exit-mailer"
 import type { ExitedEmployee } from "@/lib/hr/exit-mailer"
-import { ORG_PRIMARY_DOMAIN } from "@/lib/org-config"
+import { orgDepartmentSender } from "@/lib/org-config"
 import { logger } from "@/lib/logger"
 
 const log = logger("api-bulk-exit")
@@ -146,7 +146,7 @@ export async function POST(request: Request) {
       // e.g. "ACOB Admin & HR Department" — derived from the lead's actual department name
       const hrDeptName =
         (hrLead?.lead_departments as string[] | undefined)?.find((d) => d.toLowerCase().includes("hr")) ?? "Admin & HR"
-      const exitEmailSender = `ACOB ${hrDeptName} Department <notifications@${ORG_PRIMARY_DOMAIN}>`
+      const exitEmailSender = orgDepartmentSender(hrDeptName)
 
       // All active staff — include additional_email so no one is missed
       const { data: activeStaff } = await dataClient

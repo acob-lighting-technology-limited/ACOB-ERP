@@ -443,6 +443,7 @@ export function AdminHelpDeskContent({ initialTickets, employees, leadDirectory,
         data={activeData}
         columns={finalColumns}
         getRowId={(r) => r.id}
+        pagination={{ pageSize: 50 }}
         isLoading={loadingTicketId !== null && loadingTicketId === "REFRESH"}
         onRetry={refresh}
         searchPlaceholder="Search ticket number, subject or requester department..."

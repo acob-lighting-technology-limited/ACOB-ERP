@@ -5,6 +5,8 @@ import type { AdminRouteKeyV2 } from "@/lib/admin/policy-v2"
 interface RouteEntry {
   key: AdminRouteKeyV2
   label: string
+  /** Optional clarifier shown under the label — used when one grant covers several sidebar pages. */
+  hint?: string
 }
 
 interface RouteGroup {
@@ -16,18 +18,23 @@ export const ADMIN_ROUTE_GROUPS: RouteGroup[] = [
   {
     label: "HR",
     routes: [
-      { key: "hr.main", label: "Employees & HR" },
-      { key: "jobdescriptions.main", label: "Job Descriptions" },
-      { key: "hr.fleet", label: "Fleet Management" },
-      { key: "hr.resources", label: "Learning Resources" },
-      { key: "hr.pms.cbt.manage", label: "CBT / Assessments" },
+      {
+        key: "hr.main",
+        label: "Employees & HR",
+        hint: "Employees, Departments, Office Location & Performance (also covers Leave & Attendance)",
+      },
+      { key: "hr.leave", label: "Leave" },
+      { key: "hr.attendance", label: "Attendance" },
+      { key: "hr.fleet", label: "Resource Booking", hint: "Fleet & Resources" },
+      { key: "hr.pms", label: "PMS", hint: "Includes everything under PMS (CBT / Assessments, etc.)" },
+      { key: "jobdescriptions.main", label: "Job Descriptions", hint: "Standalone module" },
     ],
   },
   {
     label: "Finance",
     routes: [
-      { key: "finance.main", label: "Finance" },
-      { key: "purchasing.main", label: "Purchasing" },
+      { key: "finance.main", label: "Finance", hint: "Payments, Bills, Invoices & Finance Reports" },
+      { key: "purchasing.main", label: "Purchasing", hint: "Orders, Receipts & Suppliers" },
     ],
   },
   {
@@ -42,25 +49,34 @@ export const ADMIN_ROUTE_GROUPS: RouteGroup[] = [
     label: "Reports",
     routes: [
       { key: "reports.weekly", label: "Weekly Reports" },
-      { key: "reports.other", label: "Other Reports" },
+      { key: "reports.other", label: "Other Reports", hint: "General Meeting, KSS, Minutes, Action Tracker" },
     ],
   },
   {
     label: "Tasks",
-    routes: [{ key: "tasks.main", label: "Tasks" }],
+    routes: [
+      { key: "tasks.main", label: "Tasks" },
+      { key: "helpdesk.main", label: "Help Desk" },
+    ],
   },
   {
     label: "Communications",
     routes: [
-      { key: "communications.main", label: "Communications" },
+      { key: "communications.main", label: "Overview", hint: "Communications landing page" },
       { key: "communications.broadcast", label: "Broadcasts" },
-      { key: "communications.meetings", label: "Meetings" },
-      { key: "helpdesk.main", label: "Help Desk" },
+      { key: "communications.meetings", label: "Meetings", hint: "Meeting mail & reminders" },
       { key: "notifications.main", label: "Notifications" },
       { key: "correspondence.main", label: "Correspondence" },
       { key: "documentation.main", label: "Documentation" },
       { key: "feedback.main", label: "Feedback" },
+    ],
+  },
+  {
+    label: "Others",
+    routes: [
       { key: "tools.main", label: "Tools" },
+      { key: "settings.main", label: "Settings", hint: "Users, Roles, Company, Mail & Maintenance" },
+      { key: "auditlogs.main", label: "Audit Logs" },
     ],
   },
 ]
@@ -120,13 +136,19 @@ export function AdminRoutesPicker({ values, onChange }: AdminRoutesPickerProps) 
             </label>
             <div className="ml-4 grid grid-cols-2 gap-1">
               {group.routes.map((route) => (
-                <label key={route.key} className="flex cursor-pointer items-center gap-2 rounded px-1 py-0.5 text-xs">
+                <label key={route.key} className="flex cursor-pointer items-start gap-2 rounded px-1 py-0.5 text-xs">
                   <input
                     type="checkbox"
+                    className="mt-0.5"
                     checked={values.includes(route.key)}
                     onChange={(e) => toggle(route.key, e.target.checked)}
                   />
-                  {route.label}
+                  <span className="flex flex-col">
+                    <span>{route.label}</span>
+                    {route.hint && (
+                      <span className="text-muted-foreground text-[10px] leading-tight">{route.hint}</span>
+                    )}
+                  </span>
                 </label>
               ))}
             </div>

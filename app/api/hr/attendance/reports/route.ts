@@ -57,7 +57,7 @@ export async function GET(request: NextRequest) {
 
     const contextResult = await requireAccessContextV2()
     if (!contextResult.ok) return contextResult.response
-    const routeAccess = enforceRouteAccessV2(contextResult.context, "hr.main")
+    const routeAccess = enforceRouteAccessV2(contextResult.context, "hr.attendance")
     if (!routeAccess.ok) return routeAccess.response
     if (routeAccess.dataScope === "none") {
       return NextResponse.json({ data: [], departments: [] })

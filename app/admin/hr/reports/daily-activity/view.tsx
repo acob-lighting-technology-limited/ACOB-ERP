@@ -305,6 +305,7 @@ export function AdminDailyActivityPage({ backLinkHref }: { backLinkHref?: string
         columns={columns}
         filters={tableFilters}
         getRowId={(r) => r.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search employee or department..."
         searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
         isLoading={loading}

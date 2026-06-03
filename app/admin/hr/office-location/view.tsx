@@ -62,7 +62,7 @@ interface LocationEmployee {
   employment_status?: string | null
 }
 
-interface OfficeLocationsData {
+export interface OfficeLocationsData {
   locations: OfficeLocation[]
   locationEmployees: Record<string, LocationEmployee[]>
   canManageLocations: boolean
@@ -179,7 +179,8 @@ function LocationCard({ location, onEdit }: { location: OfficeLocation; onEdit: 
 export function OfficeLocationsPage({
   backLinkHref,
   employeesBasePath,
-}: { backLinkHref?: string; employeesBasePath?: string } = {}) {
+  initialData,
+}: { backLinkHref?: string; employeesBasePath?: string; initialData?: OfficeLocationsData } = {}) {
   const queryClient = useQueryClient()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingLocation, setEditingLocation] = useState<OfficeLocation | null>(null)
@@ -194,6 +195,7 @@ export function OfficeLocationsPage({
   const { data, isLoading, error } = useQuery({
     queryKey: QUERY_KEYS.adminOfficeLocations(),
     queryFn: fetchOfficeLocationsData,
+    initialData,
   })
 
   const locations = data?.locations ?? []
@@ -508,6 +510,7 @@ export function OfficeLocationsPage({
         columns={columns}
         filters={filters}
         getRowId={(location) => location.id}
+        pagination={{ pageSize: 20 }}
         searchPlaceholder="Search location name, type, department, or description..."
         searchFn={(location, query) =>
           [

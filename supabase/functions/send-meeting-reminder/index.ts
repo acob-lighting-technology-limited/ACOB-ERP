@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 import { writeEdgeAuditLog } from "../_shared/audit.ts"
 import { sendEmail } from "../_shared/email.ts"
+import { EDGE_SENDERS, SENDER_ADDRESS } from "../_shared/senders.ts"
 import {
   getCurrentOfficeWeek,
   getOfficeWeekFromDate,
@@ -29,9 +30,10 @@ type KnowledgePresenter = {
 }
 
 const DEFAULT_TIME_ZONE = "Africa/Lagos"
-const DEFAULT_SENDER_EMAIL = Deno.env.get("NOTIFICATION_SENDER_EMAIL") || "notifications@acoblighting.com"
-const DEFAULT_SENDER = `ACOB Meeting System <${DEFAULT_SENDER_EMAIL}>`
-const MEETING_CONTACT_EMAIL = Deno.env.get("MEETING_CONTACT_EMAIL") || "e.rafiat@org.acoblighting.com"
+const DEFAULT_SENDER = EDGE_SENDERS.meeting
+// Configurable contact for meeting questions. Falls back to the shared
+// notifications mailbox (never a specific person, who may exit).
+const MEETING_CONTACT_EMAIL = Deno.env.get("MEETING_CONTACT_EMAIL") || SENDER_ADDRESS
 
 type ReminderRequestBody = {
   type: ReminderType

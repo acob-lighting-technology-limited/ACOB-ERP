@@ -626,6 +626,7 @@ export function HelpDeskContent({
         columns={columns}
         getRowId={(ticket) => ticket.id}
         filters={filters}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search ticket number, title, or department..."
         searchFn={(ticket, query) =>
           `${ticket.ticket_number} ${ticket.title} ${ticket.service_department}`.toLowerCase().includes(query)

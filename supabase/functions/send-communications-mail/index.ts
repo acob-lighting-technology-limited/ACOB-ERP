@@ -4,6 +4,7 @@ import { writeEdgeAuditLog } from "../_shared/audit.ts"
 import { sendEmail } from "../_shared/email.ts"
 import { isEdgeSystemEmailEnabled } from "../_shared/notification-gateway.ts"
 import { sanitizeHtml } from "../_shared/sanitize-html.ts"
+import { edgeDepartmentSenderBare } from "../_shared/senders.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -12,8 +13,6 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 }
-
-const DEFAULT_SENDER_EMAIL = Deno.env.get("NOTIFICATION_SENDER_EMAIL") || "notifications@acoblighting.com"
 
 type BroadcastRequestBody = {
   recipients?: string[]
@@ -73,8 +72,7 @@ function normalizeDepartmentLabel(input: string): string {
 }
 
 function buildBroadcastSender(department: string): string {
-  const senderDepartment = normalizeDepartmentLabel(department)
-  return `ACOB ${senderDepartment} <${DEFAULT_SENDER_EMAIL}>`
+  return edgeDepartmentSenderBare(normalizeDepartmentLabel(department))
 }
 
 function withSubjectPrefix(moduleName: string, subject: string): string {

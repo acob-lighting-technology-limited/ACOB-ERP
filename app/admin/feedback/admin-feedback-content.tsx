@@ -285,6 +285,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
         data={feedback}
         columns={columns}
         getRowId={(r) => r.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search ref #, title, requester name or email..."
         searchFn={(r, q) =>
           `${r.id} ${r.title} ${r.is_anonymous ? "anonymous" : ""} ${r.profiles?.first_name || ""} ${r.profiles?.last_name || ""} ${r.profiles?.company_email || ""}`

@@ -241,6 +241,7 @@ export default function AdminJobDescriptionsPage() {
         data={profiles}
         columns={columns}
         getRowId={(r) => r.id}
+        pagination={{ pageSize: 50 }}
         isLoading={isLoading}
         searchPlaceholder="Search name, email or designation..."
         searchFn={(r, q) =>

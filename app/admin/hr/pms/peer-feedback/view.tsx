@@ -316,6 +316,7 @@ export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string 
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search subject, reviewer, department, or comments…"
         searchFn={(row, query) => {
           return [

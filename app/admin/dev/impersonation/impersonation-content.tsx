@@ -261,6 +261,7 @@ export function DevImpersonationContent() {
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search by name, email, department, or role..."
         searchFn={(row, query) => {
           const q = query.toLowerCase()

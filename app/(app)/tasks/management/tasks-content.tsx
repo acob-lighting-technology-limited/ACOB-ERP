@@ -371,6 +371,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
         columns={columns}
         getRowId={(t) => t.id}
         filters={filters}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search task title, ID or department..."
         searchFn={(t, q) => `${t.work_item_number} ${t.title} ${t.department}`.toLowerCase().includes(q)}
         rowActions={[

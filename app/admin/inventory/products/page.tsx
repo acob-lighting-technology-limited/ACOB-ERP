@@ -293,6 +293,7 @@ export default function ProductsPage() {
         columns={columns}
         filters={filters}
         getRowId={(product) => product.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search product name, SKU, or description..."
         searchFn={(product, query) => {
           const normalizedQuery = query.toLowerCase()

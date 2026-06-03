@@ -1,5 +1,5 @@
 import { sendNotificationEmail } from "@/lib/notifications/email-gateway"
-import { ORG_PRIMARY_DOMAIN } from "@/lib/org-config"
+import { ORG_EMAIL_SENDERS } from "@/lib/org-config"
 import { withSubjectPrefix } from "@/lib/notifications/subject-policy"
 
 export interface LeaveWorkflowEmailPayload {
@@ -46,7 +46,7 @@ function buildEmailHtml(payload: Omit<LeaveWorkflowEmailPayload, "to" | "subject
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">' +
     '<tr><td align="center" bgcolor="#000000" style="padding:20px;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;font-size:11px;color:#d1d5db;">' +
     '<strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>' +
-    '<span style="color:#16a34a;font-weight:600;">HR System</span>' +
+    '<span style="color:#16a34a;font-weight:600;">Admin &amp; HR Department</span>' +
     "<br><br>" +
     '<i style="color:#9ca3af;">This is an automated system notification. Please do not reply directly to this email.</i>' +
     "</td></tr></table>" +
@@ -64,7 +64,7 @@ export async function sendLeaveWorkflowEmail(payload: LeaveWorkflowEmailPayload)
   if (!recipients.length) return
 
   await sendNotificationEmail({
-    from: `ACOB HR System <notifications@${ORG_PRIMARY_DOMAIN}>`,
+    from: ORG_EMAIL_SENDERS.hr,
     to: recipients,
     subject: withSubjectPrefix("Leave", payload.subject),
     html: buildEmailHtml({ title: payload.title, message: payload.message, ctaPath: payload.ctaPath }),

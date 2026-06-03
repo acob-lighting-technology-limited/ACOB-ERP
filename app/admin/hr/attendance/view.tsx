@@ -544,7 +544,10 @@ const ATTENDANCE_TABS: DataTableTab[] = [
   { key: "exceptions", label: "Exceptions" },
 ]
 
-export function AttendanceReportsPage({ backLinkHref }: { backLinkHref?: string } = {}) {
+export function AttendanceReportsPage({
+  backLinkHref,
+  lockedDepartment,
+}: { backLinkHref?: string; lockedDepartment?: string } = {}) {
   const [activeTab, setActiveTab] = useState<AttendanceTab>("daily")
   const [loading, setLoading] = useState(false)
   const [reports, setReports] = useState<AttendanceReport[]>([])
@@ -553,7 +556,7 @@ export function AttendanceReportsPage({ backLinkHref }: { backLinkHref?: string 
   const [periodMode, setPeriodMode] = useState<"month" | "quarter">("month")
   const [quarter, setQuarter] = useState<"Q1" | "Q2" | "Q3" | "Q4">("Q1")
   const [quarterYear, setQuarterYear] = useState(new Date().getFullYear())
-  const [department, setDepartment] = useState("all")
+  const [department, setDepartment] = useState(lockedDepartment || "all")
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [holidayOpen, setHolidayOpen] = useState(false)
   const [holidayDate, setHolidayDate] = useState("")
@@ -1086,6 +1089,7 @@ export function AttendanceReportsPage({ backLinkHref }: { backLinkHref?: string 
           columns={columns}
           filters={reportFilters}
           getRowId={(r) => r.user_id}
+          pagination={{ pageSize: 50 }}
           searchPlaceholder="Search employee or department…"
           searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
           isLoading={loading}

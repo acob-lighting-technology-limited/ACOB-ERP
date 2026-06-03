@@ -122,7 +122,7 @@ const html =
   "</html>"
 
 const { data, error } = await resend.emails.send({
-  from: "ACOB HR Department <notifications@acoblighting.com>",
+  from: "ACOB Admin & HR Department <notifications@acoblighting.com>",
   to: ["justilonze@gmail.com"],
   subject: "Staff Exit Notification — ACOB Lighting Technology Limited",
   html,

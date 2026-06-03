@@ -408,6 +408,7 @@ export function AssetIssuesPage({ backLinkHref }: { backLinkHref?: string } = {}
         columns={columns}
         filters={tableFilters}
         getRowId={(issue) => issue.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search issue description, asset code, assignee, or reporter..."
         searchFn={(issue, query) =>
           [

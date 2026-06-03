@@ -37,6 +37,39 @@ export const ORG_NOTIFICATION_SENDER =
   process.env.ORG_NOTIFICATION_SENDER ?? `${ORG_CODE} Internal Systems <notifications@${ORG_PRIMARY_DOMAIN}>`
 
 // ---------------------------------------------------------------------------
+// Outbound email sender identities ("From" display names)
+//
+// SINGLE SOURCE OF TRUTH — never hardcode a sender string in a mailer. Every
+// outbound email in the Next app must pick its "From" from here so the names
+// can never drift (e.g. "HR" vs "Admin & HR"). Edge functions live in a
+// separate runtime and mirror these in supabase/functions/_shared/senders.ts.
+// ---------------------------------------------------------------------------
+
+/** Shared notifications mailbox all subsystem senders send from. */
+export const ORG_SENDER_ADDRESS = process.env.ORG_SENDER_ADDRESS ?? `notifications@${ORG_PRIMARY_DOMAIN}`
+
+/** Compose a "Label <address>" sender string from a display label. */
+export function orgSender(label: string): string {
+  return `${label} <${ORG_SENDER_ADDRESS}>`
+}
+
+export const ORG_EMAIL_SENDERS = {
+  /** Generic system notifications / approvals (env-overridable). */
+  notification: ORG_NOTIFICATION_SENDER,
+  /** Admin & HR department mail — leave, exit notices, HR communications. */
+  hr: orgSender(`${ORG_CODE} Admin & HR Department`),
+  /** Help desk tickets. */
+  helpDesk: orgSender(`${ORG_CODE} Help Desk`),
+  /** Correspondence module. */
+  correspondence: orgSender(`${ORG_CODE} Correspondence System`),
+} as const
+
+/** Dynamic department sender, e.g. "ACOB Admin & HR Department" (label resolved at runtime). */
+export function orgDepartmentSender(departmentLabel: string): string {
+  return orgSender(`${ORG_CODE} ${departmentLabel} Department`)
+}
+
+// ---------------------------------------------------------------------------
 // Business hours (used for SLA calculations)
 // ---------------------------------------------------------------------------
 

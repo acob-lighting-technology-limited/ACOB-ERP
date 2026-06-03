@@ -1,4 +1,5 @@
 import { Resend } from "npm:resend@2.0.0"
+import { EDGE_SENDERS } from "./senders.ts"
 
 type EmailAttachment = {
   filename: string
@@ -7,6 +8,7 @@ type EmailAttachment = {
 
 type SendEmailOptions = {
   to: string | string[]
+  cc?: string | string[]
   subject: string
   html: string
   from?: string
@@ -25,8 +27,7 @@ type SendEmailResult = {
 }
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")
-const DEFAULT_SENDER_EMAIL = Deno.env.get("NOTIFICATION_SENDER_EMAIL") || "notifications@acoblighting.com"
-const DEFAULT_FROM = `ACOB Notification System <${DEFAULT_SENDER_EMAIL}>`
+const DEFAULT_FROM = EDGE_SENDERS.notification
 const RATE_LIMIT_INTERVAL_MS = 500
 const MAX_ATTEMPTS = 3
 let nextAvailableSendTime = 0
@@ -60,9 +61,11 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
   }
 
   const resend = new Resend(RESEND_API_KEY)
+  const ccList = options.cc ? (Array.isArray(options.cc) ? options.cc : [options.cc]) : undefined
   const payload = {
     from: options.from || DEFAULT_FROM,
     to: Array.isArray(options.to) ? options.to : [options.to],
+    ...(ccList && ccList.length ? { cc: ccList } : {}),
     subject: options.subject,
     html: options.html,
     replyTo: options.replyTo,

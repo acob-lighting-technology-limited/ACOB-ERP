@@ -372,8 +372,18 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       }
       loadData()
     } catch (_error: unknown) {
-      log.error({ err: String(_error) }, "error updating employee")
-      toast.error(_error instanceof Error ? _error.message : "Failed to update employee")
+      // Supabase/Postgrest errors are plain objects — String() yields "[object Object]".
+      // Extract a readable message so failures (e.g. check-constraint violations) are visible.
+      const errMessage =
+        _error instanceof Error
+          ? _error.message
+          : typeof _error === "object" && _error !== null
+            ? ((_error as { message?: string; details?: string }).message ??
+              (_error as { details?: string }).details ??
+              JSON.stringify(_error))
+            : String(_error)
+      log.error({ err: errMessage }, "error updating employee")
+      toast.error(errMessage || "Failed to update employee")
     } finally {
       setIsSaving(false)
     }
@@ -672,6 +682,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         data={employees}
         columns={columns}
         getRowId={(r) => r.id}
+        pagination={{ pageSize: 50 }}
         isLoading={isLoading}
         error={error instanceof Error ? error.message : null}
         onRetry={refetch}

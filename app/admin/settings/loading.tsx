@@ -1,5 +1,5 @@
-import { TablePageSkeleton } from "@/components/skeletons/table-page-skeleton"
+import { CardGridPageSkeleton } from "@/components/skeletons"
 
 export default function Loading() {
-  return <TablePageSkeleton showStats={true} statCards={5} />
+  return <CardGridPageSkeleton cards={8} columns={4} />
 }

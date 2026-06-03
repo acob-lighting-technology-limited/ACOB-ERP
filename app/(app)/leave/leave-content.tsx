@@ -617,6 +617,7 @@ export function LeaveContent({
             columns={columns}
             getRowId={(r) => r.id}
             filters={filters}
+            pagination={{ pageSize: 50 }}
             searchPlaceholder="Search reason or type..."
             searchFn={(r, q) => `${leaveTypeMap.get(r.leave_type_id)?.name} ${r.reason}`.toLowerCase().includes(q)}
             rowActions={staticRowActions}
@@ -788,6 +789,7 @@ export function LeaveContent({
             <DataTable<ApproverQueueItem>
               data={approverQueue}
               getRowId={(r) => r.id}
+              pagination={{ pageSize: 50 }}
               columns={[
                 {
                   key: "requester",

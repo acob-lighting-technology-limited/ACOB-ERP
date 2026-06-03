@@ -525,6 +525,7 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
         columns={columns}
         filters={filters}
         getRowId={(plan) => plan.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search employee, department, plan title, or focus area…"
         searchFn={(plan, query) =>
           [

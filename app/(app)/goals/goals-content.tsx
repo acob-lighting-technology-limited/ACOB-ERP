@@ -230,6 +230,7 @@ export function GoalsContent({
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search goal, department, status, or cycle..."
         searchFn={(row, query) =>
           `${row.title} ${row.description} ${row.department} ${row.priority} ${row.status} ${row.cycleLabel}`

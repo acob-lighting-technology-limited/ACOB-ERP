@@ -250,6 +250,7 @@ export function AdminDocumentationContent({
             columns={columns}
             filters={filters}
             getRowId={(row) => row.id}
+            pagination={{ pageSize: 50 }}
             searchPlaceholder="Search titles or content..."
             searchFn={(row, query) => {
               const q = query.toLowerCase()

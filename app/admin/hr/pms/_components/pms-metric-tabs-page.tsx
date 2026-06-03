@@ -637,6 +637,7 @@ export function PmsMetricTabsPage({
         columns={tableColumns}
         filters={tableFilters}
         getRowId={(row) => String(row.user_id || row.department || row.cycle || JSON.stringify(row).slice(0, 40))}
+        pagination={{ pageSize: 50 }}
         isLoading={isInitialLoading}
         skeletonRows={6}
         rowActions={tableRowActions}

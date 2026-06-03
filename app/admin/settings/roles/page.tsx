@@ -344,6 +344,7 @@ export default function RolesPage() {
         columns={columns}
         filters={filters}
         getRowId={(role) => role.id}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search role name or description..."
         searchFn={(role, query) => {
           const normalizedQuery = query.toLowerCase()

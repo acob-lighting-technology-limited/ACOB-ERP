@@ -117,6 +117,7 @@ export function BehaviourContent({
         columns={columns}
         filters={filters}
         getRowId={(row) => row.competency}
+        pagination={{ pageSize: 50 }}
         searchPlaceholder="Search competency..."
         searchFn={(row, query) => row.competency.toLowerCase().includes(query)}
         expandable={{

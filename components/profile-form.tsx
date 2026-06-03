@@ -90,28 +90,34 @@ export function ProfileForm({ user, profile, hideBackButton = false, onSaved }: 
     const phoneNumber = (data.phoneNumber || "").replace(/[^0-9+]/g, "")
     const additionalPhone = (data.additionalPhone || "").replace(/[^0-9+]/g, "")
 
+    const updatePayload: Record<string, unknown> = {
+      first_name: data.firstName,
+      last_name: data.lastName,
+      other_names: data.otherNames,
+      department: data.department,
+      designation: data.companyRole,
+      phone_number: phoneNumber,
+      additional_phone: additionalPhone,
+      residential_address: data.residentialAddress,
+      office_location: data.officeLocation,
+      bank_name: data.bankName,
+      bank_account_number: data.bankAccountNumber,
+      bank_account_name: data.bankAccountName,
+      date_of_birth: data.dateOfBirth || null,
+      employment_date: data.employmentDate || null,
+      email_notifications: data.emailNotifications,
+      updated_at: new Date().toISOString(),
+    }
+
+    // Keep `birthday` (MM-DD, source of the automated birthday email) in sync with
+    // the Date of Birth field. Only set it when a date is provided so saving the
+    // form never clears an HR-populated birthday for someone without a full DOB.
+    if (data.dateOfBirth && /^\d{4}-\d{2}-\d{2}$/.test(data.dateOfBirth)) {
+      updatePayload.birthday = data.dateOfBirth.substring(5, 10)
+    }
+
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update({
-          first_name: data.firstName,
-          last_name: data.lastName,
-          other_names: data.otherNames,
-          department: data.department,
-          designation: data.companyRole,
-          phone_number: phoneNumber,
-          additional_phone: additionalPhone,
-          residential_address: data.residentialAddress,
-          office_location: data.officeLocation,
-          bank_name: data.bankName,
-          bank_account_number: data.bankAccountNumber,
-          bank_account_name: data.bankAccountName,
-          date_of_birth: data.dateOfBirth || null,
-          employment_date: data.employmentDate || null,
-          email_notifications: data.emailNotifications,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", user.id)
+      const { error } = await supabase.from("profiles").update(updatePayload).eq("id", user.id)
 
       if (error) throw error
       toast.success("Profile updated successfully!")

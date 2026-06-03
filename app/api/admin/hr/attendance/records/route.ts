@@ -7,6 +7,7 @@ import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { toLocalISODate } from "@/lib/hr/attendance-utils"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
+import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
 import { DB_WRITABLE_STATUSES, deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 
 const CreateSchema = z.object({
@@ -45,6 +46,10 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get("end_date")
     const userId = searchParams.get("user_id")
     const includeAll = searchParams.get("include_all") === "1" || searchParams.get("include_all") === "true"
+    // Department lock from the dept console (/dept/[id]/hr/attendance). Narrows
+    // results to a single department even for global roles whose data scope is
+    // otherwise "all" — this is what enforces dept guarding on the dept pages.
+    const departmentParam = (searchParams.get("department") || "").trim()
 
     const dataClient = getServiceRoleClientOrFallback(supabase)
 
@@ -54,6 +59,17 @@ export async function GET(request: NextRequest) {
       if (depts.length === 0) return NextResponse.json({ records: [] })
       const { data: scopedProfiles } = await dataClient.from("profiles").select("id").in("department", depts)
       scopedUserIds = (scopedProfiles ?? []).map((p) => p.id)
+      if (scopedUserIds.length === 0) return NextResponse.json({ records: [] })
+    }
+
+    // Narrow to the requested department, intersected with the caller's scope.
+    if (departmentParam && departmentParam.toLowerCase() !== "all") {
+      const deptVariants = expandDepartmentScopeForQuery([departmentParam])
+      const { data: deptProfiles } = await dataClient.from("profiles").select("id").in("department", deptVariants)
+      const deptUserIds = (deptProfiles ?? []).map((p) => p.id)
+      if (deptUserIds.length === 0) return NextResponse.json({ records: [] })
+      scopedUserIds =
+        scopedUserIds === null ? deptUserIds : scopedUserIds.filter((id) => deptUserIds.includes(id))
       if (scopedUserIds.length === 0) return NextResponse.json({ records: [] })
     }
 
