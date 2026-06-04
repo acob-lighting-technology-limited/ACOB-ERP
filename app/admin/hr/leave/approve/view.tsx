@@ -134,21 +134,21 @@ const TABS: DataTableTab[] = [
   { key: "history", label: "History", icon: History },
 ]
 
-async function fetchLeaveApprovalData(): Promise<{
+async function fetchLeaveApprovalData(apiBasePath: string): Promise<{
   myQueue: LeaveItem[]
   allPendingQueue: LeaveItem[]
   history: LeaveItem[]
   reviewHistory: LeaveActionHistoryItem[]
 }> {
-  const myQueueRes = await fetch("/api/hr/leave/queue")
+  const myQueueRes = await fetch(`${apiBasePath}/queue`)
   if (!myQueueRes.ok) throw new Error("Failed to load leave queue")
   const myQueuePayload = await myQueueRes.json()
 
   let allQueuePayload: { data?: LeaveItem[] } = { data: [] }
   let requestPayload: { data?: LeaveItem[] } = { data: [] }
   const [allQueueRes, requestsRes] = await Promise.allSettled([
-    fetch("/api/hr/leave/queue?all=true"),
-    fetch("/api/hr/leave/requests?all=true&limit=200"),
+    fetch(`${apiBasePath}/queue?all=true`),
+    fetch(`${apiBasePath}/requests?all=true&limit=200`),
   ])
   if (allQueueRes.status === "fulfilled" && allQueueRes.value.ok) {
     allQueuePayload = await allQueueRes.value.json()
@@ -168,7 +168,11 @@ async function fetchLeaveApprovalData(): Promise<{
   }
 }
 
-export function LeaveApprovePage({ backLinkHref }: { backLinkHref?: string } = {}) {
+export function LeaveApprovePage({
+  backLinkHref,
+  apiBasePath = "/api/hr/leave",
+}: { backLinkHref?: string; apiBasePath?: string } = {}) {
+  const normalizedApiBasePath = apiBasePath.replace(/\/$/, "")
   const queryClient = useQueryClient()
   const [activeTab, setActiveTab] = useState("my-actions")
   const [actionDialog, setActionDialog] = useState<ActionDialogState>({
@@ -180,8 +184,8 @@ export function LeaveApprovePage({ backLinkHref }: { backLinkHref?: string } = {
   const overrideEvidenceRef = useRef(false)
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: QUERY_KEYS.leaveRequests({ scope: "approve" }),
-    queryFn: fetchLeaveApprovalData,
+    queryKey: QUERY_KEYS.leaveRequests({ scope: "approve", apiBasePath: normalizedApiBasePath }),
+    queryFn: () => fetchLeaveApprovalData(normalizedApiBasePath),
   })
 
   const { mutateAsync: submitActionMutateAsync } = useMutation({
@@ -196,7 +200,7 @@ export function LeaveApprovePage({ backLinkHref }: { backLinkHref?: string } = {
       comments: string
       overrideEvidence: boolean
     }) => {
-      const response = await fetch("/api/hr/leave/approve", {
+      const response = await fetch(`${normalizedApiBasePath}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ leave_request_id: id, action, comments, override_evidence: overrideEvidence }),
@@ -207,7 +211,9 @@ export function LeaveApprovePage({ backLinkHref }: { backLinkHref?: string } = {
     },
     onSuccess: (payload) => {
       toast.success(payload.message || "Action completed")
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.leaveRequests({ scope: "approve" }) })
+      queryClient.invalidateQueries({
+        queryKey: QUERY_KEYS.leaveRequests({ scope: "approve", apiBasePath: normalizedApiBasePath }),
+      })
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.leaveRequests() })
     },
     onError: (error) => {

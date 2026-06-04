@@ -59,9 +59,10 @@ interface AttendanceRecord {
 
 interface DailyRosterViewProps {
   departments: string[]
+  lockedDepartment?: string
 }
 
-export function DailyRosterView({ departments }: DailyRosterViewProps) {
+export function DailyRosterView({ departments, lockedDepartment }: DailyRosterViewProps) {
   const [rosterDate, setRosterDate] = useState(toLocalISODate())
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(false)
@@ -73,6 +74,7 @@ export function DailyRosterView({ departments }: DailyRosterViewProps) {
     setLoading(true)
     try {
       const params = new URLSearchParams({ start_date: rosterDate, end_date: rosterDate, include_all: "1" })
+      if (lockedDepartment) params.set("department", lockedDepartment)
       const res = await fetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load roster")
@@ -82,7 +84,7 @@ export function DailyRosterView({ departments }: DailyRosterViewProps) {
     } finally {
       setLoading(false)
     }
-  }, [rosterDate])
+  }, [rosterDate, lockedDepartment])
 
   useEffect(() => {
     void load()
@@ -147,7 +149,10 @@ export function DailyRosterView({ departments }: DailyRosterViewProps) {
     [records]
   )
 
-  const departmentOptions = useMemo(() => departments.map((d) => ({ value: d, label: d })), [departments])
+  const departmentOptions = useMemo(() => {
+    const visibleDepartments = lockedDepartment ? [lockedDepartment] : departments
+    return visibleDepartments.map((d) => ({ value: d, label: d }))
+  }, [departments, lockedDepartment])
 
   const columns: DataTableColumn<AttendanceRecord>[] = [
     {
@@ -248,7 +253,7 @@ export function DailyRosterView({ departments }: DailyRosterViewProps) {
       key: "department",
       label: "Department",
       options: departmentOptions,
-      placeholder: "All Departments",
+      placeholder: lockedDepartment || "All Departments",
     },
     {
       key: "status",

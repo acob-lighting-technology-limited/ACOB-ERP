@@ -38,6 +38,7 @@ interface AttendanceRecord {
 
 interface ExceptionsViewProps {
   departments: string[]
+  lockedDepartment?: string
 }
 
 function issueBadge(record: AttendanceRecord) {
@@ -59,7 +60,7 @@ function isException(r: AttendanceRecord) {
   )
 }
 
-export function ExceptionsView({ departments }: ExceptionsViewProps) {
+export function ExceptionsView({ departments, lockedDepartment }: ExceptionsViewProps) {
   const { start: defaultStart } = monthBounds(toLocalYearMonth())
   const [startDate, setStartDate] = useState(defaultStart)
   const [endDate, setEndDate] = useState(toLocalISODate())
@@ -74,6 +75,7 @@ export function ExceptionsView({ departments }: ExceptionsViewProps) {
     setLoading(true)
     try {
       const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
+      if (lockedDepartment) params.set("department", lockedDepartment)
       const res = await fetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load")
@@ -84,7 +86,7 @@ export function ExceptionsView({ departments }: ExceptionsViewProps) {
     } finally {
       setLoading(false)
     }
-  }, [startDate, endDate])
+  }, [startDate, endDate, lockedDepartment])
 
   useEffect(() => {
     void load()
@@ -131,7 +133,10 @@ export function ExceptionsView({ departments }: ExceptionsViewProps) {
     [records]
   )
 
-  const departmentOptions = useMemo(() => departments.map((d) => ({ value: d, label: d })), [departments])
+  const departmentOptions = useMemo(() => {
+    const visibleDepartments = lockedDepartment ? [lockedDepartment] : departments
+    return visibleDepartments.map((d) => ({ value: d, label: d }))
+  }, [departments, lockedDepartment])
 
   const columns: DataTableColumn<AttendanceRecord>[] = [
     {
@@ -202,7 +207,7 @@ export function ExceptionsView({ departments }: ExceptionsViewProps) {
       key: "department",
       label: "Department",
       options: departmentOptions,
-      placeholder: "All Departments",
+      placeholder: lockedDepartment || "All Departments",
     },
     {
       key: "issue_type",

@@ -119,7 +119,7 @@ async function main() {
   await walk(APP_DIR, files)
 
   const tsxFiles = files.filter((f) => f.endsWith(".tsx"))
-  const pageFiles = tsxFiles.filter((f) => f.endsWith("/page.tsx"))
+  const pageFiles = tsxFiles.filter((f) => toPosix(f).endsWith("/page.tsx"))
 
   const missingLoading = []
   for (const pagePath of pageFiles) {
@@ -164,7 +164,7 @@ async function main() {
   }
 
   const statsViolations = []
-  for (const filePath of tsxFiles.filter((f) => f.endsWith("/page.tsx"))) {
+  for (const filePath of tsxFiles.filter((f) => toPosix(f).endsWith("/page.tsx"))) {
     const rel = toPosix(path.relative(ROOT, filePath))
     if (/\/\[[^/]+\]\/page\.tsx$/.test(rel) || /\/\[\.\.\.[^/]+\]\/page\.tsx$/.test(rel)) continue
     const content = await readText(filePath)

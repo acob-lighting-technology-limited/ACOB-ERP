@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -85,28 +85,43 @@ export function WeeklyReportAdminDialog({
   const normalizedRole = (currentUser.role || "").trim().toLowerCase()
   const isAdminLikeRole =
     normalizedRole === "developer" || normalizedRole === "super_admin" || normalizedRole === "admin"
+  const managedDepartments = useMemo(() => {
+    if (adminScope) return adminScope.managedDepartments
+    return !isAdminLikeRole && currentUser.department ? [currentUser.department] : []
+  }, [adminScope, currentUser.department, isAdminLikeRole])
 
   // Restrict to managed departments only when the current admin view is truly lead-scoped.
   const isLeadScopedView = Boolean(
     adminScope
       ? adminScope.scopeMode === "lead" || (!adminScope.isAdminLike && adminScope.isDepartmentLead)
-      : currentUser.is_department_lead && !isAdminLikeRole
+      : managedDepartments.length > 0
   )
 
   useEffect(() => {
     const fetchMetadata = async () => {
-      if (isLeadScopedView && currentUser.department) {
-        setDepartments([currentUser.department])
-        return
-      }
-      const { data: deptData } = await supabase.from("profiles").select("department").not("department", "is", null)
-      if (deptData) {
-        const uniqueDepts = Array.from(new Set(deptData.map((d) => d.department))).sort()
+      try {
+        if (isLeadScopedView) {
+          setDepartments(managedDepartments)
+          return
+        }
+        const response = await fetch("/api/departments", { cache: "no-store" })
+        const payload = (await response.json().catch(() => null)) as {
+          data?: Array<{ name?: string | null }>
+          error?: string
+        } | null
+        if (!response.ok) {
+          throw new Error(payload?.error || "Failed to load departments")
+        }
+        const uniqueDepts = Array.from(
+          new Set((payload?.data || []).map((department) => department.name).filter(Boolean))
+        ).sort()
         setDepartments(uniqueDepts as string[])
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to load departments")
       }
     }
-    fetchMetadata()
-  }, [currentUser.department, isLeadScopedView, supabase])
+    void fetchMetadata()
+  }, [isLeadScopedView, managedDepartments])
 
   useEffect(() => {
     const fetchLockState = async () => {

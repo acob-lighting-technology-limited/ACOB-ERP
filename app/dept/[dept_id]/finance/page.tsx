@@ -8,5 +8,5 @@ interface Props {
 export default async function DeptFinancePage({ params }: Props) {
   const { dept_id } = await params
   await requireDeptScope(dept_id)
-  return <FinanceDashboardContent basePath={`/dept/${dept_id}`} />
+  return <FinanceDashboardContent basePath={`/dept/${dept_id}`} lockedDepartmentId={dept_id} />
 }

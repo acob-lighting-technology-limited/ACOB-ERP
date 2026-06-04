@@ -13,6 +13,7 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { EmptyState } from "@/components/ui/patterns"
 import { Badge } from "@/components/ui/badge"
+import { normalizeDepartmentName } from "@/shared/departments"
 
 interface FinancePaymentRow {
   id: string
@@ -45,7 +46,7 @@ type FinancePaymentQueryRow = {
   department?: { name?: string | null } | null
 }
 
-async function fetchFinanceReportData(): Promise<FinanceReportData> {
+async function fetchFinanceReportData(lockedDepartment?: string): Promise<FinanceReportData> {
   const supabase = createClient()
 
   const { data, error } = await supabase
@@ -60,16 +61,22 @@ async function fetchFinanceReportData(): Promise<FinanceReportData> {
     throw new Error(error.message)
   }
 
-  const rows = ((data || []) as FinancePaymentQueryRow[]).map((payment) => ({
-    id: payment.id,
-    title: payment.title,
-    amount: payment.amount || 0,
-    category: payment.category || "Other",
-    created_at: payment.created_at,
-    department_name: payment.department?.name || "Unknown",
-    status: payment.status || "unknown",
-    currency: payment.currency || "NGN",
-  }))
+  const rows = ((data || []) as FinancePaymentQueryRow[])
+    .map((payment) => ({
+      id: payment.id,
+      title: payment.title,
+      amount: payment.amount || 0,
+      category: payment.category || "Other",
+      created_at: payment.created_at,
+      department_name: payment.department?.name || "Unknown",
+      status: payment.status || "unknown",
+      currency: payment.currency || "NGN",
+    }))
+    .filter(
+      (payment) =>
+        !lockedDepartment ||
+        normalizeDepartmentName(payment.department_name) === normalizeDepartmentName(lockedDepartment)
+    )
 
   const totalExpenses = rows.reduce((sum, payment) => sum + payment.amount, 0)
 
@@ -122,12 +129,15 @@ function getPeriodLabel(date: string) {
   return `${parsedDate.getFullYear()}-${String(parsedDate.getMonth() + 1).padStart(2, "0")}`
 }
 
-export function FinanceReportsPage({ backLinkHref }: { backLinkHref?: string } = {}) {
+export function FinanceReportsPage({
+  backLinkHref,
+  lockedDepartment,
+}: { backLinkHref?: string; lockedDepartment?: string } = {}) {
   const [period, setPeriod] = useState("year")
 
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: QUERY_KEYS.adminFinanceReports(),
-    queryFn: fetchFinanceReportData,
+    queryKey: [...QUERY_KEYS.adminFinanceReports(), lockedDepartment ?? "all"],
+    queryFn: () => fetchFinanceReportData(lockedDepartment),
   })
 
   const reportData = data ?? {
@@ -158,14 +168,14 @@ export function FinanceReportsPage({ backLinkHref }: { backLinkHref?: string } =
     () =>
       Array.from(
         new Set(
-          reportData.rows
-            .map((row) => row.department_name)
-            .filter((department): department is string => Boolean(department))
+          (lockedDepartment ? [lockedDepartment] : reportData.rows.map((row) => row.department_name)).filter(
+            (department): department is string => Boolean(department)
+          )
         )
       )
         .sort()
         .map((department) => ({ value: department, label: department })),
-    [reportData.rows]
+    [lockedDepartment, reportData.rows]
   )
 
   const periodOptions = useMemo(

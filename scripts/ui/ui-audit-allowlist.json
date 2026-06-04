@@ -1,5 +1,10 @@
 {
-  "header": [],
+  "header": [
+    "app/(app)/cbt/page.tsx",
+    "app/kss/it/cybersecurity/page.tsx",
+    "app/kss/it/software-development/erp/page.tsx",
+    "app/kss/page.tsx"
+  ],
   "table": [],
   "stats": []
 }

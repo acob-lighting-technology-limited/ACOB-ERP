@@ -1,10 +1,5 @@
+import { TablePageSkeleton } from "@/components/skeletons"
+
 export default function DeptWeeklyReportsLoading() {
-  return (
-    <div className="space-y-4 p-6">
-      <div className="bg-muted h-8 w-48 animate-pulse rounded" />
-      <div className="bg-card rounded-xl border p-4">
-        <div className="bg-muted h-10 w-full animate-pulse rounded" />
-      </div>
-    </div>
-  )
+  return <TablePageSkeleton columns={7} rows={8} statCards={4} actions={2} filters={3} showBackLink />
 }

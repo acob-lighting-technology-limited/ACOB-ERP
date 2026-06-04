@@ -4,6 +4,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
+import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
 import { computeDailyTotals } from "@/lib/hr/daily-report"
 
 const log = logger("admin-hr-daily-activity")
@@ -24,6 +25,7 @@ export async function GET(request: NextRequest) {
     const endDate = searchParams.get("end_date")
     const userId = searchParams.get("user_id")
     const status = searchParams.get("status")
+    const departmentParam = (searchParams.get("department") || "").trim()
 
     const dataClient = getServiceRoleClientOrFallback(supabase)
 
@@ -33,6 +35,15 @@ export async function GET(request: NextRequest) {
       if (depts.length === 0) return NextResponse.json({ reports: [] })
       const { data: scopedProfiles } = await dataClient.from("profiles").select("id").in("department", depts)
       scopedUserIds = (scopedProfiles ?? []).map((p) => p.id)
+      if (scopedUserIds.length === 0) return NextResponse.json({ reports: [] })
+    }
+
+    if (departmentParam && departmentParam.toLowerCase() !== "all") {
+      const deptVariants = expandDepartmentScopeForQuery([departmentParam])
+      const { data: deptProfiles } = await dataClient.from("profiles").select("id").in("department", deptVariants)
+      const deptUserIds = (deptProfiles ?? []).map((p) => p.id)
+      if (deptUserIds.length === 0) return NextResponse.json({ reports: [] })
+      scopedUserIds = scopedUserIds === null ? deptUserIds : scopedUserIds.filter((id) => deptUserIds.includes(id))
       if (scopedUserIds.length === 0) return NextResponse.json({ reports: [] })
     }
 
@@ -64,27 +75,32 @@ export async function GET(request: NextRequest) {
     const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))]
     const profileRows =
       userIds.length > 0
-        ? (
+        ? ((
             await dataClient
               .from("profiles")
               .select("id, full_name, first_name, last_name, department")
               .in("id", userIds)
-          ).data ?? []
+          ).data ?? [])
         : []
-    const profileMap = new Map<string, { full_name?: string; first_name?: string; last_name?: string; department?: string }>()
+    const profileMap = new Map<
+      string,
+      { full_name?: string; first_name?: string; last_name?: string; department?: string }
+    >()
     for (const p of profileRows) profileMap.set(p.id, p)
 
     const reports = rows.map((r) => {
       const p = profileMap.get(r.user_id)
       const name = p?.full_name?.trim() || [p?.first_name, p?.last_name].filter(Boolean).join(" ") || "Unknown"
-      const tasks = ((r.daily_report_tasks ?? []) as {
-        id: string
-        description: string
-        status: string
-        task_type: string | null
-        comments: string | null
-        position: number
-      }[])
+      const tasks = (
+        (r.daily_report_tasks ?? []) as {
+          id: string
+          description: string
+          status: string
+          task_type: string | null
+          comments: string | null
+          position: number
+        }[]
+      )
         .slice()
         .sort((a, b) => a.position - b.position)
       return {

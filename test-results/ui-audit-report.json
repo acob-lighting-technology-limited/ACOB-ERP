@@ -1,16 +1,16 @@
 {
-  "generatedAt": "2026-03-08T23:19:42.154Z",
+  "generatedAt": "2026-06-03T15:08:53.456Z",
   "summary": {
-    "totalPages": 156,
+    "totalPages": 209,
     "missingLoading": 0,
     "headerViolations": 0,
     "tableViolations": 0,
     "statsViolations": 0,
     "modalViolations": 0,
-    "adHocEmptyStatePages": 0,
+    "adHocEmptyStatePages": 2,
     "adHocErrorStatePages": 0,
-    "adHocSectionPages": 0,
-    "adHocFormFieldPages": 0
+    "adHocSectionPages": 2,
+    "adHocFormFieldPages": 3
   },
   "violations": {
     "missingLoading": [],
@@ -18,9 +18,19 @@
     "table": [],
     "stats": [],
     "modal": [],
-    "adHocEmptyStatePages": [],
+    "adHocEmptyStatePages": [
+      "app/(app)/pms/development-plans/page.tsx",
+      "app/(app)/pms/peer-feedback/page.tsx"
+    ],
     "adHocErrorStatePages": [],
-    "adHocSectionPages": [],
-    "adHocFormFieldPages": []
+    "adHocSectionPages": [
+      "app/birthday/page.tsx",
+      "app/kss/page.tsx"
+    ],
+    "adHocFormFieldPages": [
+      "app/(app)/pms/peer-feedback/page.tsx",
+      "app/admin/hr/pms/cbt/question/page.tsx",
+      "app/admin/hr/site-locations/page.tsx"
+    ]
   }
 }

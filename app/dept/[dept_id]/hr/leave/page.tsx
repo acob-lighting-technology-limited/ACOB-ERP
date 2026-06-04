@@ -8,5 +8,5 @@ interface Props {
 export default async function DeptLeaveApprovePage({ params }: Props) {
   const { dept_id } = await params
   await requireDeptScope(dept_id)
-  return <LeaveApprovePage backLinkHref={`/dept/${dept_id}/hr`} />
+  return <LeaveApprovePage backLinkHref={`/dept/${dept_id}/hr`} apiBasePath={`/api/dept/${dept_id}/leave`} />
 }

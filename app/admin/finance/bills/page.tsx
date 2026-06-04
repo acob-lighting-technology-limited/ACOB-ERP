@@ -4,13 +4,12 @@ import { BillsPage, type Bill } from "./view"
 
 const log = logger("finance-bills-page")
 
+export const dynamic = "force-dynamic"
+
 async function getInitialBills(): Promise<Bill[] | undefined> {
   try {
     const supabase = await createClient()
-    const { data, error } = await supabase
-      .from("bills")
-      .select("*")
-      .order("created_at", { ascending: false })
+    const { data, error } = await supabase.from("bills").select("*").order("created_at", { ascending: false })
     if (error) {
       if (error.code === "42P01") return [] // table doesn't exist yet
       log.error({ err: error }, "Failed to fetch bills")
