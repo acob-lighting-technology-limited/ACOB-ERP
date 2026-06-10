@@ -18,6 +18,7 @@ import { getPaginationRange, paginatedResponse, PaginationSchema } from "@/lib/p
 import { checkIdempotency, getIdempotencyKey, storeIdempotencyKey } from "@/lib/idempotency"
 import { getOneDriveService } from "@/lib/onedrive"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { getDepartmentAliases } from "@/shared/departments"
 
 const log = logger("correspondence-records")
 const MAX_REFERENCE_INSERT_RETRIES = 3
@@ -58,6 +59,15 @@ type RpcClient = Pick<SupabaseClient, "rpc">
 type CategoryCodeRow = { code: string }
 type ReferenceRow = { reference_number: string | null }
 type CounterRow = { last_number: number | null }
+
+function quotePostgrestValue(value: string): string {
+  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
+}
+
+function correspondenceDepartmentFilter(department: string): string {
+  const values = getDepartmentAliases(department).map(quotePostgrestValue).join(",")
+  return `department_name.in.(${values}),assigned_department_name.in.(${values})`
+}
 
 function isDuplicateReferenceNumberError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false
@@ -291,13 +301,18 @@ export async function GET(request: NextRequest) {
     // and must be filtered to their own records, just like any non-global user.
     const isGlobalAdmin = isAdminRole(profile.role) && requestScope?.scopeMode !== "lead"
     const scopeMine = searchParams.get("scope") === "mine"
+    const canAccessRequestedDepartment = department ? canAccessDepartment(profile, department) : false
+
+    if (department && !isGlobalAdmin && !canAccessRequestedDepartment) {
+      return NextResponse.json({ error: "Forbidden: outside your department scope" }, { status: 403 })
+    }
 
     let query = supabase
       .from("correspondence_records")
       .select("*", { count: "exact" })
       .order("created_at", { ascending: false })
 
-    if (!isGlobalAdmin || scopeMine) {
+    if ((!isGlobalAdmin && !department) || scopeMine) {
       query = query.or(`originator_id.eq.${user.id},created_by_id.eq.${user.id}`)
     }
 
@@ -318,7 +333,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (department) {
-      query = query.or(`department_name.eq.${department},assigned_department_name.eq.${department}`)
+      query = query.or(correspondenceDepartmentFilter(department))
     }
 
     if (search) {

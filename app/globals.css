@@ -240,32 +240,67 @@
   }
 }
 
-/* ── Global modern scrollbar ─────────────────────────────────────────────── */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklch, var(--border) 80%, transparent) transparent;
+/* ── Portfolio-style page scrollbar ─────────────────────────────────────── */
+html::-webkit-scrollbar,
+body::-webkit-scrollbar,
+::-webkit-scrollbar {
+  width: 0.3em !important;
+  height: 0.3em !important;
+  background: transparent !important;
 }
 
-*::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
+html::-webkit-scrollbar-track,
+body::-webkit-scrollbar-track,
+::-webkit-scrollbar-track {
+  background: transparent !important;
+  border-radius: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
 }
 
-*::-webkit-scrollbar-track {
-  background: transparent;
+html::-webkit-scrollbar-thumb,
+body::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb {
+  background: var(--primary) !important;
+  border-radius: 0 !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  background-clip: border-box !important;
 }
 
-*::-webkit-scrollbar-thumb {
-  background-color: color-mix(in oklch, var(--muted-foreground) 25%, transparent);
-  border-radius: 999px;
+html::-webkit-scrollbar-thumb:hover,
+body::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--primary) 85%, black) !important;
 }
 
-*::-webkit-scrollbar-thumb:hover {
-  background-color: color-mix(in oklch, var(--muted-foreground) 45%, transparent);
+html::-webkit-scrollbar-button,
+body::-webkit-scrollbar-button,
+::-webkit-scrollbar-button {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+  -webkit-appearance: none !important;
 }
 
-*::-webkit-scrollbar-corner {
-  background: transparent;
+html::-webkit-scrollbar-button:vertical:start:decrement,
+html::-webkit-scrollbar-button:vertical:end:increment,
+body::-webkit-scrollbar-button:vertical:start:decrement,
+body::-webkit-scrollbar-button:vertical:end:increment,
+::-webkit-scrollbar-button:vertical:start:decrement,
+::-webkit-scrollbar-button:vertical:end:increment {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  background: transparent !important;
+  -webkit-appearance: none !important;
+}
+
+html::-webkit-scrollbar-corner,
+body::-webkit-scrollbar-corner,
+::-webkit-scrollbar-corner {
+  background: transparent !important;
 }
 
 /* Text selection styling */
@@ -311,42 +346,64 @@
 
   /* Better scrollbar styling for tables on mobile */
   .table-responsive::-webkit-scrollbar {
-    height: 8px;
+    height: 0.3em !important;
+    background: transparent !important;
   }
 
   .table-responsive::-webkit-scrollbar-track {
-    @apply bg-muted rounded-lg;
+    background: transparent !important;
+    border-radius: 0 !important;
+    border: 0 !important;
   }
 
   .table-responsive::-webkit-scrollbar-thumb {
-    @apply bg-muted-foreground/30 rounded-lg;
+    background: var(--primary) !important;
+    border-radius: 0 !important;
+    border: 0 !important;
   }
 
   .table-responsive::-webkit-scrollbar-thumb:hover {
-    @apply bg-muted-foreground/50;
+    background: color-mix(in oklch, var(--primary) 85%, black) !important;
+  }
+
+  .table-responsive::-webkit-scrollbar-button {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
   }
 
   /* Custom scrollbar for sidebar */
   .scrollbar-custom {
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in oklch, var(--primary) 30%, transparent) transparent;
+    scrollbar-width: auto;
   }
 
   .scrollbar-custom::-webkit-scrollbar {
-    width: 6px;
+    width: 0.3em !important;
+    background: transparent !important;
   }
 
   .scrollbar-custom::-webkit-scrollbar-track {
-    @apply bg-transparent;
+    background: transparent !important;
+    border-radius: 0 !important;
+    border: 0 !important;
   }
 
   .scrollbar-custom::-webkit-scrollbar-thumb {
-    background-color: color-mix(in oklch, var(--primary) 30%, transparent);
-    border-radius: 10px;
+    background: var(--primary) !important;
+    border-radius: 0 !important;
+    border: 0 !important;
   }
 
   .scrollbar-custom::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in oklch, var(--primary) 50%, transparent);
+    background: color-mix(in oklch, var(--primary) 85%, black) !important;
+  }
+
+  .scrollbar-custom::-webkit-scrollbar-button {
+    display: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    background: transparent !important;
   }
 
   /* Mobile-specific fixes */

@@ -9,7 +9,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Megaphone, Users, Calendar, Clock } from "lucide-react"
 import { writeAuditLogClient } from "@/lib/audit/client"
 import { logger } from "@/lib/logger"
-import { DEFAULT_TEAMS_LINK, DEFAULT_AGENDA, formatDateNice, capitalize, stripHtmlToText } from "./composer-utils"
+import {
+  DEFAULT_TEAMS_LINK,
+  DEFAULT_AGENDA,
+  LEGACY_DEFAULT_AGENDA,
+  formatDateNice,
+  capitalize,
+  stripHtmlToText,
+} from "./composer-utils"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { createClient } from "@/lib/supabase/client"
 import { MeetingReminderForm } from "./MeetingReminderForm"
@@ -23,6 +30,21 @@ import { getCurrentOfficeWeek, getOfficeWeekFromDate } from "@/lib/meeting-week"
 import { fetchWeeklyReportLockState, getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
 
 const log = logger("communications-composer")
+
+function normalizeAgendaText(value: string): string {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+    .join("\n")
+}
+
+function parseAgendaItems(value: string): string[] {
+  return value
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\s*\d+[\s.)-]*/, "").trim())
+    .filter(Boolean)
+}
 
 type Employee = {
   id: string
@@ -145,6 +167,22 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
         ),
         meetingTime: String(payload?.data?.meetingTime || "08:30"),
       }
+    },
+  })
+
+  const { data: defaultAgendaData } = useQuery({
+    queryKey: ["meeting-reminder-default-agenda"],
+    enabled: mode !== "communications",
+    queryFn: async (): Promise<{ agenda: string[] }> => {
+      const res = await fetch("/api/reports/meeting-agenda-default")
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error || "Failed to load meeting agenda")
+      const agenda = Array.isArray(payload?.data?.agenda)
+        ? payload.data.agenda.filter(
+            (item: unknown): item is string => typeof item === "string" && Boolean(item.trim())
+          )
+        : DEFAULT_AGENDA
+      return { agenda: agenda.length > 0 ? agenda : DEFAULT_AGENDA }
     },
   })
 
@@ -300,6 +338,12 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
     setMeetingTime(canonicalMeetingSetup.meetingTime || "08:30")
   }, [canonicalMeetingSetup, reminderType])
 
+  useEffect(() => {
+    if (reminderType !== "meeting") return
+    if (!defaultAgendaData) return
+    setAgendaText(defaultAgendaData.agenda.join("\n"))
+  }, [defaultAgendaData, reminderType])
+
   // Teams link is per-week (can change each meeting); agenda is global (rarely changes week to week).
   const meetingDraftStorageKey = useMemo(() => {
     return `meeting-reminder-draft:${activeMeetingWeek.year}:${activeMeetingWeek.week}`
@@ -310,9 +354,11 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
     if (reminderType !== "meeting") return
     if (typeof window === "undefined") return
 
-    // Restore agenda globally — it doesn't reset when the week changes
+    // Remove the old browser-local default so it cannot override the shared DB default.
     const savedAgenda = window.localStorage.getItem(AGENDA_STORAGE_KEY)
-    if (savedAgenda?.trim()) setAgendaText(savedAgenda)
+    if (savedAgenda?.trim() && normalizeAgendaText(savedAgenda) === LEGACY_DEFAULT_AGENDA.join("\n")) {
+      window.localStorage.removeItem(AGENDA_STORAGE_KEY)
+    }
 
     // Restore teams link per-week
     const savedDraftRaw = window.localStorage.getItem(meetingDraftStorageKey)
@@ -591,10 +637,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
       return
     }
     if (reminderType === "meeting") {
-      const agendaItems = agendaText
-        .split("\n")
-        .map((line) => line.replace(/^\d+\.\s*/, "").trim())
-        .filter(Boolean)
+      const agendaItems = parseAgendaItems(agendaText)
       if (agendaItems.length === 0) {
         toast.error("Agenda is required before sending")
         return
@@ -640,7 +683,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
             meetingYear: reminderType === "meeting" ? meetingContext?.meetingYear : undefined,
             meetingTime: reminderType === "meeting" ? meetingTime : undefined,
             teamsLink: reminderType === "meeting" ? teamsLink : undefined,
-            agenda: reminderType === "meeting" ? agendaText : undefined,
+            agenda: reminderType === "meeting" ? parseAgendaItems(agendaText) : undefined,
             knowledgeSharingDepartment:
               reminderType === "meeting" && knowledgeDepartment !== "none" ? knowledgeDepartment : undefined,
             knowledgeSharingPresenter: reminderType === "meeting" ? selectedKnowledgePresenter || undefined : undefined,
@@ -738,10 +781,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
           hour12: true,
         })
         payload.teamsLink = teamsLink
-        payload.agenda = agendaText
-          .split("\n")
-          .map((l) => l.replace(/^\d+\.\s*/, "").trim())
-          .filter(Boolean)
+        payload.agenda = parseAgendaItems(agendaText)
         if (knowledgeDepartment !== "none") payload.knowledgeSharingDepartment = knowledgeDepartment
         if (selectedKnowledgePresenter) payload.knowledgeSharingPresenter = selectedKnowledgePresenter
         payload.meetingPreparedByName = selectedMeetingPreparedBy?.full_name || "ACOB Team"
@@ -752,6 +792,9 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
         payload.sessionTime = sessionTime
         payload.duration = duration
       } else {
+        // Stable per-click id so a transport retry is deduped server-side
+        // instead of sending the broadcast to everyone twice.
+        payload.broadcastId = crypto.randomUUID()
         payload.broadcastSubject = broadcastSubject.trim()
         payload.broadcastBodyHtml = broadcastBodyHtml
         payload.broadcastDepartment = broadcastDepartment
@@ -774,6 +817,18 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
       if (!res.ok) throw new Error(data.error || "Failed to send")
 
       setSendResult(data)
+
+      // Admin broadcasts are accepted and delivered in the background by the
+      // edge function, which writes its own audit log with the final counts.
+      if (reminderType === "admin_broadcast") {
+        if (data.duplicate) {
+          toast.info("This broadcast was already sent — duplicate ignored", { id: toastId })
+        } else {
+          toast.success(`✅ ${label} is sending to ${resolvedRecipients.length} recipient(s)`, { id: toastId })
+        }
+        return
+      }
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const successCount = data.results?.filter((r: any) => r.success).length || 0
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -786,20 +841,17 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
       }
 
       await logMailAudit({
-        action: reminderType === "admin_broadcast" ? "communications_broadcast_sent" : "meeting_reminder_sent",
+        action: "meeting_reminder_sent",
         entityId: crypto.randomUUID(),
-        department: reminderType === "admin_broadcast" ? broadcastDepartment : currentUserDept || "Admin & HR",
+        department: currentUserDept || "Admin & HR",
         metadata: {
           reminder_type: reminderType,
           success_count: successCount,
           failure_count: failCount,
           recipient_count: resolvedRecipients.length,
-          subject: reminderType === "admin_broadcast" ? broadcastSubject.trim() : label,
-          prepared_by:
-            reminderType === "admin_broadcast"
-              ? selectedBroadcastPreparedBy?.full_name || null
-              : selectedMeetingPreparedBy?.full_name || null,
-          attachment_count: reminderType === "admin_broadcast" ? broadcastAttachments.length : 0,
+          subject: label,
+          prepared_by: selectedMeetingPreparedBy?.full_name || null,
+          attachment_count: 0,
         },
       })
     } catch (err: unknown) {
@@ -811,16 +863,37 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
     }
   }
 
-  const handleSaveMeetingDraft = useCallback(() => {
+  const handleSaveMeetingDraft = useCallback(async () => {
     if (typeof window === "undefined") return
+    const agendaItems = parseAgendaItems(agendaText)
+    if (agendaItems.length === 0) {
+      toast.error("Agenda is required before saving")
+      return
+    }
+
     setSavingMeetingDraft(true)
-    // Agenda is global — persists across week changes
-    window.localStorage.setItem(AGENDA_STORAGE_KEY, agendaText)
-    // Teams link is per-week
-    window.localStorage.setItem(meetingDraftStorageKey, JSON.stringify({ teamsLink }))
-    toast.success("Agenda changes saved")
-    window.setTimeout(() => setSavingMeetingDraft(false), 300)
-  }, [agendaText, meetingDraftStorageKey, teamsLink])
+    try {
+      const res = await fetch("/api/reports/meeting-agenda-default", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agenda: agendaItems }),
+      })
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error || "Failed to save agenda")
+
+      setAgendaText(agendaItems.join("\n"))
+      window.localStorage.removeItem(AGENDA_STORAGE_KEY)
+      // Teams link is per-week
+      window.localStorage.setItem(meetingDraftStorageKey, JSON.stringify({ teamsLink }))
+      queryClient.setQueryData(["meeting-reminder-default-agenda"], { agenda: agendaItems })
+      toast.success("Agenda changes saved")
+    } catch (error) {
+      log.error({ err: String(error) }, "Failed to save meeting agenda")
+      toast.error(error instanceof Error ? error.message : "Failed to save agenda")
+    } finally {
+      window.setTimeout(() => setSavingMeetingDraft(false), 300)
+    }
+  }, [agendaText, meetingDraftStorageKey, queryClient, teamsLink])
 
   const deactivateSchedule = async (id: string) => {
     const { error } = await supabase.from("reminder_schedules").update({ is_active: false }).eq("id", id)

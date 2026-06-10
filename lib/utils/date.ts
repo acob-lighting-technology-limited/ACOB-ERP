@@ -82,6 +82,45 @@ export function formatWATDate(date: string | Date, options: Omit<Intl.DateTimeFo
 }
 
 /**
+ * Format a stored birthday string (MM-DD, or DD-MM) as "16 June" — day and
+ * month only, no year. Returns null when the value is empty or malformed.
+ */
+export function formatBirthdayLabel(value: string | null | undefined): string | null {
+  if (!value) return null
+
+  const match = value.trim().match(/^(\d{1,2})-(\d{1,2})$/)
+  if (!match) return null
+
+  const first = Number(match[1])
+  const second = Number(match[2])
+  const month = first > 12 ? second : first
+  const day = first > 12 ? first : second
+  if (!Number.isInteger(month) || !Number.isInteger(day) || month < 1 || month > 12 || day < 1 || day > 31) {
+    return null
+  }
+
+  return new Date(Date.UTC(2000, month - 1, day, 12)).toLocaleDateString("en-GB", {
+    month: "long",
+    day: "numeric",
+    timeZone: WAT,
+  })
+}
+
+/**
+ * Display a person's date of birth. Shows the full date ("16 June 2002") when a
+ * year is known via `date_of_birth`; otherwise falls back to the day/month from
+ * the HR `birthday` field ("16 June") with the year left blank until the person
+ * supplies it. Returns null when nothing is known.
+ */
+export function formatDateOfBirth(
+  dateOfBirth: string | null | undefined,
+  birthday?: string | null | undefined
+): string | null {
+  if (dateOfBirth) return formatWATDate(dateOfBirth)
+  return formatBirthdayLabel(birthday)
+}
+
+/**
  * Format a timestamp as a date+time string in WAT.
  * Default: "25 May 2026, 09:30 AM"
  */

@@ -17,7 +17,12 @@ const UpdateProfileSchema = z.object({
   bank_name: z.string().nullable().optional(),
   bank_account_number: z.string().nullable().optional(),
   bank_account_name: z.string().nullable().optional(),
-  date_of_birth: z.string().nullable().optional(),
+  birthday: z
+    .string()
+    .regex(/^\d{2}-\d{2}$/, "Birthday must be MM-DD")
+    .nullable()
+    .optional(),
+  birth_year: z.number().int().min(1900).max(2100).nullable().optional(),
   employment_date: z.string().nullable().optional(),
 })
 
@@ -60,7 +65,8 @@ export async function PATCH(request: Request) {
       bank_name: data.bank_name ?? null,
       bank_account_number: data.bank_account_number ?? null,
       bank_account_name: data.bank_account_name ?? null,
-      date_of_birth: data.date_of_birth ?? null,
+      birthday: data.birthday ?? null,
+      birth_year: data.birth_year ?? null,
       employment_date: data.employment_date ?? null,
       updated_at: new Date().toISOString(),
     }

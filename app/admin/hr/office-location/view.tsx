@@ -203,6 +203,25 @@ export function OfficeLocationsPage({
   const canManageLocations = data?.canManageLocations ?? false
   const departments = data?.departments ?? []
 
+  // After renaming the canonical office, push the new name onto every profile that
+  // still stores the old name as plain text (keeps the directory & scoping in sync).
+  async function cascadeRename(field: "office_location", oldName: string, newName: string) {
+    if (!oldName || !newName || oldName === newName) return
+    try {
+      const res = await fetch("/api/admin/hr/rename-cascade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field, oldName, newName }),
+      })
+      const json = (await res.json()) as { updated?: number; error?: string }
+      if (res.ok && (json.updated ?? 0) > 0) {
+        toast.success(`Updated ${json.updated} staff record(s) to "${newName}"`)
+      }
+    } catch (err) {
+      log.error("Office rename cascade failed:", err)
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
     try {
@@ -214,10 +233,12 @@ export function OfficeLocationsPage({
       const supabase = createClient()
 
       if (editingLocation) {
+        const oldName = editingLocation.name?.trim() || ""
+        const newName = formData.name.trim()
         const { error: updateError, data: updatedRows } = await supabase
           .from("office_locations")
           .update({
-            name: formData.name.trim(),
+            name: newName,
             type: formData.type,
             department: formData.department || null,
             description: formData.description || null,
@@ -233,6 +254,7 @@ export function OfficeLocationsPage({
         }
 
         toast.success("Office location updated successfully")
+        await cascadeRename("office_location", oldName, newName)
       } else {
         const { error: createError } = await supabase.from("office_locations").insert({
           name: formData.name.trim(),

@@ -109,11 +109,13 @@ export function WeekSetupCard() {
     },
   })
 
+  // "Guest" is reserved for visitor presenters and is assigned automatically on
+  // save — it must never appear as a selectable host department for employees.
   const departmentOptions = useMemo(
     () =>
-      Array.from(new Set([...employees.map((employee) => employee.department), EXTERNAL_VISITOR_DEPARTMENT])).sort(
-        (a, b) => a.localeCompare(b)
-      ),
+      Array.from(new Set(employees.map((employee) => employee.department)))
+        .filter((department) => department !== EXTERNAL_VISITOR_DEPARTMENT)
+        .sort((a, b) => a.localeCompare(b)),
     [employees]
   )
 
@@ -469,6 +471,17 @@ export function WeekSetupCard() {
                 />
               </div>
               <div className="w-full max-w-[180px]">
+                <Label className="mb-1.5 block text-xs font-semibold">Grace Hours After Meeting</Label>
+                <Input
+                  type="number"
+                  value={meetingGraceHours}
+                  onChange={(event) => setMeetingGraceHours(parseInt(event.target.value, 10) || 0)}
+                  min={0}
+                  max={24}
+                  disabled={isWeekSetupLocked}
+                />
+              </div>
+              <div className="w-full max-w-[180px]">
                 <Label className="mb-1.5 block text-xs font-semibold">Presenter Type</Label>
                 <Select
                   value={kssPresenterType}
@@ -476,6 +489,9 @@ export function WeekSetupCard() {
                     setKssPresenterType(value as KssPresenterType)
                     setKssPresenterIdInput("none")
                     setKssPresenterNameInput("")
+                    // Visitors are auto-hosted under "Guest"; clear any employee
+                    // department selection so the saved record resolves correctly.
+                    if (value === "visitor") setKssDepartmentInput("none")
                   }}
                   disabled={isWeekSetupLocked}
                 >
@@ -488,40 +504,31 @@ export function WeekSetupCard() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="w-full min-w-[240px]">
-                <Label className="mb-1.5 block text-xs font-semibold">KSS Department</Label>
-                <Select
-                  value={kssDepartmentInput}
-                  onValueChange={(value) => {
-                    setKssDepartmentInput(value)
-                    setKssPresenterIdInput("none")
-                  }}
-                  disabled={isWeekSetupLocked}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Select department</SelectItem>
-                    {departmentOptions.map((department) => (
-                      <SelectItem key={department} value={department}>
-                        {department}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="w-full max-w-[180px]">
-                <Label className="mb-1.5 block text-xs font-semibold">Grace Hours After Meeting</Label>
-                <Input
-                  type="number"
-                  value={meetingGraceHours}
-                  onChange={(event) => setMeetingGraceHours(parseInt(event.target.value, 10) || 0)}
-                  min={0}
-                  max={24}
-                  disabled={isWeekSetupLocked}
-                />
-              </div>
+              {kssPresenterType === "employee" && (
+                <div className="w-full max-w-[240px]">
+                  <Label className="mb-1.5 block text-xs font-semibold">KSS Department</Label>
+                  <Select
+                    value={kssDepartmentInput}
+                    onValueChange={(value) => {
+                      setKssDepartmentInput(value)
+                      setKssPresenterIdInput("none")
+                    }}
+                    disabled={isWeekSetupLocked}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select department" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Select department</SelectItem>
+                      {departmentOptions.map((department) => (
+                        <SelectItem key={department} value={department}>
+                          {department}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
             </div>
 
             <div className="grid gap-3 md:grid-cols-[minmax(220px,320px)_1fr] md:items-end">

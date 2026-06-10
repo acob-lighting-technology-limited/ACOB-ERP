@@ -8,7 +8,7 @@ import { getRoleDisplayName } from "@/lib/permissions"
 import { logger } from "@/lib/logger"
 import { toast } from "sonner"
 import type { UserRole, EmploymentStatus } from "@/types/database"
-import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
+import { toLocalISODate, formatWATDate, formatDateOfBirth } from "@/lib/utils/date"
 
 export interface Employee {
   id: string
@@ -30,6 +30,7 @@ export interface Employee {
   bank_account_number: string | null
   bank_account_name: string | null
   date_of_birth: string | null
+  birthday: string | null
   employment_date: string | null
   is_admin: boolean
   is_department_lead: boolean
@@ -66,7 +67,8 @@ export function buildEmployeeExportRows(employees: Employee[], opts: ExportOptio
     if (selectedColumns["Bank Name"]) row["Bank Name"] = member.bank_name || "-"
     if (selectedColumns["Bank Account Number"]) row["Bank Account Number"] = member.bank_account_number || "-"
     if (selectedColumns["Bank Account Name"]) row["Bank Account Name"] = member.bank_account_name || "-"
-    if (selectedColumns["Date of Birth"]) row["Date of Birth"] = member.date_of_birth || "-"
+    if (selectedColumns["Date of Birth"])
+      row["Date of Birth"] = formatDateOfBirth(member.date_of_birth, member.birthday) || "-"
     if (selectedColumns["Employment Date"]) row["Employment Date"] = member.employment_date || "-"
     if (selectedColumns["Is Lead"]) row["Is Lead"] = member.is_department_lead ? "Yes" : "No"
     if (selectedColumns["Lead Departments"])
@@ -207,7 +209,7 @@ export async function exportEmployeesToPDF(
         headers.push("Bank Account Name")
       }
       if (selectedColumns["Date of Birth"]) {
-        row.push(member.date_of_birth || "-")
+        row.push(formatDateOfBirth(member.date_of_birth, member.birthday) || "-")
         headers.push("Date of Birth")
       }
       if (selectedColumns["Employment Date"]) {

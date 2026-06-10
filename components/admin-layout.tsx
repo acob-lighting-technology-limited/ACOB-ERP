@@ -2,6 +2,7 @@ import { AdminSidebar } from "@/components/admin-sidebar"
 import { AdminContextRibbon } from "@/components/admin-context-ribbon"
 import { AdminScopeProvider } from "@/components/admin-scope-context"
 import { SidebarContent } from "@/components/sidebar-content"
+import { AcoBot } from "@/components/acobot/acobot"
 import { createClient } from "@/lib/supabase/server"
 import { resolveAdminScope } from "@/lib/admin/rbac"
 import { normalizeDepartmentName } from "@/shared/departments"
@@ -84,6 +85,7 @@ export async function AdminLayout({ children }: AdminLayoutProps) {
           <AdminScopeProvider scope={clientScope}>{children}</AdminScopeProvider>
         </div>
       </SidebarContent>
+      <AcoBot userName={profile.first_name ?? profile.full_name ?? null} />
     </div>
   )
 }

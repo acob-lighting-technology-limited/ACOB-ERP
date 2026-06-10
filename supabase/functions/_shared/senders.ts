@@ -18,9 +18,7 @@ export const EDGE_SENDERS = {
   notification: edgeSender(`${ORG_CODE} Notification System`),
   /** Payment status alerts. */
   payments: edgeSender(`${ORG_CODE} Payments System`),
-  /** Weekly reports. */
-  reporting: edgeSender(`${ORG_CODE} Reporting System`),
-  /** Meeting reminders. */
+  /** Meeting reminders and weekly meeting reports. */
   meeting: edgeSender(`${ORG_CODE} Meeting System`),
   /** Birthday greetings (company identity). */
   birthday: edgeSender(`${ORG_CODE} Lighting Technology Limited`),

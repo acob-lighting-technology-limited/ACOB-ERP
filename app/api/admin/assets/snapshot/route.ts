@@ -4,6 +4,8 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getDepartmentScope, resolveAdminScope } from "@/lib/admin/rbac"
 import { listAssignableProfiles } from "@/lib/workforce/assignment-policy"
 import { getPaginationRange, paginatedResponse, PaginationSchema } from "@/lib/pagination"
+import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
+import { normalizeDepartmentName } from "@/shared/departments"
 
 type AdminAssetsSnapshotClient = Awaited<ReturnType<typeof createClient>>
 
@@ -51,8 +53,27 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 })
   }
 
-  const departmentScope = getDepartmentScope(scope, "general")
   const { searchParams } = new URL(request.url)
+  const requestedDepartment = searchParams.get("department")
+  const normalizedLedDepartments = scope.leadDepartments.map(normalizeDepartmentName)
+  if (
+    requestedDepartment &&
+    (!scope.isDepartmentLead || !normalizedLedDepartments.includes(normalizeDepartmentName(requestedDepartment)))
+  ) {
+    return NextResponse.json({ error: "Forbidden: outside your department scope" }, { status: 403 })
+  }
+  const departmentScope = requestedDepartment
+    ? expandDepartmentScopeForQuery([requestedDepartment])
+    : getDepartmentScope(scope, "general")
+  const { data: requestedOfficeRows } = requestedDepartment
+    ? await getServiceRoleClientOrFallback(supabase as AdminAssetsSnapshotClient)
+        .from("office_locations")
+        .select("name")
+        .in("department", departmentScope || [])
+    : { data: null }
+  const managedOffices = requestedDepartment
+    ? (requestedOfficeRows || []).map((office) => office.name).filter(Boolean)
+    : scope.managedOffices
   const paginationParsed = PaginationSchema.safeParse(Object.fromEntries(searchParams))
   if (!paginationParsed.success) {
     return NextResponse.json(
@@ -124,7 +145,7 @@ export async function GET(request: Request) {
 
       if (assignment.assigned_to && deptUserIds.includes(assignment.assigned_to)) return true
       if (assignment.department && departmentScope.includes(assignment.department)) return true
-      if (assignment.office_location && scope.managedOffices.includes(assignment.office_location)) return true
+      if (assignment.office_location && managedOffices.includes(assignment.office_location)) return true
       return false
     })
   }

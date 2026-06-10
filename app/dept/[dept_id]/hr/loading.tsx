@@ -1,5 +1,5 @@
-import { DetailPageSkeleton } from "@/components/skeletons"
+import { DashboardSkeleton } from "@/components/skeletons"
 
-export default function Loading() {
-  return <DetailPageSkeleton showSidebar={true} sections={2} />
+export default function HRLoading() {
+  return <DashboardSkeleton statCards={6} showActivity={true} />
 }

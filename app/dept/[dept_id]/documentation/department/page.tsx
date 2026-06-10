@@ -3,7 +3,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { requireDeptScope } from "@/lib/dept/require-dept-scope"
 import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
 import { normalizeDepartmentName } from "@/shared/departments"
-import { resolveOneDriveAccessScope } from "@/lib/onedrive/access"
+import { departmentToLibraryKey } from "@/lib/onedrive/access"
 import { AdminDocumentationContent } from "@/app/admin/documentation/admin-documentation-content"
 import type { UserProfile, employeeMember } from "@/app/admin/documentation/admin-documentation-content"
 import type { UserRole } from "@/types/database"
@@ -37,31 +37,21 @@ export default async function DeptDepartmentDocumentsPage({ params }: Props) {
           .order("last_name", { ascending: true })
       : { data: [] }
 
-  const { data: authData } = await supabase.auth.getUser()
-  const oneDriveScope = authData.user ? await resolveOneDriveAccessScope(supabase, authData.user.id) : null
+  const departmentPath = `/${departmentToLibraryKey(deptName)}`
 
   return (
     <AdminDocumentationContent
       initialDocumentation={[]}
       initialemployee={(employeeData || []) as employeeMember[]}
       userProfile={userProfile}
-      departmentDocs={
-        oneDriveScope
-          ? {
-              initialPath: oneDriveScope.defaultPath,
-              rootLabel: oneDriveScope.rootLabel,
-              enabled: true,
-              lockToInitialPath: !oneDriveScope.isAdminLike,
-              accessMode: "admin",
-            }
-          : {
-              initialPath: "/",
-              rootLabel: "Department Libraries",
-              enabled: false,
-              lockToInitialPath: false,
-              accessMode: "admin",
-            }
-      }
+      departmentDocs={{
+        initialPath: departmentPath,
+        rootLabel: deptName,
+        enabled: true,
+        lockToInitialPath: true,
+        accessMode: "admin",
+        lockedDepartment: deptName,
+      }}
       defaultTab="department-documents"
       hideTabList={true}
       backLinkHref={`/dept/${dept_id}/documentation`}

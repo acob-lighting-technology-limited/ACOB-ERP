@@ -1,5 +1,5 @@
-import { DetailPageSkeleton } from "@/components/skeletons"
+import { FormPageSkeleton } from "@/components/skeletons"
 
 export default function Loading() {
-  return <DetailPageSkeleton showSidebar={true} sections={2} />
+  return <FormPageSkeleton sections={3} fieldsPerSection={4} showSidebar={true} />
 }

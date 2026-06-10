@@ -785,16 +785,6 @@ export function AttendanceReportsPage({
 
   const columns: DataTableColumn<AttendanceReport>[] = [
     {
-      key: "employee_no",
-      label: "Employee No.",
-      sortable: true,
-      accessor: (r) => r.employee_no || "",
-      render: (r) => <span className="text-xs">{r.employee_no || "—"}</span>,
-      resizable: true,
-      initialWidth: 120,
-      hideOnMobile: true,
-    },
-    {
       key: "user_name",
       label: "Employee",
       sortable: true,

@@ -10,6 +10,7 @@ import {
   isAdminRole,
   appendHelpDeskEvent,
   appendAuditLog,
+  canLeadDepartment,
   resolveLeadForDepartment,
 } from "@/lib/help-desk/server"
 import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
@@ -19,6 +20,7 @@ import { getPaginationRange, paginatedResponse, PaginationSchema } from "@/lib/p
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { checkIdempotency, getIdempotencyKey, storeIdempotencyKey } from "@/lib/idempotency"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { getDepartmentAliases } from "@/shared/departments"
 
 const log = logger("help-desk-tickets")
 export const dynamic = "force-dynamic"
@@ -78,6 +80,15 @@ function getManagedDepartments(profile: HelpDeskProfile): string[] {
   return Array.isArray(profile.managed_departments) ? profile.managed_departments : []
 }
 
+function quotePostgrestValue(value: string): string {
+  return `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
+}
+
+function helpDeskDepartmentFilter(department: string): string {
+  const values = getDepartmentAliases(department).map(quotePostgrestValue).join(",")
+  return `service_department.in.(${values}),requester_department.in.(${values})`
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { supabase, user, profile } = await getAuthContext()
@@ -98,6 +109,7 @@ export async function GET(request: NextRequest) {
     const { from, to } = getPaginationRange(pagination)
     const scope = searchParams.get("scope") || "mine"
     const status = searchParams.get("status")
+    const requestedDepartment = searchParams.get("department")
 
     let query = supabase
       .from("help_desk_tickets")
@@ -122,7 +134,12 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }
 
-      if (scopedDepts === null) {
+      if (requestedDepartment) {
+        if (!canLeadDepartment(profile, requestedDepartment)) {
+          return NextResponse.json({ error: "Forbidden: outside your department scope" }, { status: 403 })
+        }
+        query = query.or(helpDeskDepartmentFilter(requestedDepartment))
+      } else if (scopedDepts === null) {
         // Global admin — no department filter needed
       } else if (!scopedDepts.length) {
         return NextResponse.json(paginatedResponse([], 0, pagination))

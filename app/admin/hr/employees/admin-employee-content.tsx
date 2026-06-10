@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { formatName, cn } from "@/lib/utils"
-import { formatWATDate } from "@/lib/utils/date"
+import { formatWATDate, formatDateOfBirth } from "@/lib/utils/date"
 import { Users, Shield, Mail, Phone, Download, Pencil, Eye, Building2, Calendar, IdCard, Settings2 } from "lucide-react"
 import type { UserRole, EmploymentStatus } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
@@ -77,6 +77,7 @@ export interface Employee {
   bank_account_number: string | null
   bank_account_name: string | null
   date_of_birth: string | null
+  birthday: string | null
   employment_date: string | null
   is_admin: boolean
   is_department_lead: boolean
@@ -133,6 +134,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     "Phone Number": true,
     "Residential Address": true,
     "Office Location": true,
+    "Date of Birth": true,
     "Employment Date": true,
     "Lead Departments": true,
     "Created At": true,
@@ -177,7 +179,8 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     bank_name: "",
     bank_account_number: "",
     bank_account_name: "",
-    date_of_birth: "",
+    birthday: "",
+    birth_year: "",
     employment_date: "",
     job_description: "",
     attendance_exempt: false,
@@ -236,7 +239,8 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             bank_name: fullProfile.bank_name || "",
             bank_account_number: fullProfile.bank_account_number || "",
             bank_account_name: fullProfile.bank_account_name || "",
-            date_of_birth: fullProfile.date_of_birth || "",
+            birthday: fullProfile.birthday || "",
+            birth_year: fullProfile.birth_year != null ? String(fullProfile.birth_year) : "",
             employment_date: fullProfile.employment_date || "",
             job_description: fullProfile.job_description || "",
             attendance_exempt: Boolean(fullProfile.attendance_exempt),
@@ -342,7 +346,8 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         bank_name: editForm.bank_name || null,
         bank_account_number: editForm.bank_account_number || null,
         bank_account_name: editForm.bank_account_name || null,
-        date_of_birth: editForm.date_of_birth || null,
+        birthday: editForm.birthday || null,
+        birth_year: editForm.birth_year ? Number(editForm.birth_year) : null,
         employment_date: editForm.employment_date || null,
         job_description: editForm.job_description || null,
       }
@@ -593,6 +598,8 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           { value: "exited", label: "Exited" },
         ],
         placeholder: "Active Statuses",
+        // Hide exited employees by default; user can opt to include them.
+        defaultValues: ["active", "suspended", "on_leave"],
       },
     ],
     [departments, offices]
@@ -709,7 +716,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
                   </div>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">DOB</span>
-                    <span>{r.date_of_birth ? formatWATDate(r.date_of_birth) : "—"}</span>
+                    <span>{formatDateOfBirth(r.date_of_birth, r.birthday) ?? "—"}</span>
                   </div>
                 </div>
               </div>

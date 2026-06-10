@@ -27,8 +27,9 @@ export type Database = {
           bank_name: string | null
           bank_account_number: string | null
           bank_account_name: string | null
-          date_of_birth: string | null
-          birthday: string | null // MM-DD, populated from HR tracker; used for automated birthday emails
+          date_of_birth: string | null // DERIVED (trigger) from birthday + birth_year; not directly writable
+          birthday: string | null // MM-DD, canonical month/day; source for birthday emails & derived date_of_birth
+          birth_year: number | null // year only, null until known; combines with birthday to form date_of_birth
           employment_date: string | null
           is_admin: boolean
           role: Database["public"]["Enums"]["user_role"]
@@ -71,8 +72,8 @@ export type Database = {
           bank_name?: string | null
           bank_account_number?: string | null
           bank_account_name?: string | null
-          date_of_birth?: string | null
           birthday?: string | null
+          birth_year?: number | null
           employment_date?: string | null
           is_admin?: boolean
           role?: Database["public"]["Enums"]["user_role"]
@@ -108,8 +109,8 @@ export type Database = {
           bank_name?: string | null
           bank_account_number?: string | null
           bank_account_name?: string | null
-          date_of_birth?: string | null
           birthday?: string | null
+          birth_year?: number | null
           employment_date?: string | null
           is_admin?: boolean
           role?: Database["public"]["Enums"]["user_role"]
@@ -316,7 +317,9 @@ export interface Profile {
   bank_name?: string
   bank_account_number?: string
   bank_account_name?: string
-  date_of_birth?: string
+  date_of_birth?: string // DERIVED from birthday + birth_year
+  birthday?: string | null // MM-DD canonical month/day
+  birth_year?: number | null // year only, null until known
   employment_date?: string
   is_admin: boolean
   role: UserRole

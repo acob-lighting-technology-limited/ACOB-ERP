@@ -13,6 +13,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { BirthdayInput } from "@/components/ui/birthday-input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SearchableSelect } from "@/components/ui/searchable-select"
@@ -55,7 +56,8 @@ interface EditForm {
   bank_name: string
   bank_account_number: string
   bank_account_name: string
-  date_of_birth: string
+  birthday: string
+  birth_year: string
   employment_date: string
   job_description: string
   attendance_exempt: boolean
@@ -743,11 +745,14 @@ export function EmployeeViewModal({
                         <div className="grid gap-4 md:grid-cols-2">
                           <div>
                             <Label>Date of Birth</Label>
-                            <Input
-                              type="date"
-                              value={editForm.date_of_birth}
-                              onChange={(e) => setEditForm({ ...editForm, date_of_birth: e.target.value })}
+                            <BirthdayInput
+                              birthday={editForm.birthday}
+                              birthYear={editForm.birth_year}
+                              onChange={({ birthday, birthYear }) =>
+                                setEditForm({ ...editForm, birthday, birth_year: birthYear })
+                              }
                             />
+                            <p className="text-muted-foreground mt-1 text-xs">Year is optional.</p>
                           </div>
                           <div>
                             <Label>Employment Date</Label>

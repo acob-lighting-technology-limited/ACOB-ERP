@@ -177,6 +177,25 @@ export function DepartmentsPage({
   const departmentEmployees = data?.departmentEmployees ?? {}
   const canManageDepartments = data?.canManageDepartments ?? false
 
+  // After renaming the canonical department, push the new name onto every profile
+  // that still stores the old name as plain text (keeps directory & scoping in sync).
+  async function cascadeRename(oldName: string, newName: string) {
+    if (!oldName || !newName || oldName === newName) return
+    try {
+      const res = await fetch("/api/admin/hr/rename-cascade", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ field: "department", oldName, newName }),
+      })
+      const json = (await res.json()) as { updated?: number; error?: string }
+      if (res.ok && (json.updated ?? 0) > 0) {
+        toast.success(`Updated ${json.updated} staff record(s) to "${newName}"`)
+      }
+    } catch (err) {
+      log.error("Department rename cascade failed:", err)
+    }
+  }
+
   async function handleSubmit(event: React.FormEvent) {
     event.preventDefault()
 
@@ -189,6 +208,7 @@ export function DepartmentsPage({
       const supabase = createClient()
 
       if (editingDepartment) {
+        const oldName = editingDepartment.name?.trim() || ""
         const newName = formData.name.trim()
         const { error: updateError, data: updatedRows } = await supabase
           .from("departments")
@@ -209,6 +229,7 @@ export function DepartmentsPage({
         }
 
         toast.success("Department updated successfully")
+        await cascadeRename(oldName, newName)
       } else {
         const { error: createError } = await supabase.from("departments").insert({
           name: formData.name,

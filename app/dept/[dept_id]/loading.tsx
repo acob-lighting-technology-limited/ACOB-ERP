@@ -1,5 +1,5 @@
 import { DashboardSkeleton } from "@/components/skeletons"
 
-export default function DeptLoading() {
-  return <DashboardSkeleton statCards={6} />
+export default function AdminLoading() {
+  return <DashboardSkeleton statCards={5} showActivity={true} />
 }

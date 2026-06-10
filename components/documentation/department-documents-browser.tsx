@@ -67,6 +67,7 @@ interface DepartmentDocumentsBrowserProps {
   rootLabel?: string
   lockToInitialPath?: boolean
   accessMode?: "self" | "admin"
+  lockedDepartment?: string
 }
 
 interface UploadQueueItem {
@@ -205,6 +206,7 @@ export function DepartmentDocumentsBrowser({
   rootLabel = "Department Libraries",
   lockToInitialPath = false,
   accessMode = "self",
+  lockedDepartment,
 }: DepartmentDocumentsBrowserProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -266,6 +268,7 @@ export function DepartmentDocumentsBrowser({
         const params = new URLSearchParams()
         params.set("path", path)
         params.set("accessMode", accessMode)
+        if (lockedDepartment) params.set("department", lockedDepartment)
         if (search) params.set("search", search)
 
         const response = await fetch(`/api/onedrive?${params.toString()}`)
@@ -283,7 +286,7 @@ export function DepartmentDocumentsBrowser({
         setLoading(false)
       }
     },
-    [accessMode]
+    [accessMode, lockedDepartment]
   )
 
   useEffect(() => {
@@ -347,6 +350,7 @@ export function DepartmentDocumentsBrowser({
       const params = new URLSearchParams()
       params.set("path", path)
       params.set("accessMode", accessMode)
+      if (lockedDepartment) params.set("department", lockedDepartment)
       const response = await fetch(`/api/onedrive?${params.toString()}`)
       const payload = (await response.json().catch(() => null)) as { data?: FileItem[]; error?: string } | null
       if (!response.ok) {
@@ -354,7 +358,7 @@ export function DepartmentDocumentsBrowser({
       }
       return payload?.data || []
     },
-    [accessMode]
+    [accessMode, lockedDepartment]
   )
 
   const collectDownloadableFiles = useCallback(
@@ -381,6 +385,7 @@ export function DepartmentDocumentsBrowser({
       const params = new URLSearchParams()
       params.set("path", path)
       params.set("accessMode", accessMode)
+      if (lockedDepartment) params.set("department", lockedDepartment)
       const link = document.createElement("a")
       params.set("redirect", "true")
       link.href = `/api/onedrive/download?${params.toString()}`
@@ -388,7 +393,7 @@ export function DepartmentDocumentsBrowser({
       link.click()
       document.body.removeChild(link)
     },
-    [accessMode]
+    [accessMode, lockedDepartment]
   )
 
   const fetchFileBlob = useCallback(
@@ -396,6 +401,7 @@ export function DepartmentDocumentsBrowser({
       const params = new URLSearchParams()
       params.set("path", path)
       params.set("accessMode", accessMode)
+      if (lockedDepartment) params.set("department", lockedDepartment)
       params.set("raw", "true")
       const blobResponse = await fetch(`/api/onedrive/download?${params.toString()}`)
       if (!blobResponse.ok) {
@@ -403,7 +409,7 @@ export function DepartmentDocumentsBrowser({
       }
       return blobResponse.blob()
     },
-    [accessMode]
+    [accessMode, lockedDepartment]
   )
 
   const downloadSelection = useCallback(
@@ -492,6 +498,7 @@ export function DepartmentDocumentsBrowser({
         formData.set("action", "upload")
         formData.set("path", candidate.targetPath)
         formData.set("accessMode", accessMode)
+        if (lockedDepartment) formData.set("department", lockedDepartment)
         formData.set("file", candidate.file)
 
         const xhr = new XMLHttpRequest()
@@ -524,7 +531,7 @@ export function DepartmentDocumentsBrowser({
 
         xhr.send(formData)
       }),
-    [accessMode, updateUploadQueueItem]
+    [accessMode, lockedDepartment, updateUploadQueueItem]
   )
 
   const createFolderRequest = useCallback(
@@ -533,6 +540,7 @@ export function DepartmentDocumentsBrowser({
       formData.set("action", "create-folder")
       formData.set("path", dirname(folderPath))
       formData.set("accessMode", accessMode)
+      if (lockedDepartment) formData.set("department", lockedDepartment)
       formData.set("name", basename(folderPath))
 
       const response = await fetch("/api/onedrive", {
@@ -544,7 +552,7 @@ export function DepartmentDocumentsBrowser({
         throw new Error(data.error || "Failed to create folder")
       }
     },
-    [accessMode]
+    [accessMode, lockedDepartment]
   )
 
   const createFolder = async () => {
@@ -723,6 +731,7 @@ export function DepartmentDocumentsBrowser({
           path: renameTarget.path,
           newName: trimmedName,
           accessMode,
+          department: lockedDepartment || null,
         }),
       })
       const data = (await response.json()) as { error?: string }
@@ -751,6 +760,7 @@ export function DepartmentDocumentsBrowser({
       const params = new URLSearchParams()
       params.set("path", deleteTarget.path)
       params.set("accessMode", accessMode)
+      if (lockedDepartment) params.set("department", lockedDepartment)
 
       const response = await fetch(`/api/onedrive?${params.toString()}`, {
         method: "DELETE",
@@ -1238,6 +1248,7 @@ export function DepartmentDocumentsBrowser({
         isOpen={previewOpen}
         onClose={() => setPreviewOpen(false)}
         accessMode={accessMode}
+        lockedDepartment={lockedDepartment}
       />
 
       <Dialog open={newFolderOpen} onOpenChange={setNewFolderOpen}>

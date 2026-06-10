@@ -371,6 +371,12 @@ export async function POST(req: Request) {
       }
     }
 
+    // Split the onboarding DOB (YYYY-MM-DD) into the canonical month/day +
+    // optional year. The profiles trigger derives date_of_birth from these.
+    const dobMatch = String(pendingUser.date_of_birth || "").match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    const pendingBirthday = dobMatch ? `${dobMatch[2]}-${dobMatch[3]}` : null
+    const pendingBirthYear = dobMatch ? Number(dobMatch[1]) : null
+
     // 4 & 5. Atomically upsert profile + delete from pending_users in one DB transaction.
     // If either step fails, both roll back — no ghost users, no orphaned profiles.
     const { error: approvalError } = await supabaseAdmin.rpc("atomic_complete_user_approval", {
@@ -389,6 +395,8 @@ export async function POST(req: Request) {
       p_residential_address: pendingUser.residential_address ?? null,
       p_office_location: pendingUser.office_location ?? null,
       p_employment_date: hireDate ?? null,
+      p_birthday: pendingBirthday,
+      p_birth_year: pendingBirthYear,
     })
 
     if (approvalError) {

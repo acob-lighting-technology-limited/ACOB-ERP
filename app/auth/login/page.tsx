@@ -51,14 +51,6 @@ export default function LoginPage() {
     }
   }, [step])
 
-  // Force canonical host for auth landing flows while preserving hash tokens.
-  useEffect(() => {
-    const currentHost = window.location.hostname.toLowerCase()
-    if (currentHost !== "acob-erp.vercel.app") return
-    const target = `https://erp.acoblighting.com${window.location.pathname}${window.location.search}${window.location.hash}`
-    window.location.replace(target)
-  }, [])
-
   // Handle hash-based auth handoff (e.g. developer impersonation magic links)
   // after middleware redirects unauthenticated requests back to /auth/login.
   useEffect(() => {

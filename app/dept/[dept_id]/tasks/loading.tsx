@@ -1,5 +1,5 @@
 import { TablePageSkeleton } from "@/components/skeletons"
 
-export default function DeptTasksLoading() {
-  return <TablePageSkeleton columns={7} rows={8} statCards={4} actions={2} filters={3} showBackLink />
+export default function TasksLoading() {
+  return <TablePageSkeleton filters={3} columns={6} rows={8} showStats={true} statCards={5} />
 }

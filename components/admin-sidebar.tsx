@@ -29,6 +29,7 @@ import {
   FlaskConical,
   User,
   Building2,
+  Bot,
 } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
@@ -51,7 +52,13 @@ import type { UserRole } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
 import { motion } from "framer-motion"
 import { normalizeDepartmentName } from "@/shared/departments"
-import { canAccessRouteV2, resolveAdminRouteKeyV2, GRANTABLE_ADMIN_ROUTES, type AccessContextV2, type AdminRouteKeyV2 } from "@/lib/admin/policy-v2"
+import {
+  canAccessRouteV2,
+  resolveAdminRouteKeyV2,
+  GRANTABLE_ADMIN_ROUTES,
+  type AccessContextV2,
+  type AdminRouteKeyV2,
+} from "@/lib/admin/policy-v2"
 
 interface AdminSidebarProps {
   user?: {
@@ -436,6 +443,13 @@ const adminNavigation: NavItem[] = [
     name: "Tests",
     href: "/admin/dev/tests",
     icon: FlaskConical,
+    roles: ["developer"],
+  },
+  {
+    section: "dev",
+    name: "ACOBot",
+    href: "/admin/dev/acobot",
+    icon: Bot,
     roles: ["developer"],
   },
 ]
