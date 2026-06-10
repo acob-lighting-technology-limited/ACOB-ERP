@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
@@ -18,13 +18,19 @@ const log = logger("reference-generator")
 
 interface AdminReferenceGeneratorContentProps {
   initialRecords: CorrespondenceRecord[]
+  lockedDepartment?: string
+  backLinkHref?: string
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
-export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenceGeneratorContentProps) {
+export function AdminReferenceGeneratorContent({
+  initialRecords,
+  lockedDepartment,
+  backLinkHref = "/admin",
+}: AdminReferenceGeneratorContentProps) {
   const [records, setRecords] = useState<CorrespondenceRecord[]>(initialRecords)
   const [loadingRecordId, setLoadingRecordId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"all" | "external" | "internal">("all")
@@ -34,6 +40,13 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
   const [isLoading, setIsLoading] = useState(false)
   const [tabCounts, setTabCounts] = useState({ all: initialRecords.length, external: 0, internal: 0 })
   const [globalCounts, setGlobalCounts] = useState({ total: 0, underReview: 0, approved: 0, rejected: 0 })
+  const recordsUrl = useCallback(
+    (params: URLSearchParams) => {
+      if (lockedDepartment) params.set("department", lockedDepartment)
+      return `/api/correspondence/records?${params.toString()}`
+    },
+    [lockedDepartment]
+  )
 
   const [decisionPrompt, setDecisionPrompt] = useState<{
     recordId: string
@@ -44,13 +57,15 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
     async function fetchTabCounts() {
       try {
         const [all, external, internal] = await Promise.all([
-          fetch("/api/correspondence/records?page=1&limit=1", { cache: "no-store" }).then((r) => r.json()),
-          fetch("/api/correspondence/records?page=1&limit=1&letter_type=external", { cache: "no-store" }).then((r) =>
+          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1" })), { cache: "no-store" }).then((r) =>
             r.json()
           ),
-          fetch("/api/correspondence/records?page=1&limit=1&letter_type=internal", { cache: "no-store" }).then((r) =>
-            r.json()
-          ),
+          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", letter_type: "external" })), {
+            cache: "no-store",
+          }).then((r) => r.json()),
+          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", letter_type: "internal" })), {
+            cache: "no-store",
+          }).then((r) => r.json()),
         ])
         setTabCounts({
           all: Number(all.total || 0),
@@ -65,16 +80,18 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
     async function fetchGlobalCounts() {
       try {
         const [all, underReview, approved, rejected] = await Promise.all([
-          fetch("/api/correspondence/records?page=1&limit=1", { cache: "no-store" }).then((r) => r.json()),
-          fetch("/api/correspondence/records?page=1&limit=1&status=under_review", { cache: "no-store" }).then((r) =>
+          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1" })), { cache: "no-store" }).then((r) =>
             r.json()
           ),
-          fetch("/api/correspondence/records?page=1&limit=1&status=approved", { cache: "no-store" }).then((r) =>
-            r.json()
-          ),
-          fetch("/api/correspondence/records?page=1&limit=1&status=rejected", { cache: "no-store" }).then((r) =>
-            r.json()
-          ),
+          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "under_review" })), {
+            cache: "no-store",
+          }).then((r) => r.json()),
+          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "approved" })), {
+            cache: "no-store",
+          }).then((r) => r.json()),
+          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "rejected" })), {
+            cache: "no-store",
+          }).then((r) => r.json()),
         ])
         setGlobalCounts({
           total: Number(all.total || 0),
@@ -88,7 +105,7 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
     }
     void fetchTabCounts()
     void fetchGlobalCounts()
-  }, [])
+  }, [recordsUrl])
 
   const stats = useMemo(() => {
     return {
@@ -120,7 +137,7 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
         if (activeTab !== "all") params.set("letter_type", activeTab)
         if (searchQuery.trim()) params.set("search", searchQuery.trim())
 
-        const res = await fetch(`/api/correspondence/records?${params.toString()}`, { cache: "no-store" })
+        const res = await fetch(recordsUrl(params), { cache: "no-store" })
         const json = await res.json()
         setRecords(json.data || [])
         setTotal(Number(json.total || 0))
@@ -132,7 +149,7 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
     }
 
     void loadRecords()
-  }, [page, searchQuery, activeTab])
+  }, [page, searchQuery, activeTab, recordsUrl])
 
   async function decide(recordId: string, decision: "approved" | "rejected" | "returned_for_correction") {
     setDecisionPrompt({ recordId, decision })
@@ -148,7 +165,11 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
       const res = await fetch(`/api/correspondence/records/${recordId}/approvals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ decision, comments: comments || null }),
+        body: JSON.stringify({
+          decision,
+          comments: comments || null,
+          acting_department: lockedDepartment || null,
+        }),
       })
 
       const body = await res.json()
@@ -274,7 +295,10 @@ export function AdminReferenceGeneratorContent({ initialRecords }: AdminReferenc
       title="Correspondence"
       description="Manage correspondence references and tracking."
       icon={ListFilter}
-      backLink={{ href: "/admin", label: "Back to Admin" }}
+      backLink={{
+        href: backLinkHref,
+        label: lockedDepartment ? "Back to Department" : "Back to Admin",
+      }}
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={(tab) => {

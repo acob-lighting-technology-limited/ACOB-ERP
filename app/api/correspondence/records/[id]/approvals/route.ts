@@ -28,6 +28,7 @@ const CreateCorrespondenceApprovalSchema = z.object({
     errorMap: () => ({ message: "decision must be one of approved, rejected, returned_for_correction" }),
   }),
   comments: z.string().optional().nullable(),
+  acting_department: z.string().trim().optional().nullable(),
 })
 
 async function resolveCategoryCodeForReference(
@@ -128,31 +129,48 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       return NextResponse.json({ error: "Record not found" }, { status: 404 })
     }
 
-    const approvalsScope = await getRequestScope()
-    const isGlobalAdmin = approvalsScope?.isAdminLike === true && approvalsScope.scopeMode !== "lead"
-    if (!isGlobalAdmin && !canAccessRecord(profile, user.id, record)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
-
     const body = await request.json()
     const parsed = CreateCorrespondenceApprovalSchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
     }
 
+    const actingDepartment = parsed.data.acting_department || null
+    if (
+      actingDepartment &&
+      (!canAccessDepartment(profile, actingDepartment) ||
+        ![record.department_name, record.assigned_department_name]
+          .filter(Boolean)
+          .some(
+            (department) => normalizeDepartmentName(String(department)) === normalizeDepartmentName(actingDepartment)
+          ))
+    ) {
+      return NextResponse.json({ error: "Forbidden: outside your department scope" }, { status: 403 })
+    }
+
+    const approvalsScope = await getRequestScope()
+    const isGlobalAdmin =
+      !actingDepartment && approvalsScope?.isAdminLike === true && approvalsScope.scopeMode !== "lead"
+    if (!isGlobalAdmin && !canAccessRecord(profile, user.id, record)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
     const decision = parsed.data.decision
     const comments = parsed.data.comments ? String(parsed.data.comments).trim() : null
     const now = new Date().toISOString()
 
-    const approvalScopeDepartment = String(record.department_name || record.assigned_department_name || "")
+    const approvalScopeDepartment = String(
+      actingDepartment || record.department_name || record.assigned_department_name || ""
+    )
     const designation = String((profile as { designation?: string | null })?.designation || "").toLowerCase()
     const role = String(profile.role || "").toLowerCase()
 
     const isManagingDirector =
-      role === "super_admin" ||
-      role === "developer" ||
-      designation.includes("managing director") ||
-      designation === "md"
+      !actingDepartment &&
+      (role === "super_admin" ||
+        role === "developer" ||
+        designation.includes("managing director") ||
+        designation === "md")
 
     const execMgmtDept = await getExecutiveDepartmentName()
     const isExecutiveLead =
@@ -166,7 +184,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
       canAccessDepartment(profile, approvalScopeDepartment)
 
     const isExecutiveApprover = isManagingDirector || isExecutiveLead
-    const canBypassChain = role === "super_admin" || role === "developer" || role === "admin"
+    const canBypassChain = !actingDepartment && (role === "super_admin" || role === "developer" || role === "admin")
 
     const { data: existingApprovals, error: approvalError } = await supabase
       .from("correspondence_approvals")

@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/sidebar"
 import { SidebarContent } from "@/components/sidebar-content"
+import { AcoBot } from "@/components/acobot/acobot"
 import { createClient } from "@/lib/supabase/server"
 import { resolveAdminScope } from "@/lib/admin/rbac"
 import { normalizeDepartmentName } from "@/shared/departments"
@@ -54,6 +55,7 @@ export async function AppLayout({ children }: AppLayoutProps) {
         deptConsoleHref={deptConsoleHref}
       />
       <SidebarContent>{children}</SidebarContent>
+      <AcoBot userName={profile?.first_name ?? profile?.full_name ?? null} />
     </div>
   )
 }

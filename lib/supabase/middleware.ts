@@ -7,6 +7,8 @@ import { resolveDeptScope } from "@/lib/dept/scope"
 import { buildAccessContextV2, canAccessRouteV2, resolveAdminRouteKeyV2 } from "@/lib/admin/policy-v2"
 import { resolveCookieMaxAge } from "@/lib/supabase/cookie-policy"
 
+type CookieSetOptions = Parameters<NextResponse["cookies"]["set"]>[2]
+
 // ---------------------------------------------------------------------------
 // Maintenance-mode in-memory cache (30 s TTL).
 // Avoids a DB round-trip on every authenticated request.
@@ -52,6 +54,7 @@ async function getMaintenanceMode(supabase: ReturnType<typeof createServerClient
 export async function updateSession(request: NextRequest) {
   const requestId = globalThis.crypto.randomUUID()
   request.headers.set("x-request-id", requestId)
+  const refreshedCookies: { name: string; value: string; options: CookieSetOptions }[] = []
 
   // SECURITY: strip any client-supplied internal scope headers up-front, for
   // EVERY request, before any branch runs. These headers are only ever trusted
@@ -65,6 +68,14 @@ export async function updateSession(request: NextRequest) {
     request,
   })
   supabaseResponse.headers.set("x-request-id", requestId)
+
+  function setSupabaseResponseCookie(name: string, value: string, options: CookieSetOptions) {
+    supabaseResponse.cookies.set(name, value, options)
+  }
+
+  function replayRefreshedCookies() {
+    refreshedCookies.forEach(({ name, value, options }) => setSupabaseResponseCookie(name, value, options))
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -84,10 +95,12 @@ export async function updateSession(request: NextRequest) {
             // Cap server-set auth cookies to the uniform 7-day window so every
             // browser expires the session at the same point (see cookie-policy.ts).
             const isDeletion = value === "" || options?.maxAge === 0
-            supabaseResponse.cookies.set(name, value, {
+            const cookieOptions = {
               ...options,
               maxAge: resolveCookieMaxAge(options?.maxAge, isDeletion),
-            })
+            }
+            refreshedCookies.push({ name, value, options: cookieOptions })
+            setSupabaseResponseCookie(name, value, cookieOptions)
           })
         },
       },
@@ -150,10 +163,7 @@ export async function updateSession(request: NextRequest) {
           // so that headers() in server components / API routes can read it
           supabaseResponse = NextResponse.next({ request: { headers: forwardedHeaders } })
           supabaseResponse.headers.set("x-request-id", requestId)
-          // Re-apply any cookies that were already set on the previous supabaseResponse
-          request.cookies.getAll().forEach(({ name, value }) => {
-            supabaseResponse.cookies.set(name, value)
-          })
+          replayRefreshedCookies()
         }
       }
     } catch {
@@ -193,9 +203,7 @@ export async function updateSession(request: NextRequest) {
           forwardedHeaders.set("x-dept-scope", encoded)
           supabaseResponse = NextResponse.next({ request: { headers: forwardedHeaders } })
           supabaseResponse.headers.set("x-request-id", requestId)
-          request.cookies.getAll().forEach(({ name, value }) => {
-            supabaseResponse.cookies.set(name, value)
-          })
+          replayRefreshedCookies()
         }
       }
     } catch {

@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { DeptLayout } from "@/components/dept-layout"
+import { AcoBot } from "@/components/acobot/acobot"
 import { requireDeptScope } from "@/lib/dept/require-dept-scope"
 import { createClient } from "@/lib/supabase/server"
 import { ErrorBoundary } from "@/components/error-boundary"
@@ -63,8 +64,11 @@ export default async function DeptLayoutPage({ children, params }: DeptLayoutPag
     : undefined
 
   return (
-    <DeptLayout scope={clientScope} user={userData} profile={sidebarProfile} deptName={scope.deptName}>
-      <ErrorBoundary>{children}</ErrorBoundary>
-    </DeptLayout>
+    <>
+      <DeptLayout scope={clientScope} user={userData} profile={sidebarProfile} deptName={scope.deptName}>
+        <ErrorBoundary>{children}</ErrorBoundary>
+      </DeptLayout>
+      <AcoBot userName={profile?.first_name ?? null} />
+    </>
   )
 }

@@ -62,7 +62,8 @@ export class EmployeeService extends BaseService {
       bank_name?: string
       bank_account_number?: string
       bank_account_name?: string
-      date_of_birth?: string
+      birthday?: string // MM-DD; date_of_birth is derived from this + birth_year
+      birth_year?: number
       employment_date?: string
       job_description?: string
     }

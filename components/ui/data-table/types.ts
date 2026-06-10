@@ -60,6 +60,11 @@ export interface DataTableFilter<TData = unknown> {
   filterFn?: (row: TData, selectedValues: string[]) => boolean
   /** Whether this is multi-select (default: true) */
   multi?: boolean
+  /**
+   * Values selected by default on first load (e.g. show only active statuses).
+   * When urlSync is enabled, values present in the URL take precedence.
+   */
+  defaultValues?: string[]
 }
 
 // ─── Tab Definition ──────────────────────────────────────────────────────────

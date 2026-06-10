@@ -7,7 +7,7 @@ import { createServerClient } from "@supabase/ssr"
 import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { getOneDriveService } from "@/lib/onedrive"
-import { isPathAllowed, resolveOneDriveAccessScope } from "@/lib/onedrive/access"
+import { isPathAllowed, resolveOneDriveAccessScope, resolveOneDriveDepartmentAccessScope } from "@/lib/onedrive/access"
 import { logger } from "@/lib/logger"
 
 const log = logger("onedrive-download")
@@ -55,13 +55,16 @@ export async function GET(request: Request) {
     }
     const { searchParams } = new URL(request.url)
     const accessMode = searchParams.get("accessMode")
-    const scope = await resolveOneDriveAccessScope(
-      supabase as OneDriveClient,
-      user.id,
-      accessMode === "admin"
-        ? { allowAdminLike: true, allowManagedDepartments: true }
-        : { allowAdminLike: false, allowManagedDepartments: false }
-    )
+    const department = searchParams.get("department")
+    const scope = department
+      ? await resolveOneDriveDepartmentAccessScope(supabase as OneDriveClient, user.id, department)
+      : await resolveOneDriveAccessScope(
+          supabase as OneDriveClient,
+          user.id,
+          accessMode === "admin"
+            ? { allowAdminLike: true, allowManagedDepartments: true }
+            : { allowAdminLike: false, allowManagedDepartments: false }
+        )
     if (!scope) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }

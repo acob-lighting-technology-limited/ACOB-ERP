@@ -110,7 +110,7 @@ export function MeetingReminderForm({
             here.
           </p>
           <Button variant="outline" size="sm" asChild className="h-7 px-2 text-[11px]">
-            <Link href="/admin/reports/general-meeting/weekly-reports">Manage Meeting Date</Link>
+            <Link href="/admin/reports/general-meeting">Manage Meeting Date</Link>
           </Button>
         </div>
         <div className="space-y-2">
@@ -137,7 +137,7 @@ export function MeetingReminderForm({
           value={agendaText}
           onChange={(e) => setAgendaText(e.target.value)}
           rows={8}
-          placeholder={"1. Opening Prayer\n2. Departmental updates\n..."}
+          placeholder={"Enter each agenda item on a new line"}
         />
         <p className="text-muted-foreground text-xs">Each line becomes one agenda item. Numbering is automatic.</p>
         <Button variant="outline" size="sm" className="h-8" onClick={onSaveDraft} disabled={savingDraft}>

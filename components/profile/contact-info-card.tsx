@@ -1,4 +1,4 @@
-import { formatWATDate } from "@/lib/utils/date"
+import { formatWATDate, formatBirthdayLabel } from "@/lib/utils/date"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { getRoleBadgeColor, getRoleDisplayName } from "@/lib/permissions"
@@ -33,7 +33,7 @@ interface DetailItemProps {
 
 function DetailItem({ icon: Icon, label, children }: DetailItemProps) {
   return (
-    <div className="group flex min-w-0 gap-3 rounded-md border bg-background/60 p-3 transition-colors hover:bg-muted/40">
+    <div className="group bg-background/60 hover:bg-muted/40 flex min-w-0 gap-3 rounded-md border p-3 transition-colors">
       <div className="bg-primary/10 text-primary mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md">
         <Icon className="h-4 w-4" />
       </div>
@@ -45,27 +45,6 @@ function DetailItem({ icon: Icon, label, children }: DetailItemProps) {
   )
 }
 
-function formatBirthdayLabel(value: string | null | undefined): string | null {
-  if (!value) return null
-
-  const match = value.trim().match(/^(\d{1,2})-(\d{1,2})$/)
-  if (!match) return null
-
-  const first = Number(match[1])
-  const second = Number(match[2])
-  const month = first > 12 ? second : first
-  const day = first > 12 ? first : second
-  if (!Number.isInteger(month) || !Number.isInteger(day) || month < 1 || month > 12 || day < 1 || day > 31) {
-    return null
-  }
-
-  return new Intl.DateTimeFormat("en-GB", {
-    month: "long",
-    day: "numeric",
-    timeZone: "Africa/Lagos",
-  }).format(new Date(Date.UTC(2000, month - 1, day, 12)))
-}
-
 export function ContactInfoCard({ profile }: ContactInfoCardProps) {
   const employmentDate = profile.employment_date ? new Date(profile.employment_date) : null
   const daysAtAcob = employmentDate ? Math.floor((Date.now() - employmentDate.getTime()) / (1000 * 60 * 60 * 24)) : null
@@ -74,7 +53,7 @@ export function ContactInfoCard({ profile }: ContactInfoCardProps) {
 
   return (
     <Card className="overflow-hidden">
-      <CardHeader className="border-b bg-muted/30 px-4 py-4 sm:px-5">
+      <CardHeader className="bg-muted/30 border-b px-4 py-4 sm:px-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-base">Profile Details</CardTitle>
@@ -106,7 +85,9 @@ export function ContactInfoCard({ profile }: ContactInfoCardProps) {
           )}
           <DetailItem icon={ShieldCheck} label="Access Level">
             <span>{getRoleDisplayName(profile.role as UserRole)}</span>
-            {profile.is_department_lead && <span className="text-muted-foreground ml-1.5 text-xs">Department Lead</span>}
+            {profile.is_department_lead && (
+              <span className="text-muted-foreground ml-1.5 text-xs">Department Lead</span>
+            )}
           </DetailItem>
           {profile.company_email && (
             <DetailItem icon={Mail} label="Email">

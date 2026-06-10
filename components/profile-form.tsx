@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { BirthdayInput } from "@/components/ui/birthday-input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
@@ -45,7 +46,8 @@ const ProfileFormSchema = z
     bankName: z.string().optional(),
     bankAccountNumber: z.string().optional(),
     bankAccountName: z.string().optional(),
-    dateOfBirth: z.string().optional(),
+    birthday: z.string().optional(),
+    birthYear: z.string().optional(),
     employmentDate: z.string().optional(),
     emailNotifications: z.boolean(),
   })
@@ -74,7 +76,8 @@ export function ProfileForm({ user, profile, hideBackButton = false, onSaved }: 
       bankName: profile?.bank_name || "",
       bankAccountNumber: profile?.bank_account_number || "",
       bankAccountName: profile?.bank_account_name || "",
-      dateOfBirth: profile?.date_of_birth ? profile.date_of_birth.substring(0, 10) : "",
+      birthday: profile?.birthday || "",
+      birthYear: profile?.birth_year != null ? String(profile.birth_year) : "",
       employmentDate: profile?.employment_date ? profile.employment_date.substring(0, 10) : "",
       emailNotifications: profile?.email_notifications ?? true,
     },
@@ -103,17 +106,18 @@ export function ProfileForm({ user, profile, hideBackButton = false, onSaved }: 
       bank_name: data.bankName,
       bank_account_number: data.bankAccountNumber,
       bank_account_name: data.bankAccountName,
-      date_of_birth: data.dateOfBirth || null,
       employment_date: data.employmentDate || null,
       email_notifications: data.emailNotifications,
       updated_at: new Date().toISOString(),
     }
 
-    // Keep `birthday` (MM-DD, source of the automated birthday email) in sync with
-    // the Date of Birth field. Only set it when a date is provided so saving the
-    // form never clears an HR-populated birthday for someone without a full DOB.
-    if (data.dateOfBirth && /^\d{4}-\d{2}-\d{2}$/.test(data.dateOfBirth)) {
-      updatePayload.birthday = data.dateOfBirth.substring(5, 10)
+    // `birthday` (MM-DD) is the canonical month/day and the source of the
+    // automated birthday email; `birth_year` stays null until the person adds
+    // it. The DB trigger derives `date_of_birth` from these two. Only write
+    // `birthday` when fully set so a save never clears an HR-populated value.
+    if (/^\d{2}-\d{2}$/.test(data.birthday || "")) {
+      updatePayload.birthday = data.birthday
+      updatePayload.birth_year = data.birthYear ? Number(data.birthYear) : null
     }
 
     try {
@@ -298,8 +302,16 @@ export function ProfileForm({ user, profile, hideBackButton = false, onSaved }: 
               <h3 className="font-semibold">Personal Information</h3>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="dateOfBirth">Date of Birth</Label>
-                  <Input id="dateOfBirth" type="date" {...form.register("dateOfBirth")} />
+                  <Label htmlFor="dob-month">Date of Birth</Label>
+                  <BirthdayInput
+                    birthday={form.watch("birthday") || ""}
+                    birthYear={form.watch("birthYear") || ""}
+                    onChange={({ birthday, birthYear }) => {
+                      form.setValue("birthday", birthday)
+                      form.setValue("birthYear", birthYear)
+                    }}
+                  />
+                  <p className="text-muted-foreground text-xs">Year is optional — leave it blank if you prefer.</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="employmentDate">Employment Date</Label>

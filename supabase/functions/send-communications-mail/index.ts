@@ -15,6 +15,7 @@ const corsHeaders = {
 }
 
 type BroadcastRequestBody = {
+  broadcastId?: string
   recipients?: string[]
   broadcastSubject?: string
   broadcastBodyHtml?: string
@@ -43,6 +44,10 @@ type ProfileRecipientRow = {
 }
 
 const DELIVERY_BATCH_SIZE = 2
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+type EdgeRuntimeLike = { EdgeRuntime?: { waitUntil?: (promise: Promise<unknown>) => void } }
 
 type MailAttachment = {
   filename: string
@@ -261,6 +266,8 @@ serve(async (req) => {
 
     const body = (await req.json()) as BroadcastRequestBody
 
+    const broadcastId =
+      typeof body.broadcastId === "string" && UUID_RE.test(body.broadcastId.trim()) ? body.broadcastId.trim() : null
     const recipients = body.recipients as string[] | undefined
     const broadcastSubject = body.broadcastSubject as string | undefined
     const broadcastBodyHtml = body.broadcastBodyHtml as string | undefined
@@ -303,6 +310,33 @@ serve(async (req) => {
     )
     const from = buildBroadcastSender(department)
 
+    // ── Idempotency claim ────────────────────────────────────────────────────
+    // Claim this broadcast before sending. A retry (or concurrent duplicate)
+    // reuses the same broadcastId and hits the primary-key constraint, so it is
+    // skipped instead of sending to everyone a second time.
+    if (broadcastId) {
+      const { error: claimError } = await supabase.from("broadcast_dispatches").insert({
+        broadcast_id: broadcastId,
+        subject,
+        department,
+        requested_by: requestedByUserId,
+        recipient_count: recipients.length,
+        status: "processing",
+      })
+      if (claimError) {
+        const claimCode = (claimError as { code?: string }).code
+        if (claimCode === "23505") {
+          console.log("[communications-mail] duplicate broadcast claim skipped: " + broadcastId)
+          return new Response(JSON.stringify({ success: true, duplicate: true, broadcastId }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+            status: 200,
+          })
+        }
+        // Non-conflict errors fail open: a ledger problem must not block delivery.
+        console.error("[communications-mail] broadcast claim failed (continuing):", JSON.stringify(claimError))
+      }
+    }
+
     console.log("[communications-mail] Sending admin_broadcast to " + recipients.length + " recipients")
     console.log(
       "[communications-mail] request summary",
@@ -311,101 +345,141 @@ serve(async (req) => {
         recipient_count: recipients.length,
         attachment_count: attachments.length,
         subject,
+        broadcast_id: broadcastId,
       })
     )
 
-    const results = await processRecipientBatch(
-      recipients,
-      DELIVERY_BATCH_SIZE,
-      async (to, index): Promise<DeliveryResult> => {
-        const recipientStartedAt = Date.now()
-        try {
-          const data = await sendEmail({
-            from,
-            to,
-            subject,
-            html,
-            attachments,
-            traceLabel: `communications-mail:${index + 1}/${recipients.length}:${to}`,
-          })
-          console.log("[communications-mail] Sent to " + to + ". ID: " + data.id)
-          console.log(
-            "[communications-mail] recipient send completed",
-            JSON.stringify({
-              recipient: to,
-              recipient_index: index + 1,
-              recipient_elapsed_ms: Date.now() - recipientStartedAt,
-              send_total_duration_ms: data.totalDurationMs,
-              rate_limit_wait_ms: data.rateLimitWaitMs,
-              resend_api_duration_ms: data.resendApiDurationMs,
-              retry_backoff_ms: data.retryBackoffMs,
-            })
-          )
-          return { to, success: true, emailId: data.id }
-        } catch (error) {
-          console.error("[communications-mail] Failed to send to " + to + ":", JSON.stringify(error))
-          return { to, success: false, error }
-        }
-      }
-    )
-
-    console.log(
-      "[communications-mail] send cycle completed",
-      JSON.stringify({
-        total_elapsed_ms: Date.now() - requestStartedAt,
-        recipient_count: recipients.length,
-        success_count: results.filter((result) => result.success).length,
-        failure_count: results.filter((result) => !result.success).length,
-      })
-    )
-
-    const successfulResults = results.filter((result) => result.success)
-    try {
-      await createInAppBroadcastNotifications({
-        supabase,
+    // The actual fan-out is slow (rate-limited, one email at a time). Run it in
+    // the background and return immediately so the HTTP request can't time out
+    // and trigger a retry mid-send.
+    const runSend = async (): Promise<void> => {
+      const results = await processRecipientBatch(
         recipients,
-        successfulResults,
-        subject,
-        requestedByUserId,
-        department,
-        preparedBy,
-      })
-    } catch (notificationError) {
-      console.error("[communications-mail] Failed to create in-app notifications:", notificationError)
-    }
+        DELIVERY_BATCH_SIZE,
+        async (to, index): Promise<DeliveryResult> => {
+          const recipientStartedAt = Date.now()
+          try {
+            const data = await sendEmail({
+              from,
+              to,
+              subject,
+              html,
+              attachments,
+              traceLabel: `communications-mail:${index + 1}/${recipients.length}:${to}`,
+            })
+            console.log("[communications-mail] Sent to " + to + ". ID: " + data.id)
+            console.log(
+              "[communications-mail] recipient send completed",
+              JSON.stringify({
+                recipient: to,
+                recipient_index: index + 1,
+                recipient_elapsed_ms: Date.now() - recipientStartedAt,
+                send_total_duration_ms: data.totalDurationMs,
+                rate_limit_wait_ms: data.rateLimitWaitMs,
+                resend_api_duration_ms: data.resendApiDurationMs,
+                retry_backoff_ms: data.retryBackoffMs,
+              })
+            )
+            return { to, success: true, emailId: data.id }
+          } catch (error) {
+            console.error("[communications-mail] Failed to send to " + to + ":", JSON.stringify(error))
+            return { to, success: false, error }
+          }
+        }
+      )
 
-    try {
+      const successfulResults = results.filter((result) => result.success)
       const successCount = successfulResults.length
       const failureCount = results.length - successCount
-      const auditEntityId = crypto.randomUUID()
-      await writeEdgeAuditLog(supabase, {
-        action: "communications_broadcast_sent",
-        entityType: "communications_mail",
-        entityId: auditEntityId,
-        actorId: requestedByUserId,
-        department,
-        source: "edge",
-        route: "/functions/send-communications-mail",
-        metadata: {
-          reminder_type: "admin_broadcast",
+
+      console.log(
+        "[communications-mail] send cycle completed",
+        JSON.stringify({
+          total_elapsed_ms: Date.now() - requestStartedAt,
           recipient_count: recipients.length,
           success_count: successCount,
           failure_count: failureCount,
+        })
+      )
+
+      try {
+        await createInAppBroadcastNotifications({
+          supabase,
+          recipients,
+          successfulResults,
           subject,
-          prepared_by: preparedBy,
-          prepared_by_designation: broadcastPreparedByDesignation || null,
-          prepared_by_department: broadcastPreparedByDepartment || department,
-          attachment_count: attachments.length,
-        },
-      })
-    } catch (auditErr) {
-      console.error("[communications-mail] Failed to write audit log:", auditErr)
+          requestedByUserId,
+          department,
+          preparedBy,
+        })
+      } catch (notificationError) {
+        console.error("[communications-mail] Failed to create in-app notifications:", notificationError)
+      }
+
+      try {
+        const auditEntityId = broadcastId || crypto.randomUUID()
+        await writeEdgeAuditLog(supabase, {
+          action: "communications_broadcast_sent",
+          entityType: "communications_mail",
+          entityId: auditEntityId,
+          actorId: requestedByUserId,
+          department,
+          source: "edge",
+          route: "/functions/send-communications-mail",
+          metadata: {
+            reminder_type: "admin_broadcast",
+            recipient_count: recipients.length,
+            success_count: successCount,
+            failure_count: failureCount,
+            subject,
+            prepared_by: preparedBy,
+            prepared_by_designation: broadcastPreparedByDesignation || null,
+            prepared_by_department: broadcastPreparedByDepartment || department,
+            attachment_count: attachments.length,
+            broadcast_id: broadcastId,
+          },
+        })
+      } catch (auditErr) {
+        console.error("[communications-mail] Failed to write audit log:", auditErr)
+      }
+
+      if (broadcastId) {
+        const { error: updateError } = await supabase
+          .from("broadcast_dispatches")
+          .update({
+            status: failureCount > 0 ? "completed_with_errors" : "completed",
+            success_count: successCount,
+            failure_count: failureCount,
+            completed_at: new Date().toISOString(),
+          })
+          .eq("broadcast_id", broadcastId)
+        if (updateError) {
+          console.error("[communications-mail] Failed to finalize broadcast dispatch:", JSON.stringify(updateError))
+        }
+      }
     }
 
-    return new Response(JSON.stringify({ success: true, type: "admin_broadcast", results }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-      status: 200,
-    })
+    const waitUntil = (globalThis as EdgeRuntimeLike).EdgeRuntime?.waitUntil
+    if (typeof waitUntil === "function") {
+      waitUntil(runSend())
+    } else {
+      // Older runtimes without background tasks: fall back to inline execution.
+      await runSend()
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        accepted: true,
+        type: "admin_broadcast",
+        broadcastId,
+        recipientCount: recipients.length,
+      }),
+      {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 202,
+      }
+    )
   } catch (err: unknown) {
     console.error("[send-communications-mail] Error:", err)
     return new Response(JSON.stringify({ error: getErrorMessage(err) }), {

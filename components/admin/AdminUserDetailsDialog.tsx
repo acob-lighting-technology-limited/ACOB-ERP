@@ -1,6 +1,6 @@
 "use client"
 
-import { formatWATDateTime } from "@/lib/utils/date"
+import { formatWATDateTime, formatDateOfBirth } from "@/lib/utils/date"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -93,7 +93,7 @@ export function AdminUserDetailsDialog({ user, open, onClose, feedbackByUserId }
               </div>
               <div>
                 <Label>DOB</Label>
-                <div className="mt-1">{user.date_of_birth || ""}</div>
+                <div className="mt-1">{formatDateOfBirth(user.date_of_birth, user.birthday) || ""}</div>
               </div>
               <div>
                 <Label>Employment Date</Label>
@@ -136,7 +136,7 @@ export function AdminUserDetailsDialog({ user, open, onClose, feedbackByUserId }
                   `Office Location: ${properCase(user.office_location)}`,
                   `Bank: ${properCase(user.bank_name)} ${user.bank_account_number || ""}`,
                   `Account Name: ${properCase(user.bank_account_name)}`,
-                  `DOB: ${user.date_of_birth || ""}`,
+                  `DOB: ${formatDateOfBirth(user.date_of_birth, user.birthday) || ""}`,
                   `Employment: ${user.employment_date || ""}`,
                 ]
                 navigator.clipboard.writeText(lines.join("\n"))

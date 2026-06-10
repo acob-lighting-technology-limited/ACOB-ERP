@@ -326,11 +326,17 @@ export function DataTable<TData>({
 
   // ─── Filter state ──────────────────────────────────────────────────────────
   const initialFilters = useMemo(() => {
-    if (!urlSync) return {} as Record<string, string[]>
     const init: Record<string, string[]> = {}
     for (const f of filters) {
-      const val = searchParams.getAll(f.key)
-      if (val.length > 0) init[f.key] = val
+      // URL values (when synced) take precedence over configured defaults.
+      if (urlSync) {
+        const val = searchParams.getAll(f.key)
+        if (val.length > 0) {
+          init[f.key] = val
+          continue
+        }
+      }
+      if (f.defaultValues && f.defaultValues.length > 0) init[f.key] = f.defaultValues
     }
     return init
     // eslint-disable-next-line react-hooks/exhaustive-deps

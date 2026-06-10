@@ -22,6 +22,7 @@ import {
   Settings,
   ShieldCheck,
   User,
+  Users,
   Wrench,
 } from "lucide-react"
 import { toast } from "sonner"
@@ -73,6 +74,7 @@ type NavItemDef = { name: string; href: string; icon: React.ElementType; childre
 
 const navigation: NavItemDef[] = [
   { name: "Home", href: "/profile", icon: LayoutDashboard },
+  { name: "Directory", href: "/directory", icon: Users },
   { name: "Tasks", href: "/tasks", icon: ClipboardList },
   { name: "Help Desk", href: "/help-desk", icon: ClipboardList },
   {

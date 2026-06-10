@@ -19,6 +19,7 @@ interface FilePreviewProps {
   isOpen: boolean
   onClose: () => void
   accessMode?: "self" | "admin"
+  lockedDepartment?: string
 }
 
 interface PreviewData {
@@ -26,7 +27,14 @@ interface PreviewData {
   previewType: "embed" | "image" | "download"
 }
 
-export function FilePreview({ file, category, isOpen, onClose, accessMode = "self" }: FilePreviewProps) {
+export function FilePreview({
+  file,
+  category,
+  isOpen,
+  onClose,
+  accessMode = "self",
+  lockedDepartment,
+}: FilePreviewProps) {
   const [previewData, setPreviewData] = useState<PreviewData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -44,9 +52,9 @@ export function FilePreview({ file, category, isOpen, onClose, accessMode = "sel
       setError(null)
 
       try {
-        const response = await fetch(
-          `/api/onedrive/preview?path=${encodeURIComponent(file.path)}&accessMode=${accessMode}`
-        )
+        const params = new URLSearchParams({ path: file.path, accessMode })
+        if (lockedDepartment) params.set("department", lockedDepartment)
+        const response = await fetch(`/api/onedrive/preview?${params.toString()}`)
         const data = await response.json()
 
         if (!response.ok) {
@@ -75,14 +83,13 @@ export function FilePreview({ file, category, isOpen, onClose, accessMode = "sel
     return () => {
       isCancelled = true
     }
-  }, [accessMode, file, isOpen])
+  }, [accessMode, file, isOpen, lockedDepartment])
 
   const handleDownload = () => {
     if (!file) return
-    window.open(
-      `/api/onedrive/download?path=${encodeURIComponent(file.path)}&redirect=true&accessMode=${accessMode}`,
-      "_blank"
-    )
+    const params = new URLSearchParams({ path: file.path, redirect: "true", accessMode })
+    if (lockedDepartment) params.set("department", lockedDepartment)
+    window.open(`/api/onedrive/download?${params.toString()}`, "_blank")
   }
 
   const handleOpenInOneDrive = () => {

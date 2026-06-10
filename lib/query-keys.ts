@@ -65,6 +65,12 @@ export const QUERY_KEYS = {
   // Dev login logs
   devLoginLogs: () => ["dev-login-logs"],
 
+  // Dev AcoBot logs
+  acobotLogs: () => ["acobot-logs"],
+
+  // Company directory
+  directory: () => ["directory"],
+
   // Pending applications
   pendingApplications: () => ["pending-applications"],
 

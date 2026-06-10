@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { requireDeptScope } from "@/lib/dept/require-dept-scope"
 import { normalizeDepartmentName } from "@/shared/departments"
+import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
 import { listAssignableProfiles } from "@/lib/workforce/assignment-policy"
 import {
   AdminAssetsContent,
@@ -37,6 +38,12 @@ export default async function DeptAssetsPage({ params }: DeptAssetsPageProps) {
   const dataClient = getServiceRoleClientOrFallback(supabase)
 
   const deptName = normalizeDepartmentName(scope.deptName)
+  const expandedDepartments = expandDepartmentScopeForQuery([deptName])
+  const { data: officeRows } = await dataClient
+    .from("office_locations")
+    .select("name")
+    .in("department", expandedDepartments)
+  const managedOffices = (officeRows || []).map((office) => office.name).filter(Boolean)
 
   const userProfile: UserProfile = {
     role: scope.role,
@@ -44,7 +51,7 @@ export default async function DeptAssetsPage({ params }: DeptAssetsPageProps) {
     is_department_lead: true,
     lead_departments: [scope.deptName],
     managed_departments: [deptName],
-    managed_offices: [],
+    managed_offices: managedOffices,
   }
 
   const { data: employeeData } = await listAssignableProfiles(dataClient, {
@@ -87,6 +94,7 @@ export default async function DeptAssetsPage({ params }: DeptAssetsPageProps) {
     if (!assignment) return false
     if (assignment.assigned_to && deptUserIds.includes(assignment.assigned_to)) return true
     if (assignment.department && normalizeDepartmentName(assignment.department) === deptName) return true
+    if (assignment.office_location && managedOffices.includes(assignment.office_location)) return true
     return false
   })
 
@@ -114,6 +122,7 @@ export default async function DeptAssetsPage({ params }: DeptAssetsPageProps) {
       initialDepartments={[deptName]}
       userProfile={userProfile}
       initialError={null}
+      lockedDepartment={scope.deptName}
     />
   )
 }

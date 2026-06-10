@@ -41,6 +41,8 @@ interface AdminHelpDeskContentProps {
     lead_departments: string[]
     managed_departments: string[]
   }
+  lockedDepartment?: string
+  backLinkHref?: string
 }
 
 const FINAL_STATUSES = new Set(["resolved", "closed", "cancelled", "rejected"])
@@ -55,7 +57,14 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback
 }
 
-export function AdminHelpDeskContent({ initialTickets, employees, leadDirectory, viewer }: AdminHelpDeskContentProps) {
+export function AdminHelpDeskContent({
+  initialTickets,
+  employees,
+  leadDirectory,
+  viewer,
+  lockedDepartment,
+  backLinkHref = "/admin",
+}: AdminHelpDeskContentProps) {
   const [tickets, setTickets] = useState(initialTickets)
   const [activeTab, setActiveTab] = useState("my-actions")
   const [assignmentMap, setAssignmentMap] = useState<Record<string, string>>({})
@@ -176,15 +185,17 @@ export function AdminHelpDeskContent({ initialTickets, employees, leadDirectory,
     ] as DataTableFilter<HelpDeskTicket>[]
   }, [tickets])
 
-  async function refresh() {
-    const res = await fetch("/api/help-desk/tickets?scope=department", { cache: "no-store" })
+  const refresh = useCallback(async () => {
+    const params = new URLSearchParams({ scope: "department" })
+    if (lockedDepartment) params.set("department", lockedDepartment)
+    const res = await fetch(`/api/help-desk/tickets?${params.toString()}`, { cache: "no-store" })
     const json = await res.json()
     if (!res.ok) {
       toast.error(json?.error || "Failed to refresh help desk queue")
       return
     }
     setTickets(json.data || [])
-  }
+  }, [lockedDepartment])
 
   const assign = useCallback(
     async (ticketId: string) => {
@@ -212,7 +223,7 @@ export function AdminHelpDeskContent({ initialTickets, employees, leadDirectory,
         setLoadingTicketId(null)
       }
     },
-    [assignmentMap]
+    [assignmentMap, refresh]
   )
 
   async function routeTicket(ticketId: string, action: "send_to_queue" | "assign_department" | "assign_me") {
@@ -402,7 +413,10 @@ export function AdminHelpDeskContent({ initialTickets, employees, leadDirectory,
       title="Help Desk Workflow"
       description="Manage ticket routing, department approvals, and technical escalations."
       icon={Headset}
-      backLink={{ href: "/admin", label: "Back to Admin" }}
+      backLink={{
+        href: backLinkHref,
+        label: lockedDepartment ? "Back to Department" : "Back to Admin",
+      }}
       tabs={TABS}
       activeTab={activeTab}
       onTabChange={setActiveTab}

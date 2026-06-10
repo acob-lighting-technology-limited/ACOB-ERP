@@ -1,5 +1,5 @@
 import { TablePageSkeleton } from "@/components/skeletons"
 
-export default function DeptCorrespondenceLoading() {
-  return <TablePageSkeleton columns={6} rows={8} statCards={3} actions={2} showBackLink />
+export default function Loading() {
+  return <TablePageSkeleton filters={2} columns={6} rows={8} showStats={false} />
 }

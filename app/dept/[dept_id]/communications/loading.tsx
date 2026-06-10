@@ -1,5 +1,5 @@
-import { DetailPageSkeleton } from "@/components/skeletons"
+import { CardGridPageSkeleton } from "@/components/skeletons"
 
 export default function Loading() {
-  return <DetailPageSkeleton showSidebar={true} sections={2} />
+  return <CardGridPageSkeleton cards={2} columns={3} />
 }

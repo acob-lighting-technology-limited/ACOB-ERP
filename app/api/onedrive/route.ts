@@ -8,7 +8,12 @@ import { cookies } from "next/headers"
 import { NextResponse } from "next/server"
 import { getOneDriveService } from "@/lib/onedrive"
 import { writeAuditLog } from "@/lib/audit/write-audit"
-import { getDepartmentContextFromPath, isPathAllowed, resolveOneDriveAccessScope } from "@/lib/onedrive/access"
+import {
+  getDepartmentContextFromPath,
+  isPathAllowed,
+  resolveOneDriveAccessScope,
+  resolveOneDriveDepartmentAccessScope,
+} from "@/lib/onedrive/access"
 import { logger } from "@/lib/logger"
 import type { FileItem } from "@/lib/onedrive/types"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
@@ -235,7 +240,11 @@ async function writeDepartmentDocumentAudit(
   )
 }
 
-async function getRequestContext(accessMode: string | null, requireWrite = false): Promise<RequestContext> {
+async function getRequestContext(
+  accessMode: string | null,
+  requireWrite = false,
+  department: string | null = null
+): Promise<RequestContext> {
   const supabase = await createClient()
 
   const {
@@ -249,7 +258,9 @@ async function getRequestContext(accessMode: string | null, requireWrite = false
     return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
   }
 
-  const scope = await resolveOneDriveAccessScope(supabase as OneDriveClient, user.id, getAccessOptions(accessMode))
+  const scope = department
+    ? await resolveOneDriveDepartmentAccessScope(supabase as OneDriveClient, user.id, department)
+    : await resolveOneDriveAccessScope(supabase as OneDriveClient, user.id, getAccessOptions(accessMode))
   if (!scope) {
     return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
   }
@@ -272,7 +283,7 @@ async function getRequestContext(accessMode: string | null, requireWrite = false
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const context = await getRequestContext(searchParams.get("accessMode"))
+    const context = await getRequestContext(searchParams.get("accessMode"), false, searchParams.get("department"))
     if ("response" in context) {
       return context.response
     }
@@ -357,7 +368,8 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData()
     const accessMode = typeof formData.get("accessMode") === "string" ? String(formData.get("accessMode")) : null
-    const context = await getRequestContext(accessMode, true)
+    const department = typeof formData.get("department") === "string" ? String(formData.get("department")) : null
+    const context = await getRequestContext(accessMode, true, department)
     if ("response" in context) {
       return context.response
     }
@@ -438,8 +450,8 @@ export async function PATCH(request: Request) {
       { status: 429 }
     )
   try {
-    const body = (await request.json()) as { path?: string; newName?: string; accessMode?: string }
-    const context = await getRequestContext(body.accessMode ?? null, true)
+    const body = (await request.json()) as { path?: string; newName?: string; accessMode?: string; department?: string }
+    const context = await getRequestContext(body.accessMode ?? null, true, body.department ?? null)
     if ("response" in context) {
       return context.response
     }
@@ -487,7 +499,7 @@ export async function DELETE(request: Request) {
     )
   try {
     const { searchParams } = new URL(request.url)
-    const context = await getRequestContext(searchParams.get("accessMode"), true)
+    const context = await getRequestContext(searchParams.get("accessMode"), true, searchParams.get("department"))
     if ("response" in context) {
       return context.response
     }

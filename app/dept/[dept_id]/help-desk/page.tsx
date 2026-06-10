@@ -157,6 +157,8 @@ export default async function DeptHelpDeskPage({ params }: DeptHelpDeskPageProps
         lead_departments: [scope.deptName],
         managed_departments: [scope.deptName],
       }}
+      lockedDepartment={scope.deptName}
+      backLinkHref={`/dept/${dept_id}`}
     />
   )
 }

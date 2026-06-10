@@ -3,7 +3,7 @@ import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
 export const DEFAULT_TEAMS_LINK =
   "https://teams.microsoft.com/l/meetup-join/19%3ameeting_MWZhNTgwYjEtMzdjMi00ZDZkLWJhM2YtZjFiNjgxNDEzN2Nk%40thread.v2/0?context=%7b%22Tid%22%3a%22b1f048ac-9f61-4cfd-98a3-13454b2682e5%22%2c%22Oid%22%3a%22224317b2-9cfb-425c-bc86-57bb397c73cd%22%7d"
 
-export const DEFAULT_AGENDA = [
+export const LEGACY_DEFAULT_AGENDA = [
   "Opening Prayer",
   "Knowledge Sharing Session (30 minutes)",
   "Departmental Updates",
@@ -11,6 +11,16 @@ export const DEFAULT_AGENDA = [
   "Upcoming Events and Deadlines",
   "Any Other Business",
   "Adjournment",
+]
+
+export const DEFAULT_AGENDA = [
+  "Opening Prayer",
+  "Knowledge Sharing Session (30 minutes)",
+  "Minutes of the Last Meeting",
+  "Departmental Updates",
+  "Any Other Business",
+  "MD's Remarks",
+  "Closing Remarks",
 ]
 
 export function getNextMondayFormatted(): string {
@@ -27,8 +37,8 @@ export function formatDateNice(dateStr: string): string {
   const d = new Date(dateStr + "T00:00:00")
   const day = d.getDate()
   const suffix = [1, 21, 31].includes(day) ? "st" : [2, 22].includes(day) ? "nd" : [3, 23].includes(day) ? "rd" : "th"
-  const weekday = formatWATDate(d, { weekday: "long" })
-  const month = formatWATDate(d, { month: "long" })
+  const weekday = new Intl.DateTimeFormat("en-GB", { weekday: "long", timeZone: "Africa/Lagos" }).format(d)
+  const month = new Intl.DateTimeFormat("en-GB", { month: "long", timeZone: "Africa/Lagos" }).format(d)
   const year = d.getFullYear()
   return `${weekday} ${day}${suffix} ${month} ${year}`
 }

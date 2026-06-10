@@ -1,5 +1,5 @@
-import { DetailPageSkeleton } from "@/components/skeletons"
+import { TablePageSkeleton } from "@/components/skeletons"
 
-export default function Loading() {
-  return <DetailPageSkeleton showSidebar={true} sections={2} />
+export default function DepartmentsLoading() {
+  return <TablePageSkeleton filters={0} columns={5} rows={6} showStats={true} statCards={3} />
 }

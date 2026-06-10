@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { PageHeader, PageWrapper } from "@/components/layout"
-import { Code2, ScrollText, ShieldEllipsis, ShieldAlert, FlaskConical, Bug, UserRoundCog } from "lucide-react"
+import { Code2, ScrollText, ShieldEllipsis, ShieldAlert, FlaskConical, Bug, UserRoundCog, Bot } from "lucide-react"
 
 const sections = [
   {
@@ -41,6 +41,12 @@ const sections = [
     description: "Switch into any account for end-to-end flow validation without shared passwords.",
     href: "/admin/dev/impersonation",
     icon: UserRoundCog,
+  },
+  {
+    title: "ACOBot Conversations",
+    description: "Review every question staff and website visitors asked ACOBot, its answer, and who asked it.",
+    href: "/admin/dev/acobot",
+    icon: Bot,
   },
 ]
 

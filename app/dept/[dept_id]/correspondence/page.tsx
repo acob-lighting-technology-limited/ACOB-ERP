@@ -29,5 +29,11 @@ export default async function DeptCorrespondencePage({ params }: DeptCorresponde
       normalizeDepartmentName(record.assigned_department_name || "") === deptName
   )
 
-  return <AdminReferenceGeneratorContent initialRecords={scopedRecords} />
+  return (
+    <AdminReferenceGeneratorContent
+      initialRecords={scopedRecords}
+      lockedDepartment={scope.deptName}
+      backLinkHref={`/dept/${dept_id}`}
+    />
+  )
 }

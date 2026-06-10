@@ -202,6 +202,7 @@ interface AdminAssetsContentProps {
   initialDepartments: string[]
   userProfile: UserProfile
   initialError?: string | null
+  lockedDepartment?: string
 }
 
 export function AdminAssetsContent({
@@ -210,6 +211,7 @@ export function AdminAssetsContent({
   initialDepartments,
   userProfile,
   initialError,
+  lockedDepartment,
 }: AdminAssetsContentProps) {
   const router = useRouter()
   const normalizedRole = String(userProfile?.role || "")
@@ -446,7 +448,9 @@ export function AdminAssetsContent({
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const response = await fetch("/api/admin/assets/snapshot", {
+      const params = new URLSearchParams()
+      if (lockedDepartment) params.set("department", lockedDepartment)
+      const response = await fetch(`/api/admin/assets/snapshot?${params.toString()}`, {
         method: "GET",
         credentials: "include",
         cache: "no-store",
@@ -1197,12 +1201,12 @@ export function AdminAssetsContent({
   }, [scopedAssets])
 
   const stats = {
-    total: assets.filter((d) => !d.deleted_at).length,
-    available: assets.filter((d) => !d.deleted_at && d.status === "available").length,
-    assigned: assets.filter((d) => !d.deleted_at && d.status === "assigned").length,
-    maintenance: assets.filter((d) => !d.deleted_at && d.status === "maintenance").length,
-    archived: assets.filter((d) => !!d.deleted_at).length,
-    unresolvedIssues: assets
+    total: scopedAssets.filter((d) => !d.deleted_at).length,
+    available: scopedAssets.filter((d) => !d.deleted_at && d.status === "available").length,
+    assigned: scopedAssets.filter((d) => !d.deleted_at && d.status === "assigned").length,
+    maintenance: scopedAssets.filter((d) => !d.deleted_at && d.status === "maintenance").length,
+    archived: scopedAssets.filter((d) => !!d.deleted_at).length,
+    unresolvedIssues: scopedAssets
       .filter((d) => !d.deleted_at)
       .reduce((sum, asset) => sum + (asset.unresolved_issues_count || 0), 0),
   }
@@ -1226,7 +1230,13 @@ export function AdminAssetsContent({
 
   const assetTypeOptions = assetTypes.map((type) => ({ value: type.code, label: type.label }))
   const departmentOptions = departments.map((department) => ({ value: department, label: department }))
-  const officeOptions = Array.from(new Set(assets.map((asset) => asset.office_location).filter(Boolean) as string[]))
+  const officeOptions = Array.from(
+    new Set(
+      scopedAssets
+        .map((asset) => asset.current_assignment?.office_location || asset.office_location)
+        .filter(Boolean) as string[]
+    )
+  )
     .sort()
     .map((office) => ({ value: office, label: office }))
   const employeeOptions = employees
@@ -1238,7 +1248,7 @@ export function AdminAssetsContent({
       }
     })
     .sort((a, b) => a.label.localeCompare(b.label))
-  const yearOptions = Array.from(new Set(assets.map((asset) => String(asset.acquisition_year))))
+  const yearOptions = Array.from(new Set(scopedAssets.map((asset) => String(asset.acquisition_year))))
     .sort()
     .map((year) => ({ value: year, label: year }))
 

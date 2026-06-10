@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { isAdminLikeRole } from "@/lib/admin/rbac"
+import { normalizeDepartmentName } from "@/shared/departments"
 
 interface OneDriveProfile {
   role: string | null
@@ -128,6 +129,35 @@ export async function resolveOneDriveAccessScope(
     allowedPrefixes,
     defaultPath: normalizePath(`/${departmentToLibraryKey(defaultDepartment)}`),
     rootLabel: defaultDepartment,
+  }
+}
+
+export async function resolveOneDriveDepartmentAccessScope(
+  supabase: SupabaseClient,
+  userId: string,
+  department: string
+): Promise<OneDriveAccessScope | null> {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, department, is_department_lead, lead_departments")
+    .eq("id", userId)
+    .single<OneDriveProfile>()
+
+  if (!profile?.is_department_lead) return null
+
+  const requestedDepartment = normalizeDepartmentName(department)
+  const ledDepartments = uniqueDepartments([...(profile.lead_departments || []), profile.department]).map(
+    normalizeDepartmentName
+  )
+  if (!ledDepartments.includes(requestedDepartment)) return null
+
+  const prefix = normalizePath(`/${departmentToLibraryKey(requestedDepartment)}`)
+  return {
+    isAdminLike: false,
+    managedDepartments: [requestedDepartment],
+    allowedPrefixes: [prefix],
+    defaultPath: prefix,
+    rootLabel: requestedDepartment,
   }
 }
 

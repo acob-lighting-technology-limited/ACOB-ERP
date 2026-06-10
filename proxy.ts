@@ -2,7 +2,19 @@ import { updateSession } from "@/lib/supabase/middleware"
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 
+const LEGACY_HOSTS = new Set(["acob-erp.vercel.app"])
+const CANONICAL_HOST = "erp.acoblighting.com"
+
 export async function proxy(request: NextRequest) {
+  const hostname = request.nextUrl.hostname.toLowerCase()
+  if (LEGACY_HOSTS.has(hostname)) {
+    const url = request.nextUrl.clone()
+    url.protocol = "https"
+    url.hostname = CANONICAL_HOST
+    url.port = ""
+    return NextResponse.redirect(url, 308)
+  }
+
   const pathname = request.nextUrl.pathname
 
   // Allow API routes and static assets through with session update
