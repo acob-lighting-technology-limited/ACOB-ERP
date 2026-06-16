@@ -66,7 +66,7 @@ function buildBirthdayHtml(firstName: string): string {
     ".text{font-size:15px;color:#374151;line-height:1.7;margin:0 0 18px 0;text-align:left}" +
     ".card{margin-top:8px;border:1px solid #bbf7d0;background:#f0fdf4;border-radius:10px;padding:22px 24px}" +
     ".card .text{margin:0;color:#166534;text-align:center;font-size:16px;font-style:italic;line-height:1.6}" +
-    "</style></head><body><div class=\"email-shell\">" +
+    '</style></head><body><div class="email-shell">' +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">' +
     '<tr><td align="center" style="padding:20px 0;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;">' +
     '<img src="https://erp.acoblighting.com/images/acob-logo-dark.png" alt="ACOB Lighting" height="65"></td></tr></table>' +
@@ -131,10 +131,14 @@ serve(async (req) => {
       .eq("employment_status", "active")
     if (error) throw new Error(`Failed to load birthday profiles: ${error.message}`)
 
+    // Dedup key: (user_id, sent_year, birthday). If someone's birthday is corrected
+    // after an earlier send, the old log row has a different `birthday` value and
+    // will not block the send on their real birthday.
     const { data: alreadySent } = await supabase
       .from("birthday_email_log")
       .select("user_id")
       .eq("sent_year", year)
+      .eq("birthday", mmdd)
     const sentUserIds = new Set((alreadySent || []).map((r: { user_id: string }) => r.user_id))
 
     const results: Array<{ user_id: string; to: string; success: boolean; error?: string }> = []
@@ -156,7 +160,7 @@ serve(async (req) => {
           html: buildBirthdayHtml(p.first_name || ""),
           traceLabel: `birthday:${recipient}`,
         })
-        await supabase.from("birthday_email_log").insert({ user_id: p.id, sent_year: year, recipient })
+        await supabase.from("birthday_email_log").insert({ user_id: p.id, sent_year: year, birthday: mmdd, recipient })
 
         // Mirror the email as an in-app notification. Every mail a user receives
         // externally must also land in their ERP notification bell.
@@ -197,7 +201,14 @@ serve(async (req) => {
     }
 
     return new Response(
-      JSON.stringify({ success: true, date: mmdd, year, candidates: profiles?.length ?? 0, sent: successCount, results }),
+      JSON.stringify({
+        success: true,
+        date: mmdd,
+        year,
+        candidates: profiles?.length ?? 0,
+        sent: successCount,
+        results,
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     )
   } catch (err) {
