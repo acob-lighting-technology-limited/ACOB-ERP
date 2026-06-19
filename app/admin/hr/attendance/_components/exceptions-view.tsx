@@ -19,8 +19,8 @@ import {
 import { StatCard } from "@/components/ui/stat-card"
 import { Clock, AlertTriangle, XCircle, FileText, Pencil } from "lucide-react"
 import { toast } from "sonner"
-import { toLocalISODate, monthBounds, toLocalYearMonth } from "@/lib/hr/attendance-utils"
-import { MANUAL_ATTENDANCE_STATUS_OPTIONS } from "@/lib/hr/attendance-status"
+import { toLocalISODate, monthBounds, toLocalYearMonth, isLate } from "@/lib/hr/attendance-utils"
+import { MANUAL_ATTENDANCE_STATUS_OPTIONS, isEarlyDeparture } from "@/lib/hr/attendance-status"
 import { formatTime, labelSource } from "./status-badge"
 
 interface AttendanceRecord {
@@ -70,7 +70,7 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null)
-  const [editForm, setEditForm] = useState({ clock_in: "", clock_out: "", status: "auto", manual_comment: "" })
+  const [editForm, setEditForm] = useState({ status: "", manual_comment: "" })
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
@@ -96,14 +96,29 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
   }, [load])
 
   function openEdit(record: AttendanceRecord) {
+    const clockIn = record.clock_in ?? null
+    const clockOut = record.clock_out ?? null
+    const hasClockIn = Boolean(clockIn)
+    const hasClockOut = Boolean(clockOut)
+    const hasAnyPunch = hasClockIn || hasClockOut
+
+    const isLatePunch = hasClockIn && isLate(clockIn)
+    const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
+    const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
+
+    let initialStatus = ""
+    if (!hasAnyPunch) {
+      initialStatus = "absent_with_permission"
+    } else if (!isOnTimePresent) {
+      initialStatus = "lateness_with_permission"
+    }
+
     setEditRecord(record)
     setEditForm({
-      clock_in: record.clock_in?.substring(0, 5) ?? "",
-      clock_out: record.clock_out?.substring(0, 5) ?? "",
       status:
-        record.status && !["holiday", "on_leave", "exempted", "weekend"].includes(record.status)
+        record.status && ["lateness_with_permission", "absent_with_permission"].includes(record.status)
           ? record.status
-          : "auto",
+          : initialStatus,
       manual_comment: record.manual_comment ?? "",
     })
   }
@@ -113,11 +128,11 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
     setSaving(true)
     try {
       const body: Record<string, unknown> = {
-        clock_in: editForm.clock_in || null,
-        clock_out: editForm.clock_out || null,
+        waived: false,
+        waiver_reason: null,
         manual_comment: editForm.manual_comment,
+        status: editForm.status,
       }
-      if (editForm.status !== "auto") body.status = editForm.status
       const res = await fetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -260,10 +275,26 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
     },
   ]
 
-  const invalidTimeRange = Boolean(editForm.clock_in && editForm.clock_out && editForm.clock_out < editForm.clock_in)
-  const isNoTimePermission = editForm.status === "absent_with_permission" || editForm.status === "out_of_station"
-  const missingRequiredTimes = !isNoTimePermission && !(editForm.clock_in && editForm.clock_out)
+  const clockIn = editRecord?.clock_in ?? null
+  const clockOut = editRecord?.clock_out ?? null
+  const hasClockIn = Boolean(clockIn)
+  const hasClockOut = Boolean(clockOut)
+  const hasAnyPunch = hasClockIn || hasClockOut
+
+  const isLatePunch = hasClockIn && isLate(clockIn)
+  const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
+  const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
+
+  const showAWP = !hasAnyPunch
+  const showLWP = hasAnyPunch && !isOnTimePresent
+
+  const statusOptions = [
+    ...(showLWP ? [{ value: "lateness_with_permission", label: "LWP" }] : []),
+    ...(showAWP ? [{ value: "absent_with_permission", label: "AWP" }] : []),
+  ]
+
   const hasManualComment = editForm.manual_comment.trim().length >= 3
+  const cannotSave = saving || !editForm.status || !hasManualComment || isOnTimePresent
 
   return (
     <>
@@ -343,62 +374,48 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={editForm.status} onValueChange={(value) => setEditForm((f) => ({ ...f, status: value }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MANUAL_ATTENDANCE_STATUS_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Clock In</Label>
-                <Input
-                  type="time"
-                  value={editForm.clock_in}
-                  onChange={(e) => setEditForm((f) => ({ ...f, clock_in: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Clock Out</Label>
-                <Input
-                  type="time"
-                  value={editForm.clock_out}
-                  onChange={(e) => setEditForm((f) => ({ ...f, clock_out: e.target.value }))}
-                />
-              </div>
-            </div>
-            {invalidTimeRange && <p className="text-destructive text-xs">Clock out must be after clock in.</p>}
-            {missingRequiredTimes && (
-              <p className="text-muted-foreground text-xs">Provide both times, or choose AWP/OOS for a no-punch day.</p>
+            {isOnTimePresent ? (
+              <p className="text-muted-foreground text-sm">
+                This record is fully present and on-time. No overrides (LWP/AWP) are applicable.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={editForm.status}
+                    onValueChange={(value) => setEditForm((f) => ({ ...f, status: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    Comment <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    value={editForm.manual_comment}
+                    onChange={(e) => setEditForm((f) => ({ ...f, manual_comment: e.target.value }))}
+                    placeholder="Reason for this manual attendance change"
+                  />
+                </div>
+              </>
             )}
-            <div className="space-y-2">
-              <Label>
-                Comment <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                value={editForm.manual_comment}
-                onChange={(e) => setEditForm((f) => ({ ...f, manual_comment: e.target.value }))}
-                placeholder="Reason for this manual attendance change"
-              />
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditRecord(null)}>
               Cancel
             </Button>
-            <Button
-              onClick={saveEdit}
-              disabled={saving || invalidTimeRange || missingRequiredTimes || !hasManualComment}
-            >
+            <Button onClick={saveEdit} disabled={cannotSave}>
               {saving ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>

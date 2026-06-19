@@ -27,12 +27,13 @@ import { Switch } from "@/components/ui/switch"
 import { BarChart3, Download, FileText, Users, Clock, AlertCircle, Pencil, Info, Settings2 } from "lucide-react"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
-import { getWorkdaysInMonth, monthBounds, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
+import { getWorkdaysInMonth, monthBounds, toLocalISODate, toLocalYearMonth, isLate } from "@/lib/hr/attendance-utils"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import {
   ATTENDANCE_STATUS_COLORS,
   ATTENDANCE_STATUS_LABELS,
   MANUAL_ATTENDANCE_STATUS_OPTIONS,
+  isEarlyDeparture,
 } from "@/lib/hr/attendance-status"
 import { StatusBadge, labelSource } from "./_components/status-badge"
 
@@ -147,7 +148,7 @@ function formatDayShort(dateString: string) {
 }
 
 function formatTime(t: string | null) {
-  if (!t) return "â€”"
+  if (!t) return "—"
   return t.substring(0, 5)
 }
 
@@ -159,7 +160,7 @@ function parseTimeToMinutes(value: string | null | undefined): number | null {
 }
 
 function formatHours(hours: number | null) {
-  if (hours === null) return "â€”"
+  if (hours === null) return "—"
   return `${hours.toFixed(1)}h`
 }
 
@@ -210,11 +211,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   const [days, setDays] = useState<CalendarDay[] | null>(null)
   const [editTarget, setEditTarget] = useState<{ date: string; record: DayRecord | null } | null>(null)
   const [editForm, setEditForm] = useState({
-    clock_in: "",
-    clock_out: "",
-    status: "auto",
-    waived: false,
-    waiver_reason: "",
+    status: "",
     manual_comment: "",
   })
   const [saving, setSaving] = useState(false)
@@ -255,16 +252,29 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   }, [report.user_id, yearMonth])
 
   function openEdit(date: string, record: DayRecord | null) {
+    const clockIn = record?.clock_in ?? null
+    const clockOut = record?.clock_out ?? null
+    const hasClockIn = Boolean(clockIn)
+    const hasClockOut = Boolean(clockOut)
+    const hasAnyPunch = hasClockIn || hasClockOut
+
+    const isLatePunch = hasClockIn && isLate(clockIn)
+    const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
+    const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
+
+    let initialStatus = ""
+    if (!hasAnyPunch) {
+      initialStatus = "absent_with_permission"
+    } else if (!isOnTimePresent) {
+      initialStatus = "lateness_with_permission"
+    }
+
     setEditTarget({ date, record })
     setEditForm({
-      clock_in: record?.clock_in?.substring(0, 5) ?? "",
-      clock_out: record?.clock_out?.substring(0, 5) ?? "",
       status:
-        record?.status && !["holiday", "on_leave", "exempted", "weekend"].includes(record.status)
+        record?.status && ["lateness_with_permission", "absent_with_permission"].includes(record.status)
           ? record.status
-          : "auto",
-      waived: record?.waived ?? false,
-      waiver_reason: record?.waiver_reason ?? "",
+          : initialStatus,
       manual_comment: record?.manual_comment ?? "",
     })
   }
@@ -275,32 +285,30 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
     try {
       let res: Response
       if (editTarget.record) {
-        // Update existing record â€” status is auto-derived by the API from clock times
+        // Update existing record
         const body: Record<string, unknown> = {
-          waived: editForm.waived,
-          waiver_reason: editForm.waiver_reason || null,
-          clock_in: editForm.clock_in || null,
-          clock_out: editForm.clock_out || null,
+          waived: false,
+          waiver_reason: null,
           manual_comment: editForm.manual_comment,
+          status: editForm.status,
         }
-        if (editForm.status !== "auto") body.status = editForm.status
         res = await fetch(`/api/admin/hr/attendance/records/${editTarget.record.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         })
       } else {
-        // Create new record for a day with no existing record â€” status auto-derived by API
+        // Create new record
         const body: Record<string, unknown> = {
           user_id: report.user_id,
           date: editTarget.date,
-          waived: editForm.waived,
-          waiver_reason: editForm.waiver_reason || null,
-          clock_in: editForm.clock_in || null,
-          clock_out: editForm.clock_out || null,
+          waived: false,
+          waiver_reason: null,
           manual_comment: editForm.manual_comment,
+          status: editForm.status,
+          clock_in: null,
+          clock_out: null,
         }
-        if (editForm.status !== "auto") body.status = editForm.status
         res = await fetch("/api/admin/hr/attendance/records", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -343,30 +351,32 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   }
 
   if (!days) {
-    return <div className="text-muted-foreground py-4 text-center text-sm">Loading daysâ€¦</div>
+    return <div className="text-muted-foreground py-4 text-center text-sm">Loading days…</div>
   }
 
   const today = toLocalISODate()
   const visibleDays = days.filter((d) => d.date <= today)
   const isCreating = editTarget !== null && editTarget.record === null
-  const hasClockIn = Boolean(editForm.clock_in)
-  const hasClockOut = Boolean(editForm.clock_out)
-  const hasAnyTime = hasClockIn || hasClockOut
-  const hasPartialTime = hasClockIn !== hasClockOut
-  const invalidTimeRange = Boolean(editForm.clock_in && editForm.clock_out && editForm.clock_out < editForm.clock_in)
-  const isNoTimePermission =
-    editForm.waived ||
-    editForm.status === "waiver" ||
-    editForm.status === "absent_with_permission" ||
-    editForm.status === "out_of_station"
-  const missingRequiredTimes = !isNoTimePermission && (!hasAnyTime || hasPartialTime)
+  const clockIn = editTarget?.record?.clock_in ?? null
+  const clockOut = editTarget?.record?.clock_out ?? null
+  const hasClockIn = Boolean(clockIn)
+  const hasClockOut = Boolean(clockOut)
+  const hasAnyPunch = hasClockIn || hasClockOut
+
+  const isLatePunch = hasClockIn && isLate(clockIn)
+  const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
+  const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
+
+  const showAWP = !hasAnyPunch
+  const showLWP = hasAnyPunch && !isOnTimePresent
+
+  const statusOptions = [
+    ...(showLWP ? [{ value: "lateness_with_permission", label: "LWP" }] : []),
+    ...(showAWP ? [{ value: "absent_with_permission", label: "AWP" }] : []),
+  ]
+
   const hasManualComment = editForm.manual_comment.trim().length >= 3
-  const cannotSave =
-    saving ||
-    invalidTimeRange ||
-    missingRequiredTimes ||
-    !hasManualComment ||
-    (editForm.waived && !editForm.waiver_reason.trim())
+  const cannotSave = saving || !editForm.status || !hasManualComment || isOnTimePresent
 
   return (
     <>
@@ -401,7 +411,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
                     <span>{formatTime(day.record.clock_in)}</span>
                   </>
                 ) : (
-                  "â€”"
+                  "—"
                 )}
               </span>
               <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
@@ -411,7 +421,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
                     <span>{formatTime(day.record.clock_out)}</span>
                   </>
                 ) : (
-                  "â€”"
+                  "—"
                 )}
               </span>
               <span className="text-xs">{formatHours(hours.total ?? day.record?.total_hours ?? null)}</span>
@@ -419,10 +429,10 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
               <span
                 className={`text-xs ${hours.missed !== null && hours.missed > 0 ? "text-orange-500" : "text-muted-foreground"}`}
               >
-                {hours.missed !== null ? formatHours(hours.missed) : "â€”"}
+                {hours.missed !== null ? formatHours(hours.missed) : "—"}
               </span>
               <span className="text-xs">
-                {hours.overtime != null && hours.overtime >= 0.05 ? formatHours(hours.overtime) : "â€”"}
+                {hours.overtime != null && hours.overtime >= 0.05 ? formatHours(hours.overtime) : "—"}
               </span>
               <span className="text-xs">{labelSource(day.record)}</span>
               <div className="flex items-center justify-end gap-1">
@@ -456,91 +466,59 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           <DialogHeader>
             <DialogTitle>{isCreating ? "Add Attendance Record" : "Edit Attendance Record"}</DialogTitle>
             <DialogDescription>
-              {editTarget && `${report.user_name} â€” ${formatDayShort(editTarget.date)}`}
+              {editTarget && `${report.user_name} — ${formatDayShort(editTarget.date)}`}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={editForm.status} onValueChange={(value) => setEditForm((f) => ({ ...f, status: value }))}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {MANUAL_ATTENDANCE_STATUS_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Clock In</Label>
-                <Input
-                  type="time"
-                  max="23:59"
-                  value={editForm.clock_in}
-                  onChange={(e) => setEditForm((f) => ({ ...f, clock_in: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Clock Out</Label>
-                <Input
-                  type="time"
-                  max="23:59"
-                  value={editForm.clock_out}
-                  onChange={(e) => setEditForm((f) => ({ ...f, clock_out: e.target.value }))}
-                />
-              </div>
-            </div>
-            {missingRequiredTimes && (
-              <p className="text-muted-foreground text-xs">Provide both times, or choose AWP/OOS for a no-punch day.</p>
+            {isOnTimePresent ? (
+              <p className="text-muted-foreground text-sm">
+                This record is fully present and on-time. No overrides (LWP/AWP) are applicable.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={editForm.status}
+                    onValueChange={(value) => setEditForm((f) => ({ ...f, status: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    Comment (required) <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    required
+                    placeholder="Reason for this manual attendance change"
+                    value={editForm.manual_comment}
+                    onChange={(e) => setEditForm((f) => ({ ...f, manual_comment: e.target.value }))}
+                  />
+                  {!hasManualComment && (
+                    <p className="text-[11px] font-medium text-red-500">
+                      A comment is required for all manual attendance alterations.
+                    </p>
+                  )}
+                </div>
+              </>
             )}
-            <div className="flex items-center gap-3">
-              <Switch
-                id="waived"
-                checked={editForm.waived}
-                onCheckedChange={(checked: boolean) => setEditForm((f) => ({ ...f, waived: checked }))}
-              />
-              <Label htmlFor="waived">Waive deduction</Label>
-            </div>
-            {editForm.waived && (
-              <div className="space-y-2">
-                <Label>
-                  Reason <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  placeholder="e.g. Permit granted, client visit"
-                  value={editForm.waiver_reason}
-                  onChange={(e) => setEditForm((f) => ({ ...f, waiver_reason: e.target.value }))}
-                />
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>
-                Comment (required) <span className="text-destructive">*</span>
-              </Label>
-              <Input
-                required
-                placeholder="Reason for this manual attendance change"
-                value={editForm.manual_comment}
-                onChange={(e) => setEditForm((f) => ({ ...f, manual_comment: e.target.value }))}
-              />
-              {!hasManualComment && (
-                <p className="text-[11px] font-medium text-red-500">
-                  A comment is required for all manual attendance alterations.
-                </p>
-              )}
-            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditTarget(null)}>
               Cancel
             </Button>
             <Button onClick={saveEdit} disabled={cannotSave}>
-              {saving ? "Savingâ€¦" : isCreating ? "Create" : "Save"}
+              {saving ? "Saving…" : isCreating ? "Create" : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -554,7 +532,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           </DialogHeader>
           <div className="max-h-[420px] space-y-3 overflow-y-auto">
             {historyLoading ? (
-              <p className="text-muted-foreground text-sm">Loadingâ€¦</p>
+              <p className="text-muted-foreground text-sm">Loading…</p>
             ) : historyItems.length === 0 ? (
               <p className="text-muted-foreground text-sm">No edits found.</p>
             ) : (
@@ -589,7 +567,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
                         displayFields.map(([key, value]) => (
                           <p key={key}>
                             <span className="font-medium">{key.replaceAll("_", " ")}:</span>{" "}
-                            <span className="text-muted-foreground">{String(value ?? "â€”")}</span>
+                            <span className="text-muted-foreground">{String(value ?? "—")}</span>
                           </p>
                         ))
                       )}
@@ -797,7 +775,7 @@ export function AttendanceReportsPage({
     const rows = buildExportRows()
     const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" })
     doc.setFontSize(14)
-    doc.text(`Attendance Report â€” ${periodMode === "quarter" ? `Q${quarter} ${quarterYear}` : yearMonth}`, 40, 40)
+    doc.text(`Attendance Report — ${periodMode === "quarter" ? `Q${quarter} ${quarterYear}` : yearMonth}`, 40, 40)
     autoTable(doc, {
       head: [EXPORT_HEADERS],
       body: rows.map((row) => row.map((cell) => String(cell))),
@@ -816,8 +794,8 @@ export function AttendanceReportsPage({
     const totalAbsent = reports.reduce((a, r) => a + r.absent_days, 0)
     return {
       employees: reports.length,
-      attendanceRate: totalWorkDays > 0 ? `${((totalCredits / totalWorkDays) * 100).toFixed(2)}%` : "â€”",
-      absentRate: totalWorkDays > 0 ? `${((totalAbsent / totalWorkDays) * 100).toFixed(2)}%` : "â€”",
+      attendanceRate: totalWorkDays > 0 ? `${((totalCredits / totalWorkDays) * 100).toFixed(2)}%` : "—",
+      absentRate: totalWorkDays > 0 ? `${((totalAbsent / totalWorkDays) * 100).toFixed(2)}%` : "—",
     }
   }, [reports])
 
@@ -1073,7 +1051,7 @@ export function AttendanceReportsPage({
             ? "All check-in records for a selected date."
             : activeTab === "calendar"
               ? "Month-view calendar for an individual employee."
-              : "Records needing attention â€” late arrivals, missing clock-outs, absences."
+              : "Records needing attention — late arrivals, missing clock-outs, absences."
       }
       icon={BarChart3}
       backLink={{ href: backLinkHref ?? "/admin/hr", label: "Back to HR" }}
@@ -1140,7 +1118,7 @@ export function AttendanceReportsPage({
           filters={reportFilters}
           getRowId={(r) => r.user_id}
           pagination={{ pageSize: 50 }}
-          searchPlaceholder="Search employee or departmentâ€¦"
+          searchPlaceholder="Search employee or department…"
           searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
           isLoading={loading}
           expandable={{
@@ -1148,7 +1126,7 @@ export function AttendanceReportsPage({
               <EmployeeExpandPanel report={r} yearMonth={yearMonth} onRecordChanged={refreshSingleEmployeeSummary} />
             ),
           }}
-          emptyTitle={loading ? "Loading attendance reportâ€¦" : "No attendance report"}
+          emptyTitle={loading ? "Loading attendance report…" : "No attendance report"}
           emptyDescription="No attendance results available for this period."
           emptyIcon={FileText}
           skeletonRows={6}
