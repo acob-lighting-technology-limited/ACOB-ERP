@@ -6,6 +6,7 @@ import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-tabl
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
@@ -19,6 +20,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { Clock, AlertTriangle, XCircle, FileText, Pencil } from "lucide-react"
 import { toast } from "sonner"
 import { toLocalISODate, monthBounds, toLocalYearMonth } from "@/lib/hr/attendance-utils"
+import { MANUAL_ATTENDANCE_STATUS_OPTIONS } from "@/lib/hr/attendance-status"
 import { formatTime, labelSource } from "./status-badge"
 
 interface AttendanceRecord {
@@ -34,6 +36,7 @@ interface AttendanceRecord {
   source: string | null
   clock_in_source?: string | null
   clock_out_source?: string | null
+  manual_comment?: string | null
 }
 
 interface ExceptionsViewProps {
@@ -67,7 +70,7 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null)
-  const [editForm, setEditForm] = useState({ clock_in: "", clock_out: "" })
+  const [editForm, setEditForm] = useState({ clock_in: "", clock_out: "", status: "auto", manual_comment: "" })
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
@@ -97,6 +100,11 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
     setEditForm({
       clock_in: record.clock_in?.substring(0, 5) ?? "",
       clock_out: record.clock_out?.substring(0, 5) ?? "",
+      status:
+        record.status && !["holiday", "on_leave", "exempted", "weekend"].includes(record.status)
+          ? record.status
+          : "auto",
+      manual_comment: record.manual_comment ?? "",
     })
   }
 
@@ -104,9 +112,12 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
     if (!editRecord) return
     setSaving(true)
     try {
-      const body: Record<string, unknown> = {}
-      if (editForm.clock_in) body.clock_in = editForm.clock_in
-      if (editForm.clock_out) body.clock_out = editForm.clock_out
+      const body: Record<string, unknown> = {
+        clock_in: editForm.clock_in || null,
+        clock_out: editForm.clock_out || null,
+        manual_comment: editForm.manual_comment,
+      }
+      if (editForm.status !== "auto") body.status = editForm.status
       const res = await fetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -170,7 +181,18 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
       key: "clock_in",
       label: "Clock In",
       accessor: (r) => r.clock_in ?? "",
-      render: (r) => <span className="text-sm">{formatTime(r.clock_in)}</span>,
+      render: (r) => (
+        <span className="flex items-center justify-center gap-1 text-sm">
+          {r.clock_in ? (
+            <>
+              <Clock className="h-3 w-3 shrink-0 text-green-600" />
+              <span>{formatTime(r.clock_in)}</span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </span>
+      ),
       align: "center",
     },
     {
@@ -178,8 +200,15 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
       label: "Clock Out",
       accessor: (r) => r.clock_out ?? "",
       render: (r) => (
-        <span className={`text-sm ${!r.clock_out && r.clock_in ? "text-destructive" : ""}`}>
-          {formatTime(r.clock_out)}
+        <span className="flex items-center justify-center gap-1 text-sm">
+          {r.clock_out ? (
+            <>
+              <Clock className="h-3 w-3 shrink-0 text-red-500" />
+              <span>{formatTime(r.clock_out)}</span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
         </span>
       ),
       align: "center",
@@ -232,6 +261,9 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
   ]
 
   const invalidTimeRange = Boolean(editForm.clock_in && editForm.clock_out && editForm.clock_out < editForm.clock_in)
+  const isNoTimePermission = editForm.status === "absent_with_permission" || editForm.status === "out_of_station"
+  const missingRequiredTimes = !isNoTimePermission && !(editForm.clock_in && editForm.clock_out)
+  const hasManualComment = editForm.manual_comment.trim().length >= 3
 
   return (
     <>
@@ -311,7 +343,21 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-muted-foreground text-xs">Status is auto-derived from clock times.</p>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={editForm.status} onValueChange={(value) => setEditForm((f) => ({ ...f, status: value }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MANUAL_ATTENDANCE_STATUS_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Clock In</Label>
@@ -331,12 +377,28 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
               </div>
             </div>
             {invalidTimeRange && <p className="text-destructive text-xs">Clock out must be after clock in.</p>}
+            {missingRequiredTimes && (
+              <p className="text-muted-foreground text-xs">Provide both times, or choose AWP/OOS for a no-punch day.</p>
+            )}
+            <div className="space-y-2">
+              <Label>
+                Comment <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                value={editForm.manual_comment}
+                onChange={(e) => setEditForm((f) => ({ ...f, manual_comment: e.target.value }))}
+                placeholder="Reason for this manual attendance change"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditRecord(null)}>
               Cancel
             </Button>
-            <Button onClick={saveEdit} disabled={saving || invalidTimeRange}>
+            <Button
+              onClick={saveEdit}
+              disabled={saving || invalidTimeRange || missingRequiredTimes || !hasManualComment}
+            >
               {saving ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>

@@ -492,9 +492,26 @@ export function DataTable<TData>({
 
   const processedDataSignature = useMemo(() => sortedData.map((row) => getRowId(row)).join("|"), [sortedData, getRowId])
 
+  // Keep the latest sortedData in a ref so the effect can read it without
+  // depending on its (unstable) identity. `sortedData` gets a new reference
+  // whenever the parent rebuilds the `columns` array (a common inline pattern),
+  // and including it here would refire this effect → re-render the parent →
+  // new columns → new sortedData → infinite loop (React #185). The signature
+  // is the real "did the result set change?" trigger.
+  const sortedDataRef = useRef(sortedData)
+  const onProcessedDataChangeRef = useRef(onProcessedDataChange)
+
   useEffect(() => {
-    if (onProcessedDataChange) onProcessedDataChange(sortedData)
-  }, [processedDataSignature, sortedData, onProcessedDataChange])
+    sortedDataRef.current = sortedData
+  }, [sortedData])
+
+  useEffect(() => {
+    onProcessedDataChangeRef.current = onProcessedDataChange
+  }, [onProcessedDataChange])
+
+  useEffect(() => {
+    if (onProcessedDataChangeRef.current) onProcessedDataChangeRef.current(sortedDataRef.current)
+  }, [processedDataSignature])
 
   // ─── Pagination ────────────────────────────────────────────────────────────
   const total = isServerPagination ? (totalRows ?? data.length) : sortedData.length

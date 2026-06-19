@@ -59,7 +59,9 @@ export function detectAcobotIntent(text: string): AcobotIntent {
       has("my leave", "leave request", "leave status", "my request") ||
       (has("leave") && has("status", "pending", "applied", "request")),
     tickets: has("ticket", "help desk", "helpdesk", "support request", "my issue"),
-    tasks: has("my task", "tasks assigned", "assigned to me", "to-do", "todo") || (has("task") && mine),
+    tasks:
+      has("my task", "tasks assigned", "assigned to me", "to-do", "todo", "overdue task", "tasks due") ||
+      (has("task") && (mine || has("overdue", "due soon", "open", "pending", "priority"))),
     approvals: has("approve", "approval", "to approve", "awaiting my", "pending my", "queue", "sign off", "sign-off"),
     attendance: has(
       "attendance",
@@ -102,7 +104,7 @@ export function detectAcobotIntent(text: string): AcobotIntent {
         "my role",
         "my position"
       ) ||
-      (mine && has("department", "role", "position", "designation", "title", "contact")),
+      (mine && has("department", "role", "position", "designation", "title", "contact", "email", "phone", "address")),
     assets: has("asset", "my laptop", "my device", "equipment", "assigned to me a", "what do i have"),
     directory: directoryIntent(q),
     deptLead: leadIntent(q),
@@ -115,7 +117,9 @@ function isAboutSelf(q: string): boolean {
 }
 
 function leadIntent(q: string): boolean {
-  return /\blead of\b|\bleads\b|\bhead of\b|\bhod\b|\bdepartment lead\b|\bteam lead\b|\bthe lead\b|\bwho leads\b|\blead for\b/.test(
+  // \blead\b catches "ICT lead", "account lead", "the lead", "lead of", etc.
+  // Native terms: Igbo (onye na-edu / onye isi), Yoruba (olóri), Hausa (shugaba(n)).
+  return /\blead\b|\bleads\b|\bhead of\b|\bhod\b|\bsupervisor\b|\bmanager\b|\bin charge\b|\bwho leads\b|onye na-edu|onye isi|olor[ií]|shugab|oludari/.test(
     q
   )
 }
@@ -123,8 +127,10 @@ function leadIntent(q: string): boolean {
 function directoryIntent(q: string): boolean {
   const contact =
     /\bemail\b|\be-mail\b|\bphone\b|\bmobile\b|\bcontact\b|\breach\b|\bwhatsapp\b|\bextension\b|\bnumber\b/.test(q)
-  // Contact lookups for a colleague (not "my ..."), or any "who leads X" question.
-  return (contact && !isAboutSelf(q)) || leadIntent(q)
+  // "who is …" person/role lookups — English plus Igbo/Yoruba/Hausa "who is".
+  const whois = /\bwho is\b|\bwho's\b|\bwhos\b|kedu onye|tani\b|wane ne|wanene|ta ne /.test(q)
+  // Contact / who-is lookups for a colleague (not "my ..."), or any lead question.
+  return ((contact || whois) && !isAboutSelf(q)) || leadIntent(q)
 }
 
 export function intentNeedsData(intent: AcobotIntent): boolean {
@@ -326,11 +332,15 @@ async function attendanceToday(supabase: AnySupabase, userId: string): Promise<s
 }
 
 type ProfileDetailRow = {
+  first_name: string | null
+  last_name: string | null
+  full_name: string | null
   date_of_birth: string | null
   birthday: string | null
   phone_number: string | null
   residential_address: string | null
   department: string | null
+  designation: string | null
   role: string | null
   company_email: string | null
 }
@@ -339,16 +349,24 @@ async function profileDetails(supabase: AnySupabase, userId: string): Promise<st
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select("date_of_birth, birthday, phone_number, residential_address, department, role, company_email")
+      .select(
+        "first_name, last_name, full_name, date_of_birth, birthday, phone_number, residential_address, department, designation, role, company_email"
+      )
       .eq("id", userId)
       .maybeSingle()
     if (error || !data) return null
     const p = data as unknown as ProfileDetailRow
     const dob = p.date_of_birth || (p.birthday ? `${p.birthday} (month-day; birth year not on file)` : null)
+    const fullName = p.full_name?.trim() || [p.first_name, p.last_name].filter(Boolean).join(" ").trim() || null
     const lines = [
+      // Use this EXACT name — never guess or shorten the surname.
+      fullName ? `- Full name: ${fullName}` : null,
       dob ? `- Date of birth: ${dob}` : null,
+      // Designation = job title (e.g. "Graduate Trainee"). Distinct from the system
+      // access role below — never conflate the two.
+      p.designation ? `- Designation (job title): ${p.designation}` : null,
       p.department ? `- Department: ${p.department}` : null,
-      p.role ? `- Role: ${p.role}` : null,
+      p.role ? `- System access role: ${p.role}` : null,
       p.company_email ? `- Company email: ${p.company_email}` : null,
       p.phone_number ? `- Phone: ${p.phone_number}` : null,
       p.residential_address ? `- Address: ${p.residential_address}` : null,
@@ -535,7 +553,12 @@ async function directoryLookup(
         const narrowed = leads.filter((r) => {
           const deptNorm = r.department ? normalizeDepartmentName(r.department) : ""
           const hay = `${r.department || ""} ${deptNorm} ${(r.lead_departments || []).join(" ")}`.toLowerCase()
-          return tokens.some((t) => hay.includes(t))
+          return tokens.some((t) => {
+            if (hay.includes(t)) return true
+            // Resolve abbreviations like "ICT" → "IT and Communications".
+            const tn = normalizeDepartmentName(t).toLowerCase()
+            return tn !== t && hay.includes(tn)
+          })
         })
         if (narrowed.length > 0) leads = narrowed
       }
@@ -674,7 +697,6 @@ export async function buildAcobotContext({
   if (intent.attendance) personalJobs.push(attendanceToday(supabase, userId))
   if (intent.profile) personalJobs.push(profileDetails(supabase, userId))
   if (intent.assets) personalJobs.push(personalAssets(supabase, userId))
-  if (intent.directory) personalJobs.push(directoryLookup(supabase, message, intent.deptLead))
 
   // Phase 3 — role-scoped team data (only when the user actually has scope).
   if (intent.approvals || intent.tickets) {
@@ -696,10 +718,31 @@ export async function buildAcobotContext({
     if (r) sections.push(r)
   }
 
-  if (sections.length === 0) return null
+  // Directory is handled explicitly: on a no-match we MUST emit an anti-fabrication
+  // note, otherwise the model invents fake colleagues (names/emails/phones).
+  if (intent.directory) {
+    const dir = await directoryLookup(supabase, message, intent.deptLead)
+    if (dir) {
+      sections.push(dir)
+    } else {
+      sections.push(
+        "DIRECTORY LOOKUP RESULT: No matching staff member or department lead was found for this request. Do NOT invent, guess, or fabricate any name, email, phone, office, or department under any circumstances. Tell the user you could not find that person/role in the staff directory and point them to the [Directory](/directory)."
+      )
+    }
+  }
+
+  // If a data intent fired but nothing came back, still return an explicit
+  // no-data instruction rather than null — an empty context lets the model
+  // hallucinate to fill the gap.
+  if (sections.length === 0) {
+    return [
+      "CONTEXT — the user asked for personal or directory data, but no matching record was found for them.",
+      "Do NOT invent, guess, or fabricate any names, numbers, dates, emails, phones, balances, or records. Tell the user you couldn't find that information and point them to the relevant page.",
+    ].join("\n")
+  }
 
   return [
-    "CONTEXT — live data the signed-in user is authorised to see. Use only this for any specific numbers or records; do not add anything not present here.",
+    "CONTEXT — live data the signed-in user is authorised to see. Use ONLY this for any specific names, numbers, emails, phones, dates, or records. Never add, invent, guess, or complete anything (including surnames or contact details) that is not explicitly present below.",
     "",
     sections.join("\n\n"),
   ].join("\n")

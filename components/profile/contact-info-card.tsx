@@ -1,9 +1,8 @@
-import { formatWATDate, formatBirthdayLabel } from "@/lib/utils/date"
+import { formatBirthdayLabel } from "@/lib/utils/date"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { getRoleBadgeColor, getRoleDisplayName } from "@/lib/permissions"
+import { Cake, Home, Mail, Phone, ShieldCheck } from "lucide-react"
+import { getRoleDisplayName } from "@/lib/permissions"
 import type { UserRole } from "@/types/database"
-import { BriefcaseBusiness, Building2, CalendarDays, Cake, Home, Mail, MapPin, Phone, ShieldCheck } from "lucide-react"
 
 interface ContactInfoCardProps {
   profile: {
@@ -25,116 +24,81 @@ interface ContactInfoCardProps {
   }
 }
 
-interface DetailItemProps {
+interface InlineItemProps {
   icon: React.ComponentType<{ className?: string }>
   label: string
   children: React.ReactNode
 }
 
-function DetailItem({ icon: Icon, label, children }: DetailItemProps) {
+function InlineItem({ icon: Icon, label, children }: InlineItemProps) {
   return (
-    <div className="group bg-background/60 hover:bg-muted/40 flex min-w-0 gap-3 rounded-md border p-3 transition-colors">
-      <div className="bg-primary/10 text-primary mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md">
-        <Icon className="h-4 w-4" />
+    <div className="flex items-start gap-2.5 py-1.5 text-sm">
+      <div className="text-muted-foreground mt-0.5 shrink-0">
+        <Icon className="h-3.5 w-3.5" />
       </div>
-      <div className="min-w-0 space-y-1">
-        <dt className="text-muted-foreground text-[11px] font-semibold tracking-wide uppercase">{label}</dt>
-        <dd className="text-sm leading-5 font-medium break-words">{children}</dd>
+      <div className="min-w-0">
+        <span className="text-muted-foreground mb-0.5 block text-[11px] leading-none font-semibold tracking-wide uppercase">
+          {label}
+        </span>
+        <span className="leading-snug font-medium break-words">{children}</span>
       </div>
     </div>
   )
 }
 
 export function ContactInfoCard({ profile }: ContactInfoCardProps) {
-  const employmentDate = profile.employment_date ? new Date(profile.employment_date) : null
-  const daysAtAcob = employmentDate ? Math.floor((Date.now() - employmentDate.getTime()) / (1000 * 60 * 60 * 24)) : null
-
   const birthdayLabel = formatBirthdayLabel(profile.birthday)
 
+  // Collect only the "secondary" details not already shown in the hero
+  const hasSecondaryInfo = !!(
+    profile.additional_email ||
+    profile.additional_phone ||
+    birthdayLabel ||
+    profile.residential_address
+  )
+
+  if (!hasSecondaryInfo) return null
+
   return (
-    <Card className="overflow-hidden">
-      <CardHeader className="bg-muted/30 border-b px-4 py-4 sm:px-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <CardTitle className="text-base">Profile Details</CardTitle>
-            <p className="text-muted-foreground mt-1 text-sm">Role, contact, workplace and personal information.</p>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <Badge variant="outline" className={getRoleBadgeColor(profile.role as UserRole)}>
-              {getRoleDisplayName(profile.role as UserRole)}
-            </Badge>
-            {profile.is_department_lead && (
-              <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-600">
-                Dept Lead
-              </Badge>
-            )}
-          </div>
-        </div>
+    <Card>
+      <CardHeader className="px-4 pt-4 pb-2 sm:px-5">
+        <CardTitle className="text-muted-foreground text-sm font-semibold tracking-wide uppercase">
+          Additional Details
+        </CardTitle>
       </CardHeader>
-      <CardContent className="p-4 sm:p-5">
-        <dl className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-          {profile.designation && (
-            <DetailItem icon={BriefcaseBusiness} label="Designation">
-              {profile.designation}
-            </DetailItem>
-          )}
-          {profile.department && (
-            <DetailItem icon={Building2} label="Department">
-              {profile.department}
-            </DetailItem>
-          )}
-          <DetailItem icon={ShieldCheck} label="Access Level">
-            <span>{getRoleDisplayName(profile.role as UserRole)}</span>
-            {profile.is_department_lead && (
-              <span className="text-muted-foreground ml-1.5 text-xs">Department Lead</span>
-            )}
-          </DetailItem>
-          {profile.company_email && (
-            <DetailItem icon={Mail} label="Email">
-              <a className="hover:text-primary break-all transition-colors" href={`mailto:${profile.company_email}`}>
-                {profile.company_email}
+      <CardContent className="px-4 pb-4 sm:px-5">
+        <div className="divide-y">
+          {profile.additional_email && (
+            <InlineItem icon={Mail} label="Secondary Email">
+              <a className="hover:text-primary break-all transition-colors" href={`mailto:${profile.additional_email}`}>
+                {profile.additional_email}
               </a>
-              {profile.additional_email && (
-                <span className="text-muted-foreground block text-xs break-all">{profile.additional_email}</span>
-              )}
-            </DetailItem>
+            </InlineItem>
           )}
-          {profile.phone_number && (
-            <DetailItem icon={Phone} label="Phone">
-              <a className="hover:text-primary transition-colors" href={`tel:${profile.phone_number}`}>
-                {profile.phone_number}
+          {profile.additional_phone && (
+            <InlineItem icon={Phone} label="Secondary Phone">
+              <a className="hover:text-primary transition-colors" href={`tel:${profile.additional_phone}`}>
+                {profile.additional_phone}
               </a>
-              {profile.additional_phone && (
-                <span className="text-muted-foreground block text-xs">{profile.additional_phone}</span>
-              )}
-            </DetailItem>
+            </InlineItem>
           )}
           {birthdayLabel && (
-            <DetailItem icon={Cake} label="Birthday">
+            <InlineItem icon={Cake} label="Birthday">
               {birthdayLabel}
-            </DetailItem>
-          )}
-          {profile.office_location && (
-            <DetailItem icon={MapPin} label="Office">
-              {profile.office_location}
-            </DetailItem>
+            </InlineItem>
           )}
           {profile.residential_address && (
-            <DetailItem icon={Home} label="Address">
+            <InlineItem icon={Home} label="Residential Address">
               {profile.residential_address}
-            </DetailItem>
+            </InlineItem>
           )}
-          {employmentDate && (
-            <DetailItem icon={CalendarDays} label="Joined">
-              {formatWATDate(employmentDate, { month: "long", day: "numeric", year: "numeric" })}
-            </DetailItem>
-          )}
-          {daysAtAcob !== null && (
-            <DetailItem icon={CalendarDays} label="Tenure">
-              {daysAtAcob.toLocaleString()} days
-            </DetailItem>
-          )}
-        </dl>
+          <InlineItem icon={ShieldCheck} label="Access Level">
+            {getRoleDisplayName(profile.role as UserRole)}
+            {profile.is_department_lead && (
+              <span className="text-muted-foreground ml-2 text-xs">· Department Lead</span>
+            )}
+          </InlineItem>
+        </div>
       </CardContent>
     </Card>
   )

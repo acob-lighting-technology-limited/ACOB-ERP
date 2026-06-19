@@ -91,14 +91,15 @@ export function WeekSetupCard() {
     queryFn: async (): Promise<EmployeeOption[]> => {
       const { data, error } = await supabase
         .from("profiles")
-        .select("id, full_name, department")
+        .select("id, full_name, department, employment_status")
         .not("department", "is", null)
+        .or("employment_status.neq.exited,employment_status.is.null")
         .order("full_name", { ascending: true })
 
       if (error) throw new Error(error.message)
 
       return (data || [])
-        .filter((row): row is { id: string; full_name: string; department: string } =>
+        .filter((row): row is { id: string; full_name: string; department: string; employment_status: string | null } =>
           Boolean(row?.id && row?.full_name && row?.department)
         )
         .map((row) => ({

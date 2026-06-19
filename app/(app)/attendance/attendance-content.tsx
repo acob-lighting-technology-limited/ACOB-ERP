@@ -36,16 +36,7 @@ type AttendanceRow = AttendanceRecord & {
   workHours: number | null
   overtimeHours: number | null
   missedHoursValue: number | null
-  normalizedStatus:
-    | "holiday"
-    | "on_leave"
-    | "exempted"
-    | "waiver"
-    | "present"
-    | "late"
-    | "incomplete"
-    | "half_day"
-    | "absent"
+  normalizedStatus: "holiday" | "on_leave" | "exempted" | "waiver" | "present" | "late" | "incomplete" | "absent"
 }
 type UnifiedDay = {
   date: string
@@ -233,14 +224,24 @@ export function AttendanceContent({
         label: "Clock In",
         sortable: true,
         accessor: (row) => row.clock_in ?? "",
-        render: (row) => <span>{row.clock_in || "-"}</span>,
+        render: (row) => (
+          <span className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5 shrink-0 text-green-600" />
+            <span>{row.clock_in || "-"}</span>
+          </span>
+        ),
       },
       {
         key: "clock_out",
         label: "Clock Out",
         sortable: true,
         accessor: (row) => row.clock_out ?? "",
-        render: (row) => <span>{getClockOutLabel(row)}</span>,
+        render: (row) => (
+          <span className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5 shrink-0 text-red-500" />
+            <span>{getClockOutLabel(row)}</span>
+          </span>
+        ),
       },
       {
         key: "total_hours",
@@ -477,11 +478,17 @@ export function AttendanceContent({
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs uppercase">Clock In</p>
-                    <p className="font-medium">{row.clock_in || "-"}</p>
+                    <p className="mt-0.5 flex items-center gap-1.5 font-medium">
+                      <Clock className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                      <span>{row.clock_in || "-"}</span>
+                    </p>
                   </div>
                   <div>
                     <p className="text-muted-foreground text-xs uppercase">Clock Out</p>
-                    <p className="font-medium">{row.clock_out || "-"}</p>
+                    <p className="mt-0.5 flex items-center gap-1.5 font-medium">
+                      <Clock className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                      <span>{row.clock_out || "-"}</span>
+                    </p>
                   </div>
                 </div>
               ),

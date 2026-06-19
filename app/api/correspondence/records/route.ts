@@ -262,7 +262,7 @@ const CreateCorrespondenceRecordSchema = z.object({
 
 const CorrespondenceListSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
-  limit: z.coerce.number().int().min(1).max(100).default(50),
+  limit: z.coerce.number().int().min(1).max(5000).default(50),
   search: z.string().optional().default(""),
   status: z.string().optional().default(""),
 })

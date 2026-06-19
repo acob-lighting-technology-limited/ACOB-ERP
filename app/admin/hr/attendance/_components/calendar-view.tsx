@@ -18,15 +18,21 @@ import {
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
 import { toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
-import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
+import {
+  ATTENDANCE_STATUS_COLORS,
+  ATTENDANCE_STATUS_LABELS,
+  MANUAL_ATTENDANCE_STATUS_OPTIONS,
+} from "@/lib/hr/attendance-status"
 import { formatTime } from "./status-badge"
 
 type DayStatus =
   | "present"
   | "late"
+  | "lateness_with_permission"
   | "absent"
+  | "absent_with_permission"
+  | "out_of_station"
   | "incomplete"
-  | "half_day"
   | "waiver"
   | "exempted"
   | "on_leave"
@@ -43,6 +49,7 @@ interface DayRecord {
   source: string | null
   waived: boolean
   waiver_reason: string | null
+  manual_comment?: string | null
 }
 
 interface UnifiedDay {
@@ -98,9 +105,11 @@ function buildCalendarCells(yearMonth: string): (string | null)[] {
 const CELL_BG: Record<string, string> = {
   present: "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800",
   late: "bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800",
+  lateness_with_permission: "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800",
   incomplete: "bg-cyan-50 border-cyan-200 dark:bg-cyan-950/30 dark:border-cyan-800",
-  half_day: "bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800",
   absent: "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800",
+  absent_with_permission: "bg-teal-50 border-teal-200 dark:bg-teal-950/30 dark:border-teal-800",
+  out_of_station: "bg-indigo-50 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-800",
   waiver: "bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800",
   exempted: "bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800",
   on_leave: "bg-purple-50 border-purple-200 dark:bg-purple-950/30 dark:border-purple-800",
@@ -114,7 +123,14 @@ export function CalendarView({ employees }: CalendarViewProps) {
   const [loading, setLoading] = useState(false)
 
   const [editTarget, setEditTarget] = useState<{ date: string; record: DayRecord | null } | null>(null)
-  const [editForm, setEditForm] = useState({ clock_in: "", clock_out: "", waived: false, waiver_reason: "" })
+  const [editForm, setEditForm] = useState({
+    clock_in: "",
+    clock_out: "",
+    status: "auto",
+    waived: false,
+    waiver_reason: "",
+    manual_comment: "",
+  })
   const [saving, setSaving] = useState(false)
 
   const selectedEmployee = employees.find((e) => e.user_id === selectedUserId)
@@ -151,8 +167,10 @@ export function CalendarView({ employees }: CalendarViewProps) {
     setEditForm({
       clock_in: day.record?.clock_in?.substring(0, 5) ?? "",
       clock_out: day.record?.clock_out?.substring(0, 5) ?? "",
+      status: day.status && !["holiday", "on_leave", "exempted", "weekend"].includes(day.status) ? day.status : "auto",
       waived: day.record?.waived ?? false,
       waiver_reason: day.record?.waiver_reason ?? "",
+      manual_comment: day.record?.manual_comment ?? "",
     })
   }
 
@@ -165,9 +183,11 @@ export function CalendarView({ employees }: CalendarViewProps) {
         const body: Record<string, unknown> = {
           waived: editForm.waived,
           waiver_reason: editForm.waiver_reason || null,
+          clock_in: editForm.clock_in || null,
+          clock_out: editForm.clock_out || null,
+          manual_comment: editForm.manual_comment,
         }
-        if (editForm.clock_in) body.clock_in = editForm.clock_in
-        if (editForm.clock_out) body.clock_out = editForm.clock_out
+        if (editForm.status !== "auto") body.status = editForm.status
         res = await fetch(`/api/admin/hr/attendance/records/${editTarget.record.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -179,9 +199,11 @@ export function CalendarView({ employees }: CalendarViewProps) {
           date: editTarget.date,
           waived: editForm.waived,
           waiver_reason: editForm.waiver_reason || null,
+          clock_in: editForm.clock_in || null,
+          clock_out: editForm.clock_out || null,
+          manual_comment: editForm.manual_comment,
         }
-        if (editForm.clock_in) body.clock_in = editForm.clock_in
-        if (editForm.clock_out) body.clock_out = editForm.clock_out
+        if (editForm.status !== "auto") body.status = editForm.status
         res = await fetch("/api/admin/hr/attendance/records", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -210,11 +232,19 @@ export function CalendarView({ employees }: CalendarViewProps) {
   const hasClockOut = Boolean(editForm.clock_out)
   const hasPartialTime = hasClockIn !== hasClockOut
   const invalidTimeRange = Boolean(editForm.clock_in && editForm.clock_out && editForm.clock_out <= editForm.clock_in)
+  const isNoTimePermission =
+    editForm.waived ||
+    editForm.status === "waiver" ||
+    editForm.status === "absent_with_permission" ||
+    editForm.status === "out_of_station"
+  const missingRequiredTimes = !isNoTimePermission && (!(hasClockIn || hasClockOut) || hasPartialTime)
+  const hasManualComment = editForm.manual_comment.trim().length >= 3
   const cannotSave =
     saving ||
     invalidTimeRange ||
-    (editForm.waived && !editForm.waiver_reason.trim()) ||
-    (!editForm.waived && (!(hasClockIn || hasClockOut) || hasPartialTime))
+    missingRequiredTimes ||
+    !hasManualComment ||
+    (editForm.waived && !editForm.waiver_reason.trim())
 
   return (
     <>
@@ -344,7 +374,21 @@ export function CalendarView({ employees }: CalendarViewProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-muted-foreground text-xs">Status is auto-derived from clock times.</p>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={editForm.status} onValueChange={(value) => setEditForm((f) => ({ ...f, status: value }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MANUAL_ATTENDANCE_STATUS_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Clock In</Label>
@@ -363,6 +407,9 @@ export function CalendarView({ employees }: CalendarViewProps) {
                 />
               </div>
             </div>
+            {missingRequiredTimes && (
+              <p className="text-muted-foreground text-xs">Provide both times, or choose AWP/OOS for a no-punch day.</p>
+            )}
             <div className="flex items-center gap-3">
               <Switch
                 id="cal-waived"
@@ -383,6 +430,16 @@ export function CalendarView({ employees }: CalendarViewProps) {
                 />
               </div>
             )}
+            <div className="space-y-2">
+              <Label>
+                Comment <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                placeholder="Reason for this manual attendance change"
+                value={editForm.manual_comment}
+                onChange={(e) => setEditForm((f) => ({ ...f, manual_comment: e.target.value }))}
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditTarget(null)}>

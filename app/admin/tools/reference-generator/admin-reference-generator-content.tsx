@@ -6,13 +6,19 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { PromptDialog } from "@/components/ui/prompt-dialog"
-import { CheckCircle, Clock, FileText, ListFilter, ShieldCheck } from "lucide-react"
+import { CheckCircle, Clock, FileText, ListFilter, ShieldCheck, Download } from "lucide-react"
 import type { CorrespondenceRecord, CorrespondenceStatus } from "@/types/correspondence"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { formatName } from "@/lib/utils"
 import { logger } from "@/lib/logger"
+import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
+import {
+  exportCorrespondenceToExcel,
+  exportCorrespondenceToPDF,
+  exportCorrespondenceToWord,
+} from "@/lib/correspondence/correspondence-export"
 
 const log = logger("reference-generator")
 
@@ -38,6 +44,7 @@ export function AdminReferenceGeneratorContent({
   const [page, setPage] = useState(1)
   const [total, setTotal] = useState(initialRecords.length)
   const [isLoading, setIsLoading] = useState(false)
+  const [exportOptionsOpen, setExportOptionsOpen] = useState(false)
   const [tabCounts, setTabCounts] = useState({ all: initialRecords.length, external: 0, internal: 0 })
   const [globalCounts, setGlobalCounts] = useState({ total: 0, underReview: 0, approved: 0, rejected: 0 })
   const recordsUrl = useCallback(
@@ -117,13 +124,49 @@ export function AdminReferenceGeneratorContent({
   }, [globalCounts])
   const statusLabel = (status: string) => (status === "under_review" ? "Sent for review" : formatName(status))
   const statusBadgeClass = (status: string) => {
-    if (status === "approved") return "bg-emerald-500/10 text-emerald-700 border-emerald-200"
-    if (status === "rejected") return "bg-red-500/10 text-red-700 border-red-200"
-    if (status === "returned_for_correction") return "bg-amber-500/10 text-amber-700 border-amber-200"
-    if (status === "under_review") return "bg-blue-500/10 text-blue-700 border-blue-200"
-    if (status === "draft") return "bg-slate-500/10 text-slate-700 border-slate-200"
-    if (status === "sent" || status === "filed") return "bg-violet-500/10 text-violet-700 border-violet-200"
-    return "bg-muted text-foreground border-border"
+    if (status === "approved") return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+    if (status === "rejected") return "bg-red-500/10 text-red-500 border-red-500/20"
+    if (status === "returned_for_correction") return "bg-amber-500/10 text-amber-500 border-amber-500/20"
+    if (status === "under_review") return "bg-blue-500/10 text-blue-500 border-blue-500/20"
+    if (status === "draft") return "bg-slate-500/10 text-slate-500 border-slate-500/20"
+    if (status === "sent" || status === "filed") return "bg-violet-500/10 text-violet-500 border-violet-500/20"
+    return "bg-muted text-muted-foreground border-muted-foreground/20"
+  }
+
+  const handleExport = async (format: "excel" | "pdf" | "word") => {
+    setIsLoading(true)
+    const exportToast = toast.loading(`Exporting correspondence to ${format}...`)
+    try {
+      const params = new URLSearchParams({
+        page: "1",
+        limit: "5000",
+      })
+      if (activeTab !== "all") params.set("letter_type", activeTab)
+      if (searchQuery.trim()) params.set("search", searchQuery.trim())
+
+      const res = await fetch(recordsUrl(params), { cache: "no-store" })
+      const json = await res.json()
+      const allMatchingRecords = json.data || []
+
+      if (allMatchingRecords.length === 0) {
+        toast.error("No correspondence records to export", { id: exportToast })
+        return
+      }
+
+      if (format === "excel") {
+        await exportCorrespondenceToExcel(allMatchingRecords)
+      } else if (format === "pdf") {
+        await exportCorrespondenceToPDF(allMatchingRecords)
+      } else if (format === "word") {
+        await exportCorrespondenceToWord(allMatchingRecords)
+      }
+      toast.success("Export completed successfully", { id: exportToast })
+    } catch (err) {
+      log.error("Failed to export correspondence records", err)
+      toast.error("Export failed", { id: exportToast })
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -305,6 +348,14 @@ export function AdminReferenceGeneratorContent({
         setActiveTab(tab as "all" | "external" | "internal")
         setPage(1)
       }}
+      actions={
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" className="h-8 gap-2" onClick={() => setExportOptionsOpen(true)}>
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+        </div>
+      }
       stats={
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard
@@ -429,6 +480,20 @@ export function AdminReferenceGeneratorContent({
         confirmLabel="Submit decision"
         confirmVariant={decisionPrompt?.decision === "rejected" ? "destructive" : "default"}
         onConfirm={submitDecisionNote}
+      />
+
+      <ExportOptionsDialog
+        open={exportOptionsOpen}
+        onOpenChange={setExportOptionsOpen}
+        title="Export Correspondence"
+        options={[
+          { id: "excel", label: "Excel (.xlsx)", icon: "excel" },
+          { id: "pdf", label: "PDF", icon: "pdf" },
+          { id: "word", label: "Word (.docx)", icon: "word" },
+        ]}
+        onSelect={(id) => {
+          void handleExport(id as "excel" | "pdf" | "word")
+        }}
       />
     </DataTablePage>
   )

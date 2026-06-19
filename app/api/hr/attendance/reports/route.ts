@@ -212,10 +212,12 @@ export async function GET(request: NextRequest) {
         incomplete_days = 0,
         absent_days = 0,
         exempted_days = 0,
+        out_of_station_days = 0,
+        absent_with_permission_days = 0,
+        lateness_with_permission_days = 0,
         total_hours = 0,
         total_missed_hours = 0,
         waived_days = 0,
-        half_day_days = 0,
         leave_days = 0,
         holiday_days = 0,
         attendance_credits = 0
@@ -254,16 +256,21 @@ export async function GET(request: NextRequest) {
         if (derived === "waiver") {
           waived_days++
           attendance_credits += 1.0
+        } else if (derived === "out_of_station") {
+          out_of_station_days++
+          attendance_credits += 1.0
+        } else if (derived === "absent_with_permission") {
+          absent_with_permission_days++
+          attendance_credits += 1.0
+        } else if (derived === "lateness_with_permission") {
+          lateness_with_permission_days++
+          attendance_credits += 1.0
+          total_hours += Number(rec.total_hours ?? 0)
         } else if (derived === "present" || derived === "late") {
           derived === "late" ? late_days++ : present_days++
           attendance_credits += dayCredit(derived, rec.clock_in, rec.clock_out)
           total_hours += Number(rec.total_hours ?? 0)
           total_missed_hours += missedHours(rec.clock_in, rec.clock_out)
-        } else if (derived === "half_day") {
-          half_day_days++
-          attendance_credits += 0.5
-          total_hours += 4.5
-          total_missed_hours += 4.5
         } else if (derived === "incomplete") {
           incomplete_days++
         } else {
@@ -286,8 +293,10 @@ export async function GET(request: NextRequest) {
         present_days,
         late_days,
         incomplete_days,
-        half_day_days,
         exempted_days,
+        out_of_station_days,
+        absent_with_permission_days,
+        lateness_with_permission_days,
         absent_days,
         waived_days,
         leave_days,

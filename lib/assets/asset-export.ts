@@ -79,18 +79,16 @@ export function getAssignedToLabel(
     return `${asset.current_assignment?.department || asset.department || "Assigned Department"}${statusSuffix}`
   }
 
-  // Individual — look up the name
-  const assignedId = asset.current_assignment?.assigned_to
-  if (assignedId) {
-    const emp = employees.find((e) => e.id === assignedId)
-    const firstName = emp?.first_name || ""
-    const lastName = emp?.last_name || ""
-    const fullName = `${formatName(firstName)} ${formatName(lastName)}`.trim()
-    if (fullName) return `${fullName}${statusSuffix}`
-  }
-
-  if (asset.current_assignment?.department) {
-    return `${asset.current_assignment.department}${statusSuffix}`
+  if (assignmentType === "individual") {
+    const assignedId = asset.current_assignment?.assigned_to
+    if (assignedId) {
+      const emp = employees.find((e) => e.id === assignedId)
+      const firstName = emp?.first_name || ""
+      const lastName = emp?.last_name || ""
+      const fullName = `${formatName(firstName)} ${formatName(lastName)}`.trim()
+      if (fullName) return `${fullName}${statusSuffix}`
+    }
+    return `Assigned${statusSuffix}`
   }
 
   return `Assigned${statusSuffix}`
@@ -101,20 +99,18 @@ export function getAssignedToLabel(
  * component's export functions.
  */
 function resolveAssetDepartment(asset: AssetForExport, employees: { id: string; department?: string }[]): string {
-  if (asset.assignment_type === "individual" && asset.current_assignment?.assigned_to) {
+  const assignmentType = effectiveAssignmentType(asset)
+
+  if (assignmentType === "individual" && asset.current_assignment?.assigned_to) {
     const emp = employees.find((e) => e.id === asset.current_assignment!.assigned_to)
     return emp?.department || "-"
   }
 
-  if (asset.assignment_type === "department") {
+  if (assignmentType === "department") {
     return asset.current_assignment?.department || asset.department || "-"
   }
 
-  if (asset.assignment_type === "office" && asset.office_location) {
-    return getDepartmentForOffice(asset.office_location) || "-"
-  }
-
-  return asset.current_assignment?.department || asset.department || "-"
+  return "-"
 }
 
 // ---------------------------------------------------------------------------

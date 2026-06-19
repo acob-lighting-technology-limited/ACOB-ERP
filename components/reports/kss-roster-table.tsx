@@ -225,7 +225,7 @@ export function KssRosterTable({
     },
   })
 
-  const { data: selectedWeekLockState } = useQuery({
+  const { data: selectedWeekLockRow } = useQuery({
     queryKey: ["kss-selected-week-lock", weekNumber, yearNumber],
     enabled: !readOnly,
     queryFn: async () => {
@@ -234,25 +234,34 @@ export function KssRosterTable({
         p_year: yearNumber,
       })
       if (error) throw new Error(error.message)
-      return Array.isArray(data) && data[0] ? Boolean(data[0].is_locked) : false
+      return Array.isArray(data) && data[0] ? data[0] : null
     },
   })
 
-  const isSelectedWeekLocked = Boolean(selectedWeekLockState)
+  const isSelectedWeekLocked = Boolean(selectedWeekLockRow?.is_locked)
+  const [showOverrideConfirm, setShowOverrideConfirm] = useState(false)
+
+  const isSelectedWeekOutsideGrace = useMemo(() => {
+    if (!selectedWeekLockRow?.lock_deadline) return false
+    return new Date() >= new Date(selectedWeekLockRow.lock_deadline)
+  }, [selectedWeekLockRow])
+
+  const editingRow = useMemo(() => roster.find((r) => r.id === editingId) || null, [roster, editingId])
+
   const isHistoricalSelection =
     compareWeekYear(weekNumber, yearNumber, currentOfficeWeek.week, currentOfficeWeek.year) < 0
   const allowInactivePresentersForSelection = isHistoricalSelection || isSelectedWeekLocked
   const presenterOptions = useMemo(() => {
-    if (department === "none") return []
-    return employees
-      .filter((e) => e.department === department)
+    const filtered = department === "none" ? employees : employees.filter((e) => e.department === department)
+    return filtered
       .filter(
         (e) =>
           allowInactivePresentersForSelection ||
-          isAssignableEmploymentStatus(e.employment_status, { allowLegacyNullStatus: false })
+          isAssignableEmploymentStatus(e.employment_status, { allowLegacyNullStatus: false }) ||
+          e.id === presenterId
       )
       .sort((a, b) => a.full_name.localeCompare(b.full_name))
-  }, [allowInactivePresentersForSelection, department, employees])
+  }, [allowInactivePresentersForSelection, department, employees, presenterId])
 
   const getPresenterName = useCallback(
     (row: Pick<KssRosterEntry, "presenter_id" | "presenter_name">): string => {
@@ -362,7 +371,7 @@ export function KssRosterTable({
     [docByWeekYear, hasGraceOverride]
   )
 
-  const handleSave = async () => {
+  const handleSave = async (forceOverride = false) => {
     if (readOnly) {
       toast.error("You can only add or edit from Admin Reports.")
       return
@@ -391,6 +400,13 @@ export function KssRosterTable({
       return
     }
 
+    const isOutsideGrace = editingId ? Boolean(editingRow?.is_outside_grace_window) : isSelectedWeekOutsideGrace
+    if (hasGraceOverride && isOutsideGrace && !forceOverride) {
+      setShowOverrideConfirm(true)
+      return
+    }
+
+    setShowOverrideConfirm(false)
     setSaving(true)
     setUploadPhase("saving")
     try {
@@ -476,10 +492,10 @@ export function KssRosterTable({
         if (!uploadRes.ok) throw new Error(uploadPayload.error || "Failed to upload KSS file")
         if (uploadPayload?.converted) {
           toast.success("KSS file uploaded and converted to PDF")
+        } else {
+          toast.success(`KSS file uploaded in original ${getFileExtension(file.name, file.type).toUpperCase()} format`)
         }
-      }
-
-      if (!file || !["docx", "pptx"].includes(getFileExtension(file.name, file.type))) {
+      } else {
         toast.success(editingId ? "KSS updated" : "KSS created")
       }
       resetForm()
@@ -902,6 +918,27 @@ export function KssRosterTable({
           </AlertDialogContent>
         </AlertDialog>
 
+        <AlertDialog open={showOverrideConfirm} onOpenChange={setShowOverrideConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="text-destructive">Override Grace Period Lock?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You are editing Week {weekNumber}, {yearNumber} outside the normal grace period. This override action
+                will be logged in the audit trail. Are you sure you want to proceed?
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel onClick={() => setShowOverrideConfirm(false)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                onClick={() => handleSave(true)}
+              >
+                Yes, Override and Save
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
         <Dialog
           open={showCreate}
           onOpenChange={(open) => {
@@ -959,30 +996,6 @@ export function KssRosterTable({
               </div>
 
               <div className="space-y-2">
-                <Label>Department</Label>
-                <Select
-                  value={department}
-                  onValueChange={(value) => {
-                    setDepartment(value)
-                    setPresenterId("none")
-                  }}
-                  disabled={isFormLocked || canUploadMissingForLockedWeek}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Select department</SelectItem>
-                    {departments.map((dept) => (
-                      <SelectItem key={dept} value={dept}>
-                        {dept}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
                 <Label>Presenter Type</Label>
                 <Select
                   value={presenterType}
@@ -1008,8 +1021,16 @@ export function KssRosterTable({
                 {presenterType === "employee" ? (
                   <Select
                     value={presenterId}
-                    onValueChange={setPresenterId}
-                    disabled={isFormLocked || canUploadMissingForLockedWeek || department === "none"}
+                    onValueChange={(val) => {
+                      setPresenterId(val)
+                      if (val !== "none") {
+                        const emp = employees.find((e) => e.id === val)
+                        if (emp?.department) {
+                          setDepartment(emp.department)
+                        }
+                      }
+                    }}
+                    disabled={isFormLocked || canUploadMissingForLockedWeek}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select presenter" />
@@ -1034,6 +1055,30 @@ export function KssRosterTable({
                     disabled={isFormLocked || canUploadMissingForLockedWeek}
                   />
                 )}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Department</Label>
+                <Select
+                  value={department}
+                  onValueChange={(value) => {
+                    setDepartment(value)
+                    setPresenterId("none")
+                  }}
+                  disabled={isFormLocked || canUploadMissingForLockedWeek}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select department</SelectItem>
+                    {departments.map((dept) => (
+                      <SelectItem key={dept} value={dept}>
+                        {dept}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div className="space-y-2">
@@ -1089,7 +1134,7 @@ export function KssRosterTable({
             </div>
 
             <div className="mt-4 flex gap-2">
-              <Button onClick={handleSave} disabled={saving || isFormLocked}>
+              <Button onClick={() => handleSave()} disabled={saving || isFormLocked}>
                 {saving ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />

@@ -31,6 +31,36 @@ const CreateCorrespondenceApprovalSchema = z.object({
   acting_department: z.string().trim().optional().nullable(),
 })
 
+function getDatabaseErrorCode(error: unknown): string | null {
+  return error && typeof error === "object" && "code" in error
+    ? String((error as { code?: string | null }).code || "")
+    : null
+}
+
+function getDatabaseErrorMessage(error: unknown): string {
+  return error && typeof error === "object" && "message" in error
+    ? String((error as { message?: string | null }).message || "")
+    : ""
+}
+
+function isNoRowsReturnedError(error: unknown): boolean {
+  return getDatabaseErrorCode(error) === "PGRST116"
+}
+
+function isApprovalStageConflictError(error: unknown): boolean {
+  return (
+    getDatabaseErrorCode(error) === "23505" &&
+    getDatabaseErrorMessage(error).toLowerCase().includes("correspondence_approvals")
+  )
+}
+
+function alreadyProcessedResponse() {
+  return NextResponse.json(
+    { error: "This correspondence decision has already been processed. Refresh the page to see the latest status." },
+    { status: 409 }
+  )
+}
+
 async function resolveCategoryCodeForReference(
   supabase: Awaited<ReturnType<typeof getAuthContext>>["supabase"],
   categoryInput: string | null | undefined
@@ -159,6 +189,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     const comments = parsed.data.comments ? String(parsed.data.comments).trim() : null
     const now = new Date().toISOString()
 
+    if (record.status !== "under_review") {
+      return alreadyProcessedResponse()
+    }
+
     const approvalScopeDepartment = String(
       actingDepartment || record.department_name || record.assigned_department_name || ""
     )
@@ -214,7 +248,10 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
       for (const { key, existing } of pendingStages) {
         if (existing) {
-          await dataClient
+          if (existing.status === "approved") continue
+          if (existing.status !== "pending") return alreadyProcessedResponse()
+
+          const { error: stageUpdateError } = await dataClient
             .from("correspondence_approvals")
             .update({
               approver_id: user.id,
@@ -223,8 +260,13 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
               decided_at: now,
             })
             .eq("id", existing.id)
+            .eq("status", "pending")
+            .select("id")
+            .single()
+          if (isNoRowsReturnedError(stageUpdateError)) return alreadyProcessedResponse()
+          if (stageUpdateError) throw stageUpdateError
         } else {
-          await dataClient.from("correspondence_approvals").insert({
+          const { error: stageInsertError } = await dataClient.from("correspondence_approvals").insert({
             correspondence_id: record.id,
             approval_stage: key,
             approver_id: user.id,
@@ -233,6 +275,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
             requested_at: now,
             decided_at: now,
           })
+          if (isApprovalStageConflictError(stageInsertError)) return alreadyProcessedResponse()
+          if (stageInsertError) throw stageInsertError
         }
       }
 
@@ -241,9 +285,11 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         .from("correspondence_records")
         .update({ status: "approved", approved_at: now, reference_number: finalReferenceNumber })
         .eq("id", record.id)
+        .eq("status", "under_review")
         .select("*")
         .single()
 
+      if (isNoRowsReturnedError(recordUpdateError)) return alreadyProcessedResponse()
       if (recordUpdateError || !updatedRecord) throw recordUpdateError || new Error("Approval update returned no data")
 
       await appendCorrespondenceEvent({
@@ -353,15 +399,20 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
             })
             .select("*")
             .single()
+          if (isApprovalStageConflictError(insertError)) return alreadyProcessedResponse()
           if (insertError) throw insertError
           targetApproval = inserted
         } else {
+          if (deptApproval.status !== "pending") return alreadyProcessedResponse()
+
           const { data: updatedApproval, error: updateError } = await supabase
             .from("correspondence_approvals")
             .update({ approver_id: user.id, status: "approved", comments, decided_at: now })
             .eq("id", deptApproval.id)
+            .eq("status", "pending")
             .select("*")
             .single()
+          if (isNoRowsReturnedError(updateError)) return alreadyProcessedResponse()
           if (updateError) throw updateError
           targetApproval = updatedApproval
         }
@@ -400,15 +451,20 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
             })
             .select("*")
             .single()
+          if (isApprovalStageConflictError(insertError)) return alreadyProcessedResponse()
           if (insertError) throw insertError
           targetApproval = inserted
         } else {
+          if (execApproval.status !== "pending") return alreadyProcessedResponse()
+
           const { data: updatedExec, error: updateError } = await supabase
             .from("correspondence_approvals")
             .update({ approver_id: user.id, status: "approved", comments, decided_at: now })
             .eq("id", execApproval.id)
+            .eq("status", "pending")
             .select("*")
             .single()
+          if (isNoRowsReturnedError(updateError)) return alreadyProcessedResponse()
           if (updateError) throw updateError
           targetApproval = updatedExec
         }
@@ -435,15 +491,20 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
           })
           .select("*")
           .single()
+        if (isApprovalStageConflictError(insertError)) return alreadyProcessedResponse()
         if (insertError) throw insertError
         targetApproval = inserted
       } else {
+        if (activeApproval.status !== "pending") return alreadyProcessedResponse()
+
         const { data: updated, error: updateError } = await supabase
           .from("correspondence_approvals")
           .update({ approver_id: user.id, status: decision, comments, decided_at: now })
           .eq("id", activeApproval.id)
+          .eq("status", "pending")
           .select("*")
           .single()
+        if (isNoRowsReturnedError(updateError)) return alreadyProcessedResponse()
         if (updateError) throw updateError
         targetApproval = updated
       }
@@ -462,9 +523,11 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         ...(finalReferenceNumber ? { reference_number: finalReferenceNumber } : {}),
       })
       .eq("id", record.id)
+      .eq("status", "under_review")
       .select("*")
       .single()
 
+    if (isNoRowsReturnedError(recordUpdateError)) return alreadyProcessedResponse()
     if (recordUpdateError || !updatedRecord) throw recordUpdateError || new Error("Approval update returned no data")
 
     await appendCorrespondenceEvent({
@@ -492,16 +555,22 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     })
 
     try {
+      const displayRef = record.reference_number || updatedRecord.reference_number || finalReferenceNumber || "Draft"
       await supabase.rpc("create_notification", {
         p_user_id: record.originator_id,
-        p_type: decision === "approved" ? "approval_granted" : decision === "rejected" ? "approval_rejected" : "system",
+        p_type:
+          decision === "approved"
+            ? "approval_granted"
+            : decision === "rejected"
+              ? "approval_rejected"
+              : "approval_request",
         p_category: "approvals",
-        p_title: `Correspondence ${decision}`,
-        p_message: `${String(updatedRecord.reference_number || finalReferenceNumber || "Draft")} was marked ${decision}`,
+        p_title: `Correspondence ${decision.charAt(0).toUpperCase() + decision.slice(1)}`,
+        p_message: `Your correspondence "${displayRef}" has been ${decision}.`,
         p_priority: decision === "rejected" ? "high" : "normal",
         p_link_url: "/correspondence",
         p_actor_id: user.id,
-        p_entity_type: "correspondence_record",
+        p_entity_type: "correspondence",
         p_entity_id: record.id,
         p_rich_content: {
           decision,

@@ -485,16 +485,22 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       (updated.status === "approved" || updated.status === "rejected" || updated.status === "returned_for_correction")
     ) {
       try {
+        const displayRef = record.reference_number || updated.reference_number || "Draft"
         await supabase.rpc("create_notification", {
           p_user_id: record.originator_id,
-          p_type: updated.status === "approved" ? "approval_granted" : "approval_rejected",
+          p_type:
+            updated.status === "approved"
+              ? "approval_granted"
+              : updated.status === "rejected"
+                ? "approval_rejected"
+                : "approval_request",
           p_category: "approvals",
-          p_title: `Correspondence ${updated.status}`,
-          p_message: `${String(updated.reference_number || "Draft")} was marked ${updated.status}`,
+          p_title: `Correspondence ${updated.status.charAt(0).toUpperCase() + updated.status.slice(1)}`,
+          p_message: `Your correspondence "${displayRef}" has been ${updated.status}.`,
           p_priority: updated.status === "rejected" ? "high" : "normal",
           p_link_url: "/correspondence",
           p_actor_id: user.id,
-          p_entity_type: "correspondence_record",
+          p_entity_type: "correspondence",
           p_entity_id: record.id,
           p_rich_content: { decision: updated.status, reference_number: String(updated.reference_number || "") },
         })

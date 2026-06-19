@@ -8,7 +8,11 @@ import { writeAuditLog } from "@/lib/audit/write-audit"
 import { toLocalISODate } from "@/lib/hr/attendance-utils"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
-import { DB_WRITABLE_STATUSES, deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import {
+  DB_WRITABLE_STATUSES,
+  deriveUnifiedAttendanceStatus,
+  isPermissionAttendanceStatus,
+} from "@/lib/hr/attendance-status"
 
 const CreateSchema = z.object({
   user_id: z.string().uuid(),
@@ -26,6 +30,7 @@ const CreateSchema = z.object({
   status: z.enum(DB_WRITABLE_STATUSES).optional(),
   waived: z.boolean().optional(),
   waiver_reason: z.string().max(200).optional().nullable(),
+  manual_comment: z.string().trim().min(3, "Manual attendance changes require a comment").max(500),
 })
 
 const log = logger("admin-hr-attendance-records")
@@ -68,15 +73,14 @@ export async function GET(request: NextRequest) {
       const { data: deptProfiles } = await dataClient.from("profiles").select("id").in("department", deptVariants)
       const deptUserIds = (deptProfiles ?? []).map((p) => p.id)
       if (deptUserIds.length === 0) return NextResponse.json({ records: [] })
-      scopedUserIds =
-        scopedUserIds === null ? deptUserIds : scopedUserIds.filter((id) => deptUserIds.includes(id))
+      scopedUserIds = scopedUserIds === null ? deptUserIds : scopedUserIds.filter((id) => deptUserIds.includes(id))
       if (scopedUserIds.length === 0) return NextResponse.json({ records: [] })
     }
 
     let attendanceQuery = dataClient
       .from("attendance_records")
       .select(
-        "id, user_id, date, clock_in, clock_out, total_hours, status, source, clock_in_source, clock_out_source, waived, waiver_reason, updated_at, selfie_url, selfie_out_url, face_match_confidence, face_verified, location_verified, latitude, longitude, site_id"
+        "id, user_id, date, clock_in, clock_out, total_hours, status, source, clock_in_source, clock_out_source, waived, waiver_reason, manual_comment, updated_at, selfie_url, selfie_out_url, face_match_confidence, face_verified, location_verified, latitude, longitude, site_id"
       )
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
@@ -206,6 +210,7 @@ export async function GET(request: NextRequest) {
         clock_out_source: r.clock_out_source ?? null,
         waived: r.waived,
         waiver_reason: r.waiver_reason,
+        manual_comment: r.manual_comment ?? null,
         updated_at: r.updated_at,
         selfie_url: r.selfie_url ?? null,
         selfie_out_url: r.selfie_out_url ?? null,
@@ -286,6 +291,7 @@ export async function GET(request: NextRequest) {
             clock_out_source: null,
             waived: false,
             waiver_reason: null,
+            manual_comment: null,
             updated_at: null,
             selfie_url: null,
             selfie_out_url: null,
@@ -321,7 +327,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, { status: 400 })
     }
 
-    const { user_id, date, clock_in, clock_out, waived, waiver_reason } = parsed.data
+    const { user_id, date, clock_in, clock_out, waived, waiver_reason, manual_comment } = parsed.data
     const dataClient = getServiceRoleClientOrFallback(supabase)
 
     // Validate the target employee is in this admin/lead's scope
@@ -349,26 +355,42 @@ export async function POST(request: NextRequest) {
     }
 
     // Auto-determine status via the single shared deriver (unless an explicit status was provided)
+    const explicitStatus = parsed.data.status
     const status =
-      parsed.data.status ??
+      explicitStatus ??
       (waived
         ? "waiver"
         : deriveUnifiedAttendanceStatus({
-            record: { clock_in, clock_out, waived: false },
+            record: { clock_in, clock_out, waived: false, status: explicitStatus },
             recordDate: date,
           }))
+    const isCoveredWithoutTimes =
+      status === "waiver" || status === "absent_with_permission" || status === "out_of_station"
 
     if (clock_in && clock_out && clock_out <= clock_in) {
       return NextResponse.json({ error: "Clock out must be after clock in" }, { status: 400 })
     }
-    if (!waived && !clock_in && !clock_out) {
+    if (!isCoveredWithoutTimes && !clock_in && !clock_out) {
       return NextResponse.json({ error: "Provide both clock in and clock out before saving" }, { status: 400 })
     }
-    if ((clock_in && !clock_out) || (!clock_in && clock_out)) {
+    if (!isCoveredWithoutTimes && ((clock_in && !clock_out) || (!clock_in && clock_out))) {
       return NextResponse.json({ error: "Clock in and clock out must be provided together" }, { status: 400 })
     }
+    if (isPermissionAttendanceStatus(status) && status === "lateness_with_permission" && (!clock_in || !clock_out)) {
+      return NextResponse.json({ error: "LWP requires both clock in and clock out times" }, { status: 400 })
+    }
+    if (status === "waiver" && !String(waiver_reason || manual_comment).trim()) {
+      return NextResponse.json({ error: "Waiver requires a reason or comment" }, { status: 400 })
+    }
 
-    const insert: Record<string, unknown> = { user_id, date, status, source: "manual" }
+    const insert: Record<string, unknown> = {
+      user_id,
+      date,
+      status,
+      source: "manual",
+      manual_comment,
+      waived: status === "waiver" ? true : Boolean(waived),
+    }
     if (clock_in) {
       insert.clock_in = clock_in
       insert.clock_in_source = "manual"
@@ -377,7 +399,6 @@ export async function POST(request: NextRequest) {
       insert.clock_out = clock_out
       insert.clock_out_source = "manual"
     }
-    if (waived !== undefined) insert.waived = waived
     if (waiver_reason !== undefined) insert.waiver_reason = waiver_reason
 
     if (clock_in && clock_out) {

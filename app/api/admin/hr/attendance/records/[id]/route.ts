@@ -4,7 +4,11 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
-import { DB_WRITABLE_STATUSES, deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import {
+  DB_WRITABLE_STATUSES,
+  deriveUnifiedAttendanceStatus,
+  isPermissionAttendanceStatus,
+} from "@/lib/hr/attendance-status"
 import { requireApiAdminScope } from "@/lib/admin/api-scope"
 
 const log = logger("admin-hr-attendance-record-patch")
@@ -13,14 +17,17 @@ const PatchSchema = z.object({
   clock_in: z
     .string()
     .regex(/^\d{2}:\d{2}(:\d{2})?$/, "Invalid time format")
-    .optional(),
+    .optional()
+    .nullable(),
   clock_out: z
     .string()
     .regex(/^\d{2}:\d{2}(:\d{2})?$/, "Invalid time format")
-    .optional(),
+    .optional()
+    .nullable(),
   status: z.enum(DB_WRITABLE_STATUSES).optional(),
   waived: z.boolean().optional(),
   waiver_reason: z.string().max(200).optional().nullable(),
+  manual_comment: z.string().trim().min(3, "Manual attendance changes require a comment").max(500),
 })
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -46,47 +53,72 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const { data: record } = await dataClient
       .from("attendance_records")
-      .select("id, clock_in, clock_out, date")
+      .select("id, clock_in, clock_out, date, status, waived, waiver_reason, manual_comment")
       .eq("id", id)
       .maybeSingle()
 
     if (!record) return NextResponse.json({ error: "Record not found" }, { status: 404 })
 
-    const updates: Record<string, unknown> = { ...parsed.data }
+    const updates: Record<string, unknown> = {
+      ...parsed.data,
+      source: "manual",
+      manual_comment: parsed.data.manual_comment,
+    }
 
     // Any manually-changed punch is attributed to "manual" so the source label can show Mixed
     if (parsed.data.clock_in !== undefined) updates.clock_in_source = "manual"
     if (parsed.data.clock_out !== undefined) updates.clock_out_source = "manual"
 
     // Recalculate total_hours if both times are known after update
-    const clockIn = parsed.data.clock_in ?? record.clock_in
-    const clockOut = parsed.data.clock_out ?? record.clock_out
+    const clockIn = parsed.data.clock_in !== undefined ? parsed.data.clock_in : record.clock_in
+    const clockOut = parsed.data.clock_out !== undefined ? parsed.data.clock_out : record.clock_out
+    const explicitStatus = parsed.data.status
+    const nextStatus =
+      explicitStatus ??
+      (parsed.data.waived === true
+        ? "waiver"
+        : deriveUnifiedAttendanceStatus({
+            record: { clock_in: clockIn, clock_out: clockOut, waived: false, status: record.status },
+            recordDate: record.date,
+          }))
+    const isCoveredWithoutTimes =
+      nextStatus === "waiver" || nextStatus === "absent_with_permission" || nextStatus === "out_of_station"
+
     if (clockIn && clockOut && clockOut <= clockIn) {
       return NextResponse.json({ error: "Clock out must be after clock in" }, { status: 400 })
     }
-    if (parsed.data.waived !== true && !clockIn && !clockOut) {
+    if (!isCoveredWithoutTimes && !clockIn && !clockOut) {
       return NextResponse.json({ error: "Provide both clock in and clock out before saving" }, { status: 400 })
     }
-    if ((clockIn && !clockOut) || (!clockIn && clockOut)) {
+    if (!isCoveredWithoutTimes && ((clockIn && !clockOut) || (!clockIn && clockOut))) {
       return NextResponse.json({ error: "Clock in and clock out must be provided together" }, { status: 400 })
     }
+    if (
+      isPermissionAttendanceStatus(nextStatus) &&
+      nextStatus === "lateness_with_permission" &&
+      (!clockIn || !clockOut)
+    ) {
+      return NextResponse.json({ error: "LWP requires both clock in and clock out times" }, { status: 400 })
+    }
+    if (nextStatus === "waiver" && !String(parsed.data.waiver_reason || parsed.data.manual_comment).trim()) {
+      return NextResponse.json({ error: "Waiver requires a reason or comment" }, { status: 400 })
+    }
+
     if (clockIn && clockOut) {
       const inMs = new Date(`${record.date}T${clockIn}Z`).getTime()
       const outMs = new Date(`${record.date}T${clockOut}Z`).getTime()
       updates.total_hours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
+    } else {
+      updates.total_hours = null
     }
-    // Re-derive status through the single shared deriver whenever times or the waiver toggle change
-    if (parsed.data.waived === true) {
-      updates.status = "waiver"
-    } else if (
-      parsed.data.clock_in !== undefined ||
-      parsed.data.clock_out !== undefined ||
-      parsed.data.waived === false
-    ) {
-      updates.status = deriveUnifiedAttendanceStatus({
-        record: { clock_in: clockIn, clock_out: clockOut, waived: false },
-        recordDate: record.date,
-      })
+
+    updates.status = nextStatus
+    updates.waived = nextStatus === "waiver" ? true : Boolean(parsed.data.waived ?? false)
+    if (isCoveredWithoutTimes && !clockIn && !clockOut) {
+      updates.clock_in = null
+      updates.clock_out = null
+      updates.clock_in_source = null
+      updates.clock_out_source = null
     }
 
     const { data: updated, error } = await dataClient
@@ -107,6 +139,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         action: "update",
         entityType: "attendance_record",
         entityId: id,
+        oldValues: record,
         newValues: updates,
         context: { actorId: user.id, source: "api", route: `/api/admin/hr/attendance/records/${id}` },
       },

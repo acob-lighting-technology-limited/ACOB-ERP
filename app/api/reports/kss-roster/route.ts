@@ -267,7 +267,17 @@ export async function POST(request: Request) {
       )
       .single()
 
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) {
+      if (error.code === "23505") {
+        return NextResponse.json(
+          {
+            error: `A KSS entry already exists for Week ${meetingWeek}, ${meetingYear}. Please edit the existing entry instead.`,
+          },
+          { status: 409 }
+        )
+      }
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
 
     await writeAuditLog(
       supabase as ReportsClient,

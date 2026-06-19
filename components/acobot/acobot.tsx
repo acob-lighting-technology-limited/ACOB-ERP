@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { useRouter } from "next/navigation"
+import { useRouter, usePathname } from "next/navigation"
 import { useChat } from "ai/react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Bot, Send, Square, X } from "lucide-react"
@@ -17,6 +17,7 @@ interface AcoBotProps {
 export function AcoBot({ userName }: AcoBotProps) {
   const [isOpen, setIsOpen] = useState(false)
   const router = useRouter()
+  const pathname = usePathname()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -27,6 +28,8 @@ export function AcoBot({ userName }: AcoBotProps) {
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, stop, error, setInput } = useChat({
     api: "/api/acobot",
+    // Send the page the user is on so ACOBot can answer with route context.
+    body: { currentPath: pathname },
   })
 
   const visibleMessages = messages.filter((m) => m.role === "user" || m.role === "assistant")
