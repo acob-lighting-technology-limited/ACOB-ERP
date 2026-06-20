@@ -226,41 +226,44 @@ export async function GET(request: NextRequest) {
       for (const workday of periodWorkdays) {
         if (holidaySet.has(workday)) {
           holiday_days++
-          attendance_credits += 1.0
           continue
         }
         if (onLeaveSet.has(`${profile.id}:${workday}`)) {
           leave_days++
-          attendance_credits += 1.0
           continue
         }
         const rec = empRecords.get(workday)
         // Skip today if still in progress (clocked in, not yet out) — don't score an unfinished day
         if (workday === todayIso && rec?.clock_in && !rec?.clock_out) continue
 
-        available_days++
         const isExempted = Boolean(profile.attendance_exempt) || exemptPeriodSet.has(`${profile.id}:${workday}`)
         if (isExempted) {
           exempted_days++
-          attendance_credits += 1.0
           continue
         }
 
         const derived = deriveUnifiedAttendanceStatus({ record: rec, recordDate: workday })
+
+        if (derived === "waiver") {
+          waived_days++
+          continue
+        }
+        if (derived === "absent_with_permission") {
+          absent_with_permission_days++
+          continue
+        }
+
+        // Now we are at scorable/available days!
+        available_days++
+
         if (!rec) {
           absent_days++
           total_missed_hours += 9
           continue
         }
 
-        if (derived === "waiver") {
-          waived_days++
-          attendance_credits += 1.0
-        } else if (derived === "out_of_station") {
+        if (derived === "out_of_station") {
           out_of_station_days++
-          attendance_credits += 1.0
-        } else if (derived === "absent_with_permission") {
-          absent_with_permission_days++
           attendance_credits += 1.0
         } else if (derived === "lateness_with_permission") {
           lateness_with_permission_days++
@@ -279,7 +282,7 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      const total_working_days = available_days + leave_days + holiday_days
+      const total_working_days = available_days
       const attendance_rate =
         total_working_days > 0 ? Math.round((attendance_credits / total_working_days) * 10000) / 100 : 0
 

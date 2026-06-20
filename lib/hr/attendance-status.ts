@@ -18,10 +18,12 @@ export type UnifiedAttendanceStatus =
 export const ATTENDANCE_STATUS_COLORS: Record<UnifiedAttendanceStatus, string> = {
   present: "bg-green-100 text-green-800",
   late: "bg-yellow-100 text-yellow-800",
-  lateness_with_permission: "bg-amber-100 text-amber-800",
+  lateness_with_permission:
+    "bg-gradient-to-r from-amber-100 to-green-100 text-green-800 border-amber-200 dark:from-amber-950/40 dark:to-green-950/40 dark:text-green-300",
   incomplete: "bg-cyan-100 text-cyan-800",
   absent: "bg-red-100 text-red-800",
-  absent_with_permission: "bg-teal-100 text-teal-800",
+  absent_with_permission:
+    "bg-gradient-to-r from-red-100 to-green-100 text-green-800 border-red-200 dark:from-red-950/40 dark:to-green-950/40 dark:text-green-300",
   out_of_station: "bg-indigo-100 text-indigo-800",
   waiver: "bg-blue-100 text-blue-700",
   exempted: "bg-violet-100 text-violet-700",

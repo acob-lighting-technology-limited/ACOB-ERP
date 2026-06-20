@@ -80,6 +80,7 @@ interface DayRecord {
   waiver_reason: string | null
   manual_comment?: string | null
   updated_at?: string | null
+  editor_first_name?: string | null
 }
 
 type DayStatus =
@@ -144,7 +145,7 @@ function currentYearMonth() {
 }
 
 function formatDayShort(dateString: string) {
-  return formatWATDate(dateString, { weekday: "long", month: "short", day: "numeric" })
+  return formatWATDate(dateString, { weekday: "short", month: "short", day: "numeric" })
 }
 
 function formatTime(t: string | null) {
@@ -381,7 +382,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   return (
     <>
       <div className="space-y-1 py-2">
-        <div className="text-muted-foreground grid grid-cols-[220px_90px_70px_70px_80px_80px_80px_90px_120px_60px] items-center gap-3 px-2 text-[11px] font-semibold uppercase">
+        <div className="text-muted-foreground grid grid-cols-[130px_90px_70px_70px_80px_80px_80px_90px_120px_60px] items-center gap-3 px-2 text-[11px] font-semibold uppercase">
           <span>Day</span>
           <span>Status</span>
           <span>In</span>
@@ -398,7 +399,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           return (
             <div
               key={day.date}
-              className="hover:bg-muted/30 grid grid-cols-[220px_90px_70px_70px_80px_80px_80px_90px_120px_60px] items-center gap-3 rounded px-2 py-1.5 text-sm"
+              className="hover:bg-muted/30 grid grid-cols-[130px_90px_70px_70px_80px_80px_80px_90px_120px_60px] items-center gap-3 rounded px-2 py-1.5 text-sm"
             >
               <span className="text-xs font-medium">{day.dayName}</span>
               <div>
@@ -544,9 +545,21 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
                     : item.action === "update"
                       ? "Updated"
                       : (item.action ?? "Changed")
-                const displayFields = Object.entries((item.new_values || {}) as Record<string, unknown>).filter(
-                  ([key]) => !["source", "status"].includes(key)
-                )
+                const displayFields = Object.entries((item.new_values || {}) as Record<string, unknown>)
+                  .filter(([key]) => ["status", "clock_in", "clock_out", "manual_comment", "source"].includes(key))
+                  .map(([key, value]) => {
+                    let displayValue = String(value ?? "—")
+                    if (key === "status" && typeof value === "string") {
+                      displayValue = ATTENDANCE_STATUS_LABELS[value as keyof typeof ATTENDANCE_STATUS_LABELS] ?? value
+                    }
+                    if ((key === "clock_in" || key === "clock_out") && typeof value === "string") {
+                      displayValue = formatTime(value)
+                    }
+                    if (key === "source" && typeof value === "string") {
+                      displayValue = value === "hikvision" ? "Device" : value === "remote_web" ? "Remote" : "Manual"
+                    }
+                    return [key, displayValue]
+                  })
                 return (
                   <div key={item.id} className="rounded-md border p-3">
                     <div className="flex items-center gap-2">
@@ -567,7 +580,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
                         displayFields.map(([key, value]) => (
                           <p key={key}>
                             <span className="font-medium">{key.replaceAll("_", " ")}:</span>{" "}
-                            <span className="text-muted-foreground">{String(value ?? "—")}</span>
+                            <span className="text-muted-foreground">{value}</span>
                           </p>
                         ))
                       )}

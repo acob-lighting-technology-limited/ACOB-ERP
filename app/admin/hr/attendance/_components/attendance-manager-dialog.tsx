@@ -140,9 +140,17 @@ function ExemptionTab({
       toast.error("Select at least one employee")
       return
     }
+    if (mode !== "off" && !reason.trim()) {
+      toast.error("A comment is required")
+      return
+    }
     setSaving(true)
     try {
-      const body: Record<string, unknown> = { user_ids: selectedIds, mode, reason: reason || undefined }
+      const body: Record<string, unknown> = {
+        user_ids: selectedIds,
+        mode,
+        reason: mode === "off" ? undefined : reason.trim(),
+      }
       if (mode === "weekly") body.month = month
       if (mode === "weekly") body.weeks = weeks
       if (mode === "monthly") body.months = months
@@ -284,7 +292,9 @@ function ExemptionTab({
 
       {mode !== "off" && (
         <div className="space-y-1">
-          <Label>Reason (optional)</Label>
+          <Label>
+            Comment <span className="text-destructive">*</span>
+          </Label>
           <Input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. Remote assignment" />
         </div>
       )}
@@ -568,7 +578,7 @@ function WaiverTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: (
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [startDate, setStartDate] = useState(toLocalISODate())
   const [endDate, setEndDate] = useState(toLocalISODate())
-  const [reason, setReason] = useState("")
+  const [comment, setComment] = useState("")
   const [saving, setSaving] = useState(false)
 
   async function save() {
@@ -580,8 +590,8 @@ function WaiverTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: (
       toast.error("Please set a date range")
       return
     }
-    if (!reason.trim()) {
-      toast.error("A waiver reason is required")
+    if (!comment.trim()) {
+      toast.error("A comment is required")
       return
     }
     if (endDate < startDate) {
@@ -599,8 +609,8 @@ function WaiverTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: (
           start_date: startDate,
           end_date: endDate,
           status: "waiver",
-          waiver_reason: reason.trim(),
-          manual_comment: reason.trim(),
+          waiver_reason: comment.trim(),
+          manual_comment: comment.trim(),
         }),
       })
       const payload = (await res.json().catch(() => null)) as { error?: string; created?: number } | null
@@ -610,7 +620,7 @@ function WaiverTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: (
       }
       toast.success(`Waiver applied for ${payload?.created ?? selectedIds.length} record(s)`)
       setSelectedIds([])
-      setReason("")
+      setComment("")
       onDone()
     } catch (err) {
       log.error({ err: String(err) }, "waiver save failed")
@@ -650,11 +660,11 @@ function WaiverTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: (
       </div>
       <div className="space-y-1">
         <Label>
-          Waiver Reason <span className="text-destructive">*</span>
+          Comment <span className="text-destructive">*</span>
         </Label>
         <Textarea
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
+          value={comment}
+          onChange={(e) => setComment(e.target.value)}
           placeholder="e.g. National conference attendance"
           rows={2}
         />

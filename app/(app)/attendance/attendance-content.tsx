@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { formatWATDate } from "@/lib/utils/date"
-import { Clock, Download, UserCheck, MapPin, BarChart3, AlertCircle } from "lucide-react"
+import { Clock, Download, UserCheck, MapPin, BarChart3, AlertCircle, Calendar } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
@@ -18,6 +18,7 @@ import {
   ATTENDANCE_STATUS_LABELS,
   deriveUnifiedAttendanceStatus,
 } from "@/lib/hr/attendance-status"
+import type { UnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 
 const log = logger("dashboard-attendance-attendance-content")
 
@@ -36,7 +37,7 @@ type AttendanceRow = AttendanceRecord & {
   workHours: number | null
   overtimeHours: number | null
   missedHoursValue: number | null
-  normalizedStatus: "holiday" | "on_leave" | "exempted" | "waiver" | "present" | "late" | "incomplete" | "absent"
+  normalizedStatus: UnifiedAttendanceStatus
 }
 type UnifiedDay = {
   date: string
@@ -94,7 +95,13 @@ function getClockOutLabel(row: Pick<AttendanceRow, "clock_in" | "clock_out" | "d
 }
 
 function isCoveredStatus(status: AttendanceRow["normalizedStatus"]) {
-  return status === "waiver" || status === "exempted" || status === "on_leave" || status === "holiday"
+  return (
+    status === "waiver" ||
+    status === "exempted" ||
+    status === "on_leave" ||
+    status === "holiday" ||
+    status === "absent_with_permission"
+  )
 }
 
 const ATTENDANCE_TABS: DataTableTab[] = [
@@ -114,6 +121,13 @@ export function AttendanceContent({
   const [filteredRows, setFilteredRows] = useState<AttendanceRow[]>([])
   const [remoteModalOpen, setRemoteModalOpen] = useState(false)
   const [remoteMode, setRemoteMode] = useState<"clock-in" | "clock-out">("clock-in")
+  const currentMonthLabel = useMemo(() => {
+    return new Date().toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "Africa/Lagos",
+    })
+  }, [])
 
   async function fetchAttendanceData() {
     try {
@@ -169,7 +183,7 @@ export function AttendanceContent({
             clock_out: null,
             total_hours: null,
             status: "no_record",
-            dayLabel: formatWATDate(dateObj, { weekday: "long" }),
+            dayLabel: formatWATDate(dateObj, { weekday: "short" }),
             dateLabel: formatWATDate(dateObj, { day: "2-digit", month: "long", year: "numeric" }),
             periodLabel: "-",
             monthLabel,
@@ -190,7 +204,7 @@ export function AttendanceContent({
         return {
           ...existing,
           total_hours: breakdown.total ?? existing.total_hours,
-          dayLabel: formatWATDate(dateObj, { weekday: "long" }),
+          dayLabel: formatWATDate(dateObj, { weekday: "short" }),
           dateLabel: formatWATDate(dateObj, { day: "2-digit", month: "long", year: "numeric" }),
           periodLabel: `${existing.clock_in || "-"} - ${getClockOutLabel({ ...existing, date: workday })}`,
           monthLabel,
@@ -204,10 +218,12 @@ export function AttendanceContent({
       .sort((a, b) => b.date.localeCompare(a.date))
   }, [unifiedDays])
 
-  // Seed filteredRows with all rows on first load so stat cards show before any filter interaction
+  // Seed filteredRows with current month's rows on first load so stat cards align with default filter
   useEffect(() => {
-    if (rows.length > 0) setFilteredRows(rows)
-  }, [rows])
+    if (rows.length > 0) {
+      setFilteredRows(rows.filter((r) => r.monthLabel === currentMonthLabel))
+    }
+  }, [rows, currentMonthLabel])
 
   const columns = useMemo<DataTableColumn<AttendanceRow>[]>(
     () => [
@@ -313,10 +329,11 @@ export function AttendanceContent({
           value: month,
           label: month,
         })),
+        defaultValues: [currentMonthLabel],
         filterFn: (row, selected) => selected.includes(row.monthLabel),
       },
     ],
-    [rows]
+    [rows, currentMonthLabel]
   )
 
   const todayIso = toLocalISODate()
@@ -324,20 +341,23 @@ export function AttendanceContent({
   const todayStatus = todayRecord ? normalizeStatus(todayRecord, todayIso) : "absent"
 
   // Rates are computed from whatever rows survive the active filter — "all time" when no filter is set
-  const { attendanceRate, absentRate } = useMemo(() => {
+  const { attendanceRate, absentRate, attendedDays, totalWorkdays } = useMemo(() => {
     const scorable = filteredRows.filter((row) => {
       if (isCoveredStatus(row.normalizedStatus)) return false
       // Exclude a day still in progress (clocked in today, not yet clocked out)
       if (row.date === todayIso && row.clock_in && !row.clock_out) return false
       return true
     })
-    if (scorable.length === 0) return { attendanceRate: 0, absentRate: 0 }
+    if (scorable.length === 0) return { attendanceRate: 0, absentRate: 0, attendedDays: 0, totalWorkdays: 0 }
     let credits = 0
     for (const row of scorable) credits += dayCredit(row.normalizedStatus, row.clock_in, row.clock_out)
     const attendanceRate = Math.round((credits / scorable.length) * 100)
     const absentDays = scorable.filter((r) => r.normalizedStatus === "absent").length
     const absentRate = Math.round((absentDays / scorable.length) * 100)
-    return { attendanceRate, absentRate }
+    const attended = scorable.filter(
+      (row) => row.normalizedStatus !== "absent" && row.normalizedStatus !== "absent_with_permission"
+    ).length
+    return { attendanceRate, absentRate, attendedDays: attended, totalWorkdays: scorable.length }
   }, [filteredRows, todayIso])
 
   function exportCSV() {
@@ -404,9 +424,9 @@ export function AttendanceContent({
               iconColor="text-blue-500"
             />
             <StatCard
-              title="Today Hours"
-              value={todayHours}
-              icon={Clock}
+              title="Total Days"
+              value={`${attendedDays} / ${totalWorkdays} days`}
+              icon={Calendar}
               iconBgColor="bg-emerald-500/10"
               iconColor="text-emerald-500"
             />

@@ -83,22 +83,22 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           }))
     const isCoveredWithoutTimes =
       nextStatus === "waiver" || nextStatus === "absent_with_permission" || nextStatus === "out_of_station"
+    const isLWP = nextStatus === "lateness_with_permission"
 
     if (clockIn && clockOut && clockOut <= clockIn) {
       return NextResponse.json({ error: "Clock out must be after clock in" }, { status: 400 })
     }
-    if (!isCoveredWithoutTimes && !clockIn && !clockOut) {
+    if (!isCoveredWithoutTimes && !isLWP && !clockIn && !clockOut) {
       return NextResponse.json({ error: "Provide both clock in and clock out before saving" }, { status: 400 })
     }
-    if (!isCoveredWithoutTimes && ((clockIn && !clockOut) || (!clockIn && clockOut))) {
+    if (!isCoveredWithoutTimes && !isLWP && ((clockIn && !clockOut) || (!clockIn && clockOut))) {
       return NextResponse.json({ error: "Clock in and clock out must be provided together" }, { status: 400 })
     }
-    if (
-      isPermissionAttendanceStatus(nextStatus) &&
-      nextStatus === "lateness_with_permission" &&
-      (!clockIn || !clockOut)
-    ) {
-      return NextResponse.json({ error: "LWP requires both clock in and clock out times" }, { status: 400 })
+    if (isLWP && !clockIn && !clockOut) {
+      return NextResponse.json(
+        { error: "LWP requires at least one clock punch (clock in or clock out)" },
+        { status: 400 }
+      )
     }
     if (nextStatus === "waiver" && !String(parsed.data.waiver_reason || parsed.data.manual_comment).trim()) {
       return NextResponse.json({ error: "Waiver requires a reason or comment" }, { status: 400 })

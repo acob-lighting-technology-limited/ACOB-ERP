@@ -23,6 +23,7 @@ type SourceInfo = {
   clock_out_source?: string | null
   clock_in?: string | null
   clock_out?: string | null
+  editor_first_name?: string | null
 }
 
 /** Hikvision = device "auto"; everything else (manual, remote_web) = "manual". */
@@ -48,14 +49,27 @@ export function labelSource(record: SourceInfo | string | null | undefined): str
   if (inK) kinds.add(inK)
   if (outK) kinds.add(outK)
 
-  if (kinds.size === 0) {
+  let baseLabel = "Manual"
+  if (info.source === "manual") {
+    baseLabel = "Manual"
+  } else if (kinds.size === 0) {
     // No per-punch data. A row with actual punches but missing per-punch source
     // (legacy/un-backfilled) falls back to the single source column; a row with
     // no punches at all (absent) has no source to show.
     const hasPunch = Boolean(info.clock_in || info.clock_out)
     if (!hasPunch) return "—"
-    return punchKind(info.source) === "auto" ? "Automated" : "Manual"
+    baseLabel = punchKind(info.source) === "auto" ? "Automated" : "Manual"
+  } else if (kinds.size === 2) {
+    baseLabel = "Mixed"
+  } else {
+    baseLabel = kinds.has("auto") ? "Automated" : "Manual"
   }
-  if (kinds.size === 2) return "Mixed"
-  return kinds.has("auto") ? "Automated" : "Manual"
+
+  if (baseLabel === "Manual" && info.editor_first_name) {
+    return `Manual (${info.editor_first_name})`
+  }
+  if (baseLabel === "Mixed" && info.editor_first_name) {
+    return `Mixed (${info.editor_first_name})`
+  }
+  return baseLabel
 }

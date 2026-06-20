@@ -113,8 +113,10 @@ export async function GET(request: NextRequest) {
     const minDate = allDates[0] ?? toLocalISODate()
     const maxDate = allDates[allDates.length - 1] ?? toLocalISODate()
 
-    // Fetch profiles, holidays, leaves, and exemptions in parallel
-    const [profileRows, holidayRows, leaveRows, exemptPeriodRows] = await Promise.all([
+    const recordIds = rows.map((r) => r.id).filter((id) => id && !id.startsWith("missing-"))
+
+    // Fetch profiles, holidays, leaves, exemptions, and audit logs in parallel
+    const [profileRows, holidayRows, leaveRows, exemptPeriodRows, auditLogRows] = await Promise.all([
       userIds.length > 0
         ? dataClient
             .from("profiles")
@@ -150,7 +152,43 @@ export async function GET(request: NextRequest) {
             .gte("end_date", minDate)
             .then((r) => r.data ?? [])
         : Promise.resolve([]),
+
+      recordIds.length > 0
+        ? dataClient
+            .from("audit_logs")
+            .select("entity_id, user_id, created_at")
+            .eq("entity_type", "attendance_record")
+            .in("entity_id", recordIds)
+            .order("created_at", { ascending: false })
+            .then((r) => r.data ?? [])
+        : Promise.resolve([]),
     ])
+
+    // Build audit log lookups to find the latest editor for each record
+    const editorIdByRecordId = new Map<string, string>()
+    for (const log of auditLogRows as Array<{ entity_id: string; user_id: string }>) {
+      if (!editorIdByRecordId.has(log.entity_id)) {
+        editorIdByRecordId.set(log.entity_id, log.user_id)
+      }
+    }
+
+    const editorUserIds = [...new Set(Array.from(editorIdByRecordId.values()).filter(Boolean))]
+    const editorProfileRows =
+      editorUserIds.length > 0
+        ? await dataClient
+            .from("profiles")
+            .select("id, first_name, last_name, full_name")
+            .in("id", editorUserIds)
+            .then((r) => r.data ?? [])
+        : []
+
+    const editorProfileMap = new Map<
+      string,
+      { first_name?: string | null; last_name?: string | null; full_name?: string | null }
+    >()
+    for (const p of editorProfileRows) {
+      editorProfileMap.set(p.id, p)
+    }
 
     // Build lookup structures
     const profileMap = new Map<
@@ -195,6 +233,10 @@ export async function GET(request: NextRequest) {
         recordDate: r.date,
       })
 
+      const editorUserId = editorIdByRecordId.get(r.id)
+      const editorProfile = editorUserId ? editorProfileMap.get(editorUserId) : null
+      const editorFirstName = editorProfile?.first_name || editorProfile?.full_name?.split(" ")[0] || null
+
       return {
         id: r.id,
         user_id: r.user_id,
@@ -220,6 +262,7 @@ export async function GET(request: NextRequest) {
         latitude: r.latitude ?? null,
         longitude: r.longitude ?? null,
         site_id: r.site_id ?? null,
+        editor_first_name: editorFirstName,
       }
     })
 
@@ -301,6 +344,7 @@ export async function GET(request: NextRequest) {
             latitude: null,
             longitude: null,
             site_id: null,
+            editor_first_name: null,
           })
         }
       }
@@ -366,18 +410,22 @@ export async function POST(request: NextRequest) {
           }))
     const isCoveredWithoutTimes =
       status === "waiver" || status === "absent_with_permission" || status === "out_of_station"
+    const isLWP = status === "lateness_with_permission"
 
     if (clock_in && clock_out && clock_out <= clock_in) {
       return NextResponse.json({ error: "Clock out must be after clock in" }, { status: 400 })
     }
-    if (!isCoveredWithoutTimes && !clock_in && !clock_out) {
+    if (!isCoveredWithoutTimes && !isLWP && !clock_in && !clock_out) {
       return NextResponse.json({ error: "Provide both clock in and clock out before saving" }, { status: 400 })
     }
-    if (!isCoveredWithoutTimes && ((clock_in && !clock_out) || (!clock_in && clock_out))) {
+    if (!isCoveredWithoutTimes && !isLWP && ((clock_in && !clock_out) || (!clock_in && clock_out))) {
       return NextResponse.json({ error: "Clock in and clock out must be provided together" }, { status: 400 })
     }
-    if (isPermissionAttendanceStatus(status) && status === "lateness_with_permission" && (!clock_in || !clock_out)) {
-      return NextResponse.json({ error: "LWP requires both clock in and clock out times" }, { status: 400 })
+    if (isLWP && !clock_in && !clock_out) {
+      return NextResponse.json(
+        { error: "LWP requires at least one clock punch (clock in or clock out)" },
+        { status: 400 }
+      )
     }
     if (status === "waiver" && !String(waiver_reason || manual_comment).trim()) {
       return NextResponse.json({ error: "Waiver requires a reason or comment" }, { status: 400 })

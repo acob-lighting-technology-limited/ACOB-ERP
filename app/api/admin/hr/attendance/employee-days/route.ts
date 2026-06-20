@@ -19,6 +19,7 @@ type AttendanceRow = {
   waiver_reason: string | null
   created_at?: string | null
   updated_at?: string | null
+  editor_first_name?: string | null
 }
 type HolidayRow = {
   holiday_date: string
@@ -106,11 +107,53 @@ export async function GET(request: NextRequest) {
     for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) exemptDates.add(toLocalISODate(d))
   }
 
+  // Fetch audit logs for all valid records to determine editor_first_name
+  const recordIds = (records || []).map((r) => r.id).filter(Boolean)
+  const editorIdByRecordId = new Map<string, string>()
+  const editorProfileMap = new Map<string, { first_name?: string | null; full_name?: string | null }>()
+
+  if (recordIds.length > 0) {
+    const { data: auditLogs } = await dataClient
+      .from("audit_logs")
+      .select("entity_id, user_id, created_at")
+      .eq("entity_type", "attendance_record")
+      .in("entity_id", recordIds)
+      .order("created_at", { ascending: false })
+
+    if (auditLogs && auditLogs.length > 0) {
+      for (const log of auditLogs) {
+        if (!editorIdByRecordId.has(log.entity_id)) {
+          editorIdByRecordId.set(log.entity_id, log.user_id)
+        }
+      }
+
+      const editorUserIds = [...new Set(Array.from(editorIdByRecordId.values()).filter(Boolean))]
+      if (editorUserIds.length > 0) {
+        const { data: editorProfiles } = await dataClient
+          .from("profiles")
+          .select("id, first_name, full_name")
+          .in("id", editorUserIds)
+
+        if (editorProfiles) {
+          for (const p of editorProfiles) {
+            editorProfileMap.set(p.id, p)
+          }
+        }
+      }
+    }
+  }
+
   const recordsByDate = new Map<string, AttendanceRow>()
   for (const record of records || []) {
     const existing = recordsByDate.get(record.date)
     if (!existing || shouldPreferAttendanceRecord(record, existing)) {
-      recordsByDate.set(record.date, record)
+      const editorUserId = editorIdByRecordId.get(record.id)
+      const editorProfile = editorUserId ? editorProfileMap.get(editorUserId) : null
+      const editorFirstName = editorProfile?.first_name || editorProfile?.full_name?.split(" ")[0] || null
+      recordsByDate.set(record.date, {
+        ...record,
+        editor_first_name: editorFirstName,
+      })
     }
   }
   const holidayDates = new Set<string>((holidays || []).map((h) => h.holiday_date))

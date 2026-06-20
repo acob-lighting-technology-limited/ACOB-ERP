@@ -48,6 +48,7 @@ interface AttendanceRecord {
   longitude?: number | null
   site_id?: string | null
   manual_comment?: string | null
+  editor_first_name?: string | null
 }
 
 function formatDate(dateString: string) {
@@ -277,7 +278,13 @@ export function AdminAttendanceRecordsPage({
             }
           >
             {r.source === "remote_web" && <Camera className="h-3 w-3" />}
-            {r.source === "remote_web" ? "Remote" : r.source === "hikvision" ? "Device" : "Manual"}
+            {r.source === "remote_web"
+              ? "Remote"
+              : r.source === "hikvision"
+                ? "Device"
+                : r.editor_first_name
+                  ? `Manual (${r.editor_first_name})`
+                  : "Manual"}
           </Badge>
           {r.source === "remote_web" && r.face_verified === false && (
             <Badge className="gap-1 bg-amber-100 text-xs text-amber-800">
