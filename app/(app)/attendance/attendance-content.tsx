@@ -9,6 +9,7 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { EmployeeCalendarView } from "./calendar-view"
 import { StatCard } from "@/components/ui/stat-card"
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip"
 import type { AttendanceRecord } from "./page"
 import { logger } from "@/lib/logger"
 import { RemoteCheckinModal } from "@/components/attendance/remote-checkin-modal"
@@ -415,42 +416,88 @@ export function AttendanceContent({
           </div>
         }
         stats={
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard
-              title="Today Status"
-              value={ATTENDANCE_STATUS_LABELS[todayStatus] ?? todayStatus}
-              icon={UserCheck}
-              iconBgColor="bg-blue-500/10"
-              iconColor="text-blue-500"
-            />
-            <StatCard
-              title="Total Days"
-              value={`${attendedDays} / ${totalWorkdays} days`}
-              icon={Calendar}
-              iconBgColor="bg-emerald-500/10"
-              iconColor="text-emerald-500"
-            />
-            <StatCard
-              title="Attendance Rate"
-              value={`${attendanceRate}%`}
-              icon={BarChart3}
-              iconBgColor={
-                attendanceRate >= 80 ? "bg-emerald-500/10" : attendanceRate >= 60 ? "bg-yellow-500/10" : "bg-red-500/10"
-              }
-              iconColor={
-                attendanceRate >= 80 ? "text-emerald-500" : attendanceRate >= 60 ? "text-yellow-500" : "text-red-500"
-              }
-            />
-            <StatCard
-              title="Absent Rate"
-              value={`${absentRate}%`}
-              icon={AlertCircle}
-              iconBgColor={
-                absentRate <= 10 ? "bg-emerald-500/10" : absentRate <= 25 ? "bg-yellow-500/10" : "bg-red-500/10"
-              }
-              iconColor={absentRate <= 10 ? "text-emerald-500" : absentRate <= 25 ? "text-yellow-500" : "text-red-500"}
-            />
-          </div>
+          <TooltipProvider>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard
+                title="Today Status"
+                value={ATTENDANCE_STATUS_LABELS[todayStatus] ?? todayStatus}
+                icon={UserCheck}
+                iconBgColor="bg-blue-500/10"
+                iconColor="text-blue-500"
+              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="cursor-help">
+                    <StatCard
+                      title="Total Days"
+                      value={`${attendedDays} / ${totalWorkdays} days`}
+                      icon={Calendar}
+                      iconBgColor="bg-emerald-500/10"
+                      iconColor="text-emerald-500"
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs text-xs">
+                    Expected workdays in the period. Excludes holidays, leaves, exemptions, waivers, and AWP.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="cursor-help">
+                    <StatCard
+                      title="Attendance Rate"
+                      value={`${attendanceRate}%`}
+                      icon={BarChart3}
+                      iconBgColor={
+                        attendanceRate >= 80
+                          ? "bg-emerald-500/10"
+                          : attendanceRate >= 60
+                            ? "bg-yellow-500/10"
+                            : "bg-red-500/10"
+                      }
+                      iconColor={
+                        attendanceRate >= 80
+                          ? "text-emerald-500"
+                          : attendanceRate >= 60
+                            ? "text-yellow-500"
+                            : "text-red-500"
+                      }
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs text-xs">
+                    Calculated as (attendance credits / total workdays). Excused days do not count against you.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="cursor-help">
+                    <StatCard
+                      title="Absent Rate"
+                      value={`${absentRate}%`}
+                      icon={AlertCircle}
+                      iconBgColor={
+                        absentRate <= 10 ? "bg-emerald-500/10" : absentRate <= 25 ? "bg-yellow-500/10" : "bg-red-500/10"
+                      }
+                      iconColor={
+                        absentRate <= 10 ? "text-emerald-500" : absentRate <= 25 ? "text-yellow-500" : "text-red-500"
+                      }
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs text-xs">
+                    Percentage of unexcused absences over total workdays. Excused days (holidays, leaves, etc.) are
+                    excluded.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
         }
       >
         {activeTab === "calendar" ? (
