@@ -11,10 +11,6 @@
     {
       "path": "/api/cron/attendance/mark-incomplete",
       "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/cron/dispatch-reminders",
-      "schedule": "*/5 * * * *"
     }
   ]
 }
