@@ -7,9 +7,12 @@ import { getClientId, rateLimit } from "@/lib/rate-limit"
 const log = logger("hr-performance-cbt-session")
 
 const StartSchema = z.object({
-  first_name: z.string().trim().min(1, "First name is required"),
+  last_name: z.string().trim().min(1, "Last name is required"),
   company_email: z.string().trim().email("Select a valid email"),
-  employee_number: z.string().trim().min(1, "Employee ID is required"),
+  review_cycle_id: z.string().uuid("Please select a valid review cycle"),
+  dob_day: z.union([z.string(), z.number()]),
+  dob_month: z.union([z.string(), z.number()]),
+  dob_year: z.union([z.string(), z.number()]),
 })
 
 const SubmitSchema = z.object({
@@ -19,9 +22,9 @@ const SubmitSchema = z.object({
 
 type ProfileRow = {
   id: string
-  first_name: string | null
+  last_name: string | null
   company_email: string | null
-  employee_number: string | null
+  birthday: string | null
 }
 
 type QuestionRow = {
@@ -45,6 +48,7 @@ type AttemptRow = {
 
 type CycleRow = {
   id: string
+  name: string
 }
 
 function getServiceClient() {
@@ -63,22 +67,35 @@ function getServiceClient() {
 export async function GET() {
   try {
     const supabase = getServiceClient()
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("first_name, company_email, employee_number")
-      .not("company_email", "is", null)
-      .not("employee_number", "is", null)
-      .eq("employment_status", "active")
-      .order("company_email", { ascending: true })
+    const [{ data: profiles, error: profilesError }, { data: cycles, error: cyclesError }] = await Promise.all([
+      supabase
+        .from("profiles")
+        .select("last_name, company_email, birthday")
+        .not("company_email", "is", null)
+        .eq("employment_status", "active")
+        .order("company_email", { ascending: true }),
+      supabase
+        .from("review_cycles")
+        .select("id, name")
+        .eq("status", "active")
+        .order("start_date", { ascending: false }),
+    ])
 
-    if (error) throw error
+    if (profilesError) throw profilesError
+    if (cyclesError) throw cyclesError
 
     return NextResponse.json({
-      data: (data || []).map((profile) => ({
-        first_name: profile.first_name,
-        company_email: profile.company_email,
-        employee_number: profile.employee_number,
-      })),
+      data: {
+        candidates: (profiles || []).map((profile) => ({
+          last_name: profile.last_name,
+          company_email: profile.company_email,
+          birthday: profile.birthday,
+        })),
+        cycles: (cycles || []).map((cycle) => ({
+          id: cycle.id,
+          name: cycle.name,
+        })),
+      },
     })
   } catch (error) {
     log.error({ err: String(error) }, "Failed to load CBT candidate options")
@@ -100,46 +117,38 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getServiceClient()
-    const { first_name, company_email, employee_number } = parsed.data
-    const { data: activeCycle, error: cycleError } = await supabase
-      .from("review_cycles")
-      .select("id")
-      .eq("status", "active")
-      .order("start_date", { ascending: false })
-      .limit(1)
-      .maybeSingle<CycleRow>()
-
-    if (cycleError) throw cycleError
-    if (!activeCycle?.id) {
-      return NextResponse.json({ error: "No active review cycle is available for CBT." }, { status: 400 })
-    }
+    const { last_name, company_email, review_cycle_id, dob_day, dob_month, dob_year } = parsed.data
 
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, first_name, company_email, employee_number")
+      .select("id, last_name, company_email, birthday")
       .eq("company_email", company_email)
-      .eq("employee_number", employee_number)
       .maybeSingle<ProfileRow>()
 
     if (profileError) throw profileError
 
-    const normalizedFirstName = first_name.trim().toLowerCase()
-    if (
-      !profile ||
-      String(profile.first_name || "")
+    if (!profile) {
+      return NextResponse.json({ error: "The verification details entered do not match our records." }, { status: 400 })
+    }
+
+    const isLastNameMatch =
+      String(profile.last_name || "")
         .trim()
-        .toLowerCase() !== normalizedFirstName
-    ) {
-      return NextResponse.json(
-        { error: "The first name and employee ID do not match the selected email." },
-        { status: 400 }
-      )
+        .toLowerCase() === last_name.trim().toLowerCase()
+
+    const dayNum = Number(dob_day)
+    const monthNum = Number(dob_month)
+    const enteredMMDD = `${String(monthNum).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`
+    const isDobMatch = profile.birthday === enteredMMDD
+
+    if (!isLastNameMatch || !isDobMatch) {
+      return NextResponse.json({ error: "The verification details entered do not match our records." }, { status: 400 })
     }
 
     const { data: questions, error: questionsError } = await supabase
       .from("cbt_questions")
       .select("id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, correct_option")
-      .eq("review_cycle_id", activeCycle.id)
+      .eq("review_cycle_id", review_cycle_id)
       .eq("is_active", true)
       .order("created_at", { ascending: true })
       .limit(10)
@@ -147,19 +156,28 @@ export async function POST(request: NextRequest) {
 
     if (questionsError) throw questionsError
     if (!questions || questions.length === 0) {
-      return NextResponse.json({ error: "No CBT questions are available yet." }, { status: 400 })
+      return NextResponse.json({ error: "No CBT questions are available yet for this review cycle." }, { status: 400 })
+    }
+
+    const cbt_details = {
+      last_name: last_name.trim(),
+      company_email,
+      dob_day: dayNum,
+      dob_month: monthNum,
+      dob_year: Number(dob_year),
     }
 
     const { data: attempt, error: attemptError } = await supabase
       .from("cbt_attempts")
       .insert({
         profile_id: profile.id,
-        review_cycle_id: activeCycle.id,
-        employee_number,
-        first_name_snapshot: profile.first_name || first_name,
+        review_cycle_id,
+        employee_number: "-",
+        first_name_snapshot: profile.last_name || last_name,
         company_email,
         total_questions: questions.length,
         question_ids: questions.map((question) => question.id),
+        cbt_details,
       })
       .select("id")
       .single<{ id: string }>()
@@ -172,9 +190,9 @@ export async function POST(request: NextRequest) {
       data: {
         attempt_id: attempt.id,
         candidate: {
-          first_name: profile.first_name,
+          first_name: profile.last_name,
           company_email: profile.company_email,
-          employee_number: profile.employee_number,
+          employee_number: "-",
         },
         questions: questions.map((question) => ({
           id: question.id,

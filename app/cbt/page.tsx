@@ -10,9 +10,14 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
 type CandidateOption = {
-  first_name: string | null
+  last_name: string | null
   company_email: string | null
-  employee_number: string | null
+  birthday: string | null
+}
+
+type ReviewCycleOption = {
+  id: string
+  name: string
 }
 
 type Question = {
@@ -37,8 +42,26 @@ type ResultData = {
   total_questions: number
 }
 
+const MONTH_OPTIONS = [
+  { value: "1", label: "January" },
+  { value: "2", label: "February" },
+  { value: "3", label: "March" },
+  { value: "4", label: "April" },
+  { value: "5", label: "May" },
+  { value: "6", label: "June" },
+  { value: "7", label: "July" },
+  { value: "8", label: "August" },
+  { value: "9", label: "September" },
+  { value: "10", label: "October" },
+  { value: "11", label: "November" },
+  { value: "12", label: "December" },
+]
+
+const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => String(i + 1))
+
 export default function CbtPage() {
   const [candidateOptions, setCandidateOptions] = useState<CandidateOption[]>([])
+  const [cycles, setCycles] = useState<ReviewCycleOption[]>([])
   const [loadingOptions, setLoadingOptions] = useState(true)
   const [starting, setStarting] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -47,9 +70,12 @@ export default function CbtPage() {
   const [currentIndex, setCurrentIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, "A" | "B" | "C" | "D">>({})
   const [form, setForm] = useState({
-    first_name: "",
+    last_name: "",
     company_email: "",
-    employee_number: "",
+    review_cycle_id: "",
+    dob_day: "",
+    dob_month: "",
+    dob_year: "",
   })
 
   useEffect(() => {
@@ -59,7 +85,8 @@ export default function CbtPage() {
         const response = await fetch("/api/hr/performance/cbt/session", { cache: "no-store" })
         const payload = await response.json()
         if (!response.ok) throw new Error(payload.error || "Failed to load CBT candidates")
-        setCandidateOptions(payload.data || [])
+        setCandidateOptions(payload.data?.candidates || [])
+        setCycles(payload.data?.cycles || [])
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to load CBT candidates")
       } finally {
@@ -127,7 +154,7 @@ export default function CbtPage() {
           <CardHeader className="text-center">
             <CardTitle className="text-3xl">CBT Submitted</CardTitle>
             <CardDescription className="text-slate-300">
-              Your score has been recorded for the current performance cycle.
+              Your score has been recorded for the performance cycle.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 text-center">
@@ -138,7 +165,14 @@ export default function CbtPage() {
             <Button
               onClick={() => {
                 setResult(null)
-                setForm({ first_name: "", company_email: "", employee_number: "" })
+                setForm({
+                  last_name: "",
+                  company_email: "",
+                  review_cycle_id: "",
+                  dob_day: "",
+                  dob_month: "",
+                  dob_year: "",
+                })
               }}
             >
               Start Another Session
@@ -236,6 +270,14 @@ export default function CbtPage() {
     )
   }
 
+  const isFormValid =
+    form.last_name &&
+    form.company_email &&
+    form.review_cycle_id &&
+    form.dob_day &&
+    form.dob_month &&
+    /^\d{4}$/.test(form.dob_year)
+
   return (
     <main className="flex min-h-screen items-center justify-center bg-black p-6 text-white">
       <Card className="w-full max-w-2xl border-white/10 bg-neutral-950 text-white shadow-2xl">
@@ -247,27 +289,37 @@ export default function CbtPage() {
             <div>
               <CardTitle className="text-3xl">CBT Verification</CardTitle>
               <CardDescription className="text-slate-300">
-                Enter your first name, company email, and employee ID to start the objective CBT.
+                Choose a review cycle, select your email, and verify with your last name and date of birth.
               </CardDescription>
             </div>
           </div>
           <div className="flex items-center gap-2 text-sm text-slate-300">
             <ShieldCheck className="h-4 w-4 text-white" />
-            Verification currently checks first name, company email, and employee ID together before the test opens.
+            Verification checks last name, company email, and date of birth (month/day) together before the test opens.
           </div>
         </CardHeader>
         <CardContent className="space-y-5">
+          <div className="space-y-2">
+            <Label htmlFor="review_cycle_id">Review Cycle</Label>
+            <Select
+              value={form.review_cycle_id}
+              onValueChange={(value) => setForm((current) => ({ ...current, review_cycle_id: value }))}
+            >
+              <SelectTrigger id="review_cycle_id" className="border-white/10 bg-white/5 text-white">
+                <SelectValue placeholder={loadingOptions ? "Loading cycles..." : "Select review cycle"} />
+              </SelectTrigger>
+              <SelectContent>
+                {cycles.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="grid gap-5 md:grid-cols-2">
-            <div>
-              <Label htmlFor="first_name">First Name</Label>
-              <Input
-                id="first_name"
-                value={form.first_name}
-                onChange={(event) => setForm((current) => ({ ...current, first_name: event.target.value }))}
-                className="border-white/10 bg-white/5 text-white"
-              />
-            </div>
-            <div>
+            <div className="space-y-2">
               <Label htmlFor="company_email">Company Email</Label>
               <Select
                 value={form.company_email}
@@ -278,31 +330,78 @@ export default function CbtPage() {
                 </SelectTrigger>
                 <SelectContent>
                   {candidateOptions.map((option) => (
-                    <SelectItem
-                      key={`${option.company_email}-${option.employee_number}`}
-                      value={option.company_email || ""}
-                    >
+                    <SelectItem key={option.company_email || ""} value={option.company_email || ""}>
                       {option.company_email}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="last_name">Last Name</Label>
+              <Input
+                id="last_name"
+                value={form.last_name}
+                onChange={(event) => setForm((current) => ({ ...current, last_name: event.target.value }))}
+                className="h-10 border-white/10 bg-white/5 text-white"
+                placeholder="Enter last name"
+              />
+            </div>
           </div>
 
-          <div>
-            <Label htmlFor="employee_number">Employee ID</Label>
-            <Input
-              id="employee_number"
-              value={form.employee_number}
-              onChange={(event) => setForm((current) => ({ ...current, employee_number: event.target.value }))}
-              className="border-white/10 bg-white/5 text-white"
-            />
+          <div className="space-y-2">
+            <Label>Date of Birth</Label>
+            <div className="grid grid-cols-3 gap-3">
+              <Select
+                value={form.dob_day}
+                onValueChange={(value) => setForm((current) => ({ ...current, dob_day: value }))}
+              >
+                <SelectTrigger className="border-white/10 bg-white/5 text-white">
+                  <SelectValue placeholder="Day (DD)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DAY_OPTIONS.map((day) => (
+                    <SelectItem key={day} value={day}>
+                      {day.padStart(2, "0")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={form.dob_month}
+                onValueChange={(value) => setForm((current) => ({ ...current, dob_month: value }))}
+              >
+                <SelectTrigger className="border-white/10 bg-white/5 text-white">
+                  <SelectValue placeholder="Month" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTH_OPTIONS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Input
+                id="dob_year"
+                type="text"
+                maxLength={4}
+                value={form.dob_year}
+                onChange={(event) =>
+                  setForm((current) => ({ ...current, dob_year: event.target.value.replace(/\D/g, "") }))
+                }
+                placeholder="Year (YYYY)"
+                className="h-10 border-white/10 bg-white/5 text-white"
+              />
+            </div>
           </div>
 
           <Button
             className="w-full"
-            disabled={starting || loadingOptions || !form.first_name || !form.company_email || !form.employee_number}
+            disabled={starting || loadingOptions || !isFormValid}
             onClick={() => void startSession()}
             loading={starting}
           >
