@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
     if (profileError) throw profileError
 
     if (!profile) {
-      return NextResponse.json({ error: "The verification details entered do not match our records." }, { status: 400 })
+      return NextResponse.json({ error: "The email address entered does not match our records." }, { status: 400 })
     }
 
     const isLastNameMatch =
@@ -141,8 +141,19 @@ export async function POST(request: NextRequest) {
     const enteredMMDD = `${String(monthNum).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`
     const isDobMatch = profile.birthday === enteredMMDD
 
-    if (!isLastNameMatch || !isDobMatch) {
-      return NextResponse.json({ error: "The verification details entered do not match our records." }, { status: 400 })
+    if (!isLastNameMatch && !isDobMatch) {
+      return NextResponse.json(
+        { error: "The last name and date of birth entered do not match our records." },
+        { status: 400 }
+      )
+    }
+
+    if (!isLastNameMatch) {
+      return NextResponse.json({ error: "The last name entered does not match our records." }, { status: 400 })
+    }
+
+    if (!isDobMatch) {
+      return NextResponse.json({ error: "The date of birth entered does not match our records." }, { status: 400 })
     }
 
     const { data: questions, error: questionsError } = await supabase
