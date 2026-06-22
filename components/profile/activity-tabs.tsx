@@ -19,6 +19,7 @@ import type {
   AttendanceItem,
 } from "@/app/(app)/profile/page"
 import { formatWATDate } from "@/lib/utils/date"
+import { cn } from "@/lib/utils"
 
 function statusColor(status: string): string {
   switch (status?.toLowerCase()) {
@@ -60,7 +61,7 @@ function shortDate(dateString: string): string {
 
 function EmptyTab({ label }: { label: string }) {
   return (
-    <div className="py-10 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center py-10 text-center">
       <p className="text-muted-foreground text-sm">No {label} found</p>
     </div>
   )
@@ -87,6 +88,7 @@ interface ActivityTabsProps {
   payments: PaymentItem[]
   leave: LeaveItem[]
   attendance: AttendanceItem[]
+  className?: string
 }
 
 export function ActivityTabs({
@@ -99,6 +101,7 @@ export function ActivityTabs({
   payments,
   leave,
   attendance,
+  className,
 }: ActivityTabsProps) {
   const [activeTab, setActiveTab] = useState("assets")
 
@@ -117,17 +120,22 @@ export function ActivityTabs({
     return map[activeTab] ?? map.assets
   }, [activeTab])
 
-  const listClass = "max-h-72 divide-y overflow-y-auto"
+  const listClass = "flex-1 divide-y overflow-y-auto"
 
   return (
-    <Card>
-      <CardHeader className="px-4 py-3">
+    <Card className={cn("flex h-[480px] flex-col", className)}>
+      <CardHeader className="shrink-0 px-4 py-3">
         <CardTitle className="text-sm">Activity</CardTitle>
       </CardHeader>
-      <CardContent className="p-0">
-        <Tabs defaultValue="assets" value={activeTab} onValueChange={setActiveTab}>
-          <div className="border-b px-2">
-            <TabsList className="h-auto w-full justify-start gap-0 rounded-none bg-transparent p-0">
+      <CardContent className="flex flex-1 flex-col overflow-hidden p-0">
+        <Tabs
+          defaultValue="assets"
+          value={activeTab}
+          onValueChange={setActiveTab}
+          className="flex flex-1 flex-col overflow-hidden"
+        >
+          <div className="shrink-0 border-b px-2">
+            <TabsList className="scrollbar-none h-auto w-full justify-start gap-0 overflow-x-auto rounded-none bg-transparent p-0">
               {[
                 { value: "assets", label: "Assets", count: assets.length },
                 { value: "tasks", label: "Tasks", count: tasks.length },
@@ -152,7 +160,7 @@ export function ActivityTabs({
           </div>
 
           {/* Assets */}
-          <TabsContent value="assets" className="m-0">
+          <TabsContent value="assets" className="m-0 flex flex-1 flex-col overflow-hidden">
             {assets.length > 0 ? (
               <ul className={listClass}>
                 {assets.map((a) => (
@@ -174,7 +182,7 @@ export function ActivityTabs({
           </TabsContent>
 
           {/* Tasks */}
-          <TabsContent value="tasks" className="m-0">
+          <TabsContent value="tasks" className="m-0 flex flex-1 flex-col overflow-hidden">
             {tasks.length > 0 ? (
               <ul className={listClass}>
                 {tasks.map((t) => (
@@ -194,7 +202,7 @@ export function ActivityTabs({
           </TabsContent>
 
           {/* Documentation */}
-          <TabsContent value="documentation" className="m-0">
+          <TabsContent value="documentation" className="m-0 flex flex-1 flex-col overflow-hidden">
             {documentation.length > 0 ? (
               <ul className={listClass}>
                 {documentation.map((d) => (
@@ -217,7 +225,7 @@ export function ActivityTabs({
           </TabsContent>
 
           {/* Feedback */}
-          <TabsContent value="feedback" className="m-0">
+          <TabsContent value="feedback" className="m-0 flex flex-1 flex-col overflow-hidden">
             {feedback.length > 0 ? (
               <ul className={listClass}>
                 {feedback.map((f) => (
@@ -238,7 +246,7 @@ export function ActivityTabs({
           </TabsContent>
 
           {/* Correspondence */}
-          <TabsContent value="correspondence" className="m-0">
+          <TabsContent value="correspondence" className="m-0 flex flex-1 flex-col overflow-hidden">
             {correspondence.length > 0 ? (
               <ul className={listClass}>
                 {correspondence.map((c) => (
@@ -259,7 +267,7 @@ export function ActivityTabs({
           </TabsContent>
 
           {/* Help Desk */}
-          <TabsContent value="helpdesk" className="m-0">
+          <TabsContent value="helpdesk" className="m-0 flex flex-1 flex-col overflow-hidden">
             {helpDesk.length > 0 ? (
               <ul className={listClass}>
                 {helpDesk.map((h) => (
@@ -281,7 +289,7 @@ export function ActivityTabs({
           </TabsContent>
 
           {/* Payments */}
-          <TabsContent value="payments" className="m-0">
+          <TabsContent value="payments" className="m-0 flex flex-1 flex-col overflow-hidden">
             {payments.length > 0 ? (
               <ul className={listClass}>
                 {payments.map((p) => (
@@ -307,7 +315,7 @@ export function ActivityTabs({
           </TabsContent>
 
           {/* Leave */}
-          <TabsContent value="leave" className="m-0">
+          <TabsContent value="leave" className="m-0 flex flex-1 flex-col overflow-hidden">
             {leave.length > 0 ? (
               <ul className={listClass}>
                 {leave.map((l) => (
@@ -329,7 +337,7 @@ export function ActivityTabs({
           </TabsContent>
 
           {/* Attendance */}
-          <TabsContent value="attendance" className="m-0">
+          <TabsContent value="attendance" className="m-0 flex flex-1 flex-col overflow-hidden">
             {attendance.length > 0 ? (
               <ul className={listClass}>
                 {attendance.map((a) => (
@@ -357,7 +365,7 @@ export function ActivityTabs({
           </TabsContent>
         </Tabs>
 
-        <div className="border-t px-4 py-2.5">
+        <div className="shrink-0 border-t px-4 py-2.5">
           <Link
             href={viewAllMeta.href}
             className={buttonVariants({ variant: "ghost", size: "sm" }) + " h-7 px-2 text-xs"}
