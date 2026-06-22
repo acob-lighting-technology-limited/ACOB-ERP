@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { toLocalISODate, toLocalTimeString } from "@/lib/utils/date"
 
 const log = logger("hr-attendance-clock-in")
@@ -71,6 +72,17 @@ export async function POST(request: NextRequest) {
       },
       { failOpen: true }
     )
+
+    await recordAttendanceEvent(supabase, {
+      userId: user.id,
+      eventDate: today,
+      eventType: "self_clock_in",
+      attendanceRecordId: record.id,
+      toStatus: status,
+      source: "self",
+      actorId: user.id,
+      metadata: { clock_in: record.clock_in },
+    })
 
     return NextResponse.json({
       data: record,

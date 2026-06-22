@@ -3,6 +3,8 @@ import { z } from "zod"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
+import { resolvePendingAppealOnManualStatus } from "@/lib/hr/attendance-appeals"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import {
   DB_WRITABLE_STATUSES,
@@ -26,7 +28,6 @@ const PatchSchema = z.object({
     .nullable(),
   status: z.enum(DB_WRITABLE_STATUSES).optional(),
   waived: z.boolean().optional(),
-  waiver_reason: z.string().max(200).optional().nullable(),
   manual_comment: z.string().trim().min(3, "Manual attendance changes require a comment").max(500),
 })
 
@@ -53,7 +54,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     const { data: record } = await dataClient
       .from("attendance_records")
-      .select("id, clock_in, clock_out, date, status, waived, waiver_reason, manual_comment")
+      .select("id, user_id, clock_in, clock_out, date, status, waived, manual_comment")
       .eq("id", id)
       .maybeSingle()
 
@@ -65,9 +66,11 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       manual_comment: parsed.data.manual_comment,
     }
 
-    // Any manually-changed punch is attributed to "manual" so the source label can show Mixed
-    if (parsed.data.clock_in !== undefined) updates.clock_in_source = "manual"
-    if (parsed.data.clock_out !== undefined) updates.clock_out_source = "manual"
+    // Any manually-changed punch is attributed to "manual" so the source label can show Mixed.
+    // Only set the source when a non-null time is provided; setting clock_in_source on a null
+    // punch would leave a dangling source value on a cleared clock-in.
+    if (parsed.data.clock_in != null) updates.clock_in_source = "manual"
+    if (parsed.data.clock_out != null) updates.clock_out_source = "manual"
 
     // Recalculate total_hours if both times are known after update
     const clockIn = parsed.data.clock_in !== undefined ? parsed.data.clock_in : record.clock_in
@@ -100,7 +103,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         { status: 400 }
       )
     }
-    if (nextStatus === "waiver" && !String(parsed.data.waiver_reason || parsed.data.manual_comment).trim()) {
+    if (nextStatus === "waiver" && !parsed.data.manual_comment.trim()) {
       return NextResponse.json({ error: "Waiver requires a reason or comment" }, { status: 400 })
     }
 
@@ -140,11 +143,33 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         entityType: "attendance_record",
         entityId: id,
         oldValues: record,
-        newValues: updates,
+        newValues: { ...updates, user_id: record.user_id },
         context: { actorId: user.id, source: "api", route: `/api/admin/hr/attendance/records/${id}` },
       },
       { failOpen: true }
     )
+
+    // Provenance + appeal auto-resolution (replaces the old DB trigger).
+    await recordAttendanceEvent(dataClient, {
+      userId: record.user_id,
+      eventDate: record.date,
+      eventType: "manual_update",
+      attendanceRecordId: id,
+      fromStatus: record.status,
+      toStatus: nextStatus,
+      source: "manual",
+      comment: parsed.data.manual_comment,
+      actorId: user.id,
+      metadata: { clock_in: clockIn ?? null, clock_out: clockOut ?? null },
+    })
+    await resolvePendingAppealOnManualStatus(dataClient, {
+      userId: record.user_id,
+      date: record.date,
+      status: nextStatus,
+      attendanceRecordId: id,
+      comment: parsed.data.manual_comment,
+      actorId: user.id,
+    })
 
     return NextResponse.json({ data: updated, message: "Record updated" })
   } catch (error) {

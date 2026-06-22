@@ -5,6 +5,7 @@ import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
 import { isLate } from "@/lib/hr/attendance-utils"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 
 const log = logger("hikvision-events")
 
@@ -122,6 +123,17 @@ async function processHikvisionEvent(event: ParsedEvent) {
       },
       { failOpen: true }
     )
+
+    await recordAttendanceEvent(supabase, {
+      userId,
+      eventDate: date,
+      eventType: "device_punch_in",
+      attendanceRecordId: upserted.id,
+      toStatus: status,
+      source: "hikvision",
+      actorId: null,
+      metadata: { clock_in: time, employee_no: employeeNoString },
+    })
   } else {
     if (!existing?.clock_in) {
       log.warn({ userId, date, time }, "Hikvision clock-out received but no clock-in on record — skipping")
@@ -154,6 +166,16 @@ async function processHikvisionEvent(event: ParsedEvent) {
       },
       { failOpen: true }
     )
+
+    await recordAttendanceEvent(supabase, {
+      userId,
+      eventDate: date,
+      eventType: "device_punch_out",
+      attendanceRecordId: existing.id,
+      source: "hikvision",
+      actorId: null,
+      metadata: { clock_out: time, total_hours: totalHours, employee_no: employeeNoString },
+    })
   }
 
   log.info({ userId, date, action, employeeNoString }, "Hikvision attendance recorded")

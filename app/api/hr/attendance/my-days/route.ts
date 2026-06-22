@@ -13,7 +13,6 @@ type AttendanceRow = {
   status: string
   source: string | null
   waived: boolean
-  waiver_reason: string | null
   created_at?: string | null
   updated_at?: string | null
 }
@@ -54,7 +53,7 @@ export async function GET(request: NextRequest) {
   const { data: profile } = await dataClient.from("profiles").select("attendance_exempt").eq("id", userId).maybeSingle()
   const { data: records, error: recordsError } = await dataClient
     .from("attendance_records")
-    .select("id, date, clock_in, clock_out, total_hours, status, source, waived, waiver_reason, created_at, updated_at")
+    .select("id, date, clock_in, clock_out, total_hours, status, source, waived, created_at, updated_at")
     .eq("user_id", userId)
     .gte("date", monthStart)
     .lte("date", monthEnd)

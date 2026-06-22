@@ -102,6 +102,52 @@ export function isEarlyDeparture(clockOut: string): boolean {
   return h * 60 + m < 17 * 60
 }
 
+export interface ManualStatusEditOptions {
+  /** Fully present and on-time — no LWP/AWP override is applicable. */
+  isOnTimePresent: boolean
+  showLWP: boolean
+  showAWP: boolean
+  /** Status choices to offer in the manual single-day editor. */
+  options: Array<{ value: "lateness_with_permission" | "absent_with_permission"; label: string }>
+  /** Sensible default status given the punches present. */
+  initialStatus: "" | "lateness_with_permission" | "absent_with_permission"
+}
+
+/**
+ * Single source of truth for which manual overrides (LWP/AWP) apply to a day, based on
+ * its punches. Used by the per-day attendance editor so the rule isn't duplicated between
+ * its "open" and "render" paths (and can be reused by any other single-day edit surface).
+ */
+export function getManualStatusEditOptions(
+  record: { clock_in?: string | null; clock_out?: string | null } | null
+): ManualStatusEditOptions {
+  const clockIn = record?.clock_in ?? null
+  const clockOut = record?.clock_out ?? null
+  const hasClockIn = Boolean(clockIn)
+  const hasClockOut = Boolean(clockOut)
+  const hasAnyPunch = hasClockIn || hasClockOut
+
+  const isLatePunch = hasClockIn && isLate(clockIn as string)
+  const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
+  const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
+
+  const showAWP = !hasAnyPunch
+  const showLWP = hasAnyPunch && !isOnTimePresent
+
+  const initialStatus: ManualStatusEditOptions["initialStatus"] = !hasAnyPunch
+    ? "absent_with_permission"
+    : !isOnTimePresent
+      ? "lateness_with_permission"
+      : ""
+
+  const options: ManualStatusEditOptions["options"] = [
+    ...(showLWP ? [{ value: "lateness_with_permission" as const, label: "LWP" }] : []),
+    ...(showAWP ? [{ value: "absent_with_permission" as const, label: "AWP" }] : []),
+  ]
+
+  return { isOnTimePresent, showLWP, showAWP, options, initialStatus }
+}
+
 export function deriveUnifiedAttendanceStatus(input: {
   record?: AttendanceLike | null
   isHoliday?: boolean

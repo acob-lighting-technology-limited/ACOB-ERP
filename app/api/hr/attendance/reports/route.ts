@@ -5,6 +5,7 @@ import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-gu
 import { normalizeDepartmentName } from "@/shared/departments"
 import { missedHours, dayCredit, toLocalISODate, toLocalYearMonth, getWorkdaysInMonth } from "@/lib/hr/attendance-utils"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import { loadDayContext } from "@/lib/hr/attendance-day-context"
 import { logger } from "@/lib/logger"
 
 const log = logger("hr-attendance-reports-api")
@@ -27,22 +28,6 @@ type ProfileRow = {
   department?: string | null
   attendance_exempt?: boolean | null
   attendance_exempt_until?: string | null
-}
-
-type LeaveRow = {
-  user_id: string
-  start_date: string
-  end_date: string
-  status: string
-}
-
-type HolidayRow = {
-  holiday_date: string
-}
-type ExemptPeriodRow = {
-  user_id: string
-  start_date: string
-  end_date: string
 }
 
 export async function GET(request: NextRequest) {
@@ -147,54 +132,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: attendanceError.message }, { status: 500 })
     }
 
-    // Fetch approved leave requests that overlap the selected date range
-    let leaveQuery = dataClient
-      .from("leave_requests")
-      .select("user_id, start_date, end_date, status")
-      .in("user_id", allowedProfileIds)
-      .eq("status", "approved")
-    if (startDate) leaveQuery = leaveQuery.lte("start_date", endDate ?? startDate)
-    if (endDate) leaveQuery = leaveQuery.gte("end_date", startDate ?? endDate)
-
-    const { data: leaveRows } = await leaveQuery.returns<LeaveRow[]>()
-
-    const exemptPeriodSet = new Set<string>()
-    {
-      let periodQuery = dataClient
-        .from("attendance_exempt_periods")
-        .select("user_id, start_date, end_date")
-        .in("user_id", allowedProfileIds)
-      if (startDate) periodQuery = periodQuery.lte("start_date", endDate ?? startDate)
-      if (endDate) periodQuery = periodQuery.gte("end_date", startDate ?? endDate)
-      const { data: periodRows } = await periodQuery.returns<ExemptPeriodRow[]>()
-      for (const period of periodRows || []) {
-        const start = new Date(period.start_date)
-        const end = new Date(period.end_date)
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          exemptPeriodSet.add(`${period.user_id}:${toLocalISODate(d)}`)
-        }
-      }
-    }
-
-    // Fetch org-wide holidays in selected range
-    const holidaySet = new Set<string>()
-    {
-      let holidayQuery = dataClient.from("holiday_calendar").select("holiday_date")
-      if (startDate) holidayQuery = holidayQuery.gte("holiday_date", startDate)
-      if (endDate) holidayQuery = holidayQuery.lte("holiday_date", endDate)
-      const { data: holidayRows } = await holidayQuery.returns<HolidayRow[]>()
-      for (const holiday of holidayRows || []) holidaySet.add(holiday.holiday_date)
-    }
-
-    // Build set of (user_id, date) covered by approved leave
-    const onLeaveSet = new Set<string>()
-    for (const lr of leaveRows ?? []) {
-      const start = new Date(lr.start_date)
-      const end = new Date(lr.end_date)
-      for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-        onLeaveSet.add(`${lr.user_id}:${toLocalISODate(d)}`)
-      }
-    }
+    // Org holidays, approved leave, and exemption periods covering the range —
+    // gathered through the shared helper so all read endpoints stay consistent.
+    const ctx = await loadDayContext(dataClient, {
+      userIds: allowedProfileIds,
+      start: startDate ?? periodWorkdays[0],
+      end: endDate ?? periodWorkdays[periodWorkdays.length - 1],
+    })
 
     // Build per-employee record map keyed by date
     const recordsByEmployee = new Map<string, Map<string, AttendanceRow>>()
@@ -224,11 +168,11 @@ export async function GET(request: NextRequest) {
       let available_days = 0
 
       for (const workday of periodWorkdays) {
-        if (holidaySet.has(workday)) {
+        if (ctx.isHoliday(workday)) {
           holiday_days++
           continue
         }
-        if (onLeaveSet.has(`${profile.id}:${workday}`)) {
+        if (ctx.isOnLeave(profile.id, workday)) {
           leave_days++
           continue
         }
@@ -236,7 +180,7 @@ export async function GET(request: NextRequest) {
         // Skip today if still in progress (clocked in, not yet out) — don't score an unfinished day
         if (workday === todayIso && rec?.clock_in && !rec?.clock_out) continue
 
-        const isExempted = Boolean(profile.attendance_exempt) || exemptPeriodSet.has(`${profile.id}:${workday}`)
+        const isExempted = Boolean(profile.attendance_exempt) || ctx.isExempt(profile.id, workday)
         if (isExempted) {
           exempted_days++
           continue

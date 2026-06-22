@@ -5,6 +5,9 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
+import { resolvePendingAppealOnManualStatus } from "@/lib/hr/attendance-appeals"
+import { loadDayContext } from "@/lib/hr/attendance-day-context"
 import { toLocalISODate } from "@/lib/hr/attendance-utils"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
@@ -29,7 +32,6 @@ const CreateSchema = z.object({
     .nullable(),
   status: z.enum(DB_WRITABLE_STATUSES).optional(),
   waived: z.boolean().optional(),
-  waiver_reason: z.string().max(200).optional().nullable(),
   manual_comment: z.string().trim().min(3, "Manual attendance changes require a comment").max(500),
 })
 
@@ -80,7 +82,7 @@ export async function GET(request: NextRequest) {
     let attendanceQuery = dataClient
       .from("attendance_records")
       .select(
-        "id, user_id, date, clock_in, clock_out, total_hours, status, source, clock_in_source, clock_out_source, waived, waiver_reason, manual_comment, updated_at, selfie_url, selfie_out_url, face_match_confidence, face_verified, location_verified, latitude, longitude, site_id"
+        "id, user_id, date, clock_in, clock_out, total_hours, status, source, clock_in_source, clock_out_source, waived, manual_comment, updated_at, selfie_url, selfie_out_url, face_match_confidence, face_verified, location_verified, latitude, longitude, site_id"
       )
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
@@ -115,41 +117,13 @@ export async function GET(request: NextRequest) {
 
     const recordIds = rows.map((r) => r.id).filter((id) => id && !id.startsWith("missing-"))
 
-    // Fetch profiles, holidays, leaves, exemptions, and audit logs in parallel
-    const [profileRows, holidayRows, leaveRows, exemptPeriodRows, auditLogRows] = await Promise.all([
+    // Fetch profiles + audit logs (editor attribution) in parallel with the shared day context.
+    const [profileRows, auditLogRows, ctx] = await Promise.all([
       userIds.length > 0
         ? dataClient
             .from("profiles")
             .select("id, full_name, first_name, last_name, department, attendance_exempt")
             .in("id", userIds)
-            .then((r) => r.data ?? [])
-        : Promise.resolve([]),
-
-      dataClient
-        .from("holiday_calendar")
-        .select("holiday_date")
-        .gte("holiday_date", minDate)
-        .lte("holiday_date", maxDate)
-        .then((r) => r.data ?? []),
-
-      userIds.length > 0
-        ? dataClient
-            .from("leave_requests")
-            .select("user_id, start_date, end_date")
-            .in("user_id", userIds)
-            .eq("status", "approved")
-            .lte("start_date", maxDate)
-            .gte("end_date", minDate)
-            .then((r) => r.data ?? [])
-        : Promise.resolve([]),
-
-      userIds.length > 0
-        ? dataClient
-            .from("attendance_exempt_periods")
-            .select("user_id, start_date, end_date")
-            .in("user_id", userIds)
-            .lte("start_date", maxDate)
-            .gte("end_date", minDate)
             .then((r) => r.data ?? [])
         : Promise.resolve([]),
 
@@ -162,6 +136,8 @@ export async function GET(request: NextRequest) {
             .order("created_at", { ascending: false })
             .then((r) => r.data ?? [])
         : Promise.resolve([]),
+
+      loadDayContext(dataClient, { userIds, start: minDate, end: maxDate }),
     ])
 
     // Build audit log lookups to find the latest editor for each record
@@ -197,39 +173,15 @@ export async function GET(request: NextRequest) {
     >()
     for (const p of profileRows) profileMap.set(p.id, p)
 
-    const holidaySet = new Set<string>(holidayRows.map((h: { holiday_date: string }) => h.holiday_date))
-
-    // Per-user leave date sets
-    const leaveDatesByUser = new Map<string, Set<string>>()
-    for (const lr of leaveRows as { user_id: string; start_date: string; end_date: string }[]) {
-      if (!leaveDatesByUser.has(lr.user_id)) leaveDatesByUser.set(lr.user_id, new Set())
-      const s = new Date(lr.start_date)
-      const e = new Date(lr.end_date)
-      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-        leaveDatesByUser.get(lr.user_id)!.add(toLocalISODate(d))
-      }
-    }
-
-    // Per-user exemption date sets
-    const exemptDatesByUser = new Map<string, Set<string>>()
-    for (const ep of exemptPeriodRows as { user_id: string; start_date: string; end_date: string }[]) {
-      if (!exemptDatesByUser.has(ep.user_id)) exemptDatesByUser.set(ep.user_id, new Set())
-      const s = new Date(ep.start_date)
-      const e = new Date(ep.end_date)
-      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-        exemptDatesByUser.get(ep.user_id)!.add(toLocalISODate(d))
-      }
-    }
-
     const records = rows.map((r) => {
       const p = profileMap.get(r.user_id)
       const name = p?.full_name?.trim() || [p?.first_name, p?.last_name].filter(Boolean).join(" ") || "Unknown"
 
       const derivedStatus = deriveUnifiedAttendanceStatus({
         record: r,
-        isHoliday: holidaySet.has(r.date),
-        isOnLeave: leaveDatesByUser.get(r.user_id)?.has(r.date) ?? false,
-        isExempted: Boolean(p?.attendance_exempt) || (exemptDatesByUser.get(r.user_id)?.has(r.date) ?? false),
+        isHoliday: ctx.isHoliday(r.date),
+        isOnLeave: ctx.isOnLeave(r.user_id, r.date),
+        isExempted: Boolean(p?.attendance_exempt) || ctx.isExempt(r.user_id, r.date),
         recordDate: r.date,
       })
 
@@ -251,7 +203,6 @@ export async function GET(request: NextRequest) {
         clock_in_source: r.clock_in_source ?? null,
         clock_out_source: r.clock_out_source ?? null,
         waived: r.waived,
-        waiver_reason: r.waiver_reason,
         manual_comment: r.manual_comment ?? null,
         updated_at: r.updated_at,
         selfie_url: r.selfie_url ?? null,
@@ -333,7 +284,6 @@ export async function GET(request: NextRequest) {
             clock_in_source: null,
             clock_out_source: null,
             waived: false,
-            waiver_reason: null,
             manual_comment: null,
             updated_at: null,
             selfie_url: null,
@@ -371,7 +321,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, { status: 400 })
     }
 
-    const { user_id, date, clock_in, clock_out, waived, waiver_reason, manual_comment } = parsed.data
+    const { user_id, date, clock_in, clock_out, waived, manual_comment } = parsed.data
     const dataClient = getServiceRoleClientOrFallback(supabase)
 
     // Validate the target employee is in this admin/lead's scope
@@ -427,7 +377,7 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    if (status === "waiver" && !String(waiver_reason || manual_comment).trim()) {
+    if (status === "waiver" && !manual_comment.trim()) {
       return NextResponse.json({ error: "Waiver requires a reason or comment" }, { status: 400 })
     }
 
@@ -447,8 +397,6 @@ export async function POST(request: NextRequest) {
       insert.clock_out = clock_out
       insert.clock_out_source = "manual"
     }
-    if (waiver_reason !== undefined) insert.waiver_reason = waiver_reason
-
     if (clock_in && clock_out) {
       const inMs = new Date(`${date}T${clock_in}Z`).getTime()
       const outMs = new Date(`${date}T${clock_out}Z`).getTime()
@@ -473,6 +421,27 @@ export async function POST(request: NextRequest) {
       },
       { failOpen: true }
     )
+
+    // Provenance + appeal auto-resolution (replaces the old DB trigger).
+    await recordAttendanceEvent(dataClient, {
+      userId: user_id,
+      eventDate: date,
+      eventType: "manual_create",
+      attendanceRecordId: created.id,
+      toStatus: status,
+      source: "manual",
+      comment: manual_comment,
+      actorId: scope.userId,
+      metadata: { clock_in: clock_in ?? null, clock_out: clock_out ?? null },
+    })
+    await resolvePendingAppealOnManualStatus(dataClient, {
+      userId: user_id,
+      date,
+      status,
+      attendanceRecordId: created.id,
+      comment: manual_comment,
+      actorId: scope.userId,
+    })
 
     return NextResponse.json({ data: created, message: "Record created" }, { status: 201 })
   } catch (error) {
