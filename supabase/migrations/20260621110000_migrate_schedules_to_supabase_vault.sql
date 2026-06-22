@@ -4,20 +4,32 @@
 
 -- 1. Initialize secrets in Supabase Vault if not already present
 DO $$
+DECLARE
+  v_anon_key text;
+  v_service_key text;
 BEGIN
-  -- Insert anon_key
-  IF NOT EXISTS (SELECT 1 FROM vault.decrypted_secrets WHERE name = 'anon_key') THEN
+  v_anon_key := COALESCE(
+    NULLIF(current_setting('app.settings.anon_key', true), ''),
+    NULLIF(current_setting('app.anon_key', true), '')
+  );
+  v_service_key := COALESCE(
+    NULLIF(current_setting('app.settings.service_role_key', true), ''),
+    NULLIF(current_setting('app.service_role_key', true), '')
+  );
+
+  -- Insert anon_key if found in settings and not already in vault
+  IF v_anon_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM vault.decrypted_secrets WHERE name = 'anon_key') THEN
     PERFORM vault.create_secret(
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0cWVncXhlcWtlb2d3cnZsemxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2NDI0NTcsImV4cCI6MjA3NzIxODQ1N30.eVYpuw_VqDrg28DXJFoeYGAbth4Q-t0tXokA1Nq1dog',
+      v_anon_key,
       'anon_key',
       'Supabase anon API key'
     );
   END IF;
 
-  -- Insert service_role_key
-  IF NOT EXISTS (SELECT 1 FROM vault.decrypted_secrets WHERE name = 'service_role_key') THEN
+  -- Insert service_role_key if found in settings and not already in vault
+  IF v_service_key IS NOT NULL AND NOT EXISTS (SELECT 1 FROM vault.decrypted_secrets WHERE name = 'service_role_key') THEN
     PERFORM vault.create_secret(
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0cWVncXhlcWtlb2d3cnZsemxqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTY0MjQ1NywiZXhwIjoyMDc3MjE4NDU3fQ.uUEg9q9jT9IsERFmmhmYMxdIr_xgakdf52EmMEZbf50',
+      v_service_key,
       'service_role_key',
       'Supabase service_role API key'
     );
@@ -211,12 +223,15 @@ BEGIN
   FROM vault.decrypted_secrets
   WHERE name = 'service_role_key';
 
-  -- Fallback to configuration settings or hardcoded (for safe transition)
+  -- Fallback to configuration settings
   IF v_service_key IS NULL OR v_service_key = '' THEN
-    v_service_key := COALESCE(
-      current_setting('app.service_role_key', true),
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0cWVncXhlcWtlb2d3cnZsemxqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTY0MjQ1NywiZXhwIjoyMDc3MjE4NDU3fQ.uUEg9q9jT9IsERFmmhmYMxdIr_xgakdf52EmMEZbf50'
-    );
+    v_service_key := NULLIF(current_setting('app.service_role_key', true), '');
+  END IF;
+
+  -- Bails out if no key could be resolved
+  IF v_service_key IS NULL OR v_service_key = '' THEN
+    RAISE WARNING 'service_role_key is not configured in vault or app.service_role_key; skipping notification processing';
+    RETURN;
   END IF;
 
   FOR r IN
@@ -288,12 +303,15 @@ BEGIN
   FROM vault.decrypted_secrets
   WHERE name = 'service_role_key';
 
-  -- Fallback to configuration settings or hardcoded (for safe transition)
+  -- Fallback to configuration settings
   IF service_key IS NULL OR service_key = '' THEN
-    service_key := COALESCE(
-      current_setting('app.settings.service_role_key', true),
-      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0cWVncXhlcWtlb2d3cnZsemxqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTY0MjQ1NywiZXhwIjoyMDc3MjE4NDU3fQ.uUEg9q9jT9IsERFmmhmYMxdIr_xgakdf52EmMEZbf50'
-    );
+    service_key := NULLIF(current_setting('app.settings.service_role_key', true), '');
+  END IF;
+
+  -- Bails out if no key could be resolved
+  IF service_key IS NULL OR service_key = '' THEN
+    RAISE WARNING 'service_role_key is not configured in vault or app.settings.service_role_key; skipping digest processing';
+    RETURN;
   END IF;
 
   SELECT * INTO current_info FROM public.get_current_iso_week();
