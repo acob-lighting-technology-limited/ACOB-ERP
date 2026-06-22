@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
 import { applyDataScopeV2 } from "@/lib/admin/policy-v2"
+import { getRequestScope } from "@/lib/admin/api-scope"
 import {
   areRequiredDocumentsVerified,
   assertNoOverlap,
@@ -355,7 +356,11 @@ export async function GET(request: NextRequest) {
     let scopedMode: "all" | "dept" | "none" = "all"
     let scopedDepartments: string[] = []
 
-    let query = supabase
+    // Read via the service-role client. Department scoping is enforced in code below
+    // (applyDataScopeV2), and the non-admin path is guarded — so this does NOT widen
+    // access; it only lets every admin tier (developer/super_admin/lead), not just the
+    // exact `admin` role, see leave that RLS would otherwise hide.
+    let query = dataClient
       .from("leave_requests")
       .select(
         `
@@ -395,6 +400,14 @@ export async function GET(request: NextRequest) {
         scopedDepartments = routeAccess.dataScope
       }
     } else {
+      // Non-admin path: a caller may only read their OWN requests unless admin-like.
+      // (We now read with the service-role client, so RLS no longer guards this.)
+      if (userId && userId !== user.id) {
+        const requesterScope = await getRequestScope()
+        if (!requesterScope?.isAdminLike) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+        }
+      }
       query = query.eq("user_id", targetUserId)
     }
 
@@ -409,7 +422,7 @@ export async function GET(request: NextRequest) {
     )
     const requestIds = requestRows.map((row) => row.id).filter(Boolean)
 
-    const { data: balanceRows } = await supabase
+    const { data: balanceRows } = await dataClient
       .from("leave_balances")
       .select("*")
       .eq("user_id", targetUserId)

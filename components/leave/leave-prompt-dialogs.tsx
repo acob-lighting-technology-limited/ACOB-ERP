@@ -21,13 +21,13 @@ function prettyDocName(name: string) {
 interface LeaveRejectPromptDialogProps {
   rejectPrompt: { requestId: string } | null
   onOpenChange: (open: boolean) => void
-  onConfirm: (requestId: string, reason: string) => void
+  onConfirm: (requestId: string, reason: string) => void | Promise<void>
 }
 
 interface LeaveApprovePromptDialogProps {
   approvePrompt: { requestId: string } | null
   onOpenChange: (open: boolean) => void
-  onConfirm: (requestId: string, feedback: string) => void
+  onConfirm: (requestId: string, feedback: string) => void | Promise<void>
 }
 
 export function LeaveApprovePromptDialog({ approvePrompt, onOpenChange, onConfirm }: LeaveApprovePromptDialogProps) {
@@ -44,8 +44,8 @@ export function LeaveApprovePromptDialog({ approvePrompt, onOpenChange, onConfir
       inputType="textarea"
       required
       confirmLabel="Approve Leave"
-      onConfirm={(feedback) => {
-        if (approvePrompt) onConfirm(approvePrompt.requestId, feedback)
+      onConfirm={async (feedback) => {
+        if (approvePrompt) await onConfirm(approvePrompt.requestId, feedback)
       }}
     />
   )
@@ -66,8 +66,8 @@ export function LeaveRejectPromptDialog({ rejectPrompt, onOpenChange, onConfirm 
       required
       confirmLabel="Reject Leave"
       confirmVariant="destructive"
-      onConfirm={(reason) => {
-        if (rejectPrompt) onConfirm(rejectPrompt.requestId, reason)
+      onConfirm={async (reason) => {
+        if (rejectPrompt) await onConfirm(rejectPrompt.requestId, reason)
       }}
     />
   )

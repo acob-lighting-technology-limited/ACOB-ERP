@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Clock, History, CalendarCheck2, CheckCircle2, AlertCircle, Eye, Check, X, FileText } from "lucide-react"
@@ -11,10 +11,12 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { PromptDialog } from "@/components/ui/prompt-dialog"
+import { LeaveDetailDialog } from "./_components/leave-detail-dialog"
+import { createClient } from "@/lib/supabase/client"
 import { formatName } from "@/lib/utils"
 import { formatWATDateTime } from "@/lib/utils/date"
 
-interface LeaveItem {
+export interface LeaveItem {
   id: string
   user_id: string
   start_date: string
@@ -30,6 +32,8 @@ interface LeaveItem {
   reliever_id?: string | null
   supervisor_id?: string | null
   created_at: string
+  admin_manual?: boolean | null
+  approved_at?: string | null
   user?: {
     id?: string
     first_name?: string | null
@@ -90,7 +94,7 @@ interface LeaveItem {
   evidence_complete?: boolean
 }
 
-interface LeaveActionHistoryItem {
+export interface LeaveActionHistoryItem {
   id: string
   leave_request_id: string
   status?: string | null
@@ -100,14 +104,14 @@ interface LeaveActionHistoryItem {
   request?: LeaveItem | null
 }
 
-type PersonNameRef = {
+export type PersonNameRef = {
   first_name?: string | null
   last_name?: string | null
   full_name?: string | null
   company_email?: string | null
 }
 
-const STAGE_LABELS: Record<string, string> = {
+export const STAGE_LABELS: Record<string, string> = {
   pending_reliever: "Waiting Reliever",
   pending_department_lead: "Waiting Department Lead",
   pending_admin_hr_lead: "Waiting Admin & HR Lead",
@@ -121,6 +125,88 @@ const STAGE_LABELS: Record<string, string> = {
   cancelled: "Cancelled",
 }
 
+export function expectedApproverLabel(item: LeaveItem) {
+  const status = String(item.status || "").toLowerCase()
+  if (["approved", "completed", "rejected", "cancelled"].includes(status)) {
+    return "-"
+  }
+  if (item.current_approver?.full_name) return item.current_approver.full_name
+  const stage = item.current_stage_code || item.approval_stage
+  const expectedByStage: Record<string, string> = {
+    pending_reliever: "Assigned Reliever",
+    reliever_pending: "Assigned Reliever",
+    pending_department_lead: "Department Lead",
+    supervisor_pending: "Department Lead",
+    pending_admin_hr_lead: "Admin & HR Lead",
+    hr_pending: "Admin & HR Lead",
+    pending_md: "Managing Director (MD)",
+    pending_hcs: "Head, Corporate Services (HCS)",
+  }
+  return expectedByStage[stage] || "Pending approver"
+}
+
+export function getStageBadge(item: LeaveItem) {
+  const rawStage = item.current_stage_code || item.approval_stage || ""
+  const stage = rawStage.toLowerCase()
+  const label = STAGE_LABELS[rawStage] || rawStage
+
+  let colorClass = "bg-muted/10 text-muted-foreground border-muted-foreground/20"
+  if (stage.includes("reliever")) {
+    colorClass = "bg-purple-500/10 text-purple-500 border-purple-500/20"
+  } else if (stage.includes("department_lead") || stage.includes("supervisor")) {
+    colorClass = "bg-amber-500/10 text-amber-500 border-amber-500/20"
+  } else if (stage.includes("admin_hr_lead") || stage.includes("hr_pending")) {
+    colorClass = "bg-blue-500/10 text-blue-500 border-blue-500/20"
+  } else if (stage.includes("md")) {
+    colorClass = "bg-rose-500/10 text-rose-500 border-rose-500/20"
+  } else if (stage.includes("hcs")) {
+    colorClass = "bg-violet-500/10 text-violet-500 border-violet-500/20"
+  } else if (stage === "completed" || stage === "approved") {
+    colorClass = "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+  } else if (stage === "rejected") {
+    colorClass = "bg-red-500/10 text-red-500 border-red-500/20"
+  } else if (stage === "cancelled") {
+    colorClass = "bg-muted/10 text-muted-foreground border-muted-foreground/20"
+  }
+
+  return (
+    <Badge variant="outline" className={colorClass}>
+      {label}
+    </Badge>
+  )
+}
+
+export function approvalStageKey(code?: string | null) {
+  const value = String(code || "").toLowerCase()
+  if (value.includes("reliever")) return "reliever"
+  if (value.includes("department_lead")) return "department_lead"
+  if (value.includes("admin_hr_lead")) return "admin_hr_lead"
+  if (value.includes("hcs")) return "hcs"
+  if (value.includes("md")) return "md"
+  return value || "unknown"
+}
+
+export function approvalStageLabel(code?: string | null) {
+  const value = String(code || "").toLowerCase()
+  if (value.includes("reliever")) return "Reliever"
+  if (value.includes("department_lead")) return "Department Lead"
+  if (value.includes("admin_hr_lead")) return "Admin & HR Lead"
+  if (value.includes("hcs")) return "HCS"
+  if (value.includes("md")) return "MD"
+  return formatName(code || "Stage")
+}
+
+export function resolvePersonName(person?: PersonNameRef | null) {
+  if (!person) return ""
+  const full = String(person.full_name || "").trim()
+  if (full) return full
+  const composed = `${person.first_name || ""} ${person.last_name || ""}`.trim()
+  if (composed) return composed
+  const email = String(person.company_email || "").trim()
+  if (email) return email.split("@")[0] || email
+  return ""
+}
+
 interface ActionDialogState {
   open: boolean
   id: string
@@ -128,16 +214,11 @@ interface ActionDialogState {
   missingDocuments: string[]
 }
 
-const TABS: DataTableTab[] = [
-  { key: "my-actions", label: "My Actions", icon: AlertCircle },
-  { key: "pending", label: "Global Queue", icon: Clock },
-  { key: "history", label: "History", icon: History },
-]
-
 async function fetchLeaveApprovalData(apiBasePath: string): Promise<{
   myQueue: LeaveItem[]
   allPendingQueue: LeaveItem[]
   history: LeaveItem[]
+  allRequests: LeaveItem[]
   reviewHistory: LeaveActionHistoryItem[]
 }> {
   const myQueueRes = await fetch(`${apiBasePath}/queue`)
@@ -148,14 +229,29 @@ async function fetchLeaveApprovalData(apiBasePath: string): Promise<{
   let requestPayload: { data?: LeaveItem[] } = { data: [] }
   const [allQueueRes, requestsRes] = await Promise.allSettled([
     fetch(`${apiBasePath}/queue?all=true`),
-    fetch(`${apiBasePath}/requests?all=true&limit=200`),
+    fetch(`${apiBasePath}/requests?all=true&limit=100`),
   ])
-  if (allQueueRes.status === "fulfilled" && allQueueRes.value.ok) {
-    allQueuePayload = await allQueueRes.value.json()
+  if (allQueueRes.status === "rejected") {
+    throw new Error(`Queue fetch rejected: ${allQueueRes.reason}`)
   }
-  if (requestsRes.status === "fulfilled" && requestsRes.value.ok) {
-    requestPayload = await requestsRes.value.json()
+  if (!allQueueRes.value.ok) {
+    const errorBody = await allQueueRes.value.json().catch(() => ({ error: "Unknown error" }))
+    throw new Error(
+      `Queue fetch failed (${allQueueRes.value.status}): ${errorBody.error || allQueueRes.value.statusText}`
+    )
   }
+  allQueuePayload = await allQueueRes.value.json()
+
+  if (requestsRes.status === "rejected") {
+    throw new Error(`Requests fetch rejected: ${requestsRes.reason}`)
+  }
+  if (!requestsRes.value.ok) {
+    const errorBody = await requestsRes.value.json().catch(() => ({ error: "Unknown error" }))
+    throw new Error(
+      `Requests fetch failed (${requestsRes.value.status}): ${errorBody.error || requestsRes.value.statusText}`
+    )
+  }
+  requestPayload = await requestsRes.value.json()
 
   const allRequests = (requestPayload.data || []) as LeaveItem[]
   return {
@@ -164,6 +260,7 @@ async function fetchLeaveApprovalData(apiBasePath: string): Promise<{
     history: allRequests.filter(
       (item) => !["pending", "pending_evidence"].includes(String(item.status || "").toLowerCase())
     ),
+    allRequests: allRequests,
     reviewHistory: myQueuePayload.history || [],
   }
 }
@@ -174,7 +271,7 @@ export function LeaveApprovePage({
 }: { backLinkHref?: string; apiBasePath?: string } = {}) {
   const normalizedApiBasePath = apiBasePath.replace(/\/$/, "")
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState("my-actions")
+  const [activeTab, setActiveTab] = useState("all")
   const [actionDialog, setActionDialog] = useState<ActionDialogState>({
     open: false,
     id: "",
@@ -182,6 +279,18 @@ export function LeaveApprovePage({
     missingDocuments: [],
   })
   const overrideEvidenceRef = useRef(false)
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false)
+  const [selectedLeaveDetail, setSelectedLeaveDetail] = useState<LeaveItem | null>(null)
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => {
+      if (data.user) {
+        setCurrentUserId(data.user.id)
+      }
+    })
+  }, [])
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: QUERY_KEYS.leaveRequests({ scope: "approve", apiBasePath: normalizedApiBasePath }),
@@ -236,53 +345,6 @@ export function LeaveApprovePage({
     })
   }
 
-  function expectedApproverLabel(item: LeaveItem) {
-    if (item.current_approver?.full_name) return item.current_approver.full_name
-    const stage = item.current_stage_code || item.approval_stage
-    const expectedByStage: Record<string, string> = {
-      pending_reliever: "Assigned Reliever",
-      reliever_pending: "Assigned Reliever",
-      pending_department_lead: "Department Lead",
-      supervisor_pending: "Department Lead",
-      pending_admin_hr_lead: "Admin & HR Lead",
-      hr_pending: "Admin & HR Lead",
-      pending_md: "Managing Director (MD)",
-      pending_hcs: "Head, Corporate Services (HCS)",
-    }
-    return expectedByStage[stage] || "Pending approver"
-  }
-
-  function approvalStageKey(code?: string | null) {
-    const value = String(code || "").toLowerCase()
-    if (value.includes("reliever")) return "reliever"
-    if (value.includes("department_lead")) return "department_lead"
-    if (value.includes("admin_hr_lead")) return "admin_hr_lead"
-    if (value.includes("hcs")) return "hcs"
-    if (value.includes("md")) return "md"
-    return value || "unknown"
-  }
-
-  function approvalStageLabel(code?: string | null) {
-    const value = String(code || "").toLowerCase()
-    if (value.includes("reliever")) return "Reliever"
-    if (value.includes("department_lead")) return "Department Lead"
-    if (value.includes("admin_hr_lead")) return "Admin & HR Lead"
-    if (value.includes("hcs")) return "HCS"
-    if (value.includes("md")) return "MD"
-    return formatName(code || "Stage")
-  }
-
-  function resolvePersonName(person?: PersonNameRef | null) {
-    if (!person) return ""
-    const full = String(person.full_name || "").trim()
-    if (full) return full
-    const composed = `${person.first_name || ""} ${person.last_name || ""}`.trim()
-    if (composed) return composed
-    const email = String(person.company_email || "").trim()
-    if (email) return email.split("@")[0] || email
-    return ""
-  }
-
   const columns: DataTableColumn<LeaveItem>[] = useMemo(
     () => [
       {
@@ -333,11 +395,7 @@ export function LeaveApprovePage({
         accessor: (r) =>
           STAGE_LABELS[r.current_stage_code || r.approval_stage] || r.current_stage_code || r.approval_stage,
         hideOnMobile: true,
-        render: (r) => (
-          <Badge variant="outline">
-            {STAGE_LABELS[r.current_stage_code || r.approval_stage] || r.current_stage_code || r.approval_stage}
-          </Badge>
-        ),
+        render: (r) => getStageBadge(r),
       },
       {
         key: "approver",
@@ -346,49 +404,34 @@ export function LeaveApprovePage({
         hideOnMobile: true,
         render: (r) => <span className="text-sm">{expectedApproverLabel(r)}</span>,
       },
-      {
-        key: "evidence",
-        label: "Evidence",
-        accessor: (r) => (r.evidence_complete ? "Complete" : "Incomplete"),
-        hideOnMobile: true,
-        render: (r) => (
-          <Badge variant={r.evidence_complete ? "default" : "secondary"}>
-            {r.evidence_complete ? "Complete" : "Incomplete"}
-          </Badge>
-        ),
-      },
-      {
-        key: "status",
-        label: "Status",
-        accessor: (r) => r.status,
-        render: (r) => (
-          <Badge
-            variant={
-              r.status === "approved" || r.status === "completed"
-                ? "default"
-                : r.status === "rejected" || r.status === "cancelled"
-                  ? "destructive"
-                  : "secondary"
-            }
-          >
-            {r.status}
-          </Badge>
-        ),
-        hidden: activeTab !== "history",
-      },
     ],
-    [activeTab]
+    []
   )
+
+  const dynamicTabs = useMemo(() => {
+    const myCount = data?.myQueue.length ?? 0
+    const globalCount = data?.allPendingQueue.length ?? 0
+    const historyCount = data?.history.length ?? 0
+    const allCount = data?.allRequests.length ?? 0
+
+    return [
+      { key: "all", label: `All (${allCount})`, icon: CalendarCheck2 },
+      { key: "my-actions", label: `My Actions (${myCount})`, icon: AlertCircle },
+      { key: "pending", label: `Global Queue (${globalCount})`, icon: Clock },
+      { key: "history", label: `History (${historyCount})`, icon: History },
+    ]
+  }, [data])
 
   const activeData = useMemo(() => {
     if (!data) return []
     if (activeTab === "my-actions") return data.myQueue
     if (activeTab === "pending") return data.allPendingQueue
-    return data.history
+    if (activeTab === "history") return data.history
+    return data.allRequests
   }, [data, activeTab])
 
   const filters = useMemo(() => {
-    const allData = [...(data?.myQueue || []), ...(data?.allPendingQueue || []), ...(data?.history || [])]
+    const allData = data?.allRequests || []
     const statuses = Array.from(
       new Set(
         [...allData.map((x) => x.status), "pending", "pending_evidence", "approved", "rejected", "cancelled"].filter(
@@ -423,17 +466,22 @@ export function LeaveApprovePage({
         mode: "custom",
         filterFn: (row: LeaveItem, vals: string[]) => !row.status || vals.includes(row.status),
       },
+      {
+        key: "reviewer",
+        label: "My Decisions",
+        options: [{ value: "acted_by_me", label: "Acted by me" }],
+        mode: "custom",
+        filterFn: (row: LeaveItem, vals: string[]) => {
+          if (!currentUserId || !vals.includes("acted_by_me")) return true
+          const isApprover =
+            row.approvals?.some((app) => app.approver_id === currentUserId || app.approver?.id === currentUserId) ??
+            false
+          const isManualBypasser = !!(row.admin_manual && row.approved_by_profile?.id === currentUserId)
+          return isApprover || isManualBypasser
+        },
+      },
     ] as DataTableFilter<LeaveItem>[]
-  }, [data])
-
-  const stats = useMemo(
-    () => ({
-      allPending: data?.allPendingQueue.length || 0,
-      myActions: data?.myQueue.length || 0,
-      historyTotal: data?.history.length || 0,
-    }),
-    [data]
-  )
+  }, [data, currentUserId])
 
   const isOverride = actionDialog.missingDocuments.length > 0
 
@@ -489,39 +537,23 @@ export function LeaveApprovePage({
         }}
       />
 
+      <LeaveDetailDialog
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
+        leave={selectedLeaveDetail}
+        onApprove={(id) => handleAction(id, "approve")}
+        onReject={(id) => handleAction(id, "reject")}
+        showActionButtons={activeTab === "my-actions"}
+      />
+
       <DataTablePage
         title="Leave Approvals"
         description="Review and manage leave requests, endorsements, and workflow history."
         icon={CalendarCheck2}
         backLink={{ href: backLinkHref ?? "/admin/hr", label: "Back to HR" }}
-        tabs={TABS}
+        tabs={dynamicTabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}
-        stats={
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <StatCard
-              title="Global Pending"
-              value={stats.allPending}
-              icon={Clock}
-              iconBgColor="bg-blue-500/10"
-              iconColor="text-blue-500"
-            />
-            <StatCard
-              title="My Actions"
-              value={stats.myActions}
-              icon={AlertCircle}
-              iconBgColor="bg-amber-500/10"
-              iconColor="text-amber-500"
-            />
-            <StatCard
-              title="History"
-              value={stats.historyTotal}
-              icon={CheckCircle2}
-              iconBgColor="bg-emerald-500/10"
-              iconColor="text-emerald-500"
-            />
-          </div>
-        }
       >
         <DataTable<LeaveItem>
           data={activeData}
@@ -534,9 +566,18 @@ export function LeaveApprovePage({
           searchPlaceholder="Search employee name or leave type..."
           searchFn={(r, q) => `${r.user?.full_name} ${r.leave_type?.name} ${r.status}`.toLowerCase().includes(q)}
           filters={filters}
+          forceRowActionsDropdown
           rowActions={
             activeTab === "my-actions"
               ? [
+                  {
+                    label: "View Detail",
+                    icon: Eye,
+                    onClick: (r) => {
+                      setSelectedLeaveDetail(r)
+                      setDetailDialogOpen(true)
+                    },
+                  },
                   {
                     label: "Endorse",
                     icon: Check,
@@ -553,7 +594,10 @@ export function LeaveApprovePage({
                   {
                     label: "View Detail",
                     icon: Eye,
-                    onClick: () => {}, // Handled by expansion
+                    onClick: (r) => {
+                      setSelectedLeaveDetail(r)
+                      setDetailDialogOpen(true)
+                    },
                   },
                 ]
           }
@@ -603,36 +647,67 @@ export function LeaveApprovePage({
               return (
                 <div className="grid gap-4 p-4 md:grid-cols-2">
                   <div className="space-y-3 text-sm">
-                    <p>
+                    <div>
                       <span className="text-muted-foreground">Reliever:</span>{" "}
                       <span className="font-medium">{resolvePersonName(r.reliever) || "Not assigned"}</span>
-                    </p>
-                    <p>
+                    </div>
+                    <div>
                       <span className="text-muted-foreground">Current Stage:</span>{" "}
                       <span className="font-medium">
                         {approvalStageLabel(r.current_stage_code || r.approval_stage)}
                       </span>
-                    </p>
-                    <p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Evidence:</span>{" "}
+                      <Badge variant={r.evidence_complete ? "default" : "secondary"}>
+                        {r.evidence_complete ? "Complete" : "Incomplete"}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-muted-foreground">Status:</span>{" "}
+                      <Badge
+                        variant={
+                          r.status === "approved" || r.status === "completed"
+                            ? "default"
+                            : r.status === "rejected" || r.status === "cancelled"
+                              ? "destructive"
+                              : "secondary"
+                        }
+                      >
+                        {r.status}
+                      </Badge>
+                    </div>
+                    <div>
                       <span className="text-muted-foreground">Reason:</span>{" "}
                       <span className="font-medium">{r.reason || "-"}</span>
-                    </p>
-                    <p>
+                    </div>
+                    <div>
                       <span className="text-muted-foreground">Resume Date:</span>{" "}
                       <span className="font-medium">{r.resume_date || "-"}</span>
-                    </p>
+                    </div>
                     {r.required_documents && r.required_documents.length > 0 ? (
-                      <p>
+                      <div>
                         <span className="text-muted-foreground">Required Docs:</span>{" "}
                         <span className="font-medium">{r.required_documents.join(", ")}</span>
-                      </p>
+                      </div>
                     ) : null}
                   </div>
 
                   <div className="space-y-3">
                     <p className="text-muted-foreground text-xs">Approval Timeline</p>
                     {stageAuditMap.size === 0 ? (
-                      <p className="text-muted-foreground text-xs">No approvals recorded yet.</p>
+                      r.admin_manual ? (
+                        <ul className="space-y-1">
+                          <li className="text-xs">
+                            <span className="font-medium">Manually Approved:</span>{" "}
+                            <span className="text-emerald-500 capitalize">approved</span>
+                            {r.approved_by_profile ? ` by ${resolvePersonName(r.approved_by_profile)}` : ""}
+                            {r.approved_at ? ` at ${formatWATDateTime(r.approved_at)}` : ""}
+                          </li>
+                        </ul>
+                      ) : (
+                        <p className="text-muted-foreground text-xs">No approvals recorded yet.</p>
+                      )
                     ) : (
                       <ul className="space-y-1">
                         {stageOrder.map((stageKey) => {
@@ -646,6 +721,19 @@ export function LeaveApprovePage({
                                 : stageKey === "admin_hr_lead"
                                   ? resolvePersonName(r.approved_by_profile) || null
                                   : null)
+                          const statusLower = String(r.status || "").toLowerCase()
+                          const isApprovedOrCompleted = ["approved", "completed"].includes(statusLower)
+                          const isCancelled = statusLower === "cancelled"
+                          const isRejected = statusLower === "rejected"
+                          const expectedPersonName =
+                            stageKey === "reliever"
+                              ? resolvePersonName(r.reliever) || "Assigned Reliever"
+                              : stageKey === "department_lead"
+                                ? resolvePersonName(r.supervisor) || "Department Lead"
+                                : stageKey === "admin_hr_lead"
+                                  ? resolvePersonName(r.approved_by_profile) || "Admin & HR Lead"
+                                  : stageName[stageKey]
+
                           return (
                             <li key={stageKey} className="text-xs">
                               <span className="font-medium">{stageName[stageKey]}:</span>{" "}
@@ -660,14 +748,17 @@ export function LeaveApprovePage({
                                 <span className="text-muted-foreground">Not required for this request</span>
                               ) : stageKey === "reliever" && relieverHandledByLead ? (
                                 <span className="text-muted-foreground">
-                                  {departmentLeadApproverName
-                                    ? `Handled by ${departmentLeadApproverName} (Department Lead)`
-                                    : "Handled by Department Lead stage"}
+                                  {`Handled by ${departmentLeadApproverName || resolvePersonName(r.supervisor) || "Department Lead"}`}
                                 </span>
-                              ) : stageKey === "reliever" && advancedPastReliever && currentStageKey !== "reliever" ? (
-                                <span className="text-muted-foreground">Skipped by route rules</span>
+                              ) : isCancelled ? (
+                                <span className="text-muted-foreground">Not reached (Cancelled)</span>
+                              ) : isRejected ? (
+                                <span className="text-muted-foreground">Not reached (Rejected)</span>
+                              ) : isApprovedOrCompleted ||
+                                (stageKey === "reliever" && advancedPastReliever && currentStageKey !== "reliever") ? (
+                                <span className="text-muted-foreground">Bypassed ({expectedPersonName})</span>
                               ) : (
-                                <span className="text-muted-foreground">Pending / not acted</span>
+                                <span className="text-muted-foreground">Pending action ({expectedPersonName})</span>
                               )}
                             </li>
                           )
@@ -764,34 +855,6 @@ export function LeaveApprovePage({
           )}
           urlSync
         />
-
-        <div className="mt-4 rounded-lg border p-4">
-          <p className="text-sm font-semibold">Recent Review History</p>
-          <p className="text-muted-foreground mb-3 text-xs">
-            Latest acceptance and rejection decisions by your account.
-          </p>
-          {!data?.reviewHistory || data.reviewHistory.length === 0 ? (
-            <p className="text-muted-foreground text-xs">No review activity yet.</p>
-          ) : (
-            <ul className="space-y-2">
-              {data.reviewHistory.slice(0, 10).map((entry) => (
-                <li key={entry.id} className="rounded-md border p-2 text-xs">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant={entry.status === "rejected" ? "destructive" : "outline"} className="capitalize">
-                      {entry.status || "recorded"}
-                    </Badge>
-                    <span className="font-medium">{formatName(entry.stage_code || "approval_stage")}</span>
-                    <span className="text-muted-foreground">{entry.request?.user?.full_name || "Employee"}</span>
-                    <span className="text-muted-foreground">
-                      {entry.approved_at ? formatWATDateTime(entry.approved_at) : ""}
-                    </span>
-                  </div>
-                  {entry.comments ? <p className="mt-1 text-xs">{entry.comments}</p> : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
       </DataTablePage>
     </>
   )
