@@ -58,7 +58,6 @@ interface AttendanceRecord {
   clock_in_source?: string | null
   clock_out_source?: string | null
   waived?: boolean
-  waiver_reason?: string | null
   manual_comment?: string | null
 }
 
@@ -135,7 +134,6 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           user_id: editRecord.user_id,
           date: editRecord.date,
           waived: false,
-          waiver_reason: null,
           manual_comment: editForm.manual_comment,
           status: editForm.status,
           clock_in: null,
@@ -149,7 +147,6 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
       } else {
         const body: Record<string, unknown> = {
           waived: false,
-          waiver_reason: null,
           manual_comment: editForm.manual_comment,
           status: editForm.status,
         }

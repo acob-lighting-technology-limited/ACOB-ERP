@@ -129,7 +129,6 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
     try {
       const body: Record<string, unknown> = {
         waived: false,
-        waiver_reason: null,
         manual_comment: editForm.manual_comment,
         status: editForm.status,
       }

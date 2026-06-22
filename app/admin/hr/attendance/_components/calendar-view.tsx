@@ -49,7 +49,6 @@ interface DayRecord {
   status: string
   source: string | null
   waived: boolean
-  waiver_reason: string | null
   manual_comment?: string | null
 }
 
@@ -195,7 +194,6 @@ export function CalendarView({ employees }: CalendarViewProps) {
       if (editTarget.record) {
         const body: Record<string, unknown> = {
           waived: false,
-          waiver_reason: null,
           manual_comment: editForm.manual_comment,
           status: editForm.status,
         }
@@ -209,7 +207,6 @@ export function CalendarView({ employees }: CalendarViewProps) {
           user_id: selectedUserId,
           date: editTarget.date,
           waived: false,
-          waiver_reason: null,
           manual_comment: editForm.manual_comment,
           status: editForm.status,
           clock_in: null,

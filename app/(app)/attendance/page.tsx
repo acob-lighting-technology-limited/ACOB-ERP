@@ -12,7 +12,6 @@ export interface AttendanceRecord {
   status: string
   source?: string | null
   waived?: boolean | null
-  waiver_reason?: string | null
 }
 
 async function getAttendanceData() {

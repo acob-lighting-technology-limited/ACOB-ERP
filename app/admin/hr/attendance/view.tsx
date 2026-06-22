@@ -8,6 +8,7 @@ import { DailyRosterView } from "./_components/daily-roster-view"
 import { CalendarView } from "./_components/calendar-view"
 import type { EmployeeOption } from "./_components/calendar-view"
 import { ExceptionsView } from "./_components/exceptions-view"
+import { AppealsView } from "./_components/appeals-view"
 import { AttendanceManagerDialog } from "./_components/attendance-manager-dialog"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -27,13 +28,13 @@ import { Switch } from "@/components/ui/switch"
 import { BarChart3, Download, FileText, Users, Clock, AlertCircle, Pencil, Info, Settings2 } from "lucide-react"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
-import { getWorkdaysInMonth, monthBounds, toLocalISODate, toLocalYearMonth, isLate } from "@/lib/hr/attendance-utils"
+import { getWorkdaysInMonth, monthBounds, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import {
   ATTENDANCE_STATUS_COLORS,
   ATTENDANCE_STATUS_LABELS,
   MANUAL_ATTENDANCE_STATUS_OPTIONS,
-  isEarlyDeparture,
+  getManualStatusEditOptions,
 } from "@/lib/hr/attendance-status"
 import { StatusBadge, labelSource } from "./_components/status-badge"
 
@@ -77,7 +78,6 @@ interface DayRecord {
   clock_in_source?: string | null
   clock_out_source?: string | null
   waived: boolean
-  waiver_reason: string | null
   manual_comment?: string | null
   updated_at?: string | null
   editor_first_name?: string | null
@@ -103,18 +103,88 @@ interface CalendarDay {
   record: DayRecord | null
   isOnLeave: boolean
   status: DayStatus
+  manualBy: string | null
 }
 
-type EditHistoryItem = {
+/**
+ * Source label for a day row. Real punch records use the device/manual/mixed label;
+ * any manually-set day (holiday/leave/exemption, or a manual override) shows the
+ * responsible person as "Manual (Name)"; a plain absence shows "—".
+ */
+function daySourceLabel(day: CalendarDay): string {
+  if (day.status === "absent") return "—"
+  if (day.record) {
+    const s = labelSource(day.record)
+    // A manually-set record (e.g. on_leave/OOS/waiver) reports as plain "Manual" —
+    // attach who set it when we know.
+    if (s === "Manual" && day.manualBy) return `Manual (${day.manualBy})`
+    if (s && s !== "—") return s
+  }
+  // No record but a derived manual status (holiday/leave/exempt).
+  if (day.manualBy) return `Manual (${day.manualBy})`
+  switch (day.status) {
+    case "holiday":
+    case "on_leave":
+    case "exempted":
+      return "Manual"
+    default:
+      return "—"
+  }
+}
+
+type TimelineEvent = {
   id: string
+  event_type: string
+  from_status: string | null
+  to_status: string | null
+  source: string | null
+  comment: string | null
   created_at: string
-  user_id: string | null
-  action?: string | null
-  operation?: string | null
-  old_values?: Record<string, unknown> | null
-  new_values?: Record<string, unknown> | null
-  changed_fields?: unknown
-  editor_name?: string
+  actor_name: string | null
+  metadata?: Record<string, unknown> | null
+}
+
+type TimelineContext = {
+  holiday: string | null
+  holiday_added_by: string | null
+  on_leave: string | null
+  exempt: boolean
+  exempt_reason: string | null
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  device_punch_in: "Clocked in (device)",
+  device_punch_out: "Clocked out (device)",
+  self_clock_in: "Clocked in",
+  self_clock_out: "Clocked out",
+  remote_clock_in: "Remote clock-in",
+  remote_clock_out: "Remote clock-out",
+  manual_create: "Manual record created",
+  manual_update: "Manual edit",
+  manual_delete: "Record deleted",
+  bulk_grant: "Bulk grant",
+  bulk_delete: "Bulk removal",
+  appeal_requested: "Appeal requested",
+  appeal_rejected: "Appeal rejected",
+  appeal_approved: "Appeal approved",
+  appeal_auto_resolved: "Appeal auto-approved",
+  leave_granted: "Leave granted",
+  leave_revoked: "Leave revoked",
+  exemption_added: "Exemption added",
+  exemption_removed: "Exemption removed",
+  marked_incomplete: "Auto-marked incomplete",
+}
+
+function eventBadgeClass(eventType: string): string {
+  if (eventType.startsWith("appeal_")) {
+    if (eventType === "appeal_rejected") return "bg-red-100 text-red-800"
+    if (eventType.includes("approved") || eventType.includes("resolved")) return "bg-emerald-100 text-emerald-800"
+    return "bg-amber-100 text-amber-800"
+  }
+  if (eventType.startsWith("device_")) return "bg-blue-100 text-blue-800"
+  if (eventType.startsWith("manual_") || eventType.startsWith("bulk_")) return "bg-violet-100 text-violet-800"
+  if (eventType === "marked_incomplete") return "bg-cyan-100 text-cyan-800"
+  return "bg-gray-100 text-gray-800"
 }
 
 type ExemptionsPayload = {
@@ -129,6 +199,7 @@ type UnifiedDayPayload = {
     date: string
     record: DayRecord | null
     status: DayStatus
+    manual_by?: string | null
   }>
 }
 
@@ -218,8 +289,9 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   const [saving, setSaving] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyItems, setHistoryItems] = useState<EditHistoryItem[]>([])
-  const [historyTarget, setHistoryTarget] = useState<{ date: string; id: string | null } | null>(null)
+  const [historyItems, setHistoryItems] = useState<TimelineEvent[]>([])
+  const [historyContext, setHistoryContext] = useState<TimelineContext | null>(null)
+  const [historyTarget, setHistoryTarget] = useState<{ date: string } | null>(null)
 
   function loadDays() {
     void (async () => {
@@ -237,6 +309,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           record: row.record,
           isOnLeave: row.status === "on_leave",
           status: row.status,
+          manualBy: row.manual_by ?? row.record?.editor_first_name ?? null,
         }))
 
         setDays(calDays)
@@ -253,23 +326,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   }, [report.user_id, yearMonth])
 
   function openEdit(date: string, record: DayRecord | null) {
-    const clockIn = record?.clock_in ?? null
-    const clockOut = record?.clock_out ?? null
-    const hasClockIn = Boolean(clockIn)
-    const hasClockOut = Boolean(clockOut)
-    const hasAnyPunch = hasClockIn || hasClockOut
-
-    const isLatePunch = hasClockIn && isLate(clockIn)
-    const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
-    const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
-
-    let initialStatus = ""
-    if (!hasAnyPunch) {
-      initialStatus = "absent_with_permission"
-    } else if (!isOnTimePresent) {
-      initialStatus = "lateness_with_permission"
-    }
-
+    const { initialStatus } = getManualStatusEditOptions(record)
     setEditTarget({ date, record })
     setEditForm({
       status:
@@ -289,7 +346,6 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
         // Update existing record
         const body: Record<string, unknown> = {
           waived: false,
-          waiver_reason: null,
           manual_comment: editForm.manual_comment,
           status: editForm.status,
         }
@@ -304,7 +360,6 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           user_id: report.user_id,
           date: editTarget.date,
           waived: false,
-          waiver_reason: null,
           manual_comment: editForm.manual_comment,
           status: editForm.status,
           clock_in: null,
@@ -331,20 +386,22 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   }
 
   async function openHistory(day: CalendarDay) {
-    setHistoryTarget({ date: day.date, id: day.record?.id ?? null })
+    setHistoryTarget({ date: day.date })
     setHistoryOpen(true)
-    if (!day.record) {
-      setHistoryItems([])
-      return
-    }
+    setHistoryItems([])
+    setHistoryContext(null)
     setHistoryLoading(true)
     try {
-      const res = await fetch(`/api/admin/hr/attendance/records/${day.record.id}/history`, { cache: "no-store" })
-      const payload = (await res.json().catch(() => null)) as { data?: EditHistoryItem[] } | null
-      if (!res.ok) throw new Error("Failed to load edit history")
-      setHistoryItems(payload?.data || [])
+      const qs = new URLSearchParams({ user_id: report.user_id, date: day.date })
+      const res = await fetch(`/api/admin/hr/attendance/timeline?${qs.toString()}`, { cache: "no-store" })
+      const payload = (await res.json().catch(() => null)) as {
+        data?: { events?: TimelineEvent[]; context?: TimelineContext }
+      } | null
+      if (!res.ok) throw new Error("Failed to load timeline")
+      setHistoryItems(payload?.data?.events || [])
+      setHistoryContext(payload?.data?.context || null)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to load edit history")
+      toast.error(e instanceof Error ? e.message : "Failed to load timeline")
       setHistoryItems([])
     } finally {
       setHistoryLoading(false)
@@ -358,29 +415,52 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   const today = toLocalISODate()
   const visibleDays = days.filter((d) => d.date <= today)
   const isCreating = editTarget !== null && editTarget.record === null
-  const clockIn = editTarget?.record?.clock_in ?? null
-  const clockOut = editTarget?.record?.clock_out ?? null
-  const hasClockIn = Boolean(clockIn)
-  const hasClockOut = Boolean(clockOut)
-  const hasAnyPunch = hasClockIn || hasClockOut
-
-  const isLatePunch = hasClockIn && isLate(clockIn)
-  const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
-  const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
-
-  const showAWP = !hasAnyPunch
-  const showLWP = hasAnyPunch && !isOnTimePresent
-
-  const statusOptions = [
-    ...(showLWP ? [{ value: "lateness_with_permission", label: "LWP" }] : []),
-    ...(showAWP ? [{ value: "absent_with_permission", label: "AWP" }] : []),
-  ]
+  const { isOnTimePresent, options: statusOptions } = getManualStatusEditOptions(editTarget?.record ?? null)
 
   const hasManualComment = editForm.manual_comment.trim().length >= 3
   const cannotSave = saving || !editForm.status || !hasManualComment || isOnTimePresent
 
   return (
     <>
+      <div className="bg-muted/40 mb-4 grid max-w-4xl grid-cols-3 gap-2 rounded-lg border p-3 sm:grid-cols-5 lg:grid-cols-9">
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">Late</span>
+          <span className="mt-1 text-sm font-semibold text-yellow-600">{report.late_days}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">Incomplete</span>
+          <span className="mt-1 text-sm font-semibold text-cyan-600">{report.incomplete_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">Exempted</span>
+          <span className="mt-1 text-sm font-semibold text-violet-600">{report.exempted_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">LWP</span>
+          <span className="mt-1 text-sm font-semibold text-amber-600">{report.lateness_with_permission_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">OOS</span>
+          <span className="mt-1 text-sm font-semibold text-indigo-600">{report.out_of_station_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">AWP</span>
+          <span className="mt-1 text-sm font-semibold text-teal-600">{report.absent_with_permission_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">Leave</span>
+          <span className="mt-1 text-sm font-semibold text-purple-600">{report.leave_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">Holiday</span>
+          <span className="mt-1 text-sm font-semibold text-sky-600">{report.holiday_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">Waiver</span>
+          <span className="mt-1 text-sm font-semibold text-blue-600">{report.waived_days || 0}</span>
+        </div>
+      </div>
+
       <div className="space-y-1 py-2">
         <div className="text-muted-foreground grid grid-cols-[130px_90px_70px_70px_80px_80px_80px_90px_120px_60px] items-center gap-3 px-2 text-[11px] font-semibold uppercase">
           <span>Day</span>
@@ -435,7 +515,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
               <span className="text-xs">
                 {hours.overtime != null && hours.overtime >= 0.05 ? formatHours(hours.overtime) : "—"}
               </span>
-              <span className="text-xs">{labelSource(day.record)}</span>
+              <span className="text-xs">{daySourceLabel(day)}</span>
               <div className="flex items-center justify-end gap-1">
                 <Button
                   variant="ghost"
@@ -528,63 +608,70 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Edit History</DialogTitle>
-            <DialogDescription>{historyTarget ? formatDayShort(historyTarget.date) : ""}</DialogDescription>
+            <DialogTitle>Day Timeline</DialogTitle>
+            <DialogDescription>
+              {historyTarget ? `${report.user_name} — ${formatDayShort(historyTarget.date)}` : ""}
+            </DialogDescription>
           </DialogHeader>
+
+          {historyContext && (historyContext.holiday || historyContext.on_leave || historyContext.exempt) && (
+            <div className="flex flex-wrap gap-2">
+              {historyContext.holiday && (
+                <Badge className="bg-sky-100 text-xs text-sky-800">
+                  Holiday — {historyContext.holiday}
+                  {historyContext.holiday_added_by ? ` · added by ${historyContext.holiday_added_by}` : ""}
+                </Badge>
+              )}
+              {historyContext.on_leave && (
+                <Badge className="bg-purple-100 text-xs text-purple-800">On leave — {historyContext.on_leave}</Badge>
+              )}
+              {historyContext.exempt && (
+                <Badge className="bg-violet-100 text-xs text-violet-800">
+                  Exempt{historyContext.exempt_reason ? ` — ${historyContext.exempt_reason}` : ""}
+                </Badge>
+              )}
+            </div>
+          )}
+
           <div className="max-h-[420px] space-y-3 overflow-y-auto">
             {historyLoading ? (
               <p className="text-muted-foreground text-sm">Loading…</p>
             ) : historyItems.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No edits found.</p>
+              <p className="text-muted-foreground text-sm">No recorded events for this day.</p>
             ) : (
               historyItems.map((item) => {
-                const isDevice = (item.new_values as Record<string, unknown> | null)?.source === "hikvision"
-                const actionLabel =
-                  item.action === "create"
-                    ? "Created"
-                    : item.action === "update"
-                      ? "Updated"
-                      : (item.action ?? "Changed")
-                const displayFields = Object.entries((item.new_values || {}) as Record<string, unknown>)
-                  .filter(([key]) => ["status", "clock_in", "clock_out", "manual_comment", "source"].includes(key))
-                  .map(([key, value]) => {
-                    let displayValue = String(value ?? "—")
-                    if (key === "status" && typeof value === "string") {
-                      displayValue = ATTENDANCE_STATUS_LABELS[value as keyof typeof ATTENDANCE_STATUS_LABELS] ?? value
-                    }
-                    if ((key === "clock_in" || key === "clock_out") && typeof value === "string") {
-                      displayValue = formatTime(value)
-                    }
-                    if (key === "source" && typeof value === "string") {
-                      displayValue = value === "hikvision" ? "Device" : value === "remote_web" ? "Remote" : "Manual"
-                    }
-                    return [key, displayValue]
-                  })
+                const label = EVENT_LABELS[item.event_type] ?? item.event_type.replaceAll("_", " ")
+                const fromLabel = item.from_status
+                  ? (ATTENDANCE_STATUS_LABELS[item.from_status as keyof typeof ATTENDANCE_STATUS_LABELS] ??
+                    item.from_status)
+                  : null
+                const toLabel = item.to_status
+                  ? (ATTENDANCE_STATUS_LABELS[item.to_status as keyof typeof ATTENDANCE_STATUS_LABELS] ??
+                    item.to_status)
+                  : null
+                const isAutomated = item.actor_name === null
                 return (
                   <div key={item.id} className="rounded-md border p-3">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium">
-                        {isDevice ? "HiKVision Device" : item.editor_name || "Unknown"}
-                      </p>
-                      <Badge
-                        className={isDevice ? "bg-blue-100 text-xs text-blue-800" : "bg-gray-100 text-xs text-gray-800"}
-                      >
-                        {isDevice ? "Automated" : actionLabel}
-                      </Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={`text-xs ${eventBadgeClass(item.event_type)}`}>{label}</Badge>
+                      <p className="text-sm font-medium">{isAutomated ? "System / Device" : item.actor_name}</p>
                     </div>
                     <p className="text-muted-foreground text-xs">{formatWATDateTime(item.created_at)}</p>
-                    <div className="mt-2 space-y-1 text-xs">
-                      {displayFields.length === 0 ? (
-                        <p className="text-muted-foreground">No field details captured.</p>
-                      ) : (
-                        displayFields.map(([key, value]) => (
-                          <p key={key}>
-                            <span className="font-medium">{key.replaceAll("_", " ")}:</span>{" "}
-                            <span className="text-muted-foreground">{value}</span>
-                          </p>
-                        ))
-                      )}
-                    </div>
+                    {(fromLabel || toLabel) && (
+                      <p className="mt-1 text-xs">
+                        <span className="font-medium">Status:</span>{" "}
+                        <span className="text-muted-foreground">
+                          {fromLabel ? `${fromLabel} → ` : ""}
+                          {toLabel ?? "—"}
+                        </span>
+                      </p>
+                    )}
+                    {item.comment && (
+                      <p className="mt-1 text-xs">
+                        <span className="font-medium">Comment:</span>{" "}
+                        <span className="text-muted-foreground">{item.comment}</span>
+                      </p>
+                    )}
                   </div>
                 )
               })
@@ -596,13 +683,14 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   )
 }
 
-type AttendanceTab = "summary" | "daily" | "calendar" | "exceptions"
+type AttendanceTab = "summary" | "daily" | "calendar" | "exceptions" | "appeals"
 
 const ATTENDANCE_TABS: DataTableTab[] = [
   { key: "daily", label: "Daily Roster" },
   { key: "summary", label: "Summary" },
   { key: "calendar", label: "Calendar" },
   { key: "exceptions", label: "Exceptions" },
+  { key: "appeals", label: "Appeals" },
 ]
 
 export function AttendanceReportsPage({
@@ -801,6 +889,32 @@ export function AttendanceReportsPage({
 
   const departmentOptions = useMemo(() => departments.map((d) => ({ value: d, label: d })), [departments])
 
+  const monthOptions = useMemo(() => {
+    const options: { value: string; label: string }[] = []
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth()
+
+    const startYear = 2026
+    const startMonth = 3 // April is index 3
+
+    let y = currentYear
+    let m = currentMonth
+
+    while (y > startYear || (y === startYear && m >= startMonth)) {
+      const d = new Date(y, m, 1)
+      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+      const label = d.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+      options.push({ value, label })
+      m--
+      if (m < 0) {
+        m = 11
+        y--
+      }
+    }
+    return options
+  }, [])
+
   const stats = useMemo(() => {
     const totalCredits = reports.reduce((a, r) => a + (r.attendance_credits ?? r.present_days), 0)
     const totalWorkDays = reports.reduce((a, r) => a + r.total_days, 0)
@@ -844,87 +958,6 @@ export function AttendanceReportsPage({
       sortable: true,
       accessor: (r) => r.present_days,
       render: (r) => <span className="text-green-600">{r.present_days}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "late_days",
-      label: "Late",
-      sortable: true,
-      accessor: (r) => r.late_days,
-      render: (r) => <span className="text-yellow-600">{r.late_days}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "incomplete_days",
-      label: "Incomplete",
-      sortable: true,
-      accessor: (r) => r.incomplete_days || 0,
-      render: (r) => <span className="text-cyan-600">{r.incomplete_days || 0}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "exempted_days",
-      label: "Exempted",
-      sortable: true,
-      accessor: (r) => r.exempted_days || 0,
-      render: (r) => <span className="text-violet-600">{r.exempted_days || 0}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "lateness_with_permission_days",
-      label: "LWP",
-      sortable: true,
-      accessor: (r) => r.lateness_with_permission_days ?? 0,
-      render: (r) => <span className="text-amber-600">{r.lateness_with_permission_days ?? 0}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "out_of_station_days",
-      label: "OOS",
-      sortable: true,
-      accessor: (r) => r.out_of_station_days ?? 0,
-      render: (r) => <span className="text-indigo-600">{r.out_of_station_days ?? 0}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "absent_with_permission_days",
-      label: "AWP",
-      sortable: true,
-      accessor: (r) => r.absent_with_permission_days ?? 0,
-      render: (r) => <span className="text-teal-600">{r.absent_with_permission_days ?? 0}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "leave_days",
-      label: "Leave",
-      sortable: true,
-      accessor: (r) => r.leave_days ?? 0,
-      render: (r) => <span className="text-purple-600">{r.leave_days ?? 0}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "holiday_days",
-      label: "Holiday",
-      sortable: true,
-      accessor: (r) => r.holiday_days ?? 0,
-      render: (r) => <span className="text-sky-600">{r.holiday_days ?? 0}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "waived_days",
-      label: "Waiver",
-      sortable: true,
-      accessor: (r) => r.waived_days,
-      render: (r) => <span className="text-blue-600">{r.waived_days}</span>,
       align: "center",
       hideOnMobile: true,
     },
@@ -1033,11 +1066,21 @@ export function AttendanceReportsPage({
       placeholder: "All Cycles",
     },
     {
+      key: "month",
+      label: "Month",
+      options: monthOptions,
+      placeholder: "Select Month",
+      multi: false,
+      defaultValues: [yearMonth],
+      mode: "custom",
+      filterFn: () => true,
+    },
+    {
       key: "rate_band",
       label: "Attendance Band",
       options: [
         { value: "excellent", label: "80%+" },
-        { value: "watch", label: "60â€“79%" },
+        { value: "watch", label: "60-79%" },
         { value: "risk", label: "Below 60%" },
       ],
       placeholder: "All Bands",
@@ -1073,16 +1116,6 @@ export function AttendanceReportsPage({
       onTabChange={(t) => setActiveTab(t as AttendanceTab)}
       actions={
         <div className="flex items-center gap-2">
-          {activeTab === "summary" && (
-            <input
-              type="month"
-              value={yearMonth}
-              max={currentYearMonth()}
-              onChange={(e) => e.target.value && setYearMonth(e.target.value)}
-              className="border-input bg-background h-9 rounded-md border px-3 py-1.5 text-sm"
-              aria-label="Select report month"
-            />
-          )}
           <Button variant="outline" onClick={() => setManagerOpen(true)} size="sm">
             <Settings2 className="mr-2 h-4 w-4" />
             Attendance Manager
@@ -1124,6 +1157,7 @@ export function AttendanceReportsPage({
       {activeTab === "daily" && <DailyRosterView departments={departments} lockedDepartment={lockedDepartment} />}
       {activeTab === "calendar" && <CalendarView employees={employeeOptions} />}
       {activeTab === "exceptions" && <ExceptionsView departments={departments} lockedDepartment={lockedDepartment} />}
+      {activeTab === "appeals" && <AppealsView lockedDepartment={lockedDepartment} />}
       {activeTab === "summary" && (
         <DataTable<AttendanceReport>
           data={reports}
@@ -1134,6 +1168,12 @@ export function AttendanceReportsPage({
           searchPlaceholder="Search employee or department…"
           searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
           isLoading={loading}
+          onFilterChange={(filters) => {
+            const selectedMonth = filters.month?.[0]
+            if (selectedMonth && selectedMonth !== yearMonth) {
+              setYearMonth(selectedMonth)
+            }
+          }}
           expandable={{
             render: (r) => (
               <EmployeeExpandPanel report={r} yearMonth={yearMonth} onRecordChanged={refreshSingleEmployeeSummary} />

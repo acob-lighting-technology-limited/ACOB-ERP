@@ -24,6 +24,8 @@ type SourceInfo = {
   clock_in?: string | null
   clock_out?: string | null
   editor_first_name?: string | null
+  status?: string | null
+  waived?: boolean | null
 }
 
 /** Hikvision = device "auto"; everything else (manual, remote_web) = "manual". */
@@ -57,7 +59,16 @@ export function labelSource(record: SourceInfo | string | null | undefined): str
     // (legacy/un-backfilled) falls back to the single source column; a row with
     // no punches at all (absent) has no source to show.
     const hasPunch = Boolean(info.clock_in || info.clock_out)
-    if (!hasPunch) return "—"
+
+    // Check if the record status is a manual overridden status or waived
+    const isManualStatus =
+      info.status === "waiver" ||
+      info.status === "absent_with_permission" ||
+      info.status === "lateness_with_permission" ||
+      info.status === "out_of_station" ||
+      info.waived === true
+
+    if (!hasPunch && !isManualStatus && !info.editor_first_name) return "—"
     baseLabel = punchKind(info.source) === "auto" ? "Automated" : "Manual"
   } else if (kinds.size === 2) {
     baseLabel = "Mixed"
