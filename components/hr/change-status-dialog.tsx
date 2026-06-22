@@ -10,7 +10,6 @@ import { QUERY_KEYS } from "@/lib/query-keys"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -460,13 +459,15 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={isLoading}
-              onClick={() => void submitStatusChange()}
+            <Button
+              variant="destructive"
+              loading={isLoading}
+              onClick={async () => {
+                await submitStatusChange()
+              }}
             >
               Confirm
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -504,8 +505,8 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
             >
               No, skip
             </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isSendingNotification}
+            <Button
+              loading={isSendingNotification}
               onClick={async () => {
                 if (!exitedEmployeeId) return
                 setIsSendingNotification(true)
@@ -528,15 +529,8 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
                 }
               }}
             >
-              {isSendingNotification ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending…
-                </>
-              ) : (
-                "Yes, send notification"
-              )}
-            </AlertDialogAction>
+              Yes, send notification
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

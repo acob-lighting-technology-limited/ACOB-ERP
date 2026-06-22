@@ -1,20 +1,26 @@
 {
-  "generatedAt": "2026-06-03T15:08:53.456Z",
+  "generatedAt": "2026-06-21T20:12:44.074Z",
   "summary": {
-    "totalPages": 209,
-    "missingLoading": 0,
-    "headerViolations": 0,
+    "totalPages": 211,
+    "missingLoading": 3,
+    "headerViolations": 1,
     "tableViolations": 0,
     "statsViolations": 0,
     "modalViolations": 0,
     "adHocEmptyStatePages": 2,
     "adHocErrorStatePages": 0,
     "adHocSectionPages": 2,
-    "adHocFormFieldPages": 3
+    "adHocFormFieldPages": 4
   },
   "violations": {
-    "missingLoading": [],
-    "header": [],
+    "missingLoading": [
+      "app/(app)/directory",
+      "app/admin/dev/acobot",
+      "app/admin/hr/pms/cbt/details"
+    ],
+    "header": [
+      "app/cbt/page.tsx"
+    ],
     "table": [],
     "stats": [],
     "modal": [],
@@ -30,7 +36,8 @@
     "adHocFormFieldPages": [
       "app/(app)/pms/peer-feedback/page.tsx",
       "app/admin/hr/pms/cbt/question/page.tsx",
-      "app/admin/hr/site-locations/page.tsx"
+      "app/admin/hr/site-locations/page.tsx",
+      "app/cbt/page.tsx"
     ]
   }
 }

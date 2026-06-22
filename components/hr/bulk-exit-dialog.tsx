@@ -4,7 +4,6 @@ import { useState } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -325,23 +324,14 @@ export function BulkExitDialog({ open, onOpenChange, employees, onSuccess }: Bul
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isLoading}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 min-w-[130px]"
-              disabled={isLoading}
-              onClick={(e) => {
-                e.preventDefault()
-                void handleSubmit(false)
-              }}
+            <Button
+              variant="destructive"
+              className="min-w-[130px]"
+              loading={isLoading}
+              onClick={() => void handleSubmit(false)}
             >
-              {isLoading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing…
-                </>
-              ) : (
-                "Confirm Exit"
-              )}
-            </AlertDialogAction>
+              Confirm Exit
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -379,22 +369,9 @@ export function BulkExitDialog({ open, onOpenChange, employees, onSuccess }: Bul
             >
               No, skip
             </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isSendingNotification}
-              onClick={(e) => {
-                e.preventDefault()
-                void handleSendNotification()
-              }}
-            >
-              {isSendingNotification ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending…
-                </>
-              ) : (
-                "Yes, send notification"
-              )}
-            </AlertDialogAction>
+            <Button loading={isSendingNotification} onClick={() => void handleSendNotification()}>
+              Yes, send notification
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

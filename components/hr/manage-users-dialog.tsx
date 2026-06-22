@@ -8,7 +8,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -1102,23 +1101,15 @@ export function ManageUsersDialog({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isExiting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90 min-w-[130px]"
-              disabled={isExiting}
-              onClick={(e) => {
-                e.preventDefault()
-                void handleExitSubmit(false)
+            <Button
+              variant="destructive"
+              loading={isExiting}
+              onClick={async () => {
+                await handleExitSubmit(false)
               }}
             >
-              {isExiting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing…
-                </>
-              ) : (
-                "Confirm Exit"
-              )}
-            </AlertDialogAction>
+              Confirm Exit
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1148,22 +1139,14 @@ export function ManageUsersDialog({
             <AlertDialogCancel disabled={isSendingExitNotif} onClick={() => setExitNotifyOpen(false)}>
               No, skip
             </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isSendingExitNotif}
-              onClick={(e) => {
-                e.preventDefault()
-                void handleSendExitNotif()
+            <Button
+              loading={isSendingExitNotif}
+              onClick={async () => {
+                await handleSendExitNotif()
               }}
             >
-              {isSendingExitNotif ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending…
-                </>
-              ) : (
-                "Yes, send notification"
-              )}
-            </AlertDialogAction>
+              Yes, send notification
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1195,8 +1178,8 @@ export function ManageUsersDialog({
             <AlertDialogCancel disabled={isSendingEmails} onClick={() => setPendingEmailDispatch(null)}>
               No, skip
             </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isSendingEmails}
+            <Button
+              loading={isSendingEmails}
               onClick={async () => {
                 if (!pendingEmailDispatch) return
                 setIsSendingEmails(true)
@@ -1223,15 +1206,8 @@ export function ManageUsersDialog({
                 }
               }}
             >
-              {isSendingEmails ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending…
-                </>
-              ) : (
-                "Yes, send emails"
-              )}
-            </AlertDialogAction>
+              Yes, send emails
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1244,16 +1220,17 @@ export function ManageUsersDialog({
             <AlertDialogDescription>Are you sure? This cannot be undone.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
+            <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              loading={isProcessing}
+              onClick={async () => {
+                await handleReject()
                 setPendingReject(false)
-                void handleReject()
               }}
             >
               Reject
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

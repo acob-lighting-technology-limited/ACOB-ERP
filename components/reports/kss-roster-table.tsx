@@ -14,7 +14,6 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Textarea } from "@/components/ui/textarea"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -149,6 +148,7 @@ export function KssRosterTable({
   const [showCreate, setShowCreate] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [pendingDeleteRow, setPendingDeleteRow] = useState<KssRosterEntry | null>(null)
+  const [isDeletingRow, setIsDeletingRow] = useState(false)
   const [scoringRow, setScoringRow] = useState<KssRosterEntry | null>(null)
   const [weekNumber, setWeekNumber] = useState(defaultWeek)
   const [yearNumber, setYearNumber] = useState(defaultYear)
@@ -895,7 +895,12 @@ export function KssRosterTable({
       }
     >
       <div className="space-y-4">
-        <AlertDialog open={pendingDeleteRow !== null} onOpenChange={(open) => !open && setPendingDeleteRow(null)}>
+        <AlertDialog
+          open={pendingDeleteRow !== null}
+          onOpenChange={(open) => {
+            if (!open && !isDeletingRow) setPendingDeleteRow(null)
+          }}
+        >
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>Delete KSS entry?</AlertDialogTitle>
@@ -906,14 +911,23 @@ export function KssRosterTable({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                onClick={() => {
-                  if (pendingDeleteRow) handleDelete(pendingDeleteRow)
+              <AlertDialogCancel disabled={isDeletingRow}>Cancel</AlertDialogCancel>
+              <Button
+                variant="destructive"
+                loading={isDeletingRow}
+                onClick={async () => {
+                  if (pendingDeleteRow) {
+                    setIsDeletingRow(true)
+                    try {
+                      await handleDelete(pendingDeleteRow)
+                    } finally {
+                      setIsDeletingRow(false)
+                    }
+                  }
                 }}
               >
                 Delete
-              </AlertDialogAction>
+              </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
@@ -928,13 +942,19 @@ export function KssRosterTable({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => setShowOverrideConfirm(false)}>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                onClick={() => handleSave(true)}
+              <AlertDialogCancel onClick={() => setShowOverrideConfirm(false)} disabled={saving}>
+                Cancel
+              </AlertDialogCancel>
+              <Button
+                variant="destructive"
+                loading={saving}
+                onClick={async () => {
+                  await handleSave(true)
+                  setShowOverrideConfirm(false)
+                }}
               >
                 Yes, Override and Save
-              </AlertDialogAction>
+              </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

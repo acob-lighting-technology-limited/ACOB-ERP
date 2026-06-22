@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -48,6 +47,7 @@ export default function RolesPage() {
   const [addUserWarning, setAddUserWarning] = useState<string | null>(null)
   const [addingUser, setAddingUser] = useState(false)
   const [pendingDelete, setPendingDelete] = useState<Role | null>(null)
+  const [isDeletingRole, setIsDeletingRole] = useState(false)
 
   const { data: roles = DEFAULT_ROLES, isLoading: loading } = useQuery({
     queryKey: QUERY_KEYS.adminRolesSettings(),
@@ -429,16 +429,24 @@ export default function RolesPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (pendingDelete) handleDelete(pendingDelete)
-                setPendingDelete(null)
+            <AlertDialogCancel disabled={isDeletingRole}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              loading={isDeletingRole}
+              onClick={async () => {
+                if (pendingDelete) {
+                  setIsDeletingRole(true)
+                  try {
+                    await handleDelete(pendingDelete)
+                    setPendingDelete(null)
+                  } finally {
+                    setIsDeletingRole(false)
+                  }
+                }
               }}
             >
               Delete
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

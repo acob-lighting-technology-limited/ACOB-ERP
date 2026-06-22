@@ -11,7 +11,6 @@ import { QUERY_KEYS } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -64,6 +63,7 @@ export default function SuppliersPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(searchParams.get("openCreate") === "1")
   const [editing, setEditing] = useState<Supplier | null>(null)
   const [pendingDelete, setPendingDelete] = useState<Supplier | null>(null)
+  const [isDeletingSupplier, setIsDeletingSupplier] = useState(false)
 
   const {
     data: suppliers = [],
@@ -348,18 +348,24 @@ export default function SuppliersPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
+            <AlertDialogCancel disabled={isDeletingSupplier}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              loading={isDeletingSupplier}
+              onClick={async () => {
                 if (pendingDelete) {
-                  void handleDelete(pendingDelete)
+                  setIsDeletingSupplier(true)
+                  try {
+                    await handleDelete(pendingDelete)
+                    setPendingDelete(null)
+                  } finally {
+                    setIsDeletingSupplier(false)
+                  }
                 }
-                setPendingDelete(null)
               }}
             >
               Delete
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

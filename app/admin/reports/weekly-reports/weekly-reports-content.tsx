@@ -621,9 +621,8 @@ export function WeeklyReportsContent({
       <DeleteReportDialog
         pendingDeleteId={pendingDeleteId}
         onOpenChange={() => setPendingDeleteId(null)}
-        onConfirm={(id) => {
-          void handleDelete(id)
-          setPendingDeleteId(null)
+        onConfirm={async (id) => {
+          await handleDelete(id)
         }}
       />
 

@@ -15,7 +15,6 @@ import { Badge } from "@/components/ui/badge"
 import { AlertCircle, CheckCircle2, Package, Trash2 } from "lucide-react"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -215,6 +214,7 @@ export function AssetIssuesPage({
   lockedDepartment,
 }: { backLinkHref?: string; lockedDepartment?: string } = {}) {
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [isDeletingIssue, setIsDeletingIssue] = useState(false)
   const queryClient = useQueryClient()
 
   const {
@@ -476,16 +476,24 @@ export function AssetIssuesPage({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (pendingDeleteId) void handleDeleteIssue(pendingDeleteId)
-                setPendingDeleteId(null)
+            <AlertDialogCancel disabled={isDeletingIssue}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              loading={isDeletingIssue}
+              onClick={async () => {
+                if (pendingDeleteId) {
+                  setIsDeletingIssue(true)
+                  try {
+                    await handleDeleteIssue(pendingDeleteId)
+                    setPendingDeleteId(null)
+                  } finally {
+                    setIsDeletingIssue(false)
+                  }
+                }
               }}
             >
               Delete
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

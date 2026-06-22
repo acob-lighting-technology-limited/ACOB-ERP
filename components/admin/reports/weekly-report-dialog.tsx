@@ -221,9 +221,9 @@ export function WeeklyReportAdminDialog({
         department: isLeadScopedView ? currentUser.department || report.department : report.department,
         week_number: report.week_number,
         year: report.year,
-        work_done: sanitizeReportTextForEditing(report.work_done || ""),
-        tasks_new_week: sanitizeReportTextForEditing(report.tasks_new_week || ""),
-        challenges: sanitizeReportTextForEditing(report.challenges || ""),
+        work_done: autoNumberReportText(report.work_done || ""),
+        tasks_new_week: autoNumberReportText(report.tasks_new_week || ""),
+        challenges: autoNumberReportText(report.challenges || ""),
         status: report.status || "submitted",
       })
     } else {

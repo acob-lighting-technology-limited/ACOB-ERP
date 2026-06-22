@@ -12,7 +12,6 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -63,6 +62,7 @@ export default function WarehousesPage() {
   const [editing, setEditing] = useState<WarehouseData | null>(null)
   const [formData, setFormData] = useState({ name: "", code: "", address: "", is_active: true })
   const [pendingDelete, setPendingDelete] = useState<WarehouseData | null>(null)
+  const [isDeletingWarehouse, setIsDeletingWarehouse] = useState(false)
 
   const {
     data: warehouses = [],
@@ -440,18 +440,24 @@ export default function WarehousesPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
+            <AlertDialogCancel disabled={isDeletingWarehouse}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              loading={isDeletingWarehouse}
+              onClick={async () => {
                 if (pendingDelete) {
-                  void handleDelete(pendingDelete)
+                  setIsDeletingWarehouse(true)
+                  try {
+                    await handleDelete(pendingDelete)
+                    setPendingDelete(null)
+                  } finally {
+                    setIsDeletingWarehouse(false)
+                  }
                 }
-                setPendingDelete(null)
               }}
             >
               Delete
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
