@@ -280,6 +280,7 @@ export function DataTable<TData>({
   expandableColumnPosition = "start",
   // Actions
   rowActions,
+  forceRowActionsDropdown,
   bulkActions,
   selectable = false,
   // View
@@ -746,7 +747,11 @@ export function DataTable<TData>({
       {filters.length > 0 && (
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
           {filters.map((filter) =>
-            filter.multi === false ? (
+            filter.render ? (
+              <div key={filter.key}>
+                {filter.render(filterValues[filter.key] ?? [], (vals) => handleFilterChange(filter.key, vals))}
+              </div>
+            ) : filter.multi === false ? (
               <Select
                 key={filter.key}
                 value={filterValues[filter.key]?.[0] ?? "all"}
@@ -938,9 +943,26 @@ export function DataTable<TData>({
                       data-row-id={rowId}
                       tabIndex={0}
                       onKeyDown={(e) => handleRowKeyDown(e, rowId)}
+                      onClick={(e) => {
+                        const target = e.target as HTMLElement
+                        if (
+                          target.closest("button") ||
+                          target.closest("a") ||
+                          target.closest("input") ||
+                          target.closest("label") ||
+                          target.closest("[role='menuitem']") ||
+                          target.closest("[role='checkbox']")
+                        ) {
+                          return
+                        }
+                        if (canExpand) {
+                          toggleExpand(rowId)
+                        }
+                      }}
                       className={cn(
                         isExpanded && "border-b-0",
                         selectedRows.has(rowId) && "bg-muted/50",
+                        canExpand && "hover:bg-muted/30 cursor-pointer select-none",
                         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
                       )}
                     >
@@ -1005,13 +1027,15 @@ export function DataTable<TData>({
                           {(() => {
                             const visible = rowActions.filter((a) => !a.hidden || !a.hidden(row))
                             if (visible.length === 0) return null
-                            if (visible.length === 1) {
+                            if (visible.length === 1 && !forceRowActionsDropdown) {
                               const action = visible[0]
                               return (
                                 <Button
                                   size="sm"
                                   variant={action.variant === "destructive" ? "destructive" : "outline"}
-                                  onClick={() => action.onClick(row)}
+                                  onClick={() => {
+                                    action.onClick(row)
+                                  }}
                                   className="h-7 gap-1 px-2 text-xs"
                                 >
                                   {action.icon && <action.icon className="h-3.5 w-3.5" />}
@@ -1031,7 +1055,9 @@ export function DataTable<TData>({
                                   {visible.map((action) => (
                                     <DropdownMenuItem
                                       key={action.label}
-                                      onClick={() => action.onClick(row)}
+                                      onClick={() => {
+                                        action.onClick(row)
+                                      }}
                                       className={cn(
                                         "gap-2 text-sm",
                                         action.variant === "destructive" && "text-destructive focus:text-destructive"

@@ -12,7 +12,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -143,6 +142,7 @@ export function NotificationBell({ isAdmin = false }: NotificationBellProps) {
   const [activeTab, setActiveTab] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [isDeletingNotification, setIsDeletingNotification] = useState(false)
 
   // Real-time subscription ref
   const subscriptionRef = useRef<RealtimeChannel | null>(null)
@@ -578,7 +578,12 @@ export function NotificationBell({ isAdmin = false }: NotificationBellProps) {
           </div>
         </DropdownMenuContent>
       </DropdownMenu>
-      <AlertDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)}>
+      <AlertDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingNotification) setPendingDeleteId(null)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete notification</AlertDialogTitle>
@@ -587,18 +592,24 @@ export function NotificationBell({ isAdmin = false }: NotificationBellProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
+            <AlertDialogCancel disabled={isDeletingNotification}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              loading={isDeletingNotification}
+              onClick={async () => {
                 if (pendingDeleteId) {
-                  void deleteNotification(pendingDeleteId)
+                  setIsDeletingNotification(true)
+                  try {
+                    await deleteNotification(pendingDeleteId)
+                    setPendingDeleteId(null)
+                  } finally {
+                    setIsDeletingNotification(false)
+                  }
                 }
-                setPendingDeleteId(null)
               }}
             >
               Delete
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

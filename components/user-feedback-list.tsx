@@ -12,7 +12,6 @@ import { FeedbackEditModal } from "./feedback-edit-modal"
 import { writeAuditLogClient } from "@/lib/audit/client"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -31,6 +30,7 @@ export function UserFeedbackList({ feedback }: UserFeedbackListProps) {
   const [selectedFeedback, setSelectedFeedback] = useState<EditableFeedbackRecord | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [isDeletingFeedback, setIsDeletingFeedback] = useState(false)
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -185,7 +185,12 @@ export function UserFeedbackList({ feedback }: UserFeedbackListProps) {
         />
       )}
 
-      <AlertDialog open={pendingDeleteId !== null} onOpenChange={(open) => !open && setPendingDeleteId(null)}>
+      <AlertDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingFeedback) setPendingDeleteId(null)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Feedback</AlertDialogTitle>
@@ -194,16 +199,24 @@ export function UserFeedbackList({ feedback }: UserFeedbackListProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
-                if (pendingDeleteId) handleDelete(pendingDeleteId)
-                setPendingDeleteId(null)
+            <AlertDialogCancel disabled={isDeletingFeedback}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              loading={isDeletingFeedback}
+              onClick={async () => {
+                if (pendingDeleteId) {
+                  setIsDeletingFeedback(true)
+                  try {
+                    await handleDelete(pendingDeleteId)
+                    setPendingDeleteId(null)
+                  } finally {
+                    setIsDeletingFeedback(false)
+                  }
+                }
               }}
             >
               Delete
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
