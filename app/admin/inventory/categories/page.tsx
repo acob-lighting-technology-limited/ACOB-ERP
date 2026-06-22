@@ -11,7 +11,6 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -73,6 +72,7 @@ export default function CategoriesPage() {
   const [editingCategory, setEditingCategory] = useState<Category | null>(null)
   const [formData, setFormData] = useState({ name: "", description: "" })
   const [pendingDelete, setPendingDelete] = useState<Category | null>(null)
+  const [isDeletingCategory, setIsDeletingCategory] = useState(false)
 
   const {
     data: categories = [],
@@ -412,18 +412,24 @@ export default function CategoriesPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
+            <AlertDialogCancel disabled={isDeletingCategory}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              loading={isDeletingCategory}
+              onClick={async () => {
                 if (pendingDelete) {
-                  void handleDelete(pendingDelete)
+                  setIsDeletingCategory(true)
+                  try {
+                    await handleDelete(pendingDelete)
+                    setPendingDelete(null)
+                  } finally {
+                    setIsDeletingCategory(false)
+                  }
                 }
-                setPendingDelete(null)
               }}
             >
               Delete
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

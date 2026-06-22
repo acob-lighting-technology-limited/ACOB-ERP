@@ -24,6 +24,8 @@ export interface UserProfile {
   employment_date: string | null
   created_at: string
   updated_at: string
+  additional_email?: string | null
+  birthday?: string | null
 }
 
 export interface Task {

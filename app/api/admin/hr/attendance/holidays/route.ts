@@ -47,7 +47,7 @@ async function ensureAdmin(request: NextRequest) {
   if (!["developer", "admin", "super_admin"].includes(role)) {
     return { error: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
   }
-  return { supabase }
+  return { supabase, userId: user.id }
 }
 
 export async function GET(request: NextRequest) {
@@ -88,12 +88,21 @@ export async function POST(request: NextRequest) {
   }
 
   const dates = endDate ? expandDateRange(startDate, endDate) : [startDate]
-  const rows = dates.map((holiday_date) => ({ holiday_date, location, name }))
+  const rows = dates.map((holiday_date) => ({ holiday_date, location, name, created_by: auth.userId }))
 
   // Ignore days already marked as holidays so re-adding an overlapping range is safe.
-  const { error: insertError } = await dataClient
+  let { error: insertError } = await dataClient
     .from("holiday_calendar")
     .upsert(rows, { onConflict: "holiday_date,location", ignoreDuplicates: true })
+  // Back-compat for environments missing the created_by column.
+  if (insertError && insertError.code === "42703") {
+    const fallbackRows = dates.map((holiday_date) => ({ holiday_date, location, name }))
+    insertError = (
+      await dataClient
+        .from("holiday_calendar")
+        .upsert(fallbackRows, { onConflict: "holiday_date,location", ignoreDuplicates: true })
+    ).error
+  }
   if (insertError) return NextResponse.json({ error: insertError.message || "Failed to add holiday" }, { status: 500 })
 
   return NextResponse.json({ message: dates.length > 1 ? `${dates.length} holidays added` : "Holiday added" })

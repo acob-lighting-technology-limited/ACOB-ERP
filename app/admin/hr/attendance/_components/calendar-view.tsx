@@ -17,16 +17,23 @@ import {
 } from "@/components/ui/dialog"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
-import { toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
-import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
+import { toLocalISODate, toLocalYearMonth, isLate } from "@/lib/hr/attendance-utils"
+import {
+  ATTENDANCE_STATUS_COLORS,
+  ATTENDANCE_STATUS_LABELS,
+  MANUAL_ATTENDANCE_STATUS_OPTIONS,
+  isEarlyDeparture,
+} from "@/lib/hr/attendance-status"
 import { formatTime } from "./status-badge"
 
 type DayStatus =
   | "present"
   | "late"
+  | "lateness_with_permission"
   | "absent"
+  | "absent_with_permission"
+  | "out_of_station"
   | "incomplete"
-  | "half_day"
   | "waiver"
   | "exempted"
   | "on_leave"
@@ -42,7 +49,7 @@ interface DayRecord {
   status: string
   source: string | null
   waived: boolean
-  waiver_reason: string | null
+  manual_comment?: string | null
 }
 
 interface UnifiedDay {
@@ -98,9 +105,11 @@ function buildCalendarCells(yearMonth: string): (string | null)[] {
 const CELL_BG: Record<string, string> = {
   present: "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800",
   late: "bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800",
+  lateness_with_permission: "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800",
   incomplete: "bg-cyan-50 border-cyan-200 dark:bg-cyan-950/30 dark:border-cyan-800",
-  half_day: "bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800",
   absent: "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800",
+  absent_with_permission: "bg-teal-50 border-teal-200 dark:bg-teal-950/30 dark:border-teal-800",
+  out_of_station: "bg-indigo-50 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-800",
   waiver: "bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800",
   exempted: "bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800",
   on_leave: "bg-purple-50 border-purple-200 dark:bg-purple-950/30 dark:border-purple-800",
@@ -114,7 +123,10 @@ export function CalendarView({ employees }: CalendarViewProps) {
   const [loading, setLoading] = useState(false)
 
   const [editTarget, setEditTarget] = useState<{ date: string; record: DayRecord | null } | null>(null)
-  const [editForm, setEditForm] = useState({ clock_in: "", clock_out: "", waived: false, waiver_reason: "" })
+  const [editForm, setEditForm] = useState({
+    status: "",
+    manual_comment: "",
+  })
   const [saving, setSaving] = useState(false)
 
   const selectedEmployee = employees.find((e) => e.user_id === selectedUserId)
@@ -147,12 +159,30 @@ export function CalendarView({ employees }: CalendarViewProps) {
 
   function openEdit(day: UnifiedDay) {
     if (day.status === "on_leave") return
+    const clockIn = day.record?.clock_in ?? null
+    const clockOut = day.record?.clock_out ?? null
+    const hasClockIn = Boolean(clockIn)
+    const hasClockOut = Boolean(clockOut)
+    const hasAnyPunch = hasClockIn || hasClockOut
+
+    const isLatePunch = hasClockIn && isLate(clockIn)
+    const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
+    const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
+
+    let initialStatus = ""
+    if (!hasAnyPunch) {
+      initialStatus = "absent_with_permission"
+    } else if (!isOnTimePresent) {
+      initialStatus = "lateness_with_permission"
+    }
+
     setEditTarget({ date: day.date, record: day.record })
     setEditForm({
-      clock_in: day.record?.clock_in?.substring(0, 5) ?? "",
-      clock_out: day.record?.clock_out?.substring(0, 5) ?? "",
-      waived: day.record?.waived ?? false,
-      waiver_reason: day.record?.waiver_reason ?? "",
+      status:
+        day.record?.status && ["lateness_with_permission", "absent_with_permission"].includes(day.record.status)
+          ? day.record.status
+          : initialStatus,
+      manual_comment: day.record?.manual_comment ?? "",
     })
   }
 
@@ -163,11 +193,10 @@ export function CalendarView({ employees }: CalendarViewProps) {
       let res: Response
       if (editTarget.record) {
         const body: Record<string, unknown> = {
-          waived: editForm.waived,
-          waiver_reason: editForm.waiver_reason || null,
+          waived: false,
+          manual_comment: editForm.manual_comment,
+          status: editForm.status,
         }
-        if (editForm.clock_in) body.clock_in = editForm.clock_in
-        if (editForm.clock_out) body.clock_out = editForm.clock_out
         res = await fetch(`/api/admin/hr/attendance/records/${editTarget.record.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -177,11 +206,12 @@ export function CalendarView({ employees }: CalendarViewProps) {
         const body: Record<string, unknown> = {
           user_id: selectedUserId,
           date: editTarget.date,
-          waived: editForm.waived,
-          waiver_reason: editForm.waiver_reason || null,
+          waived: false,
+          manual_comment: editForm.manual_comment,
+          status: editForm.status,
+          clock_in: null,
+          clock_out: null,
         }
-        if (editForm.clock_in) body.clock_in = editForm.clock_in
-        if (editForm.clock_out) body.clock_out = editForm.clock_out
         res = await fetch("/api/admin/hr/attendance/records", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -206,15 +236,26 @@ export function CalendarView({ employees }: CalendarViewProps) {
   const daysByDate = new Map<string, UnifiedDay>((days ?? []).map((d) => [d.date, d]))
 
   const isCreating = editTarget !== null && editTarget.record === null
-  const hasClockIn = Boolean(editForm.clock_in)
-  const hasClockOut = Boolean(editForm.clock_out)
-  const hasPartialTime = hasClockIn !== hasClockOut
-  const invalidTimeRange = Boolean(editForm.clock_in && editForm.clock_out && editForm.clock_out <= editForm.clock_in)
-  const cannotSave =
-    saving ||
-    invalidTimeRange ||
-    (editForm.waived && !editForm.waiver_reason.trim()) ||
-    (!editForm.waived && (!(hasClockIn || hasClockOut) || hasPartialTime))
+  const clockIn = editTarget?.record?.clock_in ?? null
+  const clockOut = editTarget?.record?.clock_out ?? null
+  const hasClockIn = Boolean(clockIn)
+  const hasClockOut = Boolean(clockOut)
+  const hasAnyPunch = hasClockIn || hasClockOut
+
+  const isLatePunch = hasClockIn && isLate(clockIn)
+  const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
+  const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
+
+  const showAWP = !hasAnyPunch
+  const showLWP = hasAnyPunch && !isOnTimePresent
+
+  const statusOptions = [
+    ...(showLWP ? [{ value: "lateness_with_permission", label: "LWP" }] : []),
+    ...(showAWP ? [{ value: "absent_with_permission", label: "AWP" }] : []),
+  ]
+
+  const hasManualComment = editForm.manual_comment.trim().length >= 3
+  const cannotSave = saving || !editForm.status || !hasManualComment || isOnTimePresent
 
   return (
     <>
@@ -344,44 +385,41 @@ export function CalendarView({ employees }: CalendarViewProps) {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-muted-foreground text-xs">Status is auto-derived from clock times.</p>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Clock In</Label>
-                <Input
-                  type="time"
-                  value={editForm.clock_in}
-                  onChange={(e) => setEditForm((f) => ({ ...f, clock_in: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Clock Out</Label>
-                <Input
-                  type="time"
-                  value={editForm.clock_out}
-                  onChange={(e) => setEditForm((f) => ({ ...f, clock_out: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch
-                id="cal-waived"
-                checked={editForm.waived}
-                onCheckedChange={(checked: boolean) => setEditForm((f) => ({ ...f, waived: checked }))}
-              />
-              <Label htmlFor="cal-waived">Waive deduction</Label>
-            </div>
-            {editForm.waived && (
-              <div className="space-y-2">
-                <Label>
-                  Reason <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  placeholder="e.g. Permit granted, client visit"
-                  value={editForm.waiver_reason}
-                  onChange={(e) => setEditForm((f) => ({ ...f, waiver_reason: e.target.value }))}
-                />
-              </div>
+            {isOnTimePresent ? (
+              <p className="text-muted-foreground text-sm">
+                This record is fully present and on-time. No overrides (LWP/AWP) are applicable.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={editForm.status}
+                    onValueChange={(value) => setEditForm((f) => ({ ...f, status: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    Comment <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    placeholder="Reason for this manual attendance change"
+                    value={editForm.manual_comment}
+                    onChange={(e) => setEditForm((f) => ({ ...f, manual_comment: e.target.value }))}
+                  />
+                </div>
+              </>
             )}
           </div>
           <DialogFooter>

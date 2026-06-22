@@ -140,8 +140,13 @@ export function PromptDialog({
           <Button variant="outline" onClick={handleCancel} disabled={submitting}>
             {cancelLabel}
           </Button>
-          <Button variant={confirmVariant} onClick={handleConfirm} disabled={submitting || (required && !value.trim())}>
-            {submitting ? confirmLoadingLabel : confirmLabel}
+          <Button
+            variant={confirmVariant}
+            onClick={handleConfirm}
+            disabled={required && !value.trim()}
+            loading={submitting}
+          >
+            {confirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

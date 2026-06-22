@@ -100,7 +100,7 @@ export interface DepartmentWithStats extends Department {
 // Attendance Types
 // ============================================
 
-export type AttendanceStatus = "present" | "absent" | "late" | "half_day" | "on_leave"
+export type AttendanceStatus = "present" | "absent" | "late" | "on_leave"
 
 export interface AttendanceRecord {
   id: string
@@ -118,7 +118,6 @@ export interface AttendanceSummary {
   present: number
   absent: number
   late: number
-  half_day: number
   on_leave: number
   total: number
 }

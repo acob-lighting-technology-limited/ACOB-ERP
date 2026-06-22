@@ -57,13 +57,22 @@ export function getWorkdaysInMonth(yearMonth: string): string[] {
 /**
  * Fractional day credit for attendance rate calculation.
  * Present/Late: proportional to hours worked in the 8am–5pm window.
- * Half-day: 0.5 fixed (no clock_out to compute exact hours).
- * Covered (waiver/exempted/on_leave/holiday): 1.0.
+ * Covered (waiver/exempted/on_leave/holiday/OOS/AWP/LWP): 1.0.
  * Absent/Incomplete: 0.0.
  */
 export function dayCredit(status: string, clockIn?: string | null, clockOut?: string | null): number {
-  if (status === "waiver" || status === "exempted" || status === "on_leave" || status === "holiday") return 1.0
-  if (status === "half_day") return 0.5
+  if (
+    status === "waiver" ||
+    status === "exempted" ||
+    status === "on_leave" ||
+    status === "holiday" ||
+    status === "out_of_station" ||
+    status === "absent_with_permission" ||
+    status === "lateness_with_permission"
+  ) {
+    return 1.0
+  }
+  if (status === "half_day") return dayCredit("late", clockIn, clockOut)
   if (status === "present" || status === "late") {
     const missed = missedHours(clockIn, clockOut)
     return Math.max(0, Math.min(1.0, (9 - missed) / 9))

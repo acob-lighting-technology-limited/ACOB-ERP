@@ -41,13 +41,13 @@ export function PortalReferenceGeneratorContent({
 }: PortalReferenceGeneratorContentProps) {
   const statusLabel = (status: string) => (status === "under_review" ? "Sent for review" : formatName(status))
   const statusBadgeClass = (status: string) => {
-    if (status === "approved") return "bg-emerald-500/10 text-emerald-700 border-emerald-200"
-    if (status === "rejected") return "bg-red-500/10 text-red-700 border-red-200"
-    if (status === "returned_for_correction") return "bg-amber-500/10 text-amber-700 border-amber-200"
-    if (status === "under_review") return "bg-blue-500/10 text-blue-700 border-blue-200"
-    if (status === "draft") return "bg-slate-500/10 text-slate-700 border-slate-200"
-    if (status === "sent" || status === "filed") return "bg-violet-500/10 text-violet-700 border-violet-200"
-    return "bg-muted text-foreground border-border"
+    if (status === "approved") return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20"
+    if (status === "rejected") return "bg-red-500/10 text-red-500 border-red-500/20"
+    if (status === "returned_for_correction") return "bg-amber-500/10 text-amber-500 border-amber-500/20"
+    if (status === "under_review") return "bg-blue-500/10 text-blue-500 border-blue-500/20"
+    if (status === "draft") return "bg-slate-500/10 text-slate-500 border-slate-500/20"
+    if (status === "sent" || status === "filed") return "bg-violet-500/10 text-violet-500 border-violet-500/20"
+    return "bg-muted text-muted-foreground border-muted-foreground/20"
   }
 
   const initialDepartment = departmentCodes.some((item) => item.department_name === currentViewerDepartment)

@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -61,7 +60,7 @@ const STATUS_LABELS: Record<string, string> = {
 const STATUS_TRANSITIONS: Record<CycleStatus, CycleStatus[]> = {
   planned: ["active"],
   active: ["closed"],
-  closed: ["locked"],
+  closed: ["active", "locked"],
   locked: [],
 }
 
@@ -80,7 +79,7 @@ function CycleCard({
   onDelete,
 }: {
   cycle: ReviewCycle
-  onAdvance: (cycle: ReviewCycle) => void
+  onAdvance: (cycle: ReviewCycle, nextStatus: CycleStatus) => void
   onDelete: (cycle: ReviewCycle) => void
 }) {
   const nextStatuses = STATUS_TRANSITIONS[(cycle.status || "planned") as CycleStatus] || []
@@ -105,11 +104,16 @@ function CycleCard({
         </div>
       </div>
       <div className="flex flex-wrap gap-2">
-        {nextStatuses.length > 0 ? (
-          <Button size="sm" variant="outline" onClick={() => onAdvance(cycle)}>
-            Mark {STATUS_LABELS[nextStatuses[0]]}
+        {nextStatuses.map((status) => (
+          <Button
+            key={status}
+            size="sm"
+            variant={status === "locked" ? "destructive" : "outline"}
+            onClick={() => onAdvance(cycle, status)}
+          >
+            {status === "active" && cycle.status === "closed" ? "Reopen" : `Mark ${STATUS_LABELS[status]}`}
           </Button>
-        ) : null}
+        ))}
         {!["active", "locked"].includes(String(cycle.status)) ? (
           <Button size="sm" variant="destructive" onClick={() => onDelete(cycle)}>
             Delete
@@ -295,14 +299,20 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
   const rowActions: RowAction<ReviewCycle>[] = useMemo(
     () => [
       {
-        label: "Advance",
-        onClick: (cycle) => {
-          const next = STATUS_TRANSITIONS[(cycle.status || "planned") as CycleStatus]?.[0]
-          if (next) {
-            setStatusTarget({ cycle, newStatus: next })
-          }
-        },
-        hidden: (cycle) => (STATUS_TRANSITIONS[(cycle.status || "planned") as CycleStatus] || []).length === 0,
+        label: "Activate",
+        onClick: (cycle) => setStatusTarget({ cycle, newStatus: "active" }),
+        hidden: (cycle) => !["planned", "closed"].includes(String(cycle.status)),
+      },
+      {
+        label: "Close",
+        onClick: (cycle) => setStatusTarget({ cycle, newStatus: "closed" }),
+        hidden: (cycle) => cycle.status !== "active",
+      },
+      {
+        label: "Lock Permanently",
+        variant: "destructive",
+        onClick: (cycle) => setStatusTarget({ cycle, newStatus: "locked" }),
+        hidden: (cycle) => cycle.status !== "closed",
       },
       {
         label: "Delete",
@@ -403,9 +413,8 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
         cardRenderer={(cycle) => (
           <CycleCard
             cycle={cycle}
-            onAdvance={(item) => {
-              const next = STATUS_TRANSITIONS[(item.status || "planned") as CycleStatus]?.[0]
-              if (next) setStatusTarget({ cycle: item, newStatus: next })
+            onAdvance={(item, next) => {
+              setStatusTarget({ cycle: item, newStatus: next })
             }}
             onDelete={(item) => setDeleteTarget(item)}
           />
@@ -514,14 +523,14 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isSubmitting}
-              onClick={() => {
-                if (statusTarget) void handleStatusChange(statusTarget.cycle, statusTarget.newStatus)
+            <Button
+              loading={isSubmitting}
+              onClick={async () => {
+                if (statusTarget) await handleStatusChange(statusTarget.cycle, statusTarget.newStatus)
               }}
             >
-              {isSubmitting ? "Updating..." : "Confirm"}
-            </AlertDialogAction>
+              Confirm
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -537,15 +546,15 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={isSubmitting}
-              onClick={() => {
-                if (deleteTarget) void handleDelete(deleteTarget)
+            <Button
+              variant="destructive"
+              loading={isSubmitting}
+              onClick={async () => {
+                if (deleteTarget) await handleDelete(deleteTarget)
               }}
             >
-              {isSubmitting ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
+              Delete
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

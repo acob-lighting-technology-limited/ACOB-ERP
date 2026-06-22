@@ -59,7 +59,7 @@ export default function RootLayout({
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable} overflow-x-clip`}>
         <Suspense fallback={null}>
           {/* Theme follows system preference automatically (light/dark mode) */}
-          <ThemeProvider attribute="class" defaultTheme="system" enableSystem enableColorScheme storageKey="acob-theme">
+          <ThemeProvider attribute="class" defaultTheme="system" enableSystem storageKey="acob-theme">
             <QueryProvider>
               <SeasonalFaviconSwitcher />
               <SidebarProvider>

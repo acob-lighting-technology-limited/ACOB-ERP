@@ -5,10 +5,17 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
+import { resolvePendingAppealOnManualStatus } from "@/lib/hr/attendance-appeals"
+import { loadDayContext } from "@/lib/hr/attendance-day-context"
 import { toLocalISODate } from "@/lib/hr/attendance-utils"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
-import { DB_WRITABLE_STATUSES, deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import {
+  DB_WRITABLE_STATUSES,
+  deriveUnifiedAttendanceStatus,
+  isPermissionAttendanceStatus,
+} from "@/lib/hr/attendance-status"
 
 const CreateSchema = z.object({
   user_id: z.string().uuid(),
@@ -25,7 +32,7 @@ const CreateSchema = z.object({
     .nullable(),
   status: z.enum(DB_WRITABLE_STATUSES).optional(),
   waived: z.boolean().optional(),
-  waiver_reason: z.string().max(200).optional().nullable(),
+  manual_comment: z.string().trim().min(3, "Manual attendance changes require a comment").max(500),
 })
 
 const log = logger("admin-hr-attendance-records")
@@ -68,15 +75,14 @@ export async function GET(request: NextRequest) {
       const { data: deptProfiles } = await dataClient.from("profiles").select("id").in("department", deptVariants)
       const deptUserIds = (deptProfiles ?? []).map((p) => p.id)
       if (deptUserIds.length === 0) return NextResponse.json({ records: [] })
-      scopedUserIds =
-        scopedUserIds === null ? deptUserIds : scopedUserIds.filter((id) => deptUserIds.includes(id))
+      scopedUserIds = scopedUserIds === null ? deptUserIds : scopedUserIds.filter((id) => deptUserIds.includes(id))
       if (scopedUserIds.length === 0) return NextResponse.json({ records: [] })
     }
 
     let attendanceQuery = dataClient
       .from("attendance_records")
       .select(
-        "id, user_id, date, clock_in, clock_out, total_hours, status, source, clock_in_source, clock_out_source, waived, waiver_reason, updated_at, selfie_url, selfie_out_url, face_match_confidence, face_verified, location_verified, latitude, longitude, site_id"
+        "id, user_id, date, clock_in, clock_out, total_hours, status, source, clock_in_source, clock_out_source, waived, manual_comment, updated_at, selfie_url, selfie_out_url, face_match_confidence, face_verified, location_verified, latitude, longitude, site_id"
       )
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
@@ -109,8 +115,10 @@ export async function GET(request: NextRequest) {
     const minDate = allDates[0] ?? toLocalISODate()
     const maxDate = allDates[allDates.length - 1] ?? toLocalISODate()
 
-    // Fetch profiles, holidays, leaves, and exemptions in parallel
-    const [profileRows, holidayRows, leaveRows, exemptPeriodRows] = await Promise.all([
+    const recordIds = rows.map((r) => r.id).filter((id) => id && !id.startsWith("missing-"))
+
+    // Fetch profiles + audit logs (editor attribution) in parallel with the shared day context.
+    const [profileRows, auditLogRows, ctx] = await Promise.all([
       userIds.length > 0
         ? dataClient
             .from("profiles")
@@ -119,34 +127,44 @@ export async function GET(request: NextRequest) {
             .then((r) => r.data ?? [])
         : Promise.resolve([]),
 
-      dataClient
-        .from("holiday_calendar")
-        .select("holiday_date")
-        .gte("holiday_date", minDate)
-        .lte("holiday_date", maxDate)
-        .then((r) => r.data ?? []),
-
-      userIds.length > 0
+      recordIds.length > 0
         ? dataClient
-            .from("leave_requests")
-            .select("user_id, start_date, end_date")
-            .in("user_id", userIds)
-            .eq("status", "approved")
-            .lte("start_date", maxDate)
-            .gte("end_date", minDate)
+            .from("audit_logs")
+            .select("entity_id, user_id, created_at")
+            .eq("entity_type", "attendance_record")
+            .in("entity_id", recordIds)
+            .order("created_at", { ascending: false })
             .then((r) => r.data ?? [])
         : Promise.resolve([]),
 
-      userIds.length > 0
-        ? dataClient
-            .from("attendance_exempt_periods")
-            .select("user_id, start_date, end_date")
-            .in("user_id", userIds)
-            .lte("start_date", maxDate)
-            .gte("end_date", minDate)
-            .then((r) => r.data ?? [])
-        : Promise.resolve([]),
+      loadDayContext(dataClient, { userIds, start: minDate, end: maxDate }),
     ])
+
+    // Build audit log lookups to find the latest editor for each record
+    const editorIdByRecordId = new Map<string, string>()
+    for (const log of auditLogRows as Array<{ entity_id: string; user_id: string }>) {
+      if (!editorIdByRecordId.has(log.entity_id)) {
+        editorIdByRecordId.set(log.entity_id, log.user_id)
+      }
+    }
+
+    const editorUserIds = [...new Set(Array.from(editorIdByRecordId.values()).filter(Boolean))]
+    const editorProfileRows =
+      editorUserIds.length > 0
+        ? await dataClient
+            .from("profiles")
+            .select("id, first_name, last_name, full_name")
+            .in("id", editorUserIds)
+            .then((r) => r.data ?? [])
+        : []
+
+    const editorProfileMap = new Map<
+      string,
+      { first_name?: string | null; last_name?: string | null; full_name?: string | null }
+    >()
+    for (const p of editorProfileRows) {
+      editorProfileMap.set(p.id, p)
+    }
 
     // Build lookup structures
     const profileMap = new Map<
@@ -155,41 +173,21 @@ export async function GET(request: NextRequest) {
     >()
     for (const p of profileRows) profileMap.set(p.id, p)
 
-    const holidaySet = new Set<string>(holidayRows.map((h: { holiday_date: string }) => h.holiday_date))
-
-    // Per-user leave date sets
-    const leaveDatesByUser = new Map<string, Set<string>>()
-    for (const lr of leaveRows as { user_id: string; start_date: string; end_date: string }[]) {
-      if (!leaveDatesByUser.has(lr.user_id)) leaveDatesByUser.set(lr.user_id, new Set())
-      const s = new Date(lr.start_date)
-      const e = new Date(lr.end_date)
-      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-        leaveDatesByUser.get(lr.user_id)!.add(toLocalISODate(d))
-      }
-    }
-
-    // Per-user exemption date sets
-    const exemptDatesByUser = new Map<string, Set<string>>()
-    for (const ep of exemptPeriodRows as { user_id: string; start_date: string; end_date: string }[]) {
-      if (!exemptDatesByUser.has(ep.user_id)) exemptDatesByUser.set(ep.user_id, new Set())
-      const s = new Date(ep.start_date)
-      const e = new Date(ep.end_date)
-      for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-        exemptDatesByUser.get(ep.user_id)!.add(toLocalISODate(d))
-      }
-    }
-
     const records = rows.map((r) => {
       const p = profileMap.get(r.user_id)
       const name = p?.full_name?.trim() || [p?.first_name, p?.last_name].filter(Boolean).join(" ") || "Unknown"
 
       const derivedStatus = deriveUnifiedAttendanceStatus({
         record: r,
-        isHoliday: holidaySet.has(r.date),
-        isOnLeave: leaveDatesByUser.get(r.user_id)?.has(r.date) ?? false,
-        isExempted: Boolean(p?.attendance_exempt) || (exemptDatesByUser.get(r.user_id)?.has(r.date) ?? false),
+        isHoliday: ctx.isHoliday(r.date),
+        isOnLeave: ctx.isOnLeave(r.user_id, r.date),
+        isExempted: Boolean(p?.attendance_exempt) || ctx.isExempt(r.user_id, r.date),
         recordDate: r.date,
       })
+
+      const editorUserId = editorIdByRecordId.get(r.id)
+      const editorProfile = editorUserId ? editorProfileMap.get(editorUserId) : null
+      const editorFirstName = editorProfile?.first_name || editorProfile?.full_name?.split(" ")[0] || null
 
       return {
         id: r.id,
@@ -205,7 +203,7 @@ export async function GET(request: NextRequest) {
         clock_in_source: r.clock_in_source ?? null,
         clock_out_source: r.clock_out_source ?? null,
         waived: r.waived,
-        waiver_reason: r.waiver_reason,
+        manual_comment: r.manual_comment ?? null,
         updated_at: r.updated_at,
         selfie_url: r.selfie_url ?? null,
         selfie_out_url: r.selfie_out_url ?? null,
@@ -215,6 +213,7 @@ export async function GET(request: NextRequest) {
         latitude: r.latitude ?? null,
         longitude: r.longitude ?? null,
         site_id: r.site_id ?? null,
+        editor_first_name: editorFirstName,
       }
     })
 
@@ -285,7 +284,7 @@ export async function GET(request: NextRequest) {
             clock_in_source: null,
             clock_out_source: null,
             waived: false,
-            waiver_reason: null,
+            manual_comment: null,
             updated_at: null,
             selfie_url: null,
             selfie_out_url: null,
@@ -295,6 +294,7 @@ export async function GET(request: NextRequest) {
             latitude: null,
             longitude: null,
             site_id: null,
+            editor_first_name: null,
           })
         }
       }
@@ -321,7 +321,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request" }, { status: 400 })
     }
 
-    const { user_id, date, clock_in, clock_out, waived, waiver_reason } = parsed.data
+    const { user_id, date, clock_in, clock_out, waived, manual_comment } = parsed.data
     const dataClient = getServiceRoleClientOrFallback(supabase)
 
     // Validate the target employee is in this admin/lead's scope
@@ -349,26 +349,46 @@ export async function POST(request: NextRequest) {
     }
 
     // Auto-determine status via the single shared deriver (unless an explicit status was provided)
+    const explicitStatus = parsed.data.status
     const status =
-      parsed.data.status ??
+      explicitStatus ??
       (waived
         ? "waiver"
         : deriveUnifiedAttendanceStatus({
-            record: { clock_in, clock_out, waived: false },
+            record: { clock_in, clock_out, waived: false, status: explicitStatus },
             recordDate: date,
           }))
+    const isCoveredWithoutTimes =
+      status === "waiver" || status === "absent_with_permission" || status === "out_of_station"
+    const isLWP = status === "lateness_with_permission"
 
     if (clock_in && clock_out && clock_out <= clock_in) {
       return NextResponse.json({ error: "Clock out must be after clock in" }, { status: 400 })
     }
-    if (!waived && !clock_in && !clock_out) {
+    if (!isCoveredWithoutTimes && !isLWP && !clock_in && !clock_out) {
       return NextResponse.json({ error: "Provide both clock in and clock out before saving" }, { status: 400 })
     }
-    if ((clock_in && !clock_out) || (!clock_in && clock_out)) {
+    if (!isCoveredWithoutTimes && !isLWP && ((clock_in && !clock_out) || (!clock_in && clock_out))) {
       return NextResponse.json({ error: "Clock in and clock out must be provided together" }, { status: 400 })
     }
+    if (isLWP && !clock_in && !clock_out) {
+      return NextResponse.json(
+        { error: "LWP requires at least one clock punch (clock in or clock out)" },
+        { status: 400 }
+      )
+    }
+    if (status === "waiver" && !manual_comment.trim()) {
+      return NextResponse.json({ error: "Waiver requires a reason or comment" }, { status: 400 })
+    }
 
-    const insert: Record<string, unknown> = { user_id, date, status, source: "manual" }
+    const insert: Record<string, unknown> = {
+      user_id,
+      date,
+      status,
+      source: "manual",
+      manual_comment,
+      waived: status === "waiver" ? true : Boolean(waived),
+    }
     if (clock_in) {
       insert.clock_in = clock_in
       insert.clock_in_source = "manual"
@@ -377,9 +397,6 @@ export async function POST(request: NextRequest) {
       insert.clock_out = clock_out
       insert.clock_out_source = "manual"
     }
-    if (waived !== undefined) insert.waived = waived
-    if (waiver_reason !== undefined) insert.waiver_reason = waiver_reason
-
     if (clock_in && clock_out) {
       const inMs = new Date(`${date}T${clock_in}Z`).getTime()
       const outMs = new Date(`${date}T${clock_out}Z`).getTime()
@@ -404,6 +421,27 @@ export async function POST(request: NextRequest) {
       },
       { failOpen: true }
     )
+
+    // Provenance + appeal auto-resolution (replaces the old DB trigger).
+    await recordAttendanceEvent(dataClient, {
+      userId: user_id,
+      eventDate: date,
+      eventType: "manual_create",
+      attendanceRecordId: created.id,
+      toStatus: status,
+      source: "manual",
+      comment: manual_comment,
+      actorId: scope.userId,
+      metadata: { clock_in: clock_in ?? null, clock_out: clock_out ?? null },
+    })
+    await resolvePendingAppealOnManualStatus(dataClient, {
+      userId: user_id,
+      date,
+      status,
+      attendanceRecordId: created.id,
+      comment: manual_comment,
+      actorId: scope.userId,
+    })
 
     return NextResponse.json({ data: created, message: "Record created" }, { status: 201 })
   } catch (error) {

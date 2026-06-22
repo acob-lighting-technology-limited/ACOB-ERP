@@ -65,6 +65,8 @@ export interface DataTableFilter<TData = unknown> {
    * When urlSync is enabled, values present in the URL take precedence.
    */
   defaultValues?: string[]
+  /** Custom filter rendering */
+  render?: (selectedValues: string[], onChange: (values: string[]) => void) => ReactNode
 }
 
 // ─── Tab Definition ──────────────────────────────────────────────────────────
@@ -160,6 +162,7 @@ export interface DataTableProps<TData> {
 
   // ── Row Actions ──────────────────────────────────────────────────────────
   rowActions?: RowAction<TData>[]
+  forceRowActionsDropdown?: boolean
 
   // ── Bulk Actions ─────────────────────────────────────────────────────────
   bulkActions?: BulkAction<TData>[]

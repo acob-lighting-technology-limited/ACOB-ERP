@@ -36,6 +36,7 @@ type ReviewCycle = {
 type CbtQuestion = {
   id: string
   review_cycle_id?: string | null
+  department?: string | null
   prompt: string
   option_a: string
   option_b: string
@@ -47,8 +48,22 @@ type CbtQuestion = {
   created_at?: string
 }
 
+const DEPARTMENTS = [
+  "Accounts",
+  "Admin & HR",
+  "Business, Growth and Innovation",
+  "Corporate Services",
+  "IT and Communications",
+  "Operations and Maintenance",
+  "Project",
+  "Regulatory and Compliance",
+  "Technical",
+  "Executive Management",
+] as const
+
 const INITIAL_FORM = {
   review_cycle_id: "",
+  department: "",
   prompt: "",
   option_a: "",
   option_b: "",
@@ -95,6 +110,7 @@ function QuestionCard({
         <div className="space-y-1">
           <p className="font-semibold">{question.prompt}</p>
           <p className="text-muted-foreground text-xs">{cycleName}</p>
+          <p className="text-muted-foreground text-xs">Department: {question.department || "General"}</p>
           <p className="text-muted-foreground text-xs">Correct answer: Option {question.correct_option}</p>
         </div>
         <Badge variant={question.is_active === false ? "secondary" : "default"}>
@@ -141,7 +157,6 @@ export default function AdminPmsCbtQuestionPage() {
   const searchParams = useSearchParams()
   const requestedCycleId = searchParams.get("cycleId")
   const [cycles, setCycles] = useState<ReviewCycle[]>([])
-  const [selectedCycleId, setSelectedCycleId] = useState("")
   const [questions, setQuestions] = useState<CbtQuestion[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -175,14 +190,9 @@ export default function AdminPmsCbtQuestionPage() {
 
       const nextCycles = cyclesPayload?.data || []
       const nextQuestions = questionsPayload?.data || []
-      const preferredCycleId = getPreferredCycleId(nextCycles, requestedCycleId)
 
       setCycles(nextCycles)
       setQuestions(nextQuestions)
-      setSelectedCycleId((current) => {
-        if (current && nextCycles.some((cycle) => cycle.id === current)) return current
-        return preferredCycleId
-      })
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Failed to load CBT questions"
       setError(message)
@@ -190,27 +200,41 @@ export default function AdminPmsCbtQuestionPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [requestedCycleId])
+  }, [])
 
   useEffect(() => {
     void loadPage()
   }, [loadPage])
 
+  // Automatically select the active cycle in the URL query params if none is selected
   useEffect(() => {
-    if (!cycles.length) return
-    const preferredCycleId = getPreferredCycleId(cycles, requestedCycleId)
-    setSelectedCycleId((current) => current || preferredCycleId)
-  }, [cycles, requestedCycleId])
+    if (cycles.length > 0 && !searchParams.get("review_cycle_id") && !searchParams.get("cycleId")) {
+      const activeCycle = cycles.find((c) => c.status === "active")
+      if (activeCycle) {
+        router.replace(`/admin/hr/pms/cbt/question?review_cycle_id=${encodeURIComponent(activeCycle.id)}`, {
+          scroll: false,
+        })
+      }
+    }
+  }, [cycles, searchParams, router])
+
+  const activeCycleId = useMemo(() => {
+    return cycles.find((cycle) => cycle.status === "active")?.id || cycles[0]?.id || ""
+  }, [cycles])
+
+  const currentCycleId = useMemo(() => {
+    return searchParams.get("review_cycle_id") || searchParams.get("cycleId") || activeCycleId
+  }, [searchParams, activeCycleId])
 
   const cycleNameById = useMemo(() => new Map(cycles.map((cycle) => [cycle.id, cycle.name])), [cycles])
   const selectedCycle = useMemo(
-    () => cycles.find((cycle) => cycle.id === selectedCycleId) || null,
-    [cycles, selectedCycleId]
+    () => cycles.find((cycle) => cycle.id === currentCycleId) || null,
+    [cycles, currentCycleId]
   )
 
   const filteredQuestions = useMemo(
-    () => questions.filter((question) => !selectedCycleId || question.review_cycle_id === selectedCycleId),
-    [questions, selectedCycleId]
+    () => questions.filter((question) => !currentCycleId || question.review_cycle_id === currentCycleId),
+    [questions, currentCycleId]
   )
 
   const activeQuestions = filteredQuestions.filter((question) => question.is_active !== false).length
@@ -232,6 +256,12 @@ export default function AdminPmsCbtQuestionPage() {
       placeholder: "All Cycles",
       mode: "custom",
       filterFn: (row, values) => values.length === 0 || values.includes(row.review_cycle_id || ""),
+    },
+    {
+      key: "department",
+      label: "Department",
+      options: DEPARTMENTS.map((dept) => ({ value: dept, label: dept })),
+      placeholder: "All Departments",
     },
     {
       key: "correct_option",
@@ -265,6 +295,15 @@ export default function AdminPmsCbtQuestionPage() {
       render: (row) => <span className="font-medium">{row.prompt}</span>,
       resizable: true,
       initialWidth: 320,
+    },
+    {
+      key: "department",
+      label: "Department",
+      sortable: true,
+      accessor: (row) => row.department || "General",
+      render: (row) => <Badge variant="outline">{row.department || "General"}</Badge>,
+      resizable: true,
+      initialWidth: 180,
     },
     {
       key: "review_cycle_id",
@@ -317,8 +356,8 @@ export default function AdminPmsCbtQuestionPage() {
     },
   ]
 
-  function resetForm(nextCycleId = selectedCycleId) {
-    setForm({ ...INITIAL_FORM, review_cycle_id: nextCycleId || getPreferredCycleId(cycles, requestedCycleId) })
+  function resetForm(nextCycleId = currentCycleId) {
+    setForm({ ...INITIAL_FORM, review_cycle_id: nextCycleId || activeCycleId })
     setEditingQuestion(null)
   }
 
@@ -330,7 +369,8 @@ export default function AdminPmsCbtQuestionPage() {
   function openEditModal(question: CbtQuestion) {
     setEditingQuestion(question)
     setForm({
-      review_cycle_id: question.review_cycle_id || selectedCycleId,
+      review_cycle_id: question.review_cycle_id || currentCycleId,
+      department: question.department || "",
       prompt: question.prompt,
       option_a: question.option_a,
       option_b: question.option_b,
@@ -364,7 +404,9 @@ export default function AdminPmsCbtQuestionPage() {
       if (!response.ok) throw new Error(responsePayload?.error || "Failed to save question")
 
       toast.success(editingQuestion ? "Question updated" : "Question added")
-      setSelectedCycleId(form.review_cycle_id)
+      router.replace(`/admin/hr/pms/cbt/question?review_cycle_id=${encodeURIComponent(form.review_cycle_id)}`, {
+        scroll: false,
+      })
       setIsModalOpen(false)
       resetForm(form.review_cycle_id)
       await loadPage()
@@ -449,30 +491,9 @@ export default function AdminPmsCbtQuestionPage() {
         </div>
       }
     >
-      <div className="max-w-sm">
-        <Label htmlFor="cycle-picker">Working Cycle</Label>
-        <Select
-          value={selectedCycleId}
-          onValueChange={(value) => {
-            setSelectedCycleId(value)
-            router.replace(`/admin/hr/pms/cbt/question?cycleId=${encodeURIComponent(value)}`)
-          }}
-        >
-          <SelectTrigger id="cycle-picker">
-            <SelectValue placeholder="Select cycle" />
-          </SelectTrigger>
-          <SelectContent>
-            {cycles.map((cycle) => (
-              <SelectItem key={cycle.id} value={cycle.id}>
-                {cycle.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       <DataTable<CbtQuestion>
-        data={filteredQuestions}
+        key={isLoading ? "loading" : "ready"}
+        data={questions}
         columns={columns}
         filters={filters}
         getRowId={(question) => question.id}
@@ -503,6 +524,9 @@ export default function AdminPmsCbtQuestionPage() {
               <div className="space-y-2">
                 <p>
                   <span className="font-medium">Cycle:</span> {cycleNameById.get(question.review_cycle_id || "") || "-"}
+                </p>
+                <p>
+                  <span className="font-medium">Department:</span> {question.department || "-"}
                 </p>
                 <p>
                   <span className="font-medium">Option A:</span> {question.option_a}
@@ -547,6 +571,7 @@ export default function AdminPmsCbtQuestionPage() {
         emptyDescription="Choose a cycle and add questions to start building its CBT test."
         emptyIcon={Brain}
         skeletonRows={6}
+        urlSync
       />
 
       <Dialog
@@ -567,23 +592,44 @@ export default function AdminPmsCbtQuestionPage() {
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label>Cycle</Label>
-              <Select
-                value={form.review_cycle_id}
-                onValueChange={(value) => setForm((current) => ({ ...current, review_cycle_id: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select cycle" />
-                </SelectTrigger>
-                <SelectContent>
-                  {cycles.map((cycle) => (
-                    <SelectItem key={cycle.id} value={cycle.id}>
-                      {cycle.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label>Cycle</Label>
+                <Select
+                  value={form.review_cycle_id}
+                  onValueChange={(value) => setForm((current) => ({ ...current, review_cycle_id: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select cycle" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cycles.map((cycle) => (
+                      <SelectItem key={cycle.id} value={cycle.id}>
+                        {cycle.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Department</Label>
+                <Select
+                  value={form.department}
+                  onValueChange={(value) => setForm((current) => ({ ...current, department: value }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {DEPARTMENTS.map((dept) => (
+                      <SelectItem key={dept} value={dept}>
+                        {dept}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -696,7 +742,7 @@ export default function AdminPmsCbtQuestionPage() {
               >
                 Cancel
               </Button>
-              <Button type="submit" loading={saving} disabled={!form.review_cycle_id}>
+              <Button type="submit" loading={saving} disabled={!form.review_cycle_id || !form.department}>
                 {editingQuestion ? "Save Changes" : "Add Question"}
               </Button>
             </DialogFooter>

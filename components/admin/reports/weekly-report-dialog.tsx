@@ -56,6 +56,26 @@ const autoNumberReportText = (text: string): string => {
   return lines.map((line, index) => `${index + 1}. ${line}`).join("\n")
 }
 
+const sanitizeReportTextForEditing = (text: string): string => {
+  return sanitizeReportText(String(text || ""))
+    .replace(/\r\n/g, "\n")
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .join("\n")
+    .trim()
+}
+
+function replaceSelectedText(
+  current: string,
+  insert: string,
+  selectionStart: number | null | undefined,
+  selectionEnd: number | null | undefined
+) {
+  const start = selectionStart ?? current.length
+  const end = selectionEnd ?? current.length
+  return `${current.slice(0, start)}${insert}${current.slice(end)}`
+}
+
 export function WeeklyReportAdminDialog({
   isOpen,
   onClose,
@@ -256,6 +276,9 @@ export function WeeklyReportAdminDialog({
         ...formData,
         user_id: isLeadScopedView ? currentUser.id : formData.user_id,
         department: isLeadScopedView ? currentUser.department || formData.department : formData.department,
+        work_done: autoNumberReportText(formData.work_done),
+        tasks_new_week: autoNumberReportText(formData.tasks_new_week),
+        challenges: autoNumberReportText(formData.challenges),
       }
 
       const response = await fetch("/api/reports/weekly-reports", {
@@ -282,30 +305,67 @@ export function WeeklyReportAdminDialog({
     }
   }
 
-  const handleKey = (e: React.KeyboardEvent, field: ReportTextField) => {
+  const handleKey = (e: React.KeyboardEvent<HTMLTextAreaElement>, field: ReportTextField) => {
+    if (e.key === "Backspace") {
+      const textarea = e.currentTarget
+      const current = formData[field] as string
+      if (textarea.selectionStart !== textarea.selectionEnd) return
+
+      const caret = textarea.selectionStart ?? 0
+      const lineStart = current.lastIndexOf("\n", Math.max(0, caret - 1)) + 1
+      const beforeCaret = current.slice(lineStart, caret)
+
+      if (/^\d+[.)]\s*$/.test(beforeCaret)) {
+        e.preventDefault()
+        const nextValue = `${current.slice(0, lineStart)}${current.slice(caret)}`
+        setFormData((prev) => ({ ...prev, [field]: nextValue }))
+        requestAnimationFrame(() => {
+          textarea.selectionStart = lineStart
+          textarea.selectionEnd = lineStart
+        })
+      }
+      return
+    }
+
     if (e.key === "Enter") {
+      const textarea = e.currentTarget
       const val = formData[field] as string
-      const last = val.split("\n").pop() || ""
-      const match = last.match(/^(\d+)[\.\)]\s/)
+      const caret = textarea.selectionStart ?? val.length
+      const lineStart = val.lastIndexOf("\n", Math.max(0, caret - 1)) + 1
+      const lineEndIndex = val.indexOf("\n", caret)
+      const lineEnd = lineEndIndex === -1 ? val.length : lineEndIndex
+      const currentLine = val.slice(lineStart, lineEnd)
+      const match = currentLine.match(/^\s*(\d+)[\.\)]\s/)
       if (match) {
         e.preventDefault()
-        setFormData((p) => ({ ...p, [field]: val + "\n" + (parseInt(match[1]) + 1) + ". " }))
+        const prefix = `\n${parseInt(match[1], 10) + 1}. `
+        const nextValue = replaceSelectedText(val, prefix, textarea.selectionStart, textarea.selectionEnd)
+        const nextCaret = caret + prefix.length
+        setFormData((prev) => ({ ...prev, [field]: nextValue }))
+        requestAnimationFrame(() => {
+          textarea.selectionStart = nextCaret
+          textarea.selectionEnd = nextCaret
+        })
       }
     }
   }
 
   const handleTextChange = (field: ReportTextField, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: autoNumberReportText(value) }))
+    setFormData((prev) => ({ ...prev, [field]: sanitizeReportText(value) }))
   }
 
   const handleTextPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>, field: ReportTextField) => {
     e.preventDefault()
-    const pasted = e.clipboardData.getData("text")
+    const pasted = sanitizeReportText(e.clipboardData.getData("text"))
     const current = (formData[field] as string) || ""
-    const start = e.currentTarget.selectionStart ?? current.length
-    const end = e.currentTarget.selectionEnd ?? current.length
-    const merged = `${current.slice(0, start)}${pasted}${current.slice(end)}`
-    setFormData((prev) => ({ ...prev, [field]: autoNumberReportText(merged) }))
+    const textarea = e.currentTarget
+    const merged = replaceSelectedText(current, pasted, textarea.selectionStart, textarea.selectionEnd)
+    const caret = (textarea.selectionStart ?? current.length) + pasted.length
+    setFormData((prev) => ({ ...prev, [field]: merged }))
+    requestAnimationFrame(() => {
+      textarea.selectionStart = caret
+      textarea.selectionEnd = caret
+    })
   }
 
   return (

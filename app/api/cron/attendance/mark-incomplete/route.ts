@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
 import { logger } from "@/lib/logger"
 import { toLocalISODate } from "@/lib/utils/date"
+import { recordAttendanceEvents } from "@/lib/hr/attendance-events"
 
 const log = logger("cron-attendance-mark-incomplete")
 
@@ -38,15 +39,35 @@ export async function GET(request: NextRequest) {
     .update({ status: "incomplete" })
     .eq("date", date)
     .is("clock_out", null)
-    .neq("status", "absent")
-    .select("id")
+    .not(
+      "status",
+      "in",
+      '("absent","absent_with_permission","out_of_station","lateness_with_permission","waiver","exempted")'
+    )
+    .select("id, user_id, date")
 
   if (error) {
     log.error({ err: String(error), date }, "Failed to mark incomplete records")
     return NextResponse.json({ error: "Failed to update records" }, { status: 500 })
   }
 
-  const count = data?.length ?? 0
+  const rows = (data ?? []) as Array<{ id: string; user_id: string; date: string }>
+  const count = rows.length
+
+  // Provenance: the automated status flip joins each affected day's timeline.
+  await recordAttendanceEvents(
+    supabase,
+    rows.map((row) => ({
+      userId: row.user_id,
+      eventDate: row.date,
+      eventType: "marked_incomplete" as const,
+      attendanceRecordId: row.id,
+      toStatus: "incomplete",
+      source: "cron" as const,
+      actorId: null,
+    }))
+  )
+
   log.info({ date, count }, "Marked attendance records as incomplete")
   return NextResponse.json({ date, marked: count })
 }

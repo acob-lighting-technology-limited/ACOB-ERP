@@ -5,7 +5,6 @@ import { Card, CardContent } from "@/components/ui/card"
 import { toast } from "sonner"
 import { ProfileHero } from "@/components/profile/profile-hero"
 import { ProfileEditDialog } from "@/components/profile/profile-edit-dialog"
-import { ContactInfoCard } from "@/components/profile/contact-info-card"
 import { ActivityTabs } from "@/components/profile/activity-tabs"
 import {
   PersonalRecentActivityFeed,
@@ -76,19 +75,24 @@ export function ProfileContent({
   return (
     <div className="container mx-auto max-w-full space-y-6 p-4 md:p-6 lg:p-8">
       <ProfileHero profile={profile} onEdit={() => setIsEditOpen(true)} />
-      <ContactInfoCard profile={profile} />
-      <PersonalRecentActivityFeed activity={recentActivity} />
-      <ActivityTabs
-        tasks={tasks}
-        assets={assets}
-        documentation={documentation}
-        feedback={feedback}
-        correspondence={correspondence}
-        helpDesk={helpDesk}
-        payments={payments}
-        leave={leave}
-        attendance={attendance}
-      />
+
+      {/* 2-column equal-width dashboard layout on desktop */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <ActivityTabs
+          tasks={tasks}
+          assets={assets}
+          documentation={documentation}
+          feedback={feedback}
+          correspondence={correspondence}
+          helpDesk={helpDesk}
+          payments={payments}
+          leave={leave}
+          attendance={attendance}
+        />
+
+        <PersonalRecentActivityFeed activity={recentActivity} />
+      </div>
+
       <ProfileEditDialog open={isEditOpen} onOpenChange={setIsEditOpen} profile={profile} />
     </div>
   )

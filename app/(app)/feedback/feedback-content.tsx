@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -40,6 +39,7 @@ export function FeedbackContent({ initialFeedback }: FeedbackContentProps) {
   const [selectedFeedback, setSelectedFeedback] = useState<Feedback | null>(null)
   const [showEditModal, setShowEditModal] = useState(false)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [isDeletingFeedback, setIsDeletingFeedback] = useState(false)
 
   const getTypeColor = (type: string) => {
     if (type === "concern") return "bg-yellow-100 text-yellow-800"
@@ -303,18 +303,24 @@ export function FeedbackContent({ initialFeedback }: FeedbackContentProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
+            <AlertDialogCancel disabled={isDeletingFeedback}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              loading={isDeletingFeedback}
+              onClick={async () => {
                 if (pendingDeleteId) {
-                  void handleDelete(pendingDeleteId)
+                  setIsDeletingFeedback(true)
+                  try {
+                    await handleDelete(pendingDeleteId)
+                    setPendingDeleteId(null)
+                  } finally {
+                    setIsDeletingFeedback(false)
+                  }
                 }
-                setPendingDeleteId(null)
               }}
             >
               Delete
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

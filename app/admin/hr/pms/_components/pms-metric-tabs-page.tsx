@@ -16,6 +16,7 @@ import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { exportPmsRowsToExcel, exportPmsRowsToPdf } from "@/lib/pms/export"
 import { toLocalISODate } from "@/lib/utils/date"
+import { IndividualAttendanceExpandedRow } from "./individual-attendance-expanded-row"
 
 type MetricKey = "kpi" | "goals" | "attendance" | "behaviour"
 type TabKey = "individual" | "department" | "cycle"
@@ -26,7 +27,13 @@ type MetricSnapshotPayload = {
   selected_cycle_id: string | null
   users: { id: string; name: string; department: string }[]
   departments: string[]
-  cycles: { id: string; name: string; review_type: string | null }[]
+  cycles: {
+    id: string
+    name: string
+    review_type: string | null
+    start_date: string | null
+    end_date: string | null
+  }[]
   rows: {
     individual: Record<string, unknown>[]
     department: Record<string, unknown>[]
@@ -489,8 +496,35 @@ export function PmsMetricTabsPage({
       key: "cycle",
       label: "Cycle",
       options: (data?.cycles || []).map((cycle) => ({ value: cycle.name, label: cycle.name })),
-      placeholder: "All Cycles",
-      mode: "column",
+      mode: "custom",
+      filterFn: () => true,
+      render: (values, onChange) => {
+        const activeCycleName = data?.cycles.find((c) => c.id === cycleId)?.name || ""
+        const currentValue = values[0] || activeCycleName
+        return (
+          <Select
+            value={currentValue}
+            onValueChange={(name) => {
+              onChange([name])
+              const targetCycle = data?.cycles.find((c) => c.name === name)
+              if (targetCycle) {
+                setCycleId(targetCycle.id)
+              }
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select Cycle" />
+            </SelectTrigger>
+            <SelectContent>
+              {(data?.cycles || []).map((cycle) => (
+                <SelectItem key={cycle.id} value={cycle.name}>
+                  {cycle.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )
+      },
     })
     if (tab === "individual" || tab === "department") {
       result.push({
@@ -512,13 +546,13 @@ export function PmsMetricTabsPage({
       })
     }
     return result
-  }, [tab, data])
+  }, [tab, data, cycleId])
 
   const tableRowActions = useMemo<RowAction<Record<string, unknown>>[] | undefined>(() => {
     if (tab === "individual" && metric !== "goals") {
       return [
         {
-          label: "Edit",
+          label: metric === "attendance" ? "Manage Attendance" : "Edit",
           onClick: (row) => {
             if (metric === "attendance") {
               const userId = asString(row.user_id)
@@ -641,6 +675,7 @@ export function PmsMetricTabsPage({
         isLoading={isInitialLoading}
         skeletonRows={6}
         rowActions={tableRowActions}
+        forceRowActionsDropdown={true}
         searchPlaceholder={`Search ${tab} records…`}
         searchFn={(row, query) =>
           Object.values(row)
@@ -650,53 +685,64 @@ export function PmsMetricTabsPage({
         emptyIcon={Icon}
         emptyTitle={`No ${metric} records`}
         emptyDescription={`No ${metric} data found for the selected cycle and filters.`}
-        expandable={
-          tab === "individual"
-            ? undefined
-            : {
-                canExpand: (row) => {
-                  if (tab === "department") {
-                    const department = asString(row.department)
-                    return (expandedRowsByGroup.byDepartment.get(department) || []).length > 0
-                  }
-                  const cycle = asString(row.cycle)
-                  return (expandedRowsByGroup.byCycle.get(cycle) || []).length > 0
-                },
-                render: (row) => {
-                  const detailRows =
-                    tab === "department"
-                      ? expandedRowsByGroup.byDepartment.get(asString(row.department)) || []
-                      : expandedRowsByGroup.byCycle.get(asString(row.cycle)) || []
-                  return (
-                    <div className="space-y-2">
-                      <div className="text-muted-foreground text-xs">Underlying people records</div>
-                      <div className="overflow-x-auto rounded-md border">
-                        <table className="w-full min-w-[680px] text-sm">
-                          <thead className="bg-muted/60 text-muted-foreground">
-                            <tr>
-                              <th className="px-3 py-2 text-left">Employee</th>
-                              <th className="px-3 py-2 text-left">Department</th>
-                              <th className="px-3 py-2 text-left">Cycle</th>
-                              <th className="px-3 py-2 text-left">Value</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {detailRows.map((detail) => (
-                              <tr key={`${asString(detail.user_id)}-${asString(detail.cycle)}`} className="border-t">
-                                <td className="px-3 py-2">{asString(detail.employee)}</td>
-                                <td className="px-3 py-2">{asString(detail.department)}</td>
-                                <td className="px-3 py-2">{asString(detail.cycle)}</td>
-                                <td className="px-3 py-2">{asString(detail.metric_value)}</td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )
-                },
+        expandable={{
+          canExpand: (row) => {
+            if (tab === "individual") {
+              return metric === "attendance"
+            }
+            if (tab === "department") {
+              const department = asString(row.department)
+              return (expandedRowsByGroup.byDepartment.get(department) || []).length > 0
+            }
+            const cycle = asString(row.cycle)
+            return (expandedRowsByGroup.byCycle.get(cycle) || []).length > 0
+          },
+          render: (row) => {
+            if (tab === "individual") {
+              if (metric === "attendance") {
+                return (
+                  <IndividualAttendanceExpandedRow
+                    userId={asString(row.user_id)}
+                    cycleId={cycleId}
+                    cycles={data?.cycles || []}
+                  />
+                )
               }
-        }
+              return null
+            }
+            const detailRows =
+              tab === "department"
+                ? expandedRowsByGroup.byDepartment.get(asString(row.department)) || []
+                : expandedRowsByGroup.byCycle.get(asString(row.cycle)) || []
+            return (
+              <div className="space-y-2">
+                <div className="text-muted-foreground text-xs">Underlying people records</div>
+                <div className="overflow-x-auto rounded-md border">
+                  <table className="w-full min-w-[680px] text-sm">
+                    <thead className="bg-muted/60 text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 text-left">Employee</th>
+                        <th className="px-3 py-2 text-left">Department</th>
+                        <th className="px-3 py-2 text-left">Cycle</th>
+                        <th className="px-3 py-2 text-left">Value</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {detailRows.map((detail) => (
+                        <tr key={`${asString(detail.user_id)}-${asString(detail.cycle)}`} className="border-t">
+                          <td className="px-3 py-2">{asString(detail.employee)}</td>
+                          <td className="px-3 py-2">{asString(detail.department)}</td>
+                          <td className="px-3 py-2">{asString(detail.cycle)}</td>
+                          <td className="px-3 py-2">{asString(detail.metric_value)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )
+          },
+        }}
       />
 
       {metric !== "attendance" ? (

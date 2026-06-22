@@ -5,7 +5,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -587,8 +586,8 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
             <AlertDialogCancel disabled={isSendingEmails} onClick={() => setPendingEmailDispatch(null)}>
               No, skip
             </AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isSendingEmails}
+            <Button
+              loading={isSendingEmails}
               onClick={async () => {
                 if (!pendingEmailDispatch) return
                 setIsSendingEmails(true)
@@ -617,15 +616,8 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                 }
               }}
             >
-              {isSendingEmails ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending…
-                </>
-              ) : (
-                "Yes, send emails"
-              )}
-            </AlertDialogAction>
+              Yes, send emails
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -639,16 +631,17 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
+            <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              loading={isProcessing}
+              onClick={async () => {
+                await handleReject()
                 setPendingReject(false)
-                handleReject()
               }}
             >
               Reject
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

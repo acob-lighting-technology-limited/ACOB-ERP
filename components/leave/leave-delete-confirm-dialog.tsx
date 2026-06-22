@@ -44,13 +44,14 @@ export function LeaveDeleteConfirmDialog({
           <Button
             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             disabled={isDeleting || !request}
+            loading={isDeleting}
             onClick={() => {
               if (request) {
                 void onConfirm(request)
               }
             }}
           >
-            {isDeleting ? "Deleting..." : "Delete"}
+            Delete
           </Button>
         </AlertDialogFooter>
       </AlertDialogContent>

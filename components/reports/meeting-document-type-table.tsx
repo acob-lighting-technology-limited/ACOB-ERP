@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -86,6 +85,7 @@ export function MeetingDocumentTypeTable({
   const [showCreate, setShowCreate] = useState(false)
   const [editingDoc, setEditingDoc] = useState<MeetingDocument | null>(null)
   const [pendingDeleteDoc, setPendingDeleteDoc] = useState<MeetingDocument | null>(null)
+  const [isDeletingDoc, setIsDeletingDoc] = useState(false)
   const [weekNumber, setWeekNumber] = useState(officeWeek.week)
   const [yearNumber, setYearNumber] = useState(officeWeek.year)
   const [file, setFile] = useState<File | null>(null)
@@ -485,7 +485,12 @@ export function MeetingDocumentTypeTable({
         </div>
       }
     >
-      <AlertDialog open={pendingDeleteDoc !== null} onOpenChange={(open) => !open && setPendingDeleteDoc(null)}>
+      <AlertDialog
+        open={pendingDeleteDoc !== null}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingDoc) setPendingDeleteDoc(null)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete document?</AlertDialogTitle>
@@ -496,16 +501,23 @@ export function MeetingDocumentTypeTable({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
+            <AlertDialogCancel disabled={isDeletingDoc}>Cancel</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              loading={isDeletingDoc}
+              onClick={async () => {
                 if (pendingDeleteDoc) {
-                  void remove(pendingDeleteDoc.id)
+                  setIsDeletingDoc(true)
+                  try {
+                    await remove(pendingDeleteDoc.id)
+                  } finally {
+                    setIsDeletingDoc(false)
+                  }
                 }
               }}
             >
               Delete
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

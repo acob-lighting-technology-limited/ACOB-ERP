@@ -870,8 +870,8 @@ export function LeaveContent({
       <LeaveApprovePromptDialog
         approvePrompt={approvePrompt}
         onOpenChange={() => setApprovePrompt(null)}
-        onConfirm={(requestId, feedback) => {
-          submitAction(requestId, "approve", feedback)
+        onConfirm={async (requestId, feedback) => {
+          await submitAction(requestId, "approve", feedback)
           setApprovePrompt(null)
         }}
       />
@@ -879,8 +879,8 @@ export function LeaveContent({
       <LeaveRejectPromptDialog
         rejectPrompt={rejectPrompt}
         onOpenChange={() => setRejectPrompt(null)}
-        onConfirm={(requestId, reason) => {
-          submitAction(requestId, "reject", reason)
+        onConfirm={async (requestId, reason) => {
+          await submitAction(requestId, "reject", reason)
           setRejectPrompt(null)
         }}
       />

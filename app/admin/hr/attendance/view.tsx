@@ -8,6 +8,8 @@ import { DailyRosterView } from "./_components/daily-roster-view"
 import { CalendarView } from "./_components/calendar-view"
 import type { EmployeeOption } from "./_components/calendar-view"
 import { ExceptionsView } from "./_components/exceptions-view"
+import { AppealsView } from "./_components/appeals-view"
+import { AttendanceManagerDialog } from "./_components/attendance-manager-dialog"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StatCard } from "@/components/ui/stat-card"
@@ -23,23 +25,17 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import {
-  BarChart3,
-  Download,
-  FileText,
-  Users,
-  Clock,
-  AlertCircle,
-  Pencil,
-  Info,
-  CalendarDays,
-  Trash2,
-} from "lucide-react"
+import { BarChart3, Download, FileText, Users, Clock, AlertCircle, Pencil, Info, Settings2 } from "lucide-react"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
 import { getWorkdaysInMonth, monthBounds, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
-import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
+import {
+  ATTENDANCE_STATUS_COLORS,
+  ATTENDANCE_STATUS_LABELS,
+  MANUAL_ATTENDANCE_STATUS_OPTIONS,
+  getManualStatusEditOptions,
+} from "@/lib/hr/attendance-status"
 import { StatusBadge, labelSource } from "./_components/status-badge"
 
 const log = logger("hr-attendance-reports")
@@ -53,7 +49,9 @@ interface AttendanceReport {
   present_days: number
   late_days: number
   incomplete_days?: number
-  half_day_days?: number
+  lateness_with_permission_days?: number
+  absent_with_permission_days?: number
+  out_of_station_days?: number
   exempted_days?: number
   waived_days: number
   absent_days: number
@@ -80,16 +78,19 @@ interface DayRecord {
   clock_in_source?: string | null
   clock_out_source?: string | null
   waived: boolean
-  waiver_reason: string | null
+  manual_comment?: string | null
   updated_at?: string | null
+  editor_first_name?: string | null
 }
 
 type DayStatus =
   | "present"
   | "late"
+  | "lateness_with_permission"
   | "absent"
+  | "absent_with_permission"
+  | "out_of_station"
   | "incomplete"
-  | "half_day"
   | "waiver"
   | "exempted"
   | "on_leave"
@@ -102,18 +103,88 @@ interface CalendarDay {
   record: DayRecord | null
   isOnLeave: boolean
   status: DayStatus
+  manualBy: string | null
 }
 
-type EditHistoryItem = {
+/**
+ * Source label for a day row. Real punch records use the device/manual/mixed label;
+ * any manually-set day (holiday/leave/exemption, or a manual override) shows the
+ * responsible person as "Manual (Name)"; a plain absence shows "—".
+ */
+function daySourceLabel(day: CalendarDay): string {
+  if (day.status === "absent") return "—"
+  if (day.record) {
+    const s = labelSource(day.record)
+    // A manually-set record (e.g. on_leave/OOS/waiver) reports as plain "Manual" —
+    // attach who set it when we know.
+    if (s === "Manual" && day.manualBy) return `Manual (${day.manualBy})`
+    if (s && s !== "—") return s
+  }
+  // No record but a derived manual status (holiday/leave/exempt).
+  if (day.manualBy) return `Manual (${day.manualBy})`
+  switch (day.status) {
+    case "holiday":
+    case "on_leave":
+    case "exempted":
+      return "Manual"
+    default:
+      return "—"
+  }
+}
+
+type TimelineEvent = {
   id: string
+  event_type: string
+  from_status: string | null
+  to_status: string | null
+  source: string | null
+  comment: string | null
   created_at: string
-  user_id: string | null
-  action?: string | null
-  operation?: string | null
-  old_values?: Record<string, unknown> | null
-  new_values?: Record<string, unknown> | null
-  changed_fields?: unknown
-  editor_name?: string
+  actor_name: string | null
+  metadata?: Record<string, unknown> | null
+}
+
+type TimelineContext = {
+  holiday: string | null
+  holiday_added_by: string | null
+  on_leave: string | null
+  exempt: boolean
+  exempt_reason: string | null
+}
+
+const EVENT_LABELS: Record<string, string> = {
+  device_punch_in: "Clocked in (device)",
+  device_punch_out: "Clocked out (device)",
+  self_clock_in: "Clocked in",
+  self_clock_out: "Clocked out",
+  remote_clock_in: "Remote clock-in",
+  remote_clock_out: "Remote clock-out",
+  manual_create: "Manual record created",
+  manual_update: "Manual edit",
+  manual_delete: "Record deleted",
+  bulk_grant: "Bulk grant",
+  bulk_delete: "Bulk removal",
+  appeal_requested: "Appeal requested",
+  appeal_rejected: "Appeal rejected",
+  appeal_approved: "Appeal approved",
+  appeal_auto_resolved: "Appeal auto-approved",
+  leave_granted: "Leave granted",
+  leave_revoked: "Leave revoked",
+  exemption_added: "Exemption added",
+  exemption_removed: "Exemption removed",
+  marked_incomplete: "Auto-marked incomplete",
+}
+
+function eventBadgeClass(eventType: string): string {
+  if (eventType.startsWith("appeal_")) {
+    if (eventType === "appeal_rejected") return "bg-red-100 text-red-800"
+    if (eventType.includes("approved") || eventType.includes("resolved")) return "bg-emerald-100 text-emerald-800"
+    return "bg-amber-100 text-amber-800"
+  }
+  if (eventType.startsWith("device_")) return "bg-blue-100 text-blue-800"
+  if (eventType.startsWith("manual_") || eventType.startsWith("bulk_")) return "bg-violet-100 text-violet-800"
+  if (eventType === "marked_incomplete") return "bg-cyan-100 text-cyan-800"
+  return "bg-gray-100 text-gray-800"
 }
 
 type ExemptionsPayload = {
@@ -128,6 +199,7 @@ type UnifiedDayPayload = {
     date: string
     record: DayRecord | null
     status: DayStatus
+    manual_by?: string | null
   }>
 }
 
@@ -144,7 +216,7 @@ function currentYearMonth() {
 }
 
 function formatDayShort(dateString: string) {
-  return formatWATDate(dateString, { weekday: "long", month: "short", day: "numeric" })
+  return formatWATDate(dateString, { weekday: "short", month: "short", day: "numeric" })
 }
 
 function formatTime(t: string | null) {
@@ -165,7 +237,14 @@ function formatHours(hours: number | null) {
 }
 
 function getHourBreakdown(record: DayRecord | null, status?: string) {
-  const covered = status === "waiver" || status === "on_leave" || status === "holiday" || status === "exempted"
+  const covered =
+    status === "waiver" ||
+    status === "on_leave" ||
+    status === "holiday" ||
+    status === "exempted" ||
+    status === "out_of_station" ||
+    status === "absent_with_permission" ||
+    status === "lateness_with_permission"
   if (covered) {
     const inMin = parseTimeToMinutes(record?.clock_in)
     const outMin = parseTimeToMinutes(record?.clock_out)
@@ -177,7 +256,6 @@ function getHourBreakdown(record: DayRecord | null, status?: string) {
     return { total: null, work: null, overtime: null, missed: null }
   }
   if (record.clock_in && !record.clock_out) {
-    if (status === "half_day") return { total: null, work: 4.5, overtime: null, missed: 4.5 }
     return { total: null, work: null, overtime: null, missed: null }
   }
   const inMin = parseTimeToMinutes(record.clock_in)
@@ -205,16 +283,15 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   const [days, setDays] = useState<CalendarDay[] | null>(null)
   const [editTarget, setEditTarget] = useState<{ date: string; record: DayRecord | null } | null>(null)
   const [editForm, setEditForm] = useState({
-    clock_in: "",
-    clock_out: "",
-    waived: false,
-    waiver_reason: "",
+    status: "",
+    manual_comment: "",
   })
   const [saving, setSaving] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyItems, setHistoryItems] = useState<EditHistoryItem[]>([])
-  const [historyTarget, setHistoryTarget] = useState<{ date: string; id: string | null } | null>(null)
+  const [historyItems, setHistoryItems] = useState<TimelineEvent[]>([])
+  const [historyContext, setHistoryContext] = useState<TimelineContext | null>(null)
+  const [historyTarget, setHistoryTarget] = useState<{ date: string } | null>(null)
 
   function loadDays() {
     void (async () => {
@@ -232,6 +309,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           record: row.record,
           isOnLeave: row.status === "on_leave",
           status: row.status,
+          manualBy: row.manual_by ?? row.record?.editor_first_name ?? null,
         }))
 
         setDays(calDays)
@@ -248,12 +326,14 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   }, [report.user_id, yearMonth])
 
   function openEdit(date: string, record: DayRecord | null) {
+    const { initialStatus } = getManualStatusEditOptions(record)
     setEditTarget({ date, record })
     setEditForm({
-      clock_in: record?.clock_in?.substring(0, 5) ?? "",
-      clock_out: record?.clock_out?.substring(0, 5) ?? "",
-      waived: record?.waived ?? false,
-      waiver_reason: record?.waiver_reason ?? "",
+      status:
+        record?.status && ["lateness_with_permission", "absent_with_permission"].includes(record.status)
+          ? record.status
+          : initialStatus,
+      manual_comment: record?.manual_comment ?? "",
     })
   }
 
@@ -263,28 +343,28 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
     try {
       let res: Response
       if (editTarget.record) {
-        // Update existing record — status is auto-derived by the API from clock times
+        // Update existing record
         const body: Record<string, unknown> = {
-          waived: editForm.waived,
-          waiver_reason: editForm.waiver_reason || null,
+          waived: false,
+          manual_comment: editForm.manual_comment,
+          status: editForm.status,
         }
-        if (editForm.clock_in) body.clock_in = editForm.clock_in
-        if (editForm.clock_out) body.clock_out = editForm.clock_out
         res = await fetch(`/api/admin/hr/attendance/records/${editTarget.record.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         })
       } else {
-        // Create new record for a day with no existing record — status auto-derived by API
+        // Create new record
         const body: Record<string, unknown> = {
           user_id: report.user_id,
           date: editTarget.date,
-          waived: editForm.waived,
-          waiver_reason: editForm.waiver_reason || null,
+          waived: false,
+          manual_comment: editForm.manual_comment,
+          status: editForm.status,
+          clock_in: null,
+          clock_out: null,
         }
-        if (editForm.clock_in) body.clock_in = editForm.clock_in
-        if (editForm.clock_out) body.clock_out = editForm.clock_out
         res = await fetch("/api/admin/hr/attendance/records", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -306,20 +386,22 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   }
 
   async function openHistory(day: CalendarDay) {
-    setHistoryTarget({ date: day.date, id: day.record?.id ?? null })
+    setHistoryTarget({ date: day.date })
     setHistoryOpen(true)
-    if (!day.record) {
-      setHistoryItems([])
-      return
-    }
+    setHistoryItems([])
+    setHistoryContext(null)
     setHistoryLoading(true)
     try {
-      const res = await fetch(`/api/admin/hr/attendance/records/${day.record.id}/history`, { cache: "no-store" })
-      const payload = (await res.json().catch(() => null)) as { data?: EditHistoryItem[] } | null
-      if (!res.ok) throw new Error("Failed to load edit history")
-      setHistoryItems(payload?.data || [])
+      const qs = new URLSearchParams({ user_id: report.user_id, date: day.date })
+      const res = await fetch(`/api/admin/hr/attendance/timeline?${qs.toString()}`, { cache: "no-store" })
+      const payload = (await res.json().catch(() => null)) as {
+        data?: { events?: TimelineEvent[]; context?: TimelineContext }
+      } | null
+      if (!res.ok) throw new Error("Failed to load timeline")
+      setHistoryItems(payload?.data?.events || [])
+      setHistoryContext(payload?.data?.context || null)
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Failed to load edit history")
+      toast.error(e instanceof Error ? e.message : "Failed to load timeline")
       setHistoryItems([])
     } finally {
       setHistoryLoading(false)
@@ -333,21 +415,54 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   const today = toLocalISODate()
   const visibleDays = days.filter((d) => d.date <= today)
   const isCreating = editTarget !== null && editTarget.record === null
-  const hasClockIn = Boolean(editForm.clock_in)
-  const hasClockOut = Boolean(editForm.clock_out)
-  const hasAnyTime = hasClockIn || hasClockOut
-  const hasPartialTime = hasClockIn !== hasClockOut
-  const invalidTimeRange = Boolean(editForm.clock_in && editForm.clock_out && editForm.clock_out < editForm.clock_in)
-  const cannotSave =
-    saving ||
-    invalidTimeRange ||
-    (editForm.waived && !editForm.waiver_reason.trim()) ||
-    (!editForm.waived && (!hasAnyTime || hasPartialTime))
+  const { isOnTimePresent, options: statusOptions } = getManualStatusEditOptions(editTarget?.record ?? null)
+
+  const hasManualComment = editForm.manual_comment.trim().length >= 3
+  const cannotSave = saving || !editForm.status || !hasManualComment || isOnTimePresent
 
   return (
     <>
+      <div className="bg-muted/40 mb-4 grid max-w-4xl grid-cols-3 gap-2 rounded-lg border p-3 sm:grid-cols-5 lg:grid-cols-9">
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">Late</span>
+          <span className="mt-1 text-sm font-semibold text-yellow-600">{report.late_days}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">Incomplete</span>
+          <span className="mt-1 text-sm font-semibold text-cyan-600">{report.incomplete_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">Exempted</span>
+          <span className="mt-1 text-sm font-semibold text-violet-600">{report.exempted_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">LWP</span>
+          <span className="mt-1 text-sm font-semibold text-amber-600">{report.lateness_with_permission_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">OOS</span>
+          <span className="mt-1 text-sm font-semibold text-indigo-600">{report.out_of_station_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">AWP</span>
+          <span className="mt-1 text-sm font-semibold text-teal-600">{report.absent_with_permission_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">Leave</span>
+          <span className="mt-1 text-sm font-semibold text-purple-600">{report.leave_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">Holiday</span>
+          <span className="mt-1 text-sm font-semibold text-sky-600">{report.holiday_days || 0}</span>
+        </div>
+        <div className="bg-background flex flex-col items-center justify-center rounded border p-2 text-center">
+          <span className="text-muted-foreground text-[10px] font-bold uppercase">Waiver</span>
+          <span className="mt-1 text-sm font-semibold text-blue-600">{report.waived_days || 0}</span>
+        </div>
+      </div>
+
       <div className="space-y-1 py-2">
-        <div className="text-muted-foreground grid grid-cols-[220px_90px_70px_70px_80px_80px_80px_90px_120px_60px] items-center gap-3 px-2 text-[11px] font-semibold uppercase">
+        <div className="text-muted-foreground grid grid-cols-[130px_90px_70px_70px_80px_80px_80px_90px_120px_60px] items-center gap-3 px-2 text-[11px] font-semibold uppercase">
           <span>Day</span>
           <span>Status</span>
           <span>In</span>
@@ -364,17 +479,31 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           return (
             <div
               key={day.date}
-              className="hover:bg-muted/30 grid grid-cols-[220px_90px_70px_70px_80px_80px_80px_90px_120px_60px] items-center gap-3 rounded px-2 py-1.5 text-sm"
+              className="hover:bg-muted/30 grid grid-cols-[130px_90px_70px_70px_80px_80px_80px_90px_120px_60px] items-center gap-3 rounded px-2 py-1.5 text-sm"
             >
               <span className="text-xs font-medium">{day.dayName}</span>
               <div>
                 <StatusBadge status={day.status} waived={day.record?.waived} />
               </div>
-              <span className="text-muted-foreground text-xs">
-                {day.record ? formatTime(day.record.clock_in) : "—"}
+              <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                {day.record?.clock_in ? (
+                  <>
+                    <Clock className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                    <span>{formatTime(day.record.clock_in)}</span>
+                  </>
+                ) : (
+                  "—"
+                )}
               </span>
-              <span className="text-muted-foreground text-xs">
-                {day.record ? formatTime(day.record.clock_out) : "—"}
+              <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
+                {day.record?.clock_out ? (
+                  <>
+                    <Clock className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                    <span>{formatTime(day.record.clock_out)}</span>
+                  </>
+                ) : (
+                  "—"
+                )}
               </span>
               <span className="text-xs">{formatHours(hours.total ?? day.record?.total_hours ?? null)}</span>
               <span className="text-xs">{formatHours(hours.work)}</span>
@@ -386,7 +515,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
               <span className="text-xs">
                 {hours.overtime != null && hours.overtime >= 0.05 ? formatHours(hours.overtime) : "—"}
               </span>
-              <span className="text-xs">{labelSource(day.record)}</span>
+              <span className="text-xs">{daySourceLabel(day)}</span>
               <div className="flex items-center justify-end gap-1">
                 <Button
                   variant="ghost"
@@ -422,46 +551,47 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-muted-foreground text-xs">Status is auto-derived from clock times.</p>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Clock In</Label>
-                <Input
-                  type="time"
-                  max="23:59"
-                  value={editForm.clock_in}
-                  onChange={(e) => setEditForm((f) => ({ ...f, clock_in: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Clock Out</Label>
-                <Input
-                  type="time"
-                  max="23:59"
-                  value={editForm.clock_out}
-                  onChange={(e) => setEditForm((f) => ({ ...f, clock_out: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <Switch
-                id="waived"
-                checked={editForm.waived}
-                onCheckedChange={(checked: boolean) => setEditForm((f) => ({ ...f, waived: checked }))}
-              />
-              <Label htmlFor="waived">Waive deduction</Label>
-            </div>
-            {editForm.waived && (
-              <div className="space-y-2">
-                <Label>
-                  Reason <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  placeholder="e.g. Permit granted, client visit"
-                  value={editForm.waiver_reason}
-                  onChange={(e) => setEditForm((f) => ({ ...f, waiver_reason: e.target.value }))}
-                />
-              </div>
+            {isOnTimePresent ? (
+              <p className="text-muted-foreground text-sm">
+                This record is fully present and on-time. No overrides (LWP/AWP) are applicable.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={editForm.status}
+                    onValueChange={(value) => setEditForm((f) => ({ ...f, status: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    Comment (required) <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    required
+                    placeholder="Reason for this manual attendance change"
+                    value={editForm.manual_comment}
+                    onChange={(e) => setEditForm((f) => ({ ...f, manual_comment: e.target.value }))}
+                  />
+                  {!hasManualComment && (
+                    <p className="text-[11px] font-medium text-red-500">
+                      A comment is required for all manual attendance alterations.
+                    </p>
+                  )}
+                </div>
+              </>
             )}
           </div>
           <DialogFooter>
@@ -478,51 +608,70 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Edit History</DialogTitle>
-            <DialogDescription>{historyTarget ? formatDayShort(historyTarget.date) : ""}</DialogDescription>
+            <DialogTitle>Day Timeline</DialogTitle>
+            <DialogDescription>
+              {historyTarget ? `${report.user_name} — ${formatDayShort(historyTarget.date)}` : ""}
+            </DialogDescription>
           </DialogHeader>
+
+          {historyContext && (historyContext.holiday || historyContext.on_leave || historyContext.exempt) && (
+            <div className="flex flex-wrap gap-2">
+              {historyContext.holiday && (
+                <Badge className="bg-sky-100 text-xs text-sky-800">
+                  Holiday — {historyContext.holiday}
+                  {historyContext.holiday_added_by ? ` · added by ${historyContext.holiday_added_by}` : ""}
+                </Badge>
+              )}
+              {historyContext.on_leave && (
+                <Badge className="bg-purple-100 text-xs text-purple-800">On leave — {historyContext.on_leave}</Badge>
+              )}
+              {historyContext.exempt && (
+                <Badge className="bg-violet-100 text-xs text-violet-800">
+                  Exempt{historyContext.exempt_reason ? ` — ${historyContext.exempt_reason}` : ""}
+                </Badge>
+              )}
+            </div>
+          )}
+
           <div className="max-h-[420px] space-y-3 overflow-y-auto">
             {historyLoading ? (
               <p className="text-muted-foreground text-sm">Loading…</p>
             ) : historyItems.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No edits found.</p>
+              <p className="text-muted-foreground text-sm">No recorded events for this day.</p>
             ) : (
               historyItems.map((item) => {
-                const isDevice = (item.new_values as Record<string, unknown> | null)?.source === "hikvision"
-                const actionLabel =
-                  item.action === "create"
-                    ? "Created"
-                    : item.action === "update"
-                      ? "Updated"
-                      : (item.action ?? "Changed")
-                const displayFields = Object.entries((item.new_values || {}) as Record<string, unknown>).filter(
-                  ([key]) => !["source", "status"].includes(key)
-                )
+                const label = EVENT_LABELS[item.event_type] ?? item.event_type.replaceAll("_", " ")
+                const fromLabel = item.from_status
+                  ? (ATTENDANCE_STATUS_LABELS[item.from_status as keyof typeof ATTENDANCE_STATUS_LABELS] ??
+                    item.from_status)
+                  : null
+                const toLabel = item.to_status
+                  ? (ATTENDANCE_STATUS_LABELS[item.to_status as keyof typeof ATTENDANCE_STATUS_LABELS] ??
+                    item.to_status)
+                  : null
+                const isAutomated = item.actor_name === null
                 return (
                   <div key={item.id} className="rounded-md border p-3">
-                    <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium">
-                        {isDevice ? "HiKVision Device" : item.editor_name || "Unknown"}
-                      </p>
-                      <Badge
-                        className={isDevice ? "bg-blue-100 text-xs text-blue-800" : "bg-gray-100 text-xs text-gray-800"}
-                      >
-                        {isDevice ? "Automated" : actionLabel}
-                      </Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className={`text-xs ${eventBadgeClass(item.event_type)}`}>{label}</Badge>
+                      <p className="text-sm font-medium">{isAutomated ? "System / Device" : item.actor_name}</p>
                     </div>
                     <p className="text-muted-foreground text-xs">{formatWATDateTime(item.created_at)}</p>
-                    <div className="mt-2 space-y-1 text-xs">
-                      {displayFields.length === 0 ? (
-                        <p className="text-muted-foreground">No field details captured.</p>
-                      ) : (
-                        displayFields.map(([key, value]) => (
-                          <p key={key}>
-                            <span className="font-medium">{key.replaceAll("_", " ")}:</span>{" "}
-                            <span className="text-muted-foreground">{String(value ?? "—")}</span>
-                          </p>
-                        ))
-                      )}
-                    </div>
+                    {(fromLabel || toLabel) && (
+                      <p className="mt-1 text-xs">
+                        <span className="font-medium">Status:</span>{" "}
+                        <span className="text-muted-foreground">
+                          {fromLabel ? `${fromLabel} → ` : ""}
+                          {toLabel ?? "—"}
+                        </span>
+                      </p>
+                    )}
+                    {item.comment && (
+                      <p className="mt-1 text-xs">
+                        <span className="font-medium">Comment:</span>{" "}
+                        <span className="text-muted-foreground">{item.comment}</span>
+                      </p>
+                    )}
                   </div>
                 )
               })
@@ -534,13 +683,14 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   )
 }
 
-type AttendanceTab = "summary" | "daily" | "calendar" | "exceptions"
+type AttendanceTab = "summary" | "daily" | "calendar" | "exceptions" | "appeals"
 
 const ATTENDANCE_TABS: DataTableTab[] = [
   { key: "daily", label: "Daily Roster" },
   { key: "summary", label: "Summary" },
   { key: "calendar", label: "Calendar" },
   { key: "exceptions", label: "Exceptions" },
+  { key: "appeals", label: "Appeals" },
 ]
 
 export function AttendanceReportsPage({
@@ -557,35 +707,9 @@ export function AttendanceReportsPage({
   const [quarterYear, setQuarterYear] = useState(new Date().getFullYear())
   const reportDepartment = lockedDepartment || "all"
   const [isExportOpen, setIsExportOpen] = useState(false)
-  const [holidayOpen, setHolidayOpen] = useState(false)
-  const [holidayDate, setHolidayDate] = useState("")
-  const [holidayEndDate, setHolidayEndDate] = useState("")
-  const [holidayRange, setHolidayRange] = useState(false)
-  const [holidayName, setHolidayName] = useState("")
-  const [holidaySaving, setHolidaySaving] = useState(false)
   const [holidays, setHolidays] = useState<Array<{ holiday_date: string; name?: string | null }>>([])
-  const [exemptDialog, setExemptDialog] = useState<{ open: boolean; userId: string; userName: string }>({
-    open: false,
-    userId: "",
-    userName: "",
-  })
-  const [exemptMode, setExemptMode] = useState<"off" | "infinite" | "weekly" | "monthly">("off")
-  const [exemptMonth, setExemptMonth] = useState(currentYearMonth())
-  const [exemptWeeks, setExemptWeeks] = useState<number[]>([])
-  const [exemptMonths, setExemptMonths] = useState<string[]>([])
-  const [exemptReason, setExemptReason] = useState("")
-  const [exemptSaving, setExemptSaving] = useState(false)
+  // Unified Attendance Manager dialog
   const [managerOpen, setManagerOpen] = useState(false)
-  const [managerSearch, setManagerSearch] = useState("")
-  const [managerMode, setManagerMode] = useState<"off" | "infinite" | "weekly" | "monthly" | "period">("off")
-  const [managerMonth, setManagerMonth] = useState(currentYearMonth())
-  const [managerWeeks, setManagerWeeks] = useState<number[]>([])
-  const [managerMonths, setManagerMonths] = useState<string[]>([])
-  const [managerStartDate, setManagerStartDate] = useState("")
-  const [managerEndDate, setManagerEndDate] = useState("")
-  const [managerReason, setManagerReason] = useState("")
-  const [managerSaving, setManagerSaving] = useState(false)
-  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([])
 
   const refreshSingleEmployeeSummary = useCallback(
     async (userId: string) => {
@@ -678,9 +802,11 @@ export function AttendanceReportsPage({
     "Total Days",
     "Present",
     "Late",
+    "LWP",
     "Incomplete",
     "Exempted",
-    "Half Day",
+    "OOS",
+    "AWP",
     "Leave",
     "Holiday",
     "Waiver",
@@ -698,9 +824,11 @@ export function AttendanceReportsPage({
       r.total_days,
       r.present_days,
       r.late_days,
+      r.lateness_with_permission_days ?? 0,
       r.incomplete_days || 0,
       r.exempted_days || 0,
-      r.half_day_days ?? 0,
+      r.out_of_station_days ?? 0,
+      r.absent_with_permission_days ?? 0,
       r.leave_days ?? 0,
       r.holiday_days ?? 0,
       r.waived_days,
@@ -761,6 +889,32 @@ export function AttendanceReportsPage({
 
   const departmentOptions = useMemo(() => departments.map((d) => ({ value: d, label: d })), [departments])
 
+  const monthOptions = useMemo(() => {
+    const options: { value: string; label: string }[] = []
+    const now = new Date()
+    const currentYear = now.getFullYear()
+    const currentMonth = now.getMonth()
+
+    const startYear = 2026
+    const startMonth = 3 // April is index 3
+
+    let y = currentYear
+    let m = currentMonth
+
+    while (y > startYear || (y === startYear && m >= startMonth)) {
+      const d = new Date(y, m, 1)
+      const value = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
+      const label = d.toLocaleDateString("en-US", { month: "long", year: "numeric" })
+      options.push({ value, label })
+      m--
+      if (m < 0) {
+        m = 11
+        y--
+      }
+    }
+    return options
+  }, [])
+
   const stats = useMemo(() => {
     const totalCredits = reports.reduce((a, r) => a + (r.attendance_credits ?? r.present_days), 0)
     const totalWorkDays = reports.reduce((a, r) => a + r.total_days, 0)
@@ -804,69 +958,6 @@ export function AttendanceReportsPage({
       sortable: true,
       accessor: (r) => r.present_days,
       render: (r) => <span className="text-green-600">{r.present_days}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "late_days",
-      label: "Late",
-      sortable: true,
-      accessor: (r) => r.late_days,
-      render: (r) => <span className="text-yellow-600">{r.late_days}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "incomplete_days",
-      label: "Incomplete",
-      sortable: true,
-      accessor: (r) => r.incomplete_days || 0,
-      render: (r) => <span className="text-cyan-600">{r.incomplete_days || 0}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "exempted_days",
-      label: "Exempted",
-      sortable: true,
-      accessor: (r) => r.exempted_days || 0,
-      render: (r) => <span className="text-violet-600">{r.exempted_days || 0}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "half_day_days",
-      label: "Half Day",
-      sortable: true,
-      accessor: (r) => r.half_day_days ?? 0,
-      render: (r) => <span className="text-orange-600">{r.half_day_days ?? 0}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "leave_days",
-      label: "Leave",
-      sortable: true,
-      accessor: (r) => r.leave_days ?? 0,
-      render: (r) => <span className="text-purple-600">{r.leave_days ?? 0}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "holiday_days",
-      label: "Holiday",
-      sortable: true,
-      accessor: (r) => r.holiday_days ?? 0,
-      render: (r) => <span className="text-sky-600">{r.holiday_days ?? 0}</span>,
-      align: "center",
-      hideOnMobile: true,
-    },
-    {
-      key: "waived_days",
-      label: "Waiver",
-      sortable: true,
-      accessor: (r) => r.waived_days,
-      render: (r) => <span className="text-blue-600">{r.waived_days}</span>,
       align: "center",
       hideOnMobile: true,
     },
@@ -944,20 +1035,13 @@ export function AttendanceReportsPage({
     {
       key: "exempt_toggle",
       label: "",
-      render: (r) => (
+      render: (_r) => (
         <Button
           variant="ghost"
           size="icon"
           className="h-7 w-7"
-          onClick={() => {
-            setExemptMode(r.attendance_exempt ? "infinite" : "off")
-            setExemptMonth(currentYearMonth())
-            setExemptWeeks([])
-            setExemptMonths([])
-            setExemptReason("")
-            setExemptDialog({ open: true, userId: r.user_id, userName: r.user_name })
-          }}
-          title="Set attendance exemption"
+          onClick={() => setManagerOpen(true)}
+          title="Open Attendance Manager"
         >
           <Pencil className="h-3.5 w-3.5" />
         </Button>
@@ -982,11 +1066,21 @@ export function AttendanceReportsPage({
       placeholder: "All Cycles",
     },
     {
+      key: "month",
+      label: "Month",
+      options: monthOptions,
+      placeholder: "Select Month",
+      multi: false,
+      defaultValues: [yearMonth],
+      mode: "custom",
+      filterFn: () => true,
+    },
+    {
       key: "rate_band",
       label: "Attendance Band",
       options: [
         { value: "excellent", label: "80%+" },
-        { value: "watch", label: "60–79%" },
+        { value: "watch", label: "60-79%" },
         { value: "risk", label: "Below 60%" },
       ],
       placeholder: "All Bands",
@@ -1022,23 +1116,9 @@ export function AttendanceReportsPage({
       onTabChange={(t) => setActiveTab(t as AttendanceTab)}
       actions={
         <div className="flex items-center gap-2">
-          {activeTab === "summary" && (
-            <input
-              type="month"
-              value={yearMonth}
-              max={currentYearMonth()}
-              onChange={(e) => e.target.value && setYearMonth(e.target.value)}
-              className="border-input bg-background h-9 rounded-md border px-3 py-1.5 text-sm"
-              aria-label="Select report month"
-            />
-          )}
           <Button variant="outline" onClick={() => setManagerOpen(true)} size="sm">
-            <Users className="mr-2 h-4 w-4" />
-            Exemption Manager
-          </Button>
-          <Button variant="outline" onClick={() => setHolidayOpen(true)} size="sm">
-            <CalendarDays className="mr-2 h-4 w-4" />
-            Holidays
+            <Settings2 className="mr-2 h-4 w-4" />
+            Attendance Manager
           </Button>
           <Button variant="outline" onClick={() => setIsExportOpen(true)} disabled={reports.length === 0} size="sm">
             <Download className="mr-2 h-4 w-4" />
@@ -1077,6 +1157,7 @@ export function AttendanceReportsPage({
       {activeTab === "daily" && <DailyRosterView departments={departments} lockedDepartment={lockedDepartment} />}
       {activeTab === "calendar" && <CalendarView employees={employeeOptions} />}
       {activeTab === "exceptions" && <ExceptionsView departments={departments} lockedDepartment={lockedDepartment} />}
+      {activeTab === "appeals" && <AppealsView lockedDepartment={lockedDepartment} />}
       {activeTab === "summary" && (
         <DataTable<AttendanceReport>
           data={reports}
@@ -1087,6 +1168,12 @@ export function AttendanceReportsPage({
           searchPlaceholder="Search employee or department…"
           searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
           isLoading={loading}
+          onFilterChange={(filters) => {
+            const selectedMonth = filters.month?.[0]
+            if (selectedMonth && selectedMonth !== yearMonth) {
+              setYearMonth(selectedMonth)
+            }
+          }}
           expandable={{
             render: (r) => (
               <EmployeeExpandPanel report={r} yearMonth={yearMonth} onRecordChanged={refreshSingleEmployeeSummary} />
@@ -1114,511 +1201,19 @@ export function AttendanceReportsPage({
         }}
       />
 
-      <Dialog open={managerOpen} onOpenChange={setManagerOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Bulk Exemption Manager</DialogTitle>
-            <DialogDescription>Apply exemption to multiple employees at once.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Employees</Label>
-              <Input
-                placeholder="Search employee..."
-                value={managerSearch}
-                onChange={(e) => setManagerSearch(e.target.value)}
-              />
-              <div className="flex items-center gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() =>
-                    setSelectedEmployeeIds(
-                      reports
-                        .filter((row) =>
-                          `${row.user_name} ${row.department} ${row.employee_no || ""}`
-                            .toLowerCase()
-                            .includes(managerSearch.toLowerCase())
-                        )
-                        .map((row) => row.user_id)
-                    )
-                  }
-                >
-                  Select All
-                </Button>
-                <Button type="button" variant="ghost" size="sm" onClick={() => setSelectedEmployeeIds([])}>
-                  Clear
-                </Button>
-              </div>
-              <div className="max-h-52 space-y-1 overflow-auto rounded border p-2">
-                {reports
-                  .filter((row) =>
-                    `${row.user_name} ${row.department} ${row.employee_no || ""}`
-                      .toLowerCase()
-                      .includes(managerSearch.toLowerCase())
-                  )
-                  .map((row) => (
-                    <label
-                      key={row.user_id}
-                      className="hover:bg-muted/40 flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedEmployeeIds.includes(row.user_id)}
-                        onChange={(e) =>
-                          setSelectedEmployeeIds((prev) =>
-                            e.target.checked ? [...prev, row.user_id] : prev.filter((id) => id !== row.user_id)
-                          )
-                        }
-                      />
-                      <span>{row.user_name}</span>
-                      <span className="text-muted-foreground text-xs">({row.department})</span>
-                      {(row.attendance_exempt || (row.exempted_days || 0) > 0) && (
-                        <Badge variant="secondary" className="ml-auto">
-                          Exempted
-                        </Badge>
-                      )}
-                    </label>
-                  ))}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Mode</Label>
-              <Select
-                value={managerMode}
-                onValueChange={(v: "off" | "infinite" | "weekly" | "monthly" | "period") => setManagerMode(v)}
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="off">Disabled</SelectItem>
-                  <SelectItem value="infinite">Infinite (until disabled)</SelectItem>
-                  <SelectItem value="weekly">Specific Weeks</SelectItem>
-                  <SelectItem value="monthly">Specific Months</SelectItem>
-                  <SelectItem value="period">Custom Period</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            {managerMode === "weekly" && (
-              <div className="space-y-2">
-                <Label>Month</Label>
-                <input
-                  type="month"
-                  value={managerMonth}
-                  onChange={(e) => setManagerMonth(e.target.value)}
-                  className="border-input bg-background rounded-md border px-3 py-1.5 text-sm"
-                />
-                <Label>Weeks in month (multi-select)</Label>
-                <div className="flex flex-wrap gap-2">
-                  {[1, 2, 3, 4, 5].map((wk) => (
-                    <Button
-                      key={wk}
-                      type="button"
-                      variant={managerWeeks.includes(wk) ? "default" : "outline"}
-                      size="sm"
-                      onClick={() =>
-                        setManagerWeeks((prev) => (prev.includes(wk) ? prev.filter((x) => x !== wk) : [...prev, wk]))
-                      }
-                    >
-                      Week {wk}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {managerMode === "monthly" && (
-              <div className="space-y-2">
-                <Label>Months (multi-select)</Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="month"
-                    value={managerMonth}
-                    onChange={(e) => setManagerMonth(e.target.value)}
-                    className="border-input bg-background rounded-md border px-3 py-1.5 text-sm"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setManagerMonths((prev) => (prev.includes(managerMonth) ? prev : [...prev, managerMonth].sort()))
-                    }
-                  >
-                    Add
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {managerMonths.map((month) => (
-                    <Button
-                      key={month}
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setManagerMonths((prev) => prev.filter((x) => x !== month))}
-                    >
-                      {month} ×
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {managerMode === "period" && (
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-2">
-                  <Label>Start Date</Label>
-                  <Input type="date" value={managerStartDate} onChange={(e) => setManagerStartDate(e.target.value)} />
-                </div>
-                <div className="space-y-2">
-                  <Label>End Date</Label>
-                  <Input type="date" value={managerEndDate} onChange={(e) => setManagerEndDate(e.target.value)} />
-                </div>
-              </div>
-            )}
-            <div className="space-y-2">
-              <Label>Reason (optional)</Label>
-              <Input value={managerReason} onChange={(e) => setManagerReason(e.target.value)} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setManagerOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              disabled={managerSaving || selectedEmployeeIds.length === 0}
-              onClick={async () => {
-                if (managerMode === "weekly" && (managerWeeks.length === 0 || !managerMonth)) {
-                  toast.error("Select a month and at least one week.")
-                  return
-                }
-                if (managerMode === "monthly" && managerMonths.length === 0) {
-                  toast.error("Select at least one month.")
-                  return
-                }
-                if (managerMode === "period") {
-                  if (!managerStartDate || !managerEndDate) {
-                    toast.error("Select start and end date.")
-                    return
-                  }
-                  if (managerStartDate > managerEndDate) {
-                    toast.error("Start date cannot be after end date.")
-                    return
-                  }
-                }
-                setManagerSaving(true)
-                const res = await fetch("/api/admin/hr/attendance/exemptions/bulk", {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    user_ids: selectedEmployeeIds,
-                    mode: managerMode,
-                    month: managerMonth,
-                    weeks: managerMode === "weekly" ? managerWeeks : undefined,
-                    months: managerMode === "monthly" ? managerMonths : undefined,
-                    start_date: managerMode === "period" ? managerStartDate : undefined,
-                    end_date: managerMode === "period" ? managerEndDate : undefined,
-                    reason: managerReason || null,
-                  }),
-                })
-                const payload = (await res.json().catch(() => null)) as { error?: string } | null
-                if (!res.ok) {
-                  toast.error(payload?.error || "Failed to save bulk exemption")
-                  setManagerSaving(false)
-                  return
-                }
-                toast.success("Bulk exemption settings saved")
-                setManagerOpen(false)
-                setSelectedEmployeeIds([])
-                setManagerWeeks([])
-                setManagerMonths([])
-                setManagerReason("")
-                setManagerStartDate("")
-                setManagerEndDate("")
-                setManagerSaving(false)
-                void generateReport()
-              }}
-            >
-              {managerSaving ? "Saving..." : "Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={exemptDialog.open} onOpenChange={(open) => setExemptDialog((s) => ({ ...s, open }))}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Attendance Exempted Status</DialogTitle>
-            <DialogDescription>{exemptDialog.userName}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <Label>Mode</Label>
-            <Select
-              value={exemptMode}
-              onValueChange={(v: "off" | "infinite" | "weekly" | "monthly") => setExemptMode(v)}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="off">Disabled</SelectItem>
-                <SelectItem value="infinite">Infinite (until disabled)</SelectItem>
-                <SelectItem value="weekly">Specific Weeks</SelectItem>
-                <SelectItem value="monthly">Specific Months</SelectItem>
-              </SelectContent>
-            </Select>
-            {exemptMode === "weekly" && (
-              <div className="space-y-2">
-                <Label>Month</Label>
-                <input
-                  type="month"
-                  value={exemptMonth}
-                  onChange={(e) => setExemptMonth(e.target.value)}
-                  className="border-input bg-background rounded-md border px-3 py-1.5 text-sm"
-                />
-                <Label>Weeks in month (multi-select)</Label>
-                <div className="flex flex-wrap gap-2">
-                  {[1, 2, 3, 4, 5].map((wk) => (
-                    <Button
-                      key={wk}
-                      type="button"
-                      variant={exemptWeeks.includes(wk) ? "default" : "outline"}
-                      size="sm"
-                      onClick={() =>
-                        setExemptWeeks((prev) => (prev.includes(wk) ? prev.filter((x) => x !== wk) : [...prev, wk]))
-                      }
-                    >
-                      Week {wk}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-            {exemptMode === "monthly" && (
-              <div className="space-y-2">
-                <Label>Months (multi-select)</Label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="month"
-                    value={exemptMonth}
-                    onChange={(e) => setExemptMonth(e.target.value)}
-                    className="border-input bg-background rounded-md border px-3 py-1.5 text-sm"
-                  />
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() =>
-                      setExemptMonths((prev) => (prev.includes(exemptMonth) ? prev : [...prev, exemptMonth].sort()))
-                    }
-                  >
-                    Add
-                  </Button>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {exemptMonths.map((m) => (
-                    <Button
-                      key={m}
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => setExemptMonths((prev) => prev.filter((x) => x !== m))}
-                    >
-                      {m} ×
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-            <p className="text-muted-foreground text-xs">
-              Exempted employees remain visible in reports with zero deduction.
-            </p>
-            <Label>Reason (optional)</Label>
-            <Input value={exemptReason} onChange={(e) => setExemptReason(e.target.value)} />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setExemptDialog((s) => ({ ...s, open: false }))}>
-              Cancel
-            </Button>
-            <Button
-              onClick={async () => {
-                setExemptSaving(true)
-                const res = await fetch("/api/admin/hr/attendance/exemptions", {
-                  method: "PATCH",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    user_id: exemptDialog.userId,
-                    mode: exemptMode,
-                    month: exemptMonth,
-                    weeks: exemptMode === "weekly" ? exemptWeeks : undefined,
-                    months: exemptMode === "monthly" ? exemptMonths : undefined,
-                    reason: exemptReason || null,
-                  }),
-                })
-                if (!res.ok) {
-                  const payload = (await res.json().catch(() => null)) as { error?: string } | null
-                  toast.error(payload?.error || "Failed to update exemption")
-                  setExemptSaving(false)
-                  return
-                }
-                toast.success("Exemption settings saved")
-                setExemptDialog((s) => ({ ...s, open: false }))
-                setExemptReason("")
-                setExemptWeeks([])
-                setExemptMonths([])
-                setExemptSaving(false)
-                void generateReport()
-              }}
-              disabled={exemptSaving}
-            >
-              {exemptSaving ? "Saving..." : "Save"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={holidayOpen} onOpenChange={setHolidayOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Manage Holidays</DialogTitle>
-            <DialogDescription>Add or remove organization holiday dates.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <Switch
-                id="holiday-range"
-                checked={holidayRange}
-                onCheckedChange={(checked: boolean) => {
-                  setHolidayRange(checked)
-                  if (!checked) setHolidayEndDate("")
-                }}
-              />
-              <Label htmlFor="holiday-range">Date range (multiple days)</Label>
-            </div>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>{holidayRange ? "Start Date" : "Date"}</Label>
-                <Input type="date" value={holidayDate} onChange={(e) => setHolidayDate(e.target.value)} />
-              </div>
-              {holidayRange ? (
-                <div className="space-y-2">
-                  <Label>
-                    End Date <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    type="date"
-                    min={holidayDate || undefined}
-                    value={holidayEndDate}
-                    onChange={(e) => setHolidayEndDate(e.target.value)}
-                  />
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  <Label>
-                    Name <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    value={holidayName}
-                    onChange={(e) => setHolidayName(e.target.value)}
-                    placeholder="e.g. Workers Day"
-                    required
-                  />
-                </div>
-              )}
-            </div>
-            {holidayRange && (
-              <div className="space-y-2">
-                <Label>
-                  Name <span className="text-destructive">*</span>
-                </Label>
-                <Input
-                  value={holidayName}
-                  onChange={(e) => setHolidayName(e.target.value)}
-                  placeholder="e.g. Christmas Break"
-                  required
-                />
-              </div>
-            )}
-            <Button
-              type="button"
-              disabled={
-                !holidayDate ||
-                !holidayName.trim() ||
-                holidaySaving ||
-                (holidayRange && (!holidayEndDate || holidayEndDate < holidayDate))
-              }
-              onClick={async () => {
-                setHolidaySaving(true)
-                const response = await fetch("/api/admin/hr/attendance/holidays", {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    holiday_date: holidayDate,
-                    holiday_date_end: holidayRange && holidayEndDate ? holidayEndDate : undefined,
-                    name: holidayName || undefined,
-                  }),
-                })
-                const payload = (await response.json().catch(() => null)) as {
-                  error?: string
-                  message?: string
-                } | null
-                if (!response.ok) {
-                  toast.error(payload?.error || "Failed to add holiday")
-                } else {
-                  toast.success(payload?.message || "Holiday added")
-                  setHolidayDate("")
-                  setHolidayEndDate("")
-                  setHolidayName("")
-                  await loadHolidays()
-                  await generateReport()
-                }
-                setHolidaySaving(false)
-              }}
-            >
-              {holidaySaving ? "Saving..." : holidayRange ? "Add Holidays" : "Add Holiday"}
-            </Button>
-            <div className="max-h-64 space-y-2 overflow-auto rounded border p-2">
-              {holidays.length === 0 ? (
-                <p className="text-muted-foreground text-sm">No holidays for this month.</p>
-              ) : (
-                holidays.map((holiday) => (
-                  <div
-                    key={holiday.holiday_date}
-                    className="flex items-center justify-between rounded border px-2 py-1.5 text-sm"
-                  >
-                    <span>
-                      {holiday.holiday_date}
-                      {holiday.name ? ` • ${holiday.name}` : ""}
-                    </span>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 w-7 p-0"
-                      onClick={async () => {
-                        const response = await fetch(
-                          `/api/admin/hr/attendance/holidays?holiday_date=${encodeURIComponent(holiday.holiday_date)}`,
-                          { method: "DELETE" }
-                        )
-                        const payload = (await response.json().catch(() => null)) as { error?: string } | null
-                        if (!response.ok) {
-                          toast.error(payload?.error || "Failed to remove holiday")
-                          return
-                        }
-                        toast.success("Holiday removed")
-                        await loadHolidays()
-                        await generateReport()
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <AttendanceManagerDialog
+        open={managerOpen}
+        onOpenChange={setManagerOpen}
+        reports={reports}
+        yearMonth={yearMonth}
+        holidays={holidays}
+        onHolidaysChanged={() => {
+          void loadHolidays()
+          void generateReport()
+        }}
+        onReportChanged={() => void generateReport()}
+        lockedDepartment={lockedDepartment}
+      />
     </DataTablePage>
   )
 }

@@ -22,9 +22,12 @@ export default async function PmsCbtPage() {
   const rows = (
     (reviews as Array<{
       cbt_score: number | null
+      review_cycle_id: string
       review_cycles?: { name?: string } | { name?: string }[] | null
     }> | null) || []
   ).map((review) => ({
+    user_id: user.id,
+    review_cycle_id: review.review_cycle_id,
     cycle: Array.isArray(review.review_cycles)
       ? review.review_cycles[0]?.name || "-"
       : review.review_cycles?.name || "-",
@@ -49,6 +52,8 @@ export default async function PmsCbtPage() {
         { key: "cbt_score", label: "CBT Score" },
       ]}
       searchPlaceholder="Search CBT cycles..."
+      hideSecondaryFilter
+      cbtExpandable
     />
   )
 }

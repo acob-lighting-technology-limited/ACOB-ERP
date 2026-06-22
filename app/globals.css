@@ -4,6 +4,7 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  color-scheme: light;
   /* Updated color tokens to use green (hsl(120, 100%, 25%)) as primary brand color */
   --background: oklch(0.955 0.003 75); /* warm light grey — cards float above this */
   --foreground: oklch(0.25 0 0);
@@ -75,6 +76,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.13 0.002 72); /* slightly warmer dark base */
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.175 0.003 72); /* cards lift above the background */

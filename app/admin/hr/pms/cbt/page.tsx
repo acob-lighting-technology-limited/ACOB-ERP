@@ -4,6 +4,7 @@ import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Brain, Eye, RefreshCw } from "lucide-react"
+import { CbtAttemptDetail } from "@/components/pms/cbt-attempt-detail"
 import { toast } from "sonner"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "@/components/ui/data-table"
@@ -474,6 +475,11 @@ export default function AdminPmsCbtPage() {
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
+          <Link href="/admin/hr/pms/cbt/extra">
+            <Button variant="outline" size="sm">
+              Bonus Questions
+            </Button>
+          </Link>
           <Link href="/admin/hr/pms/cbt/question">
             <Button size="sm">Create Test</Button>
           </Link>
@@ -527,22 +533,7 @@ export default function AdminPmsCbtPage() {
           error={error}
           onRetry={() => void loadCbtSnapshot()}
           expandable={{
-            render: (row) => (
-              <div className="grid gap-4 text-sm sm:grid-cols-3">
-                <div>
-                  <p className="text-muted-foreground text-xs">Employee</p>
-                  <p className="mt-1">{row.employee}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs">Department</p>
-                  <p className="mt-1">{row.department}</p>
-                </div>
-                <div>
-                  <p className="text-muted-foreground text-xs">CBT Score</p>
-                  <p className="mt-1">{scoreLabel(row.cbt_score)}</p>
-                </div>
-              </div>
-            ),
+            render: (row) => <CbtAttemptDetail profileId={row.user_id} reviewCycleId={row.review_cycle_id} />,
           }}
           viewToggle
           cardRenderer={(row) => <IndividualCard row={row} />}

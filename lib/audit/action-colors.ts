@@ -4,17 +4,17 @@
  * Single source of truth — update here, not in the consumer files.
  */
 export const AUDIT_ACTION_COLORS: Record<string, string> = {
-  create: "bg-emerald-500/10 text-emerald-500 border-emerald-200",
-  update: "bg-blue-500/10 text-blue-500 border-blue-200",
-  delete: "bg-red-500/10 text-red-500 border-red-200",
-  assign: "bg-purple-500/10 text-purple-500 border-purple-200",
-  unassign: "bg-orange-500/10 text-orange-500 border-orange-200",
-  approve: "bg-purple-500/10 text-purple-500 border-purple-200",
-  reject: "bg-amber-500/10 text-amber-500 border-amber-200",
-  dispatch: "bg-cyan-500/10 text-cyan-500 border-cyan-200",
-  send: "bg-indigo-500/10 text-indigo-500 border-indigo-200",
-  status_change: "bg-amber-500/10 text-amber-500 border-amber-200",
-  default: "bg-muted text-muted-foreground",
+  create: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+  update: "bg-blue-500/10 text-blue-500 border-blue-500/20",
+  delete: "bg-red-500/10 text-red-500 border-red-500/20",
+  assign: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+  unassign: "bg-orange-500/10 text-orange-500 border-orange-500/20",
+  approve: "bg-purple-500/10 text-purple-500 border-purple-500/20",
+  reject: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+  dispatch: "bg-cyan-500/10 text-cyan-500 border-cyan-500/20",
+  send: "bg-indigo-500/10 text-indigo-500 border-indigo-500/20",
+  status_change: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+  default: "bg-muted text-muted-foreground border-muted-foreground/20",
 }
 
 /**

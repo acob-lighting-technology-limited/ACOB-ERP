@@ -14,7 +14,6 @@ import { toast } from "sonner"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -563,14 +562,10 @@ export function PaymentDetailModal({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-red-600 hover:bg-red-700"
-                onClick={handleDelete}
-                disabled={deleteLoading}
-              >
-                {deleteLoading ? "Deleting..." : "Delete"}
-              </AlertDialogAction>
+              <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
+              <Button variant="destructive" onClick={handleDelete} loading={deleteLoading}>
+                Delete
+              </Button>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

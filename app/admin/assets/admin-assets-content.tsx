@@ -20,7 +20,7 @@ import { isAssignableProfile } from "@/lib/workforce/assignment-policy"
 import { ASSET_TYPES, ASSET_TYPE_MAP } from "@/lib/asset-types"
 import { getDepartmentForOffice } from "@/lib/office-locations"
 import { assignmentValidation } from "@/lib/validation"
-import { Package, AlertCircle, Plus, Download, History, Pencil, RefreshCw, Wrench } from "lucide-react"
+import { Package, AlertCircle, Plus, Download, History, Pencil, RefreshCw, Wrench, UserMinus } from "lucide-react"
 import { StatCard } from "@/components/ui/stat-card"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
@@ -257,13 +257,16 @@ export function AdminAssetsContent({
   const [isAssetDialogOpen, setIsAssetDialogOpen] = useState(false)
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
+  const [isReleaseDialogOpen, setIsReleaseDialogOpen] = useState(false)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [isIssuesDialogOpen, setIsIssuesDialogOpen] = useState(false)
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
   const [assetToDelete, setAssetToDelete] = useState<Asset | null>(null)
+  const [assetToRelease, setAssetToRelease] = useState<Asset | null>(null)
   const [isAssigning, setIsAssigning] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isReleasing, setIsReleasing] = useState(false)
   const [assetHistory, setAssetHistory] = useState<AssetActivity[]>([])
 
   // Issue tracking states
@@ -952,6 +955,39 @@ export function AdminAssetsContent({
     }
   }
 
+  const handleReleaseAsset = async () => {
+    if (isReleasing) return
+    setIsReleasing(true)
+    try {
+      if (!assetToRelease) {
+        setIsReleasing(false)
+        return
+      }
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+
+      const { error } = await supabase.rpc("release_asset", {
+        p_asset_id: assetToRelease.id,
+        p_released_by: user?.id ?? null,
+      })
+
+      if (error) throw error
+
+      toast.success("Asset released and returned to the available pool")
+      setIsReleaseDialogOpen(false)
+      setAssetToRelease(null)
+      loadData()
+    } catch (error: unknown) {
+      log.error("Error releasing asset:", error)
+      const message = error instanceof Error ? error.message : "Unknown error"
+      toast.error(`Failed to release asset: ${message}`)
+    } finally {
+      setIsReleasing(false)
+    }
+  }
+
   const handleDeleteAsset = async () => {
     if (isDeleting) return // Prevent duplicate submissions
     setIsDeleting(true)
@@ -1119,9 +1155,11 @@ export function AdminAssetsContent({
       return `${asset.current_assignment?.department || asset.department || "Assigned Department"}${statusSuffix}`
     }
 
-    const personName = getAssignedPersonName(asset)
-    if (personName) return `${personName}${statusSuffix}`
-    if (asset.current_assignment?.department) return `${asset.current_assignment.department}${statusSuffix}`
+    if (assignmentType === "individual") {
+      const personName = getAssignedPersonName(asset)
+      if (personName) return `${personName}${statusSuffix}`
+      return `Assigned${statusSuffix}`
+    }
 
     return `Assigned${statusSuffix}`
   }
@@ -1305,7 +1343,14 @@ export function AdminAssetsContent({
       label: "Assigned To",
       sortable: true,
       accessor: (asset) => getAssignedToLabel(asset),
-      render: (asset) => <span className="text-sm">{getAssignedToLabel(asset, true)}</span>,
+      render: (asset) => {
+        const label = getAssignedToLabel(asset, true)
+        return label === "Unassigned" ? (
+          <span className="text-muted-foreground text-sm">—</span>
+        ) : (
+          <span className="text-sm">{label}</span>
+        )
+      },
       resizable: true,
       initialWidth: 220,
     },
@@ -1313,16 +1358,53 @@ export function AdminAssetsContent({
       key: "department",
       label: "Department",
       sortable: true,
-      accessor: (asset) => asset.current_assignment?.department || asset.department || "",
-      render: (asset) => <span>{asset.current_assignment?.department || asset.department || "-"}</span>,
+      accessor: (asset) => {
+        const assignmentType = getEffectiveAssignmentType(asset)
+        if (assignmentType === "department") {
+          return asset.current_assignment?.department || asset.department || ""
+        }
+        if (assignmentType === "individual") {
+          const assignedId = asset.current_assignment?.assigned_to
+          if (assignedId) {
+            const employee = employees.find((emp) => emp.id === assignedId)
+            return employee?.department || ""
+          }
+        }
+        return ""
+      },
+      render: (asset) => {
+        const assignmentType = getEffectiveAssignmentType(asset)
+        let deptVal = ""
+        if (assignmentType === "department") {
+          deptVal = asset.current_assignment?.department || asset.department || ""
+        } else if (assignmentType === "individual") {
+          const assignedId = asset.current_assignment?.assigned_to
+          if (assignedId) {
+            const employee = employees.find((emp) => emp.id === assignedId)
+            deptVal = employee?.department || ""
+          }
+        }
+        return <span>{deptVal || "-"}</span>
+      },
       hideOnMobile: true,
     },
     {
       key: "office_location",
       label: "Office",
       sortable: true,
-      accessor: (asset) => asset.current_assignment?.office_location || asset.office_location || "",
-      render: (asset) => <span>{asset.current_assignment?.office_location || asset.office_location || "-"}</span>,
+      accessor: (asset) => {
+        const assignmentType = getEffectiveAssignmentType(asset)
+        if (assignmentType === "office") {
+          return asset.current_assignment?.office_location || asset.office_location || ""
+        }
+        return ""
+      },
+      render: (asset) => {
+        const assignmentType = getEffectiveAssignmentType(asset)
+        const officeVal =
+          assignmentType === "office" ? asset.current_assignment?.office_location || asset.office_location || "" : ""
+        return <span>{officeVal || "-"}</span>
+      },
       hideOnMobile: true,
     },
     {
@@ -1419,6 +1501,15 @@ export function AdminAssetsContent({
       icon: Wrench,
       onClick: (asset) => void openAssignDialog(asset),
       hidden: (asset) => Boolean(asset.deleted_at),
+    },
+    {
+      label: "Release / Unassign",
+      icon: UserMinus,
+      onClick: (asset) => {
+        setAssetToRelease(asset)
+        setIsReleaseDialogOpen(true)
+      },
+      hidden: (asset) => Boolean(asset.deleted_at) || asset.status !== "assigned",
     },
     {
       label: "Issues",
@@ -1657,6 +1748,28 @@ export function AdminAssetsContent({
             </AlertDialogCancel>
             <Button onClick={handleDeleteAsset} loading={isDeleting} className="bg-red-600 text-white hover:bg-red-700">
               Archive
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={isReleaseDialogOpen} onOpenChange={setIsReleaseDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Release this asset?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will unassign &quot;{assetToRelease?.unique_code}&quot; (
+              {ASSET_TYPE_MAP[assetToRelease?.asset_type || ""]?.label}) from{" "}
+              {getAssignedToLabel(assetToRelease ?? ({} as Asset))} and return it to the available pool. The current
+              holder will be notified that the asset was returned.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setAssetToRelease(null)} disabled={isReleasing}>
+              Cancel
+            </AlertDialogCancel>
+            <Button onClick={handleReleaseAsset} loading={isReleasing}>
+              Release
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

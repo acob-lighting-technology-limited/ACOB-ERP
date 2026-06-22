@@ -16,6 +16,7 @@ const DEPARTMENT_ALIASES: Partial<Record<CanonicalDepartment, readonly string[]>
   Accounts: ["Finance"],
   "Business, Growth and Innovation": ["Business Growth and Innovation", "Business Growth & Innovation", "BGI"],
   "Operations and Maintenance": ["Operations"],
+  "IT and Communications": ["ICT", "IT", "IT & Communications", "Information and Communications Technology"],
 } as const
 
 const DEPARTMENT_SHORT_CODES: Record<CanonicalDepartment, string> = {

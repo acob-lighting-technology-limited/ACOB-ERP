@@ -14,6 +14,9 @@ import {
   getObjectIdentifier,
   getTargetDescription,
   getDepartmentLocation,
+  getAuditSource,
+  getAuditRoute,
+  getAuditChangedFieldsDisplay,
 } from "@/lib/audit/audit-log-display"
 import type { AuditLog } from "@/app/admin/audit-logs/types"
 import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
@@ -29,6 +32,9 @@ function buildExportRows(logs: AuditLog[]) {
     Target: getTargetDescription(entry),
     "Dept/Location": getDepartmentLocation(entry),
     By: getPerformedBy(entry),
+    Source: getAuditSource(entry),
+    Route: getAuditRoute(entry),
+    "Changed Fields": getAuditChangedFieldsDisplay(entry, 10),
     Date: formatAuditDate(entry.created_at),
   }))
 }
@@ -93,11 +99,28 @@ export async function exportAuditLogsToPDF(logs: AuditLog[]): Promise<void> {
       getTargetDescription(entry),
       getDepartmentLocation(entry),
       getPerformedBy(entry),
+      getAuditSource(entry),
+      getAuditRoute(entry),
+      getAuditChangedFieldsDisplay(entry, 10),
       formatAuditDate(entry.created_at),
     ])
 
     autoTable(doc, {
-      head: [["#", "Action", "Module", "Object", "Target", "Dept/Location", "By", "Date"]],
+      head: [
+        [
+          "#",
+          "Action",
+          "Module",
+          "Object",
+          "Target",
+          "Dept/Location",
+          "By",
+          "Source",
+          "Route",
+          "Changed Fields",
+          "Date",
+        ],
+      ],
       body: rows,
       startY: 35,
       styles: { fontSize: 8, cellPadding: 2 },
@@ -124,9 +147,19 @@ export async function exportAuditLogsToWord(logs: AuditLog[]): Promise<void> {
     const { default: saveAs } = await import("file-saver")
 
     const headerRow = new TableRow({
-      children: ["#", "Action", "Module", "Object", "Target", "Dept/Location", "By", "Date"].map(
-        (text) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text, bold: true })] })] })
-      ),
+      children: [
+        "#",
+        "Action",
+        "Module",
+        "Object",
+        "Target",
+        "Dept/Location",
+        "By",
+        "Source",
+        "Route",
+        "Changed Fields",
+        "Date",
+      ].map((text) => new TableCell({ children: [new Paragraph({ children: [new TextRun({ text, bold: true })] })] })),
     })
 
     const dataRows = logs.map(
@@ -140,6 +173,9 @@ export async function exportAuditLogsToWord(logs: AuditLog[]): Promise<void> {
             getTargetDescription(entry),
             getDepartmentLocation(entry),
             getPerformedBy(entry),
+            getAuditSource(entry),
+            getAuditRoute(entry),
+            getAuditChangedFieldsDisplay(entry, 10),
             formatAuditDate(entry.created_at),
           ].map((text) => new TableCell({ children: [new Paragraph(text)] })),
         })

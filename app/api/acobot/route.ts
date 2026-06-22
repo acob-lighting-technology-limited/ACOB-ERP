@@ -83,7 +83,8 @@ export async function POST(request: NextRequest) {
     }
 
     // 3. Validate body.
-    const body = (await request.json()) as { messages?: unknown }
+    const body = (await request.json()) as { messages?: unknown; currentPath?: unknown }
+    const currentPath = typeof body.currentPath === "string" ? body.currentPath : null
     const incoming = Array.isArray(body.messages) ? body.messages : []
     const messages: ChatMessage[] = incoming
       .filter(isChatMessage)
@@ -106,6 +107,7 @@ export async function POST(request: NextRequest) {
       userName,
       role: profile?.role,
       isDepartmentLead: Boolean(profile?.is_department_lead),
+      currentPath,
     })
 
     // 5. Permission-aware live data for the latest user message (phases 2 & 3).

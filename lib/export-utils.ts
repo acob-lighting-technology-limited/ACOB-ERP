@@ -174,9 +174,9 @@ export const sortReportsByDepartment = (reports: WeeklyReport[]) => {
 }
 
 /**
- * Auto-numbers each non-empty line: "1. line", "2. line", ...
- * If lines are already numbered (including Word-pasted formats), numbering is preserved
- * but normalized to "N. text" to avoid tab-stop spacing issues in PPTX.
+ * Auto-numbers each non-empty line in current line order.
+ * Existing numbers and pasted bullet prefixes are stripped first so inserted
+ * middle items are renumbered instead of leaving duplicate numbers.
  */
 /**
  * Strips ALL non-ASCII characters from report text.
@@ -214,17 +214,12 @@ export const autoNumberLines = (text: string): string => {
     .split("\n")
     .map((l) => sanitizeLine(l))
     .filter((l) => l.trim().length > 0)
-  const parseNumbered = (line: string) => sanitizeLine(line).match(/^(\d+)[.)]\s*(.+)$/)
-
-  if (parseNumbered(lines[0])) {
-    return lines
-      .map((line) => {
-        const numbered = parseNumbered(line)
-        if (numbered) return `${numbered[1]}. ${numbered[2].trim()}`
-        return sanitizeLine(line)
-      })
-      .join("\n")
-  }
+    .map((line) =>
+      sanitizeLine(line)
+        .replace(/^\d+[.)]\s*/, "")
+        .trim()
+    )
+    .filter((line) => line.length > 0)
 
   return lines.map((l, i) => `${i + 1}. ${sanitizeLine(l)}`).join("\n")
 }

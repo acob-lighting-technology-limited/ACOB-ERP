@@ -1,14 +1,26 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { toast } from "sonner"
 import { formatWATDate } from "@/lib/utils/date"
-import { Clock, Download, UserCheck, MapPin, BarChart3, AlertCircle } from "lucide-react"
+import { Clock, Download, FileQuestion, UserCheck, MapPin, BarChart3, AlertCircle, Calendar } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { EmployeeCalendarView } from "./calendar-view"
+import { AppealDialog } from "./_components/appeal-dialog"
 import { StatCard } from "@/components/ui/stat-card"
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip"
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import type { AttendanceRecord } from "./page"
 import { logger } from "@/lib/logger"
 import { RemoteCheckinModal } from "@/components/attendance/remote-checkin-modal"
@@ -18,6 +30,7 @@ import {
   ATTENDANCE_STATUS_LABELS,
   deriveUnifiedAttendanceStatus,
 } from "@/lib/hr/attendance-status"
+import type { UnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 
 const log = logger("dashboard-attendance-attendance-content")
 
@@ -36,16 +49,17 @@ type AttendanceRow = AttendanceRecord & {
   workHours: number | null
   overtimeHours: number | null
   missedHoursValue: number | null
-  normalizedStatus:
-    | "holiday"
-    | "on_leave"
-    | "exempted"
-    | "waiver"
-    | "present"
-    | "late"
-    | "incomplete"
-    | "half_day"
-    | "absent"
+  normalizedStatus: UnifiedAttendanceStatus
+}
+
+type AppealRecord = {
+  id: string
+  appeal_date: string
+  status: string
+  requested_status: string
+  appeal_reason: string
+  resolution_note: string | null
+  created_at: string
 }
 type UnifiedDay = {
   date: string
@@ -103,7 +117,13 @@ function getClockOutLabel(row: Pick<AttendanceRow, "clock_in" | "clock_out" | "d
 }
 
 function isCoveredStatus(status: AttendanceRow["normalizedStatus"]) {
-  return status === "waiver" || status === "exempted" || status === "on_leave" || status === "holiday"
+  return (
+    status === "waiver" ||
+    status === "exempted" ||
+    status === "on_leave" ||
+    status === "holiday" ||
+    status === "absent_with_permission"
+  )
 }
 
 const ATTENDANCE_TABS: DataTableTab[] = [
@@ -123,8 +143,20 @@ export function AttendanceContent({
   const [filteredRows, setFilteredRows] = useState<AttendanceRow[]>([])
   const [remoteModalOpen, setRemoteModalOpen] = useState(false)
   const [remoteMode, setRemoteMode] = useState<"clock-in" | "clock-out">("clock-in")
+  const [appeals, setAppeals] = useState<AppealRecord[]>([])
+  const [appealDialogRow, setAppealDialogRow] = useState<AttendanceRow | null>(null)
+  const [editAppeal, setEditAppeal] = useState<AppealRecord | null>(null)
+  const [cancelAppealId, setCancelAppealId] = useState<string | null>(null)
+  const [isCancellingAppeal, setIsCancellingAppeal] = useState(false)
+  const currentMonthLabel = useMemo(() => {
+    return new Date().toLocaleDateString("en-US", {
+      month: "long",
+      year: "numeric",
+      timeZone: "Africa/Lagos",
+    })
+  }, [])
 
-  async function fetchAttendanceData() {
+  const fetchAttendanceData = useCallback(async () => {
     try {
       const ym = toLocalYearMonth()
       const today = toLocalISODate()
@@ -146,12 +178,43 @@ export function AttendanceContent({
     } catch (error) {
       log.error("Error fetching attendance:", error)
     }
-  }
+  }, [])
+
+  const fetchAppeals = useCallback(async () => {
+    try {
+      const res = await fetch("/api/hr/attendance/appeals", { cache: "no-store" })
+      const payload = await res.json().catch(() => null)
+      if (res.ok) {
+        setAppeals((payload?.data as AppealRecord[]) ?? [])
+      }
+    } catch (err) {
+      log.error("Error fetching appeals:", err)
+    }
+  }, [])
+
+  const handleCancelAppeal = useCallback(
+    async (appealId: string) => {
+      try {
+        const res = await fetch(`/api/hr/attendance/appeals?id=${appealId}`, {
+          method: "DELETE",
+        })
+        const payload = await res.json().catch(() => null)
+        if (!res.ok) throw new Error(payload?.error ?? "Failed to cancel appeal")
+        toast.success("Appeal cancelled successfully")
+        void fetchAppeals()
+        void fetchAttendanceData()
+      } catch (err) {
+        log.error("Error cancelling appeal:", err)
+        toast.error(err instanceof Error ? err.message : "Failed to cancel appeal")
+      }
+    },
+    [fetchAppeals, fetchAttendanceData]
+  )
 
   useEffect(() => {
     void fetchAttendanceData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    void fetchAppeals()
+  }, [fetchAttendanceData, fetchAppeals])
 
   const rows = useMemo<AttendanceRow[]>(() => {
     if (unifiedDays === null) return []
@@ -178,7 +241,7 @@ export function AttendanceContent({
             clock_out: null,
             total_hours: null,
             status: "no_record",
-            dayLabel: formatWATDate(dateObj, { weekday: "long" }),
+            dayLabel: formatWATDate(dateObj, { weekday: "short" }),
             dateLabel: formatWATDate(dateObj, { day: "2-digit", month: "long", year: "numeric" }),
             periodLabel: "-",
             monthLabel,
@@ -199,7 +262,7 @@ export function AttendanceContent({
         return {
           ...existing,
           total_hours: breakdown.total ?? existing.total_hours,
-          dayLabel: formatWATDate(dateObj, { weekday: "long" }),
+          dayLabel: formatWATDate(dateObj, { weekday: "short" }),
           dateLabel: formatWATDate(dateObj, { day: "2-digit", month: "long", year: "numeric" }),
           periodLabel: `${existing.clock_in || "-"} - ${getClockOutLabel({ ...existing, date: workday })}`,
           monthLabel,
@@ -213,10 +276,12 @@ export function AttendanceContent({
       .sort((a, b) => b.date.localeCompare(a.date))
   }, [unifiedDays])
 
-  // Seed filteredRows with all rows on first load so stat cards show before any filter interaction
+  // Seed filteredRows with current month's rows on first load so stat cards align with default filter
   useEffect(() => {
-    if (rows.length > 0) setFilteredRows(rows)
-  }, [rows])
+    if (rows.length > 0) {
+      setFilteredRows(rows.filter((r) => r.monthLabel === currentMonthLabel))
+    }
+  }, [rows, currentMonthLabel])
 
   const columns = useMemo<DataTableColumn<AttendanceRow>[]>(
     () => [
@@ -233,14 +298,24 @@ export function AttendanceContent({
         label: "Clock In",
         sortable: true,
         accessor: (row) => row.clock_in ?? "",
-        render: (row) => <span>{row.clock_in || "-"}</span>,
+        render: (row) => (
+          <span className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5 shrink-0 text-green-600" />
+            <span>{row.clock_in || "-"}</span>
+          </span>
+        ),
       },
       {
         key: "clock_out",
         label: "Clock Out",
         sortable: true,
         accessor: (row) => row.clock_out ?? "",
-        render: (row) => <span>{getClockOutLabel(row)}</span>,
+        render: (row) => (
+          <span className="flex items-center gap-1.5">
+            <Clock className="h-3.5 w-3.5 shrink-0 text-red-500" />
+            <span>{getClockOutLabel(row)}</span>
+          </span>
+        ),
       },
       {
         key: "total_hours",
@@ -288,8 +363,69 @@ export function AttendanceContent({
         accessor: (row) => row.normalizedStatus,
         render: (row) => <StatusBadge status={row.normalizedStatus} />,
       },
+      {
+        key: "actions",
+        label: "Action",
+        render: (row) => {
+          const rowAppeals = appeals.filter((a) => a.appeal_date === row.date)
+          const pendingAppeal = rowAppeals.find((a) => a.status === "pending")
+          const approvedAppeal = rowAppeals.find((a) => a.status === "approved")
+          const hasRejected = rowAppeals.some((a) => a.status === "rejected")
+          const isEligible = (["absent", "late", "incomplete"] as string[]).includes(row.normalizedStatus)
+
+          if (!isEligible && rowAppeals.length === 0) {
+            return null
+          }
+
+          let content = null
+
+          if (pendingAppeal) {
+            content = (
+              <Badge variant="outline" className="border-amber-500 bg-amber-500/5 text-amber-500 hover:bg-amber-500/5">
+                Pending
+              </Badge>
+            )
+          } else if (approvedAppeal) {
+            return null
+          } else if (hasRejected) {
+            content = (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 border-red-200 px-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 dark:border-red-900/50 dark:text-red-400 dark:hover:bg-red-950/20"
+                onClick={() => {
+                  setEditAppeal(null)
+                  setAppealDialogRow(row)
+                }}
+              >
+                <FileQuestion className="h-3.5 w-3.5" />
+                Re-appeal
+              </Button>
+            )
+          } else if (isEligible) {
+            content = (
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 gap-1 px-2 text-xs"
+                onClick={() => {
+                  setEditAppeal(null)
+                  setAppealDialogRow(row)
+                }}
+              >
+                <FileQuestion className="h-3.5 w-3.5" />
+                Appeal
+              </Button>
+            )
+          }
+
+          if (!content) return null
+
+          return <div className="flex items-center gap-1.5">{content}</div>
+        },
+      },
     ],
-    []
+    [appeals]
   )
 
   const filters = useMemo<DataTableFilter<AttendanceRow>[]>(
@@ -312,10 +448,11 @@ export function AttendanceContent({
           value: month,
           label: month,
         })),
+        defaultValues: [currentMonthLabel],
         filterFn: (row, selected) => selected.includes(row.monthLabel),
       },
     ],
-    [rows]
+    [rows, currentMonthLabel]
   )
 
   const todayIso = toLocalISODate()
@@ -323,20 +460,23 @@ export function AttendanceContent({
   const todayStatus = todayRecord ? normalizeStatus(todayRecord, todayIso) : "absent"
 
   // Rates are computed from whatever rows survive the active filter — "all time" when no filter is set
-  const { attendanceRate, absentRate } = useMemo(() => {
+  const { attendanceRate, absentRate, attendedDays, totalWorkdays } = useMemo(() => {
     const scorable = filteredRows.filter((row) => {
       if (isCoveredStatus(row.normalizedStatus)) return false
       // Exclude a day still in progress (clocked in today, not yet clocked out)
       if (row.date === todayIso && row.clock_in && !row.clock_out) return false
       return true
     })
-    if (scorable.length === 0) return { attendanceRate: 0, absentRate: 0 }
+    if (scorable.length === 0) return { attendanceRate: 0, absentRate: 0, attendedDays: 0, totalWorkdays: 0 }
     let credits = 0
     for (const row of scorable) credits += dayCredit(row.normalizedStatus, row.clock_in, row.clock_out)
     const attendanceRate = Math.round((credits / scorable.length) * 100)
     const absentDays = scorable.filter((r) => r.normalizedStatus === "absent").length
     const absentRate = Math.round((absentDays / scorable.length) * 100)
-    return { attendanceRate, absentRate }
+    const attended = scorable.filter(
+      (row) => row.normalizedStatus !== "absent" && row.normalizedStatus !== "absent_with_permission"
+    ).length
+    return { attendanceRate, absentRate, attendedDays: attended, totalWorkdays: scorable.length }
   }, [filteredRows, todayIso])
 
   function exportCSV() {
@@ -394,42 +534,88 @@ export function AttendanceContent({
           </div>
         }
         stats={
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <StatCard
-              title="Today Status"
-              value={ATTENDANCE_STATUS_LABELS[todayStatus] ?? todayStatus}
-              icon={UserCheck}
-              iconBgColor="bg-blue-500/10"
-              iconColor="text-blue-500"
-            />
-            <StatCard
-              title="Today Hours"
-              value={todayHours}
-              icon={Clock}
-              iconBgColor="bg-emerald-500/10"
-              iconColor="text-emerald-500"
-            />
-            <StatCard
-              title="Attendance Rate"
-              value={`${attendanceRate}%`}
-              icon={BarChart3}
-              iconBgColor={
-                attendanceRate >= 80 ? "bg-emerald-500/10" : attendanceRate >= 60 ? "bg-yellow-500/10" : "bg-red-500/10"
-              }
-              iconColor={
-                attendanceRate >= 80 ? "text-emerald-500" : attendanceRate >= 60 ? "text-yellow-500" : "text-red-500"
-              }
-            />
-            <StatCard
-              title="Absent Rate"
-              value={`${absentRate}%`}
-              icon={AlertCircle}
-              iconBgColor={
-                absentRate <= 10 ? "bg-emerald-500/10" : absentRate <= 25 ? "bg-yellow-500/10" : "bg-red-500/10"
-              }
-              iconColor={absentRate <= 10 ? "text-emerald-500" : absentRate <= 25 ? "text-yellow-500" : "text-red-500"}
-            />
-          </div>
+          <TooltipProvider>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <StatCard
+                title="Today Status"
+                value={ATTENDANCE_STATUS_LABELS[todayStatus] ?? todayStatus}
+                icon={UserCheck}
+                iconBgColor="bg-blue-500/10"
+                iconColor="text-blue-500"
+              />
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="cursor-help">
+                    <StatCard
+                      title="Total Days"
+                      value={`${attendedDays} / ${totalWorkdays} days`}
+                      icon={Calendar}
+                      iconBgColor="bg-emerald-500/10"
+                      iconColor="text-emerald-500"
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs text-xs">
+                    Expected workdays in the period. Excludes holidays, leaves, exemptions, waivers, and AWP.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="cursor-help">
+                    <StatCard
+                      title="Attendance Rate"
+                      value={`${attendanceRate}%`}
+                      icon={BarChart3}
+                      iconBgColor={
+                        attendanceRate >= 80
+                          ? "bg-emerald-500/10"
+                          : attendanceRate >= 60
+                            ? "bg-yellow-500/10"
+                            : "bg-red-500/10"
+                      }
+                      iconColor={
+                        attendanceRate >= 80
+                          ? "text-emerald-500"
+                          : attendanceRate >= 60
+                            ? "text-yellow-500"
+                            : "text-red-500"
+                      }
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs text-xs">
+                    Calculated as (attendance credits / total workdays). Excused days do not count against you.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="cursor-help">
+                    <StatCard
+                      title="Absent Rate"
+                      value={`${absentRate}%`}
+                      icon={AlertCircle}
+                      iconBgColor={
+                        absentRate <= 10 ? "bg-emerald-500/10" : absentRate <= 25 ? "bg-yellow-500/10" : "bg-red-500/10"
+                      }
+                      iconColor={
+                        absentRate <= 10 ? "text-emerald-500" : absentRate <= 25 ? "text-yellow-500" : "text-red-500"
+                      }
+                    />
+                  </div>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="max-w-xs text-xs">
+                    Percentage of unexcused absences over total workdays. Excused days (holidays, leaves, etc.) are
+                    excluded.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </div>
+          </TooltipProvider>
         }
       >
         {activeTab === "calendar" ? (
@@ -465,26 +651,108 @@ export function AttendanceContent({
             emptyIcon={Clock}
             skeletonRows={6}
             expandable={{
-              render: (row) => (
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  <div>
-                    <p className="text-muted-foreground text-xs uppercase">Day</p>
-                    <p className="font-medium">{row.dayLabel}</p>
+              render: (row) => {
+                const rowAppeals = appeals
+                  .filter((a) => a.appeal_date === row.date)
+                  .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
+
+                return (
+                  <div className="space-y-4">
+                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <div>
+                        <p className="text-muted-foreground text-xs uppercase">Day</p>
+                        <p className="font-medium">{row.dayLabel}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs uppercase">Date</p>
+                        <p className="font-medium">{row.dateLabel}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs uppercase">Clock In</p>
+                        <p className="mt-0.5 flex items-center gap-1.5 font-medium">
+                          <Clock className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                          <span>{row.clock_in || "-"}</span>
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-xs uppercase">Clock Out</p>
+                        <p className="mt-0.5 flex items-center gap-1.5 font-medium">
+                          <Clock className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                          <span>{row.clock_out || "-"}</span>
+                        </p>
+                      </div>
+                    </div>
+                    {rowAppeals.map((appeal, index) => (
+                      <div key={appeal.id} className="bg-muted/50 max-w-2xl space-y-2 rounded-lg border p-3 text-sm">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground text-xs font-semibold uppercase">
+                              Appeal {rowAppeals.length > 1 ? `#${rowAppeals.length - index}` : ""} ({appeal.status})
+                            </span>
+                            <Badge
+                              variant="outline"
+                              className={
+                                appeal.status === "pending"
+                                  ? "border-amber-500 bg-amber-500/5 text-amber-500 hover:bg-amber-500/5"
+                                  : appeal.status === "approved"
+                                    ? "border-emerald-500 bg-emerald-500/5 text-emerald-500 hover:bg-emerald-500/5"
+                                    : "border-rose-500 bg-rose-500/5 text-rose-500 hover:bg-rose-500/5"
+                              }
+                            >
+                              {appeal.status === "pending" && "Pending Approval"}
+                              {appeal.status === "approved" && "Approved"}
+                              {appeal.status === "rejected" && "Rejected"}
+                            </Badge>
+                          </div>
+                          {appeal.status === "pending" && (
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => {
+                                  setEditAppeal(appeal)
+                                  setAppealDialogRow(row)
+                                }}
+                              >
+                                Edit Appeal
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                className="h-7 px-2 text-xs"
+                                onClick={() => setCancelAppealId(appeal.id)}
+                              >
+                                Cancel Appeal
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-muted-foreground text-xs font-semibold uppercase">Your Reason</p>
+                          <p className="mt-0.5 text-sm font-medium whitespace-pre-wrap">{appeal.appeal_reason}</p>
+                        </div>
+                        {appeal.resolution_note && (
+                          <div className="mt-2 border-t pt-2">
+                            <p className="text-muted-foreground text-xs font-semibold uppercase">
+                              Admin Comment / Note
+                            </p>
+                            <p
+                              className={`mt-0.5 text-sm font-medium whitespace-pre-wrap ${
+                                appeal.status === "approved"
+                                  ? "text-emerald-600 dark:text-emerald-400"
+                                  : "text-rose-600 dark:text-rose-400"
+                              }`}
+                            >
+                              {appeal.resolution_note}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs uppercase">Date</p>
-                    <p className="font-medium">{row.dateLabel}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs uppercase">Clock In</p>
-                    <p className="font-medium">{row.clock_in || "-"}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-xs uppercase">Clock Out</p>
-                    <p className="font-medium">{row.clock_out || "-"}</p>
-                  </div>
-                </div>
-              ),
+                )
+              },
             }}
             urlSync
           />
@@ -502,6 +770,60 @@ export function AttendanceContent({
           }}
         />
       )}
+
+      {appealDialogRow && (
+        <AppealDialog
+          row={appealDialogRow}
+          open={appealDialogRow !== null}
+          onClose={() => {
+            setAppealDialogRow(null)
+            setEditAppeal(null)
+          }}
+          editAppeal={editAppeal}
+          onSuccess={() => {
+            setAppealDialogRow(null)
+            setEditAppeal(null)
+            void fetchAppeals()
+            void fetchAttendanceData()
+          }}
+        />
+      )}
+
+      <AlertDialog
+        open={cancelAppealId !== null}
+        onOpenChange={(open) => {
+          if (!open) setCancelAppealId(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Cancel Appeal</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to cancel this appeal? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isCancellingAppeal}>Go Back</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              loading={isCancellingAppeal}
+              onClick={async () => {
+                if (cancelAppealId) {
+                  setIsCancellingAppeal(true)
+                  try {
+                    await handleCancelAppeal(cancelAppealId)
+                    setCancelAppealId(null)
+                  } finally {
+                    setIsCancellingAppeal(false)
+                  }
+                }
+              }}
+            >
+              Yes, Cancel Appeal
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }

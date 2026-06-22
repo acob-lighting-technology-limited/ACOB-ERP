@@ -25,6 +25,7 @@ export default async function AdminKssPage() {
   const { data: employees } = await supabase
     .from("profiles")
     .select("id, full_name, department, employment_status")
+    .or("employment_status.neq.exited,employment_status.is.null")
     .order("full_name")
 
   return (

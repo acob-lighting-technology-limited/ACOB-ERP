@@ -1,9 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { computeIndividualPerformanceScore } from "@/lib/performance/scoring"
 import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
+import { loadDayContext } from "@/lib/hr/attendance-day-context"
+import { dayCredit, toLocalISODate } from "@/lib/hr/attendance-utils"
+import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 
 const log = logger("hr-performance-metric-snapshot")
 
@@ -48,6 +52,15 @@ type ReviewMetricRow = {
   created_at: string
 }
 
+type AttendanceRecordRow = {
+  user_id: string | null
+  date: string | null
+  status: string | null
+  clock_in: string | null
+  clock_out: string | null
+  waived: boolean | null
+}
+
 function round(value: number) {
   return Math.round(value * 100) / 100
 }
@@ -90,11 +103,13 @@ export async function GET(request: NextRequest) {
     const scope = await getRequestScope()
     if (!scope) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
+    const dataClient = getServiceRoleClientOrFallback(supabase)
+
     const scopedDepts = getScopedDepartments(scope)
     let departments: string[]
 
     if (scopedDepts === null) {
-      const { data: departmentRows } = await supabase
+      const { data: departmentRows } = await dataClient
         .from("departments")
         .select("name")
         .order("name", { ascending: true })
@@ -106,7 +121,7 @@ export async function GET(request: NextRequest) {
 
     const { data: users } =
       departments.length > 0
-        ? await supabase
+        ? await dataClient
             .from("profiles")
             .select("id, first_name, last_name, department")
             .in("department", departments)
@@ -114,7 +129,7 @@ export async function GET(request: NextRequest) {
             .returns<ScopedUserRow[]>()
         : { data: [] as ScopedUserRow[] }
 
-    const { data: cycles } = await supabase
+    const { data: cycles } = await dataClient
       .from("review_cycles")
       .select("id, name, review_type, start_date, end_date")
       .order("start_date", { ascending: false })
@@ -136,7 +151,7 @@ export async function GET(request: NextRequest) {
     if (metric === "goals") {
       const { data: goals } =
         userIds.length > 0
-          ? await supabase
+          ? await dataClient
               .from("goals_objectives")
               .select("user_id, department, review_cycle_id, approval_status, status")
               .in("department", context.departments)
@@ -204,13 +219,13 @@ export async function GET(request: NextRequest) {
         selectedCycleId && context.users.length > 0
           ? await (async () => {
               if (metric === "kpi") {
-                const { data: goalRows } = await supabase
+                const { data: goalRows } = await dataClient
                   .from("goals_objectives")
                   .select("department")
                   .eq("review_cycle_id", selectedCycleId)
                   .eq("approval_status", "approved")
                   .in("department", context.departments)
-                const { data: reviewRows } = await supabase
+                const { data: reviewRows } = await dataClient
                   .from("performance_reviews")
                   .select("user_id")
                   .eq("review_cycle_id", selectedCycleId)
@@ -232,7 +247,7 @@ export async function GET(request: NextRequest) {
                 return context.users.map((entry) => entry.id)
               }
               if (metric === "behaviour") {
-                const { data: reviewRows } = await supabase
+                const { data: reviewRows } = await dataClient
                   .from("performance_reviews")
                   .select("user_id")
                   .eq("review_cycle_id", selectedCycleId)
@@ -249,77 +264,148 @@ export async function GET(request: NextRequest) {
 
       const candidateUsers = context.users.filter((entry) => candidateUserIds.includes(entry.id))
 
-      const { data: reviewMetricRows } =
-        selectedCycleId && candidateUsers.length > 0
-          ? await supabase
-              .from("performance_reviews")
-              .select("user_id, kpi_score, attendance_score, behaviour_score, created_at")
-              .eq("review_cycle_id", selectedCycleId)
-              .in(
-                "user_id",
-                candidateUsers.map((entry) => entry.id)
-              )
-              .order("created_at", { ascending: false })
-              .returns<ReviewMetricRow[]>()
-          : { data: [] as ReviewMetricRow[] }
+      if (metric === "attendance") {
+        // Batch attendance computation — same logic as /api/hr/attendance/reports.
+        // Enumerate every workday in the cycle window, score each day using the
+        // canonical deriveUnifiedAttendanceStatus + dayCredit path, and use the
+        // total workday count (not just days with records) as the denominator.
+        const todayIso = toLocalISODate()
+        const cycleStart = selectedCycle?.start_date ?? null
+        const cycleEnd = selectedCycle?.end_date ?? null
+        const rangeEnd = cycleEnd && cycleEnd < todayIso ? cycleEnd : todayIso
 
-      const latestReviewMetricByUser = new Map<string, ReviewMetricRow>()
-      for (const row of reviewMetricRows || []) {
-        const rawValue =
-          metric === "kpi" ? row.kpi_score : metric === "attendance" ? row.attendance_score : row.behaviour_score
-        if (typeof rawValue === "number" && rawValue > 0 && !latestReviewMetricByUser.has(row.user_id)) {
-          latestReviewMetricByUser.set(row.user_id, row)
-        }
-      }
-
-      const individualScores =
-        selectedCycleId && candidateUsers.length > 0
-          ? await Promise.all(
-              candidateUsers.map(async (entry) => ({
-                user: entry,
-                score: await computeIndividualPerformanceScore(supabase, {
-                  userId: entry.id,
-                  cycleId: selectedCycleId,
-                }),
-              }))
-            )
-          : []
-
-      individualRows = individualScores
-        .map(({ user: entry, score }) => {
-          const latestReviewMetric = latestReviewMetricByUser.get(entry.id)
-          const submittedMetricValue =
-            metric === "kpi"
-              ? (latestReviewMetric?.kpi_score ?? null)
-              : metric === "attendance"
-                ? score.breakdown.attendance.score
-                : (latestReviewMetric?.behaviour_score ?? null)
-          return {
-            user_id: entry.id,
-            employee: fullName(entry),
-            department: entry.department || "Unassigned",
-            cycle: selectedCycle?.name || "Current",
-            metric_value:
-              typeof submittedMetricValue === "number" && submittedMetricValue > 0 ? submittedMetricValue : null,
-            kpi_score:
-              typeof latestReviewMetric?.kpi_score === "number" && latestReviewMetric.kpi_score > 0
-                ? latestReviewMetric.kpi_score
-                : null,
-            attendance_score: score.breakdown.attendance.score,
-            behaviour_score:
-              typeof latestReviewMetric?.behaviour_score === "number" && latestReviewMetric.behaviour_score > 0
-                ? latestReviewMetric.behaviour_score
-                : null,
-            _goal_count: score.breakdown.goals.length,
-            _attendance_total: score.breakdown.attendance.total,
+        const workdays: string[] = []
+        if (cycleStart) {
+          for (let d = new Date(cycleStart); toLocalISODate(d) <= rangeEnd; d.setDate(d.getDate() + 1)) {
+            const dow = d.getDay()
+            if (dow !== 0 && dow !== 6) workdays.push(toLocalISODate(d))
           }
-        })
-        .filter((row) => {
-          if (metric === "kpi") return hasMetric(row.kpi_score) || Number(row._goal_count || 0) > 0
-          if (metric === "attendance") return true
-          return hasMetric(row.behaviour_score)
-        })
-        .map(({ _goal_count, _attendance_total, ...row }) => row)
+        }
+
+        const rateByUser = new Map<string, number | null>()
+
+        if (workdays.length > 0 && candidateUsers.length > 0 && cycleStart) {
+          const [{ data: attendanceRows }, ctx, { data: exemptProfiles }] = await Promise.all([
+            dataClient
+              .from("attendance_records")
+              .select("user_id, date, status, clock_in, clock_out, waived")
+              .in("user_id", candidateUserIds)
+              .gte("date", cycleStart)
+              .lte("date", rangeEnd)
+              .returns<AttendanceRecordRow[]>(),
+            loadDayContext(dataClient, { userIds: candidateUserIds, start: cycleStart, end: rangeEnd }),
+            dataClient
+              .from("profiles")
+              .select("id, attendance_exempt")
+              .in("id", candidateUserIds)
+              .returns<{ id: string; attendance_exempt: boolean | null }[]>(),
+          ])
+
+          const exemptSet = new Set((exemptProfiles || []).filter((p) => p.attendance_exempt).map((p) => p.id))
+
+          const recordsByUser = new Map<string, Map<string, AttendanceRecordRow>>()
+          for (const row of attendanceRows || []) {
+            if (!row.user_id || !row.date) continue
+            if (!recordsByUser.has(row.user_id)) recordsByUser.set(row.user_id, new Map())
+            recordsByUser.get(row.user_id)!.set(String(row.date).slice(0, 10), row)
+          }
+
+          for (const userId of candidateUserIds) {
+            const empRecords = recordsByUser.get(userId) ?? new Map<string, AttendanceRecordRow>()
+            let creditSum = 0
+            let scorableDays = 0
+
+            for (const day of workdays) {
+              if (ctx.isHoliday(day)) continue
+              if (ctx.isOnLeave(userId, day)) continue
+              if (exemptSet.has(userId) || ctx.isExempt(userId, day)) continue
+
+              const rec = empRecords.get(day) ?? null
+              // Skip today if the employee is still clocked in.
+              if (day === todayIso && rec?.clock_in && !rec?.clock_out) continue
+
+              scorableDays++
+              const status = deriveUnifiedAttendanceStatus({ record: rec ?? undefined, recordDate: day })
+              creditSum += dayCredit(status, rec?.clock_in ?? undefined, rec?.clock_out ?? undefined)
+            }
+
+            rateByUser.set(userId, scorableDays > 0 ? Math.round((creditSum / scorableDays) * 10000) / 100 : null)
+          }
+        }
+
+        individualRows = candidateUsers.map((entry) => ({
+          user_id: entry.id,
+          employee: fullName(entry),
+          department: entry.department || "Unassigned",
+          cycle: selectedCycle?.name || "Current",
+          metric_value: rateByUser.get(entry.id) ?? null,
+        }))
+      } else {
+        // kpi / behaviour — per-user scoring via computeIndividualPerformanceScore
+        const { data: reviewMetricRows } =
+          selectedCycleId && candidateUsers.length > 0
+            ? await dataClient
+                .from("performance_reviews")
+                .select("user_id, kpi_score, attendance_score, behaviour_score, created_at")
+                .eq("review_cycle_id", selectedCycleId)
+                .in(
+                  "user_id",
+                  candidateUsers.map((entry) => entry.id)
+                )
+                .order("created_at", { ascending: false })
+                .returns<ReviewMetricRow[]>()
+            : { data: [] as ReviewMetricRow[] }
+
+        const latestReviewMetricByUser = new Map<string, ReviewMetricRow>()
+        for (const row of reviewMetricRows || []) {
+          const rawValue = metric === "kpi" ? row.kpi_score : row.behaviour_score
+          if (typeof rawValue === "number" && rawValue > 0 && !latestReviewMetricByUser.has(row.user_id)) {
+            latestReviewMetricByUser.set(row.user_id, row)
+          }
+        }
+
+        const individualScores =
+          selectedCycleId && candidateUsers.length > 0
+            ? await Promise.all(
+                candidateUsers.map(async (entry) => ({
+                  user: entry,
+                  score: await computeIndividualPerformanceScore(dataClient, {
+                    userId: entry.id,
+                    cycleId: selectedCycleId,
+                  }),
+                }))
+              )
+            : []
+
+        individualRows = individualScores
+          .map(({ user: entry, score }) => {
+            const latestReviewMetric = latestReviewMetricByUser.get(entry.id)
+            const submittedMetricValue =
+              metric === "kpi" ? (latestReviewMetric?.kpi_score ?? null) : (latestReviewMetric?.behaviour_score ?? null)
+            return {
+              user_id: entry.id,
+              employee: fullName(entry),
+              department: entry.department || "Unassigned",
+              cycle: selectedCycle?.name || "Current",
+              metric_value:
+                typeof submittedMetricValue === "number" && submittedMetricValue > 0 ? submittedMetricValue : null,
+              kpi_score:
+                typeof latestReviewMetric?.kpi_score === "number" && latestReviewMetric.kpi_score > 0
+                  ? latestReviewMetric.kpi_score
+                  : null,
+              behaviour_score:
+                typeof latestReviewMetric?.behaviour_score === "number" && latestReviewMetric.behaviour_score > 0
+                  ? latestReviewMetric.behaviour_score
+                  : null,
+              _goal_count: score.breakdown.goals.length,
+            }
+          })
+          .filter((row) => {
+            if (metric === "kpi") return hasMetric(row.kpi_score) || Number(row._goal_count || 0) > 0
+            return hasMetric(row.behaviour_score)
+          })
+          .map(({ _goal_count, ...row }) => row)
+      }
 
       const employeeCountByDepartment = context.users.reduce((map, row) => {
         const department = String(row.department || "Unassigned")

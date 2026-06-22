@@ -12,9 +12,11 @@ import type { AttendanceRecord } from "./page"
 type DayStatus =
   | "present"
   | "late"
+  | "lateness_with_permission"
   | "absent"
+  | "absent_with_permission"
+  | "out_of_station"
   | "incomplete"
-  | "half_day"
   | "waiver"
   | "exempted"
   | "on_leave"
@@ -68,9 +70,11 @@ function formatTime(t: string | null | undefined) {
 const CELL_BG: Record<string, string> = {
   present: "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800",
   late: "bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800",
+  lateness_with_permission: "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800",
   incomplete: "bg-cyan-50 border-cyan-200 dark:bg-cyan-950/30 dark:border-cyan-800",
-  half_day: "bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800",
   absent: "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800",
+  absent_with_permission: "bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800",
+  out_of_station: "bg-indigo-50 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-800",
   waiver: "bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800",
   exempted: "bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800",
   on_leave: "bg-purple-50 border-purple-200 dark:bg-purple-950/30 dark:border-purple-800",
@@ -155,10 +159,10 @@ export function EmployeeCalendarView() {
         </div>
         {!loading && monthAttendanceRate !== null && (
           <div className="flex items-center gap-3">
-            <div className="rounded-lg border px-3 py-1.5 text-center min-w-[90px]">
-              <p className="text-muted-foreground text-[11px] leading-none mb-1">Monthly Attendance</p>
+            <div className="min-w-[90px] rounded-lg border px-3 py-1.5 text-center">
+              <p className="text-muted-foreground mb-1 text-[11px] leading-none">Monthly Attendance</p>
               <p
-                className={`text-sm font-semibold leading-none ${
+                className={`text-sm leading-none font-semibold ${
                   monthAttendanceRate >= 80
                     ? "text-emerald-600"
                     : monthAttendanceRate >= 60
@@ -169,10 +173,10 @@ export function EmployeeCalendarView() {
                 {monthAttendanceRate}%
               </p>
             </div>
-            <div className="rounded-lg border px-3 py-1.5 text-center min-w-[90px]">
-              <p className="text-muted-foreground text-[11px] leading-none mb-1">Monthly Absent</p>
+            <div className="min-w-[90px] rounded-lg border px-3 py-1.5 text-center">
+              <p className="text-muted-foreground mb-1 text-[11px] leading-none">Monthly Absent</p>
               <p
-                className={`text-sm font-semibold leading-none ${
+                className={`text-sm leading-none font-semibold ${
                   monthAbsentRate <= 10
                     ? "text-emerald-600"
                     : monthAbsentRate <= 25

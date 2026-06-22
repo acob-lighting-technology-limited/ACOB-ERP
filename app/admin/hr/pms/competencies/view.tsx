@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/dialog"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -608,13 +607,15 @@ export function AdminCompetenciesPage({ backLinkHref }: { backLinkHref?: string 
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void handleDelete()}
-              disabled={isSubmitting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            <Button
+              variant="destructive"
+              loading={isSubmitting}
+              onClick={async () => {
+                await handleDelete()
+              }}
             >
-              {isSubmitting ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
+              Delete
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

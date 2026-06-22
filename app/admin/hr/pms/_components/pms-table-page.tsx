@@ -9,6 +9,7 @@ import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { StatCard } from "@/components/ui/stat-card"
 import { exportPmsRowsToExcel, exportPmsRowsToPdf } from "@/lib/pms/export"
 import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
+import { CbtAttemptDetail } from "@/components/pms/cbt-attempt-detail"
 
 type IconKey = "kpi" | "goals" | "attendance" | "cbt" | "behaviour" | "reviews"
 type TableColumn = { key: string; label: string }
@@ -29,6 +30,8 @@ interface PmsTablePageProps {
   filterKey?: string
   filterLabel?: string
   filterAllLabel?: string
+  hideSecondaryFilter?: boolean
+  cbtExpandable?: boolean
 }
 
 const iconMap = {
@@ -60,6 +63,8 @@ export function PmsTablePage({
   filterKey = "department",
   filterLabel = "Department",
   filterAllLabel = "All Departments",
+  hideSecondaryFilter = false,
+  cbtExpandable = false,
 }: PmsTablePageProps) {
   const Icon = iconMap[icon]
   const [isExportOpen, setIsExportOpen] = useState(false)
@@ -104,41 +109,48 @@ export function PmsTablePage({
     [firstColumnKey, rows]
   )
 
-  const filters = useMemo<DataTableFilter<TableRowData>[]>(
-    () => [
-      {
+  const filters = useMemo<DataTableFilter<TableRowData>[]>(() => {
+    const activeFilters: DataTableFilter<TableRowData>[] = []
+
+    if (!hideSecondaryFilter) {
+      activeFilters.push({
         key: filterKey,
         label: filterLabel,
-        options: [{ value: "all", label: filterAllLabel }, ...secondaryFilterOptions],
+        placeholder: filterAllLabel,
+        options: secondaryFilterOptions,
         mode: "custom",
         filterFn: (row, selected) => {
           if (!selected || selected.length === 0 || selected.includes("all")) return true
           return selected.includes(normalizeCell(row[filterKey]))
         },
         multi: false,
+      })
+    }
+
+    activeFilters.push({
+      key: firstColumnKey,
+      label: firstColumnLabel,
+      placeholder: `All ${firstColumnLabel}`,
+      options: firstColumnOptions,
+      mode: "custom",
+      filterFn: (row, selected) => {
+        if (!selected || selected.length === 0 || selected.includes("all")) return true
+        return selected.includes(normalizeCell(row[firstColumnKey]))
       },
-      {
-        key: firstColumnKey,
-        label: firstColumnLabel,
-        options: [{ value: "all", label: `All ${firstColumnLabel}` }, ...firstColumnOptions],
-        mode: "custom",
-        filterFn: (row, selected) => {
-          if (!selected || selected.length === 0 || selected.includes("all")) return true
-          return selected.includes(normalizeCell(row[firstColumnKey]))
-        },
-        multi: false,
-      },
-    ],
-    [
-      filterAllLabel,
-      filterKey,
-      filterLabel,
-      firstColumnKey,
-      firstColumnLabel,
-      firstColumnOptions,
-      secondaryFilterOptions,
-    ]
-  )
+      multi: false,
+    })
+
+    return activeFilters
+  }, [
+    filterAllLabel,
+    filterKey,
+    filterLabel,
+    firstColumnKey,
+    firstColumnLabel,
+    firstColumnOptions,
+    secondaryFilterOptions,
+    hideSecondaryFilter,
+  ])
 
   const exportRows = useMemo(
     () =>
@@ -260,7 +272,14 @@ export function PmsTablePage({
                   )
                 },
               }
-            : undefined
+            : cbtExpandable
+              ? {
+                  canExpand: (row) => !!(row.user_id && row.review_cycle_id),
+                  render: (row) => (
+                    <CbtAttemptDetail profileId={row.user_id as string} reviewCycleId={row.review_cycle_id as string} />
+                  ),
+                }
+              : undefined
         }
         emptyTitle={tableTitle}
         emptyDescription={tableDescription}

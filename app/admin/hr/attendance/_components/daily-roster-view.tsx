@@ -6,6 +6,7 @@ import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-tabl
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Dialog,
   DialogContent,
@@ -17,7 +18,8 @@ import {
 import { StatCard } from "@/components/ui/stat-card"
 import { Users, Clock, AlertCircle, FileText, Pencil, ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
-import { toLocalISODate } from "@/lib/hr/attendance-utils"
+import { toLocalISODate, isLate } from "@/lib/hr/attendance-utils"
+import { MANUAL_ATTENDANCE_STATUS_OPTIONS, isEarlyDeparture } from "@/lib/hr/attendance-status"
 import { StatusBadge, formatTime, labelSource } from "./status-badge"
 
 function parseTimeToMinutes(value: string | null | undefined): number | null {
@@ -55,6 +57,8 @@ interface AttendanceRecord {
   source: string | null
   clock_in_source?: string | null
   clock_out_source?: string | null
+  waived?: boolean
+  manual_comment?: string | null
 }
 
 interface DailyRosterViewProps {
@@ -67,7 +71,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null)
-  const [editForm, setEditForm] = useState({ clock_in: "", clock_out: "" })
+  const [editForm, setEditForm] = useState({ status: "", manual_comment: "" })
   const [saving, setSaving] = useState(false)
 
   const load = useCallback(async () => {
@@ -91,10 +95,30 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
   }, [load])
 
   function openEdit(record: AttendanceRecord) {
+    const clockIn = record.clock_in ?? null
+    const clockOut = record.clock_out ?? null
+    const hasClockIn = Boolean(clockIn)
+    const hasClockOut = Boolean(clockOut)
+    const hasAnyPunch = hasClockIn || hasClockOut
+
+    const isLatePunch = hasClockIn && isLate(clockIn)
+    const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
+    const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
+
+    let initialStatus = ""
+    if (!hasAnyPunch) {
+      initialStatus = "absent_with_permission"
+    } else if (!isOnTimePresent) {
+      initialStatus = "lateness_with_permission"
+    }
+
     setEditRecord(record)
     setEditForm({
-      clock_in: record.clock_in?.substring(0, 5) ?? "",
-      clock_out: record.clock_out?.substring(0, 5) ?? "",
+      status:
+        record.status && ["lateness_with_permission", "absent_with_permission"].includes(record.status)
+          ? record.status
+          : initialStatus,
+      manual_comment: record.manual_comment ?? "",
     })
   }
 
@@ -106,18 +130,26 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
       const isNew = editRecord.id.startsWith("missing-")
       let res: Response
       if (isNew) {
-        const body: Record<string, unknown> = { user_id: editRecord.user_id, date: editRecord.date }
-        if (editForm.clock_in) body.clock_in = editForm.clock_in
-        if (editForm.clock_out) body.clock_out = editForm.clock_out
+        const body: Record<string, unknown> = {
+          user_id: editRecord.user_id,
+          date: editRecord.date,
+          waived: false,
+          manual_comment: editForm.manual_comment,
+          status: editForm.status,
+          clock_in: null,
+          clock_out: null,
+        }
         res = await fetch(`/api/admin/hr/attendance/records`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
         })
       } else {
-        const body: Record<string, unknown> = {}
-        if (editForm.clock_in) body.clock_in = editForm.clock_in
-        if (editForm.clock_out) body.clock_out = editForm.clock_out
+        const body: Record<string, unknown> = {
+          waived: false,
+          manual_comment: editForm.manual_comment,
+          status: editForm.status,
+        }
         res = await fetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
@@ -140,7 +172,9 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
     () => ({
       present: records.filter((r) => r.status === "present").length,
       late: records.filter((r) => r.status === "late").length,
-      half_day: records.filter((r) => r.status === "half_day").length,
+      lwp: records.filter((r) => r.status === "lateness_with_permission").length,
+      awp: records.filter((r) => r.status === "absent_with_permission").length,
+      oos: records.filter((r) => r.status === "out_of_station").length,
       incomplete: records.filter((r) => r.status === "incomplete").length,
       absent: records.filter((r) => r.status === "absent").length,
       exempted: records.filter((r) => r.status === "exempted").length,
@@ -173,14 +207,36 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
       key: "clock_in",
       label: "Clock In",
       accessor: (r) => r.clock_in ?? "",
-      render: (r) => <span className="text-sm">{formatTime(r.clock_in)}</span>,
+      render: (r) => (
+        <span className="flex items-center justify-center gap-1 text-sm">
+          {r.clock_in ? (
+            <>
+              <Clock className="h-3 w-3 shrink-0 text-green-600" />
+              <span>{formatTime(r.clock_in)}</span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </span>
+      ),
       align: "center",
     },
     {
       key: "clock_out",
       label: "Clock Out",
       accessor: (r) => r.clock_out ?? "",
-      render: (r) => <span className="text-sm">{formatTime(r.clock_out)}</span>,
+      render: (r) => (
+        <span className="flex items-center justify-center gap-1 text-sm">
+          {r.clock_out ? (
+            <>
+              <Clock className="h-3 w-3 shrink-0 text-red-500" />
+              <span>{formatTime(r.clock_out)}</span>
+            </>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </span>
+      ),
       align: "center",
     },
     {
@@ -261,9 +317,11 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
       options: [
         { value: "present", label: "Present" },
         { value: "late", label: "Late" },
-        { value: "half_day", label: "Half Day" },
+        { value: "lateness_with_permission", label: "LWP" },
         { value: "incomplete", label: "Incomplete" },
         { value: "absent", label: "Absent" },
+        { value: "absent_with_permission", label: "AWP" },
+        { value: "out_of_station", label: "OOS" },
         { value: "exempted", label: "Exempted" },
         { value: "waiver", label: "Waiver" },
         { value: "on_leave", label: "On Leave" },
@@ -273,7 +331,26 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
     },
   ]
 
-  const invalidTimeRange = Boolean(editForm.clock_in && editForm.clock_out && editForm.clock_out < editForm.clock_in)
+  const clockIn = editRecord?.clock_in ?? null
+  const clockOut = editRecord?.clock_out ?? null
+  const hasClockIn = Boolean(clockIn)
+  const hasClockOut = Boolean(clockOut)
+  const hasAnyPunch = hasClockIn || hasClockOut
+
+  const isLatePunch = hasClockIn && isLate(clockIn)
+  const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
+  const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
+
+  const showAWP = !hasAnyPunch
+  const showLWP = hasAnyPunch && !isOnTimePresent
+
+  const statusOptions = [
+    ...(showLWP ? [{ value: "lateness_with_permission", label: "LWP" }] : []),
+    ...(showAWP ? [{ value: "absent_with_permission", label: "AWP" }] : []),
+  ]
+
+  const hasManualComment = editForm.manual_comment.trim().length >= 3
+  const cannotSave = saving || !editForm.status || !hasManualComment || isOnTimePresent
 
   const todayIso = toLocalISODate()
   function shiftDate(deltaDays: number) {
@@ -339,11 +416,19 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           iconColor="text-yellow-500"
         />
         <StatCard
-          title="Half Day"
-          value={stats.half_day}
+          title="LWP"
+          value={stats.lwp}
           icon={Clock}
           iconBgColor="bg-orange-500/10"
           iconColor="text-orange-500"
+        />
+        <StatCard title="AWP" value={stats.awp} icon={Users} iconBgColor="bg-teal-500/10" iconColor="text-teal-500" />
+        <StatCard
+          title="OOS"
+          value={stats.oos}
+          icon={Users}
+          iconBgColor="bg-indigo-500/10"
+          iconColor="text-indigo-500"
         />
         <StatCard
           title="Incomplete"
@@ -400,32 +485,48 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            <p className="text-muted-foreground text-xs">Status is auto-derived from clock times.</p>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Clock In</Label>
-                <Input
-                  type="time"
-                  value={editForm.clock_in}
-                  onChange={(e) => setEditForm((f) => ({ ...f, clock_in: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Clock Out</Label>
-                <Input
-                  type="time"
-                  value={editForm.clock_out}
-                  onChange={(e) => setEditForm((f) => ({ ...f, clock_out: e.target.value }))}
-                />
-              </div>
-            </div>
-            {invalidTimeRange && <p className="text-destructive text-xs">Clock out must be after clock in.</p>}
+            {isOnTimePresent ? (
+              <p className="text-muted-foreground text-sm">
+                This record is fully present and on-time. No overrides (LWP/AWP) are applicable.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label>Status</Label>
+                  <Select
+                    value={editForm.status}
+                    onValueChange={(value) => setEditForm((f) => ({ ...f, status: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select status..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {statusOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>
+                    Comment <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    value={editForm.manual_comment}
+                    onChange={(e) => setEditForm((f) => ({ ...f, manual_comment: e.target.value }))}
+                    placeholder="Reason for this manual attendance change"
+                  />
+                </div>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditRecord(null)}>
               Cancel
             </Button>
-            <Button onClick={saveEdit} disabled={saving || invalidTimeRange}>
+            <Button onClick={saveEdit} disabled={cannotSave}>
               {saving ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>

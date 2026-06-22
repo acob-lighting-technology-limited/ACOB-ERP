@@ -26,7 +26,6 @@ import {
 } from "@/components/ui/dialog"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -1322,10 +1321,9 @@ export function DepartmentDocumentsBrowser({
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isMutating}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={deleteItem} disabled={isMutating} className="bg-red-600 hover:bg-red-700">
-              {isMutating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            <Button variant="destructive" onClick={deleteItem} loading={isMutating}>
               Delete
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

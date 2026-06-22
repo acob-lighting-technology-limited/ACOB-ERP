@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { ArrowRight, ScrollText } from "lucide-react"
 import { EmptyState } from "@/components/ui/patterns"
 import { formatWATDate } from "@/lib/utils/date"
+import { cn } from "@/lib/utils"
 
 export interface PersonalRecentActivityItem {
   id: string
@@ -59,12 +60,13 @@ function formatDate(dateString: string): string {
 
 interface PersonalRecentActivityFeedProps {
   activity: PersonalRecentActivityItem[]
+  className?: string
 }
 
-export function PersonalRecentActivityFeed({ activity }: PersonalRecentActivityFeedProps) {
+export function PersonalRecentActivityFeed({ activity, className }: PersonalRecentActivityFeedProps) {
   return (
-    <Card>
-      <CardHeader className="px-4 py-3">
+    <Card className={cn("flex h-[480px] flex-col", className)}>
+      <CardHeader className="shrink-0 px-4 py-3">
         <div className="flex items-center justify-between">
           <CardTitle className="flex items-center gap-2 text-sm">
             <ScrollText className="text-muted-foreground h-4 w-4" />
@@ -73,14 +75,14 @@ export function PersonalRecentActivityFeed({ activity }: PersonalRecentActivityF
           {activity.length > 0 && <span className="text-muted-foreground text-xs">{activity.length} entries</span>}
         </div>
       </CardHeader>
-      <CardContent className="p-0">
+      <CardContent className="flex flex-1 flex-col overflow-hidden p-0">
         {activity.length > 0 ? (
-          <ul className="max-h-72 divide-y overflow-y-auto">
+          <ul className="flex-1 divide-y overflow-y-auto">
             {activity.map((item) => (
               <li key={item.id}>
                 <Link
                   href={resolveActivityRoute(item.moduleKey)}
-                  className="hover:bg-muted/50 flex items-center gap-3 px-4 py-2.5 transition-colors"
+                  className="hover:bg-muted/55 flex items-center gap-3 px-4 py-2.5 transition-colors"
                 >
                   <div className="min-w-0 flex-1">
                     <p className="text-sm leading-snug">
@@ -99,12 +101,14 @@ export function PersonalRecentActivityFeed({ activity }: PersonalRecentActivityF
             ))}
           </ul>
         ) : (
-          <EmptyState
-            title="No recent activity yet"
-            description="Your latest actions across modules will appear here."
-            icon={ScrollText}
-            className="border-0 py-8"
-          />
+          <div className="flex flex-1 items-center justify-center p-6">
+            <EmptyState
+              title="No recent activity yet"
+              description="Your latest actions across modules will appear here."
+              icon={ScrollText}
+              className="border-0 py-4"
+            />
+          </div>
         )}
       </CardContent>
     </Card>

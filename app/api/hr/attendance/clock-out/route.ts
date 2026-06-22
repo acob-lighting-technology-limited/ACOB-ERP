@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { toLocalISODate, toLocalTimeString } from "@/lib/utils/date"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
@@ -88,6 +89,18 @@ export async function PATCH(_request: NextRequest) {
       },
       { failOpen: true }
     )
+
+    await recordAttendanceEvent(supabase, {
+      userId: user.id,
+      eventDate: today,
+      eventType: "self_clock_out",
+      attendanceRecordId: record.id,
+      fromStatus: record.status,
+      toStatus: status,
+      source: "self",
+      actorId: user.id,
+      metadata: { clock_out: clockOutTime, total_hours: workHours },
+    })
 
     return NextResponse.json({
       data: updatedRecord,

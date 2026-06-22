@@ -230,13 +230,16 @@ export async function computeIndividualPerformanceScore(
     score: null,
   }
 
-  // Attendance credit: full credit for present/wfh/remote, partial for late/half_day, zero for absent.
+  // Attendance credit: full credit for present/wfh/remote/permission statuses, partial for late, zero for absent.
   const ATTENDANCE_CREDIT: Record<string, number> = {
     present: 1.0,
     wfh: 1.0,
     remote: 1.0,
     late: 0.5,
     half_day: 0.5,
+    lateness_with_permission: 1.0,
+    absent_with_permission: 1.0,
+    out_of_station: 1.0,
     absent: 0,
   }
 
@@ -297,34 +300,71 @@ export async function computeIndividualPerformanceScore(
 
   const holidayDateSet = new Set((holidayRows || []).map((row) => row.holiday_date))
 
-  if (attendance && attendance.length > 0) {
-    const scorableRecords = attendance.filter((row) => {
-      const day = String(row.date || "").slice(0, 10)
-      if (!day) return false
-      if (holidayDateSet.has(day)) return false
-      if (leaveDateSet.has(day)) return false
-      if (Boolean(profile?.attendance_exempt) || exemptionDateSet.has(day)) return false
-      return true
-    })
+  // Build a date-keyed lookup for attendance records so we can score each workday,
+  // including days with no record (those count as absent, 0 credit).
+  const recordByDate = new Map<string, NonNullable<typeof attendance>[number]>()
+  for (const row of attendance || []) {
+    const day = String(row.date || "").slice(0, 10)
+    if (day) recordByDate.set(day, row)
+  }
 
+  // Enumerate all Mon–Fri dates in the cycle window, capped at today.
+  // When no cycle is available we cannot derive the range, so leave workdays empty
+  // and the score falls back to null (no data).
+  const todayIso = toLocalISODate()
+  const workdays: string[] = []
+  if (cycle) {
+    const rangeEnd = cycle.end_date < todayIso ? cycle.end_date : todayIso
+    for (let d = new Date(cycle.start_date); toLocalISODate(d) <= rangeEnd; d.setDate(d.getDate() + 1)) {
+      const dow = d.getDay()
+      if (dow !== 0 && dow !== 6) workdays.push(toLocalISODate(d))
+    }
+  }
+
+  if (workdays.length > 0) {
     let creditSum = 0
     let latePenaltyTotalNgn = 0
     let latePenaltyStepsTotal = 0
     let lateDays = 0
+    let presentDays = 0
+    let scorableDays = 0
 
     const cutoffMinutes = 8 * 60 + 20
     const firstPenaltyHourMinutes = 9 * 60
     const penaltyPerStepNgn = 1000
-    for (const row of scorableRecords) {
-      const status = row.waived
-        ? "waiver"
-        : !row.clock_in && !row.clock_out
-          ? "absent"
-          : row.clock_in && row.clock_out
-            ? isLate(row.clock_in)
-              ? "late"
-              : "present"
-            : "incomplete"
+
+    for (const day of workdays) {
+      if (holidayDateSet.has(day)) continue
+      if (leaveDateSet.has(day)) continue
+      if (Boolean(profile?.attendance_exempt) || exemptionDateSet.has(day)) continue
+
+      const row = recordByDate.get(day)
+
+      // Skip today if the employee is still clocked in (unfinished day).
+      if (day === todayIso && row?.clock_in && !row?.clock_out) continue
+
+      scorableDays++
+
+      if (!row) {
+        // No record for this workday — counts as absent (0 credit).
+        continue
+      }
+
+      const storedStatus = (row as { status?: string | null }).status
+      const status =
+        storedStatus === "lateness_with_permission" ||
+        storedStatus === "absent_with_permission" ||
+        storedStatus === "out_of_station"
+          ? storedStatus
+          : row.waived
+            ? "waiver"
+            : !row.clock_in && !row.clock_out
+              ? "absent"
+              : row.clock_in && row.clock_out
+                ? isLate(row.clock_in)
+                  ? "late"
+                  : "present"
+                : "incomplete"
       const baseCredit = ATTENDANCE_CREDIT[status] ?? 0
 
       let timelinessFactor = 1
@@ -346,22 +386,13 @@ export async function computeIndividualPerformanceScore(
         }
       }
 
+      if (status === "present") presentDays++
       creditSum += baseCredit * timelinessFactor
     }
-    attendanceBreakdown.present = scorableRecords.filter((row) => {
-      const status = row.waived
-        ? "waiver"
-        : !row.clock_in && !row.clock_out
-          ? "absent"
-          : row.clock_in && row.clock_out
-            ? isLate(row.clock_in)
-              ? "late"
-              : "present"
-            : "incomplete"
-      return status === "present"
-    }).length
-    attendanceBreakdown.total = scorableRecords.length
-    attendanceScore = scorableRecords.length > 0 ? roundScore((creditSum / scorableRecords.length) * 100) : null
+
+    attendanceBreakdown.present = presentDays
+    attendanceBreakdown.total = scorableDays
+    attendanceScore = scorableDays > 0 ? roundScore((creditSum / scorableDays) * 100) : null
     attendanceBreakdown.score = attendanceScore
     attendanceBreakdown.late_penalty_total_ngn = latePenaltyTotalNgn
     attendanceBreakdown.late_penalty_steps_total = latePenaltyStepsTotal

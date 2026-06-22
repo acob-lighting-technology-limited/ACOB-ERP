@@ -10,7 +10,18 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { AuditLogDetailPanel } from "@/components/audit/AuditLogDetailPanel"
 import { exportAuditLogsToExcel, exportAuditLogsToPDF, exportAuditLogsToWord } from "@/lib/audit/audit-log-export"
-import { HIDDEN_ACTIONS, VISIBLE_AUDIT_ACTIONS, getAuditLogSummary } from "@/lib/audit/audit-log-display"
+import {
+  HIDDEN_ACTIONS,
+  VISIBLE_AUDIT_ACTIONS,
+  getAuditLogSummary,
+  getAuditSource,
+  getDepartmentLocation,
+  getObjectIdentifier,
+  getPerformedBy,
+  getTargetDescription,
+  getAuditChangedFields,
+  getAuditChangedFieldsDisplay,
+} from "@/lib/audit/audit-log-display"
 import { getAuditActionColor } from "@/lib/audit/action-colors"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import type { AuditLog, EmployeeMember, UserProfile } from "./types"
@@ -63,8 +74,11 @@ export function AdminAuditLogsContent({
       // 2. Department scoping for leads
       if (userProfile?.managed_departments || userProfile?.lead_departments) {
         if (scopedDepartments.length > 0) {
-          const userDept = initialemployee.find((s) => s.id === l.user_id)?.department
-          if (!userDept || !scopedDepartments.includes(userDept)) return false
+          const auditDept = getDepartmentLocation(l)
+          const actorDept = l.user?.department || initialemployee.find((s) => s.id === l.user_id)?.department
+          const targetDept = l.target_user?.department
+          const candidates = [auditDept, actorDept, targetDept].filter(Boolean)
+          if (!candidates.some((dept) => scopedDepartments.includes(String(dept)))) return false
         }
       }
 
@@ -132,10 +146,10 @@ export function AdminAuditLogsContent({
       },
       {
         key: "user",
-        label: "User",
+        label: "Performed By",
         resizable: true,
         initialWidth: 200,
-        accessor: (r) => (r.user ? `${r.user.first_name} ${r.user.last_name}` : "System"),
+        accessor: (r) => getPerformedBy(r),
         render: (r) => (
           <div className="flex items-center gap-2">
             <div className="bg-muted flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold">
@@ -153,12 +167,21 @@ export function AdminAuditLogsContent({
         ),
       },
       {
-        key: "summary",
-        label: "Summary",
+        key: "target",
+        label: "Target",
         resizable: true,
-        initialWidth: 250,
-        accessor: (r) => getAuditLogSummary(r),
-        render: (r) => <span className="block max-w-[250px] truncate text-sm">{getAuditLogSummary(r)}</span>,
+        initialWidth: 190,
+        accessor: (r) => getTargetDescription(r),
+        render: (r) => <span className="block max-w-[190px] truncate text-sm">{getTargetDescription(r)}</span>,
+      },
+      {
+        key: "department",
+        label: "Department",
+        sortable: true,
+        resizable: true,
+        initialWidth: 170,
+        accessor: (r) => getDepartmentLocation(r),
+        render: (r) => <span className="block max-w-[170px] truncate text-sm">{getDepartmentLocation(r)}</span>,
       },
     ],
     []
@@ -185,8 +208,10 @@ export function AdminAuditLogsContent({
         mode: "custom",
         filterFn: (row, vals) => {
           if (vals.length === 0) return true
-          const userDept = initialemployee.find((e) => e.id === row.user_id)?.department
-          return !!userDept && vals.includes(userDept)
+          const actorDept = row.user?.department || initialemployee.find((e) => e.id === row.user_id)?.department
+          const targetDept = row.target_user?.department
+          const auditDept = getDepartmentLocation(row)
+          return [auditDept, actorDept, targetDept].some((dept) => !!dept && vals.includes(String(dept)))
         },
       },
     ],
@@ -247,8 +272,19 @@ export function AdminAuditLogsContent({
         searchPlaceholder="Search action, module, user or summary..."
         searchFn={(r, q) => {
           const summary = getAuditLogSummary(r)
-          const userName = r.user ? `${r.user.first_name} ${r.user.last_name}` : "System"
-          return `${r.action} ${r.entity_type} ${userName} ${summary}`.toLowerCase().includes(q)
+          return [
+            r.action,
+            r.entity_type,
+            getPerformedBy(r),
+            getTargetDescription(r),
+            getObjectIdentifier(r),
+            getDepartmentLocation(r),
+            getAuditSource(r),
+            summary,
+          ]
+            .join(" ")
+            .toLowerCase()
+            .includes(q)
         }}
         filters={filters}
         pagination={{ pageSize: 50 }}
@@ -270,10 +306,14 @@ export function AdminAuditLogsContent({
         expandable={{
           render: (r) => (
             <div className="bg-muted/20 space-y-6 border-t p-6">
+              <div className="space-y-2">
+                <h4 className="text-muted-foreground text-[10px] font-black tracking-widest uppercase">Log Summary</h4>
+                <p className="text-sm font-medium">{getAuditLogSummary(r)}</p>
+              </div>
               <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
                 <div className="space-y-2">
                   <h4 className="text-muted-foreground text-[10px] font-black tracking-widest uppercase">
-                    Entity Detail
+                    Entity & Object Details
                   </h4>
                   <div className="space-y-1 text-sm">
                     <p>
@@ -284,17 +324,33 @@ export function AdminAuditLogsContent({
                       <span className="text-muted-foreground mr-2 font-medium">ID:</span>{" "}
                       <span className="font-mono text-xs">{r.entity_id || "—"}</span>
                     </p>
+                    <p>
+                      <span className="text-muted-foreground mr-2 font-medium">Object:</span>{" "}
+                      <span>{getObjectIdentifier(r)}</span>
+                    </p>
                   </div>
                 </div>
                 <div className="space-y-2">
                   <h4 className="text-muted-foreground text-[10px] font-black tracking-widest uppercase">
-                    Change Metrics
+                    Origin & Source
+                  </h4>
+                  <div className="space-y-1 text-sm">
+                    <p>
+                      <span className="text-muted-foreground mr-2 font-medium">Source:</span>{" "}
+                      <span>{getAuditSource(r)}</span>
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <h4 className="text-muted-foreground text-[10px] font-black tracking-widest uppercase">
+                    Change Details
                   </h4>
                   <div className="space-y-1 text-sm">
                     <p>
                       <span className="text-muted-foreground mr-2 font-medium">Fields Changed:</span>{" "}
-                      <span>{r.changed_fields?.length || 0}</span>
+                      <span>{getAuditChangedFields(r).length}</span>
                     </p>
+                    <p className="text-muted-foreground text-xs">{getAuditChangedFieldsDisplay(r)}</p>
                   </div>
                 </div>
               </div>

@@ -4,6 +4,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { toLocalISODate, toLocalTimeString, toLocalYearMonth } from "@/lib/utils/date"
 import { distanceMetres } from "@/lib/hr/attendance-utils"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
@@ -200,6 +201,22 @@ export async function POST(request: NextRequest) {
       },
       { failOpen: true }
     )
+
+    await recordAttendanceEvent(dataClient, {
+      userId: user.id,
+      eventDate: today,
+      eventType: "remote_clock_out",
+      attendanceRecordId: record.id,
+      toStatus: status,
+      source: "remote_web",
+      actorId: user.id,
+      metadata: {
+        clock_out: clockOutTime,
+        total_hours,
+        location_verified: locationVerified,
+        face_verified: faceVerified,
+      },
+    })
 
     return NextResponse.json({
       data: updated,
