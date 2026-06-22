@@ -475,6 +475,11 @@ export default function AdminPmsCbtPage() {
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
+          <Link href="/admin/hr/pms/cbt/extra">
+            <Button variant="outline" size="sm">
+              Bonus Questions
+            </Button>
+          </Link>
           <Link href="/admin/hr/pms/cbt/question">
             <Button size="sm">Create Test</Button>
           </Link>

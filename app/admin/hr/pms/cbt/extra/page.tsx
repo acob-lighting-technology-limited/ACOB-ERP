@@ -46,24 +46,12 @@ type CbtQuestion = {
   explanation?: string | null
   is_active?: boolean
   created_at?: string
+  is_bonus?: boolean
+  targeted_emails?: string[] | null
 }
-
-const DEPARTMENTS = [
-  "Accounts",
-  "Admin & HR",
-  "Business, Growth and Innovation",
-  "Corporate Services",
-  "IT and Communications",
-  "Operations and Maintenance",
-  "Project",
-  "Regulatory and Compliance",
-  "Technical",
-  "Executive Management",
-] as const
 
 const INITIAL_FORM = {
   review_cycle_id: "",
-  department: "",
   prompt: "",
   option_a: "",
   option_b: "",
@@ -72,23 +60,12 @@ const INITIAL_FORM = {
   correct_option: "A" as "A" | "B" | "C" | "D",
   explanation: "",
   is_active: true,
+  targeted_emails: "",
 }
 
 function formatDate(date: string | undefined) {
   if (!date) return "-"
   return formatWATDate(date, { day: "2-digit", month: "short", year: "numeric" })
-}
-
-function getPreferredCycleId(cycles: ReviewCycle[], requestedCycleId: string | null) {
-  if (requestedCycleId && cycles.some((cycle) => cycle.id === requestedCycleId)) return requestedCycleId
-
-  const q1Cycle = cycles.find((cycle) => cycle.name.toLowerCase().includes("q1"))
-  if (q1Cycle) return q1Cycle.id
-
-  const activeCycle = cycles.find((cycle) => cycle.status === "active")
-  if (activeCycle) return activeCycle.id
-
-  return cycles[0]?.id || ""
 }
 
 function QuestionCard({
@@ -108,9 +85,9 @@ function QuestionCard({
     <div className="space-y-3 rounded-xl border p-4">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
-          <p className="font-semibold">{question.prompt}</p>
+          <p className="font-semibold text-white">{question.prompt}</p>
           <p className="text-muted-foreground text-xs">{cycleName}</p>
-          <p className="text-muted-foreground text-xs">Department: {question.department || "General"}</p>
+          <p className="text-muted-foreground text-xs">Targeted: {question.targeted_emails?.join(", ") || "None"}</p>
           <p className="text-muted-foreground text-xs">Correct answer: Option {question.correct_option}</p>
         </div>
         <Badge variant={question.is_active === false ? "secondary" : "default"}>
@@ -118,22 +95,22 @@ function QuestionCard({
         </Badge>
       </div>
 
-      <div className="grid gap-2 text-sm">
+      <div className="grid gap-2 text-sm text-slate-300">
         <p>
-          <span className="font-medium">A:</span> {question.option_a}
+          <span className="font-medium text-white">A:</span> {question.option_a}
         </p>
         <p>
-          <span className="font-medium">B:</span> {question.option_b}
+          <span className="font-medium text-white">B:</span> {question.option_b}
         </p>
         <p>
-          <span className="font-medium">C:</span> {question.option_c}
+          <span className="font-medium text-white">C:</span> {question.option_c}
         </p>
         <p>
-          <span className="font-medium">D:</span> {question.option_d}
+          <span className="font-medium text-white">D:</span> {question.option_d}
         </p>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2 pt-2">
         <Button size="sm" variant="outline" onClick={() => onEdit(question)}>
           <Pencil className="h-4 w-4" />
           Edit
@@ -152,10 +129,9 @@ function QuestionCard({
   )
 }
 
-export default function AdminPmsCbtQuestionPage() {
+export default function AdminPmsCbtExtraQuestionPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const requestedCycleId = searchParams.get("cycleId")
   const [cycles, setCycles] = useState<ReviewCycle[]>([])
   const [questions, setQuestions] = useState<CbtQuestion[]>([])
   const [isLoading, setIsLoading] = useState(true)
@@ -173,7 +149,7 @@ export default function AdminPmsCbtQuestionPage() {
     try {
       const [cyclesResponse, questionsResponse] = await Promise.all([
         fetch("/api/hr/performance/cycles", { cache: "no-store" }),
-        fetch("/api/hr/performance/cbt/questions", { cache: "no-store" }),
+        fetch("/api/hr/performance/cbt/questions?is_bonus=true", { cache: "no-store" }),
       ])
 
       const cyclesPayload = (await cyclesResponse.json().catch(() => null)) as {
@@ -211,7 +187,7 @@ export default function AdminPmsCbtQuestionPage() {
     if (cycles.length > 0 && !searchParams.get("review_cycle_id") && !searchParams.get("cycleId")) {
       const activeCycle = cycles.find((c) => c.status === "active")
       if (activeCycle) {
-        router.replace(`/admin/hr/pms/cbt/question?review_cycle_id=${encodeURIComponent(activeCycle.id)}`, {
+        router.replace(`/admin/hr/pms/cbt/extra?review_cycle_id=${encodeURIComponent(activeCycle.id)}`, {
           scroll: false,
         })
       }
@@ -258,12 +234,6 @@ export default function AdminPmsCbtQuestionPage() {
       filterFn: (row, values) => values.length === 0 || values.includes(row.review_cycle_id || ""),
     },
     {
-      key: "department",
-      label: "Department",
-      options: DEPARTMENTS.map((dept) => ({ value: dept, label: dept })),
-      placeholder: "All Departments",
-    },
-    {
       key: "correct_option",
       label: "Correct Answer",
       options: (["A", "B", "C", "D"] as const).map((value) => ({ value, label: `Option ${value}` })),
@@ -297,13 +267,19 @@ export default function AdminPmsCbtQuestionPage() {
       initialWidth: 320,
     },
     {
-      key: "department",
-      label: "Department",
+      key: "targeted_emails",
+      label: "Target Candidates",
       sortable: true,
-      accessor: (row) => row.department || "General",
-      render: (row) => <Badge variant="outline">{row.department || "General"}</Badge>,
+      accessor: (row) => row.targeted_emails?.join(", ") || "",
+      render: (row) => (
+        <span className="text-muted-foreground text-xs break-all">
+          {row.targeted_emails && row.targeted_emails.length > 0
+            ? row.targeted_emails.join(", ")
+            : "No candidates targeted"}
+        </span>
+      ),
       resizable: true,
-      initialWidth: 180,
+      initialWidth: 260,
     },
     {
       key: "review_cycle_id",
@@ -312,7 +288,7 @@ export default function AdminPmsCbtQuestionPage() {
       accessor: (row) => cycleNameById.get(row.review_cycle_id || "") || "Unassigned",
       render: (row) => cycleNameById.get(row.review_cycle_id || "") || "Unassigned",
       resizable: true,
-      initialWidth: 240,
+      initialWidth: 200,
       hideOnMobile: true,
     },
     {
@@ -370,7 +346,6 @@ export default function AdminPmsCbtQuestionPage() {
     setEditingQuestion(question)
     setForm({
       review_cycle_id: question.review_cycle_id || currentCycleId,
-      department: question.department || "",
       prompt: question.prompt,
       option_a: question.option_a,
       option_b: question.option_b,
@@ -379,6 +354,7 @@ export default function AdminPmsCbtQuestionPage() {
       correct_option: question.correct_option,
       explanation: question.explanation || "",
       is_active: question.is_active !== false,
+      targeted_emails: question.targeted_emails?.join(", ") || "",
     })
     setIsModalOpen(true)
   }
@@ -392,7 +368,30 @@ export default function AdminPmsCbtQuestionPage() {
         ? `/api/hr/performance/cbt/questions/${encodeURIComponent(editingQuestion.id)}`
         : "/api/hr/performance/cbt/questions"
       const method = editingQuestion ? "PATCH" : "POST"
-      const payload = editingQuestion ? form : form
+
+      const parsedEmails = form.targeted_emails
+        .split(",")
+        .map((email) => email.trim().toLowerCase())
+        .filter((email) => email.length > 0)
+
+      if (parsedEmails.length === 0) {
+        throw new Error("At least one target email is required for bonus questions.")
+      }
+
+      const payload = {
+        review_cycle_id: form.review_cycle_id,
+        department: "Bonus",
+        prompt: form.prompt,
+        option_a: form.option_a,
+        option_b: form.option_b,
+        option_c: form.option_c,
+        option_d: form.option_d,
+        correct_option: form.correct_option,
+        explanation: form.explanation || null,
+        is_active: form.is_active,
+        is_bonus: true,
+        targeted_emails: parsedEmails,
+      }
 
       const response = await fetch(endpoint, {
         method,
@@ -401,17 +400,17 @@ export default function AdminPmsCbtQuestionPage() {
       })
       const responsePayload = (await response.json().catch(() => null)) as { error?: string } | null
 
-      if (!response.ok) throw new Error(responsePayload?.error || "Failed to save question")
+      if (!response.ok) throw new Error(responsePayload?.error || "Failed to save bonus question")
 
-      toast.success(editingQuestion ? "Question updated" : "Question added")
-      router.replace(`/admin/hr/pms/cbt/question?review_cycle_id=${encodeURIComponent(form.review_cycle_id)}`, {
+      toast.success(editingQuestion ? "Bonus question updated" : "Bonus question added")
+      router.replace(`/admin/hr/pms/cbt/extra?review_cycle_id=${encodeURIComponent(form.review_cycle_id)}`, {
         scroll: false,
       })
       setIsModalOpen(false)
       resetForm(form.review_cycle_id)
       await loadPage()
     } catch (submitError) {
-      toast.error(submitError instanceof Error ? submitError.message : "Failed to save question")
+      toast.error(submitError instanceof Error ? submitError.message : "Failed to save bonus question")
     } finally {
       setSaving(false)
     }
@@ -439,22 +438,19 @@ export default function AdminPmsCbtQuestionPage() {
 
   return (
     <DataTablePage
-      title="CBT Question Bank"
-      description="Choose a PMS cycle, then add, edit, or delete CBT questions for that cycle. Q1 can stay editable while the team is still working there."
+      title="CBT Bonus Questions Manager"
+      description="Manage standalone, ungraded bonus/joke questions and specify which candidate emails can see them."
       icon={Brain}
-      backLink={{ href: "/admin/hr/pms/cbt", label: "Back to PMS CBT" }}
+      backLink={{ href: "/admin/hr/pms/cbt", label: "Back to PMS CBT Overview" }}
       actions={
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void loadPage()} disabled={isLoading}>
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/admin/hr/pms/cycles">Manage Cycles</Link>
-          </Button>
           <Button size="sm" onClick={openCreateModal}>
             <Plus className="h-4 w-4" />
-            Add Question
+            Add Bonus Question
           </Button>
         </div>
       }
@@ -468,7 +464,7 @@ export default function AdminPmsCbtQuestionPage() {
             iconColor="text-blue-500"
           />
           <StatCard
-            title="Questions"
+            title="Bonus Questions"
             value={filteredQuestions.length}
             icon={Brain}
             iconBgColor="bg-emerald-500/10"
@@ -493,21 +489,17 @@ export default function AdminPmsCbtQuestionPage() {
     >
       <DataTable<CbtQuestion>
         key={isLoading ? "loading" : "ready"}
-        data={questions}
+        data={filteredQuestions}
         columns={columns}
         filters={filters}
         getRowId={(question) => question.id}
         pagination={{ pageSize: 50 }}
-        searchPlaceholder="Search question text, options, explanation, or answer..."
+        searchPlaceholder="Search question text, candidate email, correct answer..."
         searchFn={(question, query) =>
           [
             cycleNameById.get(question.review_cycle_id || "") || "",
             question.prompt,
-            question.option_a,
-            question.option_b,
-            question.option_c,
-            question.option_d,
-            question.explanation || "",
+            question.targeted_emails?.join(" ") || "",
             question.correct_option,
           ]
             .join(" ")
@@ -523,33 +515,36 @@ export default function AdminPmsCbtQuestionPage() {
             <div className="grid gap-4 text-sm md:grid-cols-2">
               <div className="space-y-2">
                 <p>
-                  <span className="font-medium">Cycle:</span> {cycleNameById.get(question.review_cycle_id || "") || "-"}
+                  <span className="font-medium text-white">Cycle:</span>{" "}
+                  {cycleNameById.get(question.review_cycle_id || "") || "-"}
                 </p>
                 <p>
-                  <span className="font-medium">Department:</span> {question.department || "-"}
+                  <span className="font-medium text-white">Target Candidates:</span>{" "}
+                  {question.targeted_emails?.join(", ") || "-"}
                 </p>
                 <p>
-                  <span className="font-medium">Option A:</span> {question.option_a}
+                  <span className="font-medium text-white">Option A:</span> {question.option_a}
                 </p>
                 <p>
-                  <span className="font-medium">Option B:</span> {question.option_b}
+                  <span className="font-medium text-white">Option B:</span> {question.option_b}
                 </p>
                 <p>
-                  <span className="font-medium">Option C:</span> {question.option_c}
+                  <span className="font-medium text-white">Option C:</span> {question.option_c}
                 </p>
                 <p>
-                  <span className="font-medium">Option D:</span> {question.option_d}
+                  <span className="font-medium text-white">Option D:</span> {question.option_d}
                 </p>
               </div>
               <div className="space-y-2">
                 <p>
-                  <span className="font-medium">Correct Answer:</span> Option {question.correct_option}
+                  <span className="font-medium text-white">Correct Answer:</span> Option {question.correct_option}
                 </p>
                 <p>
-                  <span className="font-medium">Status:</span> {question.is_active === false ? "Inactive" : "Active"}
+                  <span className="font-medium text-white">Status:</span>{" "}
+                  {question.is_active === false ? "Inactive" : "Active"}
                 </p>
                 <p>
-                  <span className="font-medium">Explanation:</span> {question.explanation || "-"}
+                  <span className="font-medium text-white">Explanation:</span> {question.explanation || "-"}
                 </p>
               </div>
             </div>
@@ -567,8 +562,8 @@ export default function AdminPmsCbtQuestionPage() {
             deletingId={deletingId}
           />
         )}
-        emptyTitle="No CBT questions in this cycle"
-        emptyDescription="Choose a cycle and add questions to start building its CBT test."
+        emptyTitle="No CBT bonus questions in this cycle"
+        emptyDescription="Choose a cycle and add targeted bonus questions for candidates."
         emptyIcon={Brain}
         skeletonRows={6}
         urlSync
@@ -581,28 +576,30 @@ export default function AdminPmsCbtQuestionPage() {
           if (!open) resetForm()
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl border-white/10 bg-neutral-950 text-white">
           <DialogHeader>
-            <DialogTitle>{editingQuestion ? "Edit CBT Question" : "Add CBT Question"}</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-xl text-white">
+              {editingQuestion ? "Edit CBT Bonus Question" : "Add CBT Bonus Question"}
+            </DialogTitle>
+            <DialogDescription className="text-slate-400">
               {editingQuestion
-                ? "Update the selected CBT question and keep it under the right cycle."
-                : "Add a new CBT question and choose the PMS cycle it belongs to."}
+                ? "Update the selected CBT bonus question and manage targeted candidates."
+                : "Add a new CBT bonus question and choose targeted candidates."}
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Cycle</Label>
+                <Label className="text-white">Cycle</Label>
                 <Select
                   value={form.review_cycle_id}
                   onValueChange={(value) => setForm((current) => ({ ...current, review_cycle_id: value }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="border-white/10 bg-neutral-900 text-white">
                     <SelectValue placeholder="Select cycle" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="border-white/10 bg-neutral-900 text-white">
                     {cycles.map((cycle) => (
                       <SelectItem key={cycle.id} value={cycle.id}>
                         {cycle.name}
@@ -613,70 +610,80 @@ export default function AdminPmsCbtQuestionPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Department</Label>
-                <Select
-                  value={form.department}
-                  onValueChange={(value) => setForm((current) => ({ ...current, department: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DEPARTMENTS.map((dept) => (
-                      <SelectItem key={dept} value={dept}>
-                        {dept}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label htmlFor="targeted_emails" className="text-white">
+                  Target Candidate Emails
+                </Label>
+                <Input
+                  id="targeted_emails"
+                  placeholder="candidate1@example.com, candidate2@example.com"
+                  value={form.targeted_emails}
+                  onChange={(event) => setForm((current) => ({ ...current, targeted_emails: event.target.value }))}
+                  className="border-white/10 bg-neutral-900 text-white"
+                  required
+                />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="prompt">Question</Label>
+              <Label htmlFor="prompt" className="text-white">
+                Question
+              </Label>
               <Textarea
                 id="prompt"
-                rows={4}
+                rows={3}
                 value={form.prompt}
                 onChange={(event) => setForm((current) => ({ ...current, prompt: event.target.value }))}
+                className="border-white/10 bg-neutral-900 text-white"
                 required
               />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label htmlFor="option_a">Option A</Label>
+                <Label htmlFor="option_a" className="text-white">
+                  Option A
+                </Label>
                 <Input
                   id="option_a"
                   value={form.option_a}
                   onChange={(event) => setForm((current) => ({ ...current, option_a: event.target.value }))}
+                  className="border-white/10 bg-neutral-900 text-white"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="option_b">Option B</Label>
+                <Label htmlFor="option_b" className="text-white">
+                  Option B
+                </Label>
                 <Input
                   id="option_b"
                   value={form.option_b}
                   onChange={(event) => setForm((current) => ({ ...current, option_b: event.target.value }))}
+                  className="border-white/10 bg-neutral-900 text-white"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="option_c">Option C</Label>
+                <Label htmlFor="option_c" className="text-white">
+                  Option C
+                </Label>
                 <Input
                   id="option_c"
                   value={form.option_c}
                   onChange={(event) => setForm((current) => ({ ...current, option_c: event.target.value }))}
+                  className="border-white/10 bg-neutral-900 text-white"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="option_d">Option D</Label>
+                <Label htmlFor="option_d" className="text-white">
+                  Option D
+                </Label>
                 <Input
                   id="option_d"
                   value={form.option_d}
                   onChange={(event) => setForm((current) => ({ ...current, option_d: event.target.value }))}
+                  className="border-white/10 bg-neutral-900 text-white"
                   required
                 />
               </div>
@@ -684,17 +691,17 @@ export default function AdminPmsCbtQuestionPage() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2">
-                <Label>Correct Answer</Label>
+                <Label className="text-white">Correct Answer</Label>
                 <Select
                   value={form.correct_option}
                   onValueChange={(value: "A" | "B" | "C" | "D") =>
                     setForm((current) => ({ ...current, correct_option: value }))
                   }
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="border-white/10 bg-neutral-900 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="border-white/10 bg-neutral-900 text-white">
                     <SelectItem value="A">Option A</SelectItem>
                     <SelectItem value="B">Option B</SelectItem>
                     <SelectItem value="C">Option C</SelectItem>
@@ -704,15 +711,15 @@ export default function AdminPmsCbtQuestionPage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Status</Label>
+                <Label className="text-white">Status</Label>
                 <Select
                   value={form.is_active ? "active" : "inactive"}
                   onValueChange={(value) => setForm((current) => ({ ...current, is_active: value === "active" }))}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger className="border-white/10 bg-neutral-900 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="border-white/10 bg-neutral-900 text-white">
                     <SelectItem value="active">Active</SelectItem>
                     <SelectItem value="inactive">Inactive</SelectItem>
                   </SelectContent>
@@ -721,12 +728,15 @@ export default function AdminPmsCbtQuestionPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="explanation">Explanation</Label>
+              <Label htmlFor="explanation" className="text-white">
+                Explanation
+              </Label>
               <Textarea
                 id="explanation"
-                rows={3}
+                rows={2}
                 value={form.explanation}
                 onChange={(event) => setForm((current) => ({ ...current, explanation: event.target.value }))}
+                className="border-white/10 bg-neutral-900 text-white"
               />
             </div>
 
@@ -739,10 +749,16 @@ export default function AdminPmsCbtQuestionPage() {
                   resetForm()
                 }}
                 disabled={saving}
+                className="border-white/10 bg-neutral-900 text-white hover:bg-neutral-800 hover:text-white"
               >
                 Cancel
               </Button>
-              <Button type="submit" loading={saving} disabled={!form.review_cycle_id || !form.department}>
+              <Button
+                type="submit"
+                loading={saving}
+                disabled={!form.review_cycle_id || !form.targeted_emails}
+                className="bg-white text-black hover:bg-slate-200 hover:text-black"
+              >
                 {editingQuestion ? "Save Changes" : "Add Question"}
               </Button>
             </DialogFooter>

@@ -1,8 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { createClient } from "@/lib/supabase/client"
+import { logger } from "@/lib/logger"
 import { CheckCircle2, XCircle, AlertCircle, Loader2, Info } from "lucide-react"
+
+const log = logger("cbt-attempt-detail")
 import { Badge } from "@/components/ui/badge"
 import { formatWATDateTime } from "@/lib/utils/date"
 
@@ -45,20 +47,13 @@ export function CbtAttemptDetail({ profileId, reviewCycleId }: CbtAttemptDetailP
       setIsLoading(true)
       setError(null)
       try {
-        const supabase = createClient()
+        const params = new URLSearchParams({ profile_id: profileId, review_cycle_id: reviewCycleId })
+        const res = await fetch(`/api/admin/hr/performance/cbt/attempts/detail?${params}`, { cache: "no-store" })
+        const payload = await res.json().catch(() => null)
+        if (!res.ok) throw new Error(payload?.error || "Failed to load CBT details")
 
-        // 1. Fetch attempt
-        const { data: attemptData, error: attemptErr } = await supabase
-          .from("cbt_attempts")
-          .select("id, question_ids, answers, score, correct_answers, total_questions, submitted_at")
-          .eq("profile_id", profileId)
-          .eq("review_cycle_id", reviewCycleId)
-          .eq("status", "submitted")
-          .order("submitted_at", { ascending: false })
-          .limit(1)
-          .maybeSingle()
+        const { attempt: attemptData, questions: rawQuestions } = payload?.data ?? {}
 
-        if (attemptErr) throw attemptErr
         if (!attemptData) {
           if (isMounted) {
             setAttempt(null)
@@ -67,36 +62,17 @@ export function CbtAttemptDetail({ profileId, reviewCycleId }: CbtAttemptDetailP
           return
         }
 
-        const typedAttempt = attemptData as unknown as Attempt
+        const typedAttempt = attemptData as Attempt
+        const orderedQuestions = (typedAttempt.question_ids || [])
+          .map((qId: string) => (rawQuestions as Question[]).find((q) => q.id === qId))
+          .filter((q): q is Question => !!q)
 
-        // 2. Fetch questions
-        if (typedAttempt.question_ids && typedAttempt.question_ids.length > 0) {
-          const { data: questionsData, error: questionsErr } = await supabase
-            .from("cbt_questions")
-            .select("id, prompt, option_a, option_b, option_c, option_d, correct_option, explanation")
-            .in("id", typedAttempt.question_ids)
-
-          if (questionsErr) throw questionsErr
-
-          const rawQuestions = (questionsData || []) as unknown as Question[]
-
-          // Order questions according to attempt.question_ids
-          const orderedQuestions = typedAttempt.question_ids
-            .map((qId) => rawQuestions.find((q) => q.id === qId))
-            .filter((q): q is Question => !!q)
-
-          if (isMounted) {
-            setAttempt(typedAttempt)
-            setQuestions(orderedQuestions)
-          }
-        } else {
-          if (isMounted) {
-            setAttempt(typedAttempt)
-            setQuestions([])
-          }
+        if (isMounted) {
+          setAttempt(typedAttempt)
+          setQuestions(orderedQuestions)
         }
       } catch (err) {
-        console.error("Error loading CBT attempt details:", err)
+        log.error({ err: String(err) }, "Failed to load CBT attempt details")
         if (isMounted) {
           setError(err instanceof Error ? err.message : "Failed to load CBT details")
         }
@@ -152,6 +128,7 @@ export function CbtAttemptDetail({ profileId, reviewCycleId }: CbtAttemptDetailP
             </p>
           )}
         </div>
+
         <div className="flex items-center gap-3">
           <div className="text-right">
             <span className="text-muted-foreground block text-xs">Score</span>

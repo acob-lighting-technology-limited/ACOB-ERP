@@ -22,9 +22,11 @@ const SubmitSchema = z.object({
 
 type ProfileRow = {
   id: string
+  first_name: string | null
   last_name: string | null
   company_email: string | null
   birthday: string | null
+  department: string | null
 }
 
 type QuestionRow = {
@@ -36,6 +38,8 @@ type QuestionRow = {
   option_c: string
   option_d: string
   correct_option: "A" | "B" | "C" | "D"
+  department?: string | null
+  is_bonus?: boolean
 }
 
 type AttemptRow = {
@@ -64,13 +68,19 @@ function getServiceClient() {
   })
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-cbt-session-get:${getClientId(request)}`, { limit: 30, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
   try {
     const supabase = getServiceClient()
     const [{ data: profiles, error: profilesError }, { data: cycles, error: cyclesError }] = await Promise.all([
       supabase
         .from("profiles")
-        .select("last_name, company_email, birthday")
+        .select("company_email")
         .not("company_email", "is", null)
         .eq("employment_status", "active")
         .order("company_email", { ascending: true }),
@@ -87,9 +97,7 @@ export async function GET() {
     return NextResponse.json({
       data: {
         candidates: (profiles || []).map((profile) => ({
-          last_name: profile.last_name,
           company_email: profile.company_email,
-          birthday: profile.birthday,
         })),
         cycles: (cycles || []).map((cycle) => ({
           id: cycle.id,
@@ -119,9 +127,20 @@ export async function POST(request: NextRequest) {
     const supabase = getServiceClient()
     const { last_name, company_email, review_cycle_id, dob_day, dob_month, dob_year } = parsed.data
 
+    const { data: cycle, error: cycleError } = await supabase
+      .from("review_cycles")
+      .select("id, status")
+      .eq("id", review_cycle_id)
+      .maybeSingle<CycleRow & { status: string }>()
+
+    if (cycleError) throw cycleError
+    if (!cycle || cycle.status !== "active") {
+      return NextResponse.json({ error: "The selected review cycle is not currently active." }, { status: 400 })
+    }
+
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
-      .select("id, last_name, company_email, birthday")
+      .select("id, first_name, last_name, company_email, birthday, department")
       .eq("company_email", company_email)
       .maybeSingle<ProfileRow>()
 
@@ -156,58 +175,215 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "The date of birth entered does not match our records." }, { status: 400 })
     }
 
-    const { data: questions, error: questionsError } = await supabase
-      .from("cbt_questions")
-      .select("id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, correct_option")
-      .eq("review_cycle_id", review_cycle_id)
-      .eq("is_active", true)
-      .order("created_at", { ascending: true })
-      .limit(10)
-      .returns<QuestionRow[]>()
-
-    if (questionsError) throw questionsError
-    if (!questions || questions.length === 0) {
-      return NextResponse.json({ error: "No CBT questions are available yet for this review cycle." }, { status: 400 })
-    }
-
-    const cbt_details = {
-      last_name: last_name.trim(),
-      company_email,
-      dob_day: dayNum,
-      dob_month: monthNum,
-      dob_year: Number(dob_year),
-    }
-
-    const { data: attempt, error: attemptError } = await supabase
+    // 0. Check for existing submitted attempt
+    const { data: submittedAttempt, error: submittedError } = await supabase
       .from("cbt_attempts")
-      .insert({
-        profile_id: profile.id,
-        review_cycle_id,
-        employee_number: "-",
-        first_name_snapshot: profile.last_name || last_name,
-        company_email,
-        total_questions: questions.length,
-        question_ids: questions.map((question) => question.id),
-        cbt_details,
-      })
-      .select("id")
-      .single<{ id: string }>()
+      .select("id, question_ids")
+      .eq("profile_id", profile.id)
+      .eq("review_cycle_id", review_cycle_id)
+      .eq("status", "submitted")
+      .limit(1)
+      .maybeSingle<{ id: string; question_ids: string[] }>()
 
-    if (attemptError || !attempt) {
-      return NextResponse.json({ error: attemptError?.message || "Failed to start CBT session" }, { status: 500 })
+    if (submittedError) throw submittedError
+    if (submittedAttempt) {
+      const { data: questionsData, error: questionsError } = await supabase
+        .from("cbt_questions")
+        .select("id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, correct_option, department")
+        .in("id", submittedAttempt.question_ids || [])
+        .returns<QuestionRow[]>()
+
+      if (questionsError) throw questionsError
+
+      return NextResponse.json({
+        data: {
+          attempt_id: submittedAttempt.id,
+          is_resume: false,
+          is_completed: true,
+          candidate: {
+            first_name: profile.first_name || profile.last_name || "",
+            last_name: profile.last_name || "",
+            full_name: [profile.first_name, profile.last_name].filter(Boolean).join(" ") || profile.last_name || "",
+            department: profile.department || "",
+            company_email: profile.company_email,
+            employee_number: "-",
+          },
+          questions: (questionsData || []).map((question) => ({
+            id: question.id,
+            prompt: question.prompt,
+            department: question.department || "",
+            options: {
+              A: question.option_a,
+              B: question.option_b,
+              C: question.option_c,
+              D: question.option_d,
+            },
+          })),
+        },
+      })
+    }
+
+    // 1. Check for existing in_progress attempt
+    const { data: existingAttempt, error: existingAttemptError } = await supabase
+      .from("cbt_attempts")
+      .select("id, question_ids")
+      .eq("profile_id", profile.id)
+      .eq("review_cycle_id", review_cycle_id)
+      .eq("status", "in_progress")
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ id: string; question_ids: string[] }>()
+
+    if (existingAttemptError) throw existingAttemptError
+
+    let sessionAttemptId = ""
+    let sessionQuestions: QuestionRow[] = []
+    let isResume = false
+
+    if (existingAttempt) {
+      isResume = true
+      sessionAttemptId = existingAttempt.id
+      const { data: questionsData, error: questionsError } = await supabase
+        .from("cbt_questions")
+        .select(
+          "id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, correct_option, department, is_bonus"
+        )
+        .in("id", existingAttempt.question_ids)
+        .returns<QuestionRow[]>()
+
+      if (questionsError) throw questionsError
+      if (!questionsData || questionsData.length === 0) {
+        return NextResponse.json(
+          { error: "Failed to load assigned questions for your existing session." },
+          { status: 500 }
+        )
+      }
+
+      const questionMap = new Map(questionsData.map((q) => [q.id, q]))
+      sessionQuestions = existingAttempt.question_ids
+        .map((qId) => questionMap.get(qId))
+        .filter((q): q is QuestionRow => !!q)
+    } else {
+      // 2. Fetch all active standard questions for the review cycle
+      const { data: allQuestions, error: questionsError } = await supabase
+        .from("cbt_questions")
+        .select(
+          "id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, correct_option, department, is_bonus"
+        )
+        .eq("review_cycle_id", review_cycle_id)
+        .eq("is_active", true)
+        .eq("is_bonus", false)
+        .returns<QuestionRow[]>()
+
+      if (questionsError) throw questionsError
+      if (!allQuestions || allQuestions.length === 0) {
+        return NextResponse.json(
+          { error: "No CBT questions are available yet for this review cycle." },
+          { status: 400 }
+        )
+      }
+
+      // Query active bonus questions matching candidate's email
+      const { data: bonusQuestions, error: bonusError } = await supabase
+        .from("cbt_questions")
+        .select(
+          "id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, correct_option, department, is_bonus"
+        )
+        .eq("review_cycle_id", review_cycle_id)
+        .eq("is_active", true)
+        .eq("is_bonus", true)
+        .contains("targeted_emails", [company_email])
+        .returns<QuestionRow[]>()
+
+      if (bonusError) throw bonusError
+
+      // 3. Select 1 random question per department (up to 10), and pad to exactly 10 if fewer than 10 departments
+      if (allQuestions.length <= 10) {
+        sessionQuestions = [...allQuestions].sort(() => 0.5 - Math.random())
+      } else {
+        const deptMap = new Map<string, QuestionRow[]>()
+        for (const q of allQuestions) {
+          const dept = q.department || ""
+          if (!deptMap.has(dept)) {
+            deptMap.set(dept, [])
+          }
+          deptMap.get(dept)!.push(q)
+        }
+
+        const departments = Array.from(deptMap.keys()).sort(() => 0.5 - Math.random())
+        const selectedDepts = departments.slice(0, 10)
+        const chosenQuestions: QuestionRow[] = []
+
+        for (const dept of selectedDepts) {
+          const questionsInDept = deptMap.get(dept) || []
+          if (questionsInDept.length > 0) {
+            const randomQ = questionsInDept[Math.floor(Math.random() * questionsInDept.length)]
+            chosenQuestions.push(randomQ)
+          }
+        }
+
+        if (chosenQuestions.length < 10) {
+          const remainingPool = allQuestions.filter((q) => !chosenQuestions.some((cq) => cq.id === q.id))
+          const needed = 10 - chosenQuestions.length
+          const padding = [...remainingPool].sort(() => 0.5 - Math.random()).slice(0, needed)
+          chosenQuestions.push(...padding)
+        }
+
+        sessionQuestions = chosenQuestions.slice(0, 10)
+      }
+
+      // 4. Append targeted bonus questions if any exist
+      if (bonusQuestions && bonusQuestions.length > 0) {
+        sessionQuestions = [...sessionQuestions, ...bonusQuestions]
+      }
+
+      const cbt_details = {
+        last_name: last_name.trim(),
+        company_email,
+        dob_day: dayNum,
+        dob_month: monthNum,
+        dob_year: Number(dob_year),
+      }
+
+      const { data: newAttempt, error: attemptError } = await supabase
+        .from("cbt_attempts")
+        .insert({
+          profile_id: profile.id,
+          review_cycle_id,
+          employee_number: "-",
+          first_name_snapshot: profile.first_name || profile.last_name || last_name,
+          company_email,
+          total_questions: sessionQuestions.length,
+          question_ids: sessionQuestions.map((q) => q.id),
+          cbt_details,
+        })
+        .select("id")
+        .single<{ id: string }>()
+
+      if (attemptError || !newAttempt) {
+        return NextResponse.json({ error: attemptError?.message || "Failed to start CBT session" }, { status: 500 })
+      }
+
+      sessionAttemptId = newAttempt.id
     }
 
     return NextResponse.json({
       data: {
-        attempt_id: attempt.id,
+        attempt_id: sessionAttemptId,
+        is_resume: isResume,
         candidate: {
-          first_name: profile.last_name,
+          first_name: profile.first_name || profile.last_name || "",
+          last_name: profile.last_name || "",
+          full_name: [profile.first_name, profile.last_name].filter(Boolean).join(" ") || profile.last_name || "",
+          department: profile.department || "",
           company_email: profile.company_email,
           employee_number: "-",
         },
-        questions: questions.map((question) => ({
+        questions: sessionQuestions.map((question) => ({
           id: question.id,
           prompt: question.prompt,
+          department: question.department || "",
+          is_bonus: question.is_bonus || false,
           options: {
             A: question.option_a,
             B: question.option_b,
@@ -252,15 +428,18 @@ export async function PATCH(request: NextRequest) {
 
     const { data: questions, error: questionsError } = await supabase
       .from("cbt_questions")
-      .select("id, correct_option")
+      .select("id, correct_option, is_bonus")
       .in("id", attempt.question_ids)
-      .returns<Array<Pick<QuestionRow, "id" | "correct_option">>>()
+      .returns<Array<Pick<QuestionRow, "id" | "correct_option" | "is_bonus">>>()
 
     if (questionsError) throw questionsError
 
     const questionMap = new Map((questions || []).map((question) => [question.id, question.correct_option]))
-    const totalQuestions = attempt.question_ids.length
-    const correctAnswers = attempt.question_ids.reduce((count, questionId) => {
+    const gradedQuestions = (questions || []).filter((q) => !q.is_bonus)
+    const gradedQuestionIds = gradedQuestions.map((q) => q.id)
+
+    const totalQuestions = gradedQuestionIds.length
+    const correctAnswers = gradedQuestionIds.reduce((count, questionId) => {
       return count + (answers[questionId] && answers[questionId] === questionMap.get(questionId) ? 1 : 0)
     }, 0)
     const score = totalQuestions === 0 ? 0 : Math.round((correctAnswers / totalQuestions) * 10000) / 100

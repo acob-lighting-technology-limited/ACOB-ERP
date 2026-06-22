@@ -13,7 +13,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -524,14 +523,14 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              disabled={isSubmitting}
-              onClick={() => {
-                if (statusTarget) void handleStatusChange(statusTarget.cycle, statusTarget.newStatus)
+            <Button
+              loading={isSubmitting}
+              onClick={async () => {
+                if (statusTarget) await handleStatusChange(statusTarget.cycle, statusTarget.newStatus)
               }}
             >
-              {isSubmitting ? "Updating..." : "Confirm"}
-            </AlertDialogAction>
+              Confirm
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -547,15 +546,15 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isSubmitting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              disabled={isSubmitting}
-              onClick={() => {
-                if (deleteTarget) void handleDelete(deleteTarget)
+            <Button
+              variant="destructive"
+              loading={isSubmitting}
+              onClick={async () => {
+                if (deleteTarget) await handleDelete(deleteTarget)
               }}
             >
-              {isSubmitting ? "Deleting..." : "Delete"}
-            </AlertDialogAction>
+              Delete
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

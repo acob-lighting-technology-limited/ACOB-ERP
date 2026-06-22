@@ -10,6 +10,7 @@ import { getClientId, rateLimit } from "@/lib/rate-limit"
 const log = logger("hr-performance-cbt-question-detail")
 
 const UpdateSchema = z.object({
+  department: z.string().trim().min(1).optional(),
   prompt: z.string().trim().min(1).optional(),
   option_a: z.string().trim().min(1).optional(),
   option_b: z.string().trim().min(1).optional(),
@@ -18,6 +19,8 @@ const UpdateSchema = z.object({
   correct_option: z.enum(["A", "B", "C", "D"]).optional(),
   explanation: z.string().trim().optional().nullable(),
   is_active: z.boolean().optional(),
+  is_bonus: z.boolean().optional(),
+  targeted_emails: z.array(z.string()).optional(),
 })
 
 async function getAuthorizedContext() {
@@ -63,7 +66,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       .update(parsed.data)
       .eq("id", params.id)
       .select(
-        "id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, correct_option, explanation, is_active, created_at"
+        "id, review_cycle_id, department, prompt, option_a, option_b, option_c, option_d, correct_option, explanation, is_active, created_at, is_bonus, targeted_emails"
       )
       .single()
 

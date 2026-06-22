@@ -11,6 +11,7 @@ const log = logger("hr-performance-cbt-questions")
 
 const QuestionSchema = z.object({
   review_cycle_id: z.string().uuid("Review cycle is required"),
+  department: z.string().trim().min(1, "Department is required"),
   prompt: z.string().trim().min(1, "Question is required"),
   option_a: z.string().trim().min(1, "Option A is required"),
   option_b: z.string().trim().min(1, "Option B is required"),
@@ -19,6 +20,8 @@ const QuestionSchema = z.object({
   correct_option: z.enum(["A", "B", "C", "D"]),
   explanation: z.string().trim().optional().nullable(),
   is_active: z.boolean().optional().default(true),
+  is_bonus: z.boolean().optional().default(false),
+  targeted_emails: z.array(z.string()).optional().default([]),
 })
 
 type CbtQuestionRow = {
@@ -33,6 +36,9 @@ type CbtQuestionRow = {
   is_active: boolean
   created_at: string
   review_cycle_id?: string | null
+  department?: string | null
+  is_bonus?: boolean
+  targeted_emails?: string[] | null
 }
 
 async function getAuthorizedProfile() {
@@ -62,11 +68,15 @@ export async function GET(request: NextRequest) {
     }
 
     const cycleId = request.nextUrl.searchParams.get("cycle_id")
+    const isBonusParam = request.nextUrl.searchParams.get("is_bonus")
+    const fetchBonus = isBonusParam === "true"
+
     let query = dataClient
       .from("cbt_questions")
       .select(
-        "id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, correct_option, explanation, is_active, created_at"
+        "id, review_cycle_id, department, prompt, option_a, option_b, option_c, option_d, correct_option, explanation, is_active, created_at, is_bonus, targeted_emails"
       )
+      .eq("is_bonus", fetchBonus)
       .order("created_at", { ascending: false })
 
     if (cycleId) {
@@ -118,7 +128,7 @@ export async function POST(request: NextRequest) {
         created_by: user.id,
       })
       .select(
-        "id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, correct_option, explanation, is_active, created_at"
+        "id, review_cycle_id, department, prompt, option_a, option_b, option_c, option_d, correct_option, explanation, is_active, created_at, is_bonus, targeted_emails"
       )
       .single<CbtQuestionRow>()
 

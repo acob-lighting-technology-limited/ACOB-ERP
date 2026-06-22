@@ -101,19 +101,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
     }
 
-    // Prevent overlapping active cycles
+    // Automatically close other active cycles if the new one is active
     if (parsed.data.status === "active") {
-      const { data: existingActive } = await adminSupabase
+      const { error: deactivateError } = await adminSupabase
         .from("review_cycles")
-        .select("id, name")
+        .update({ status: "closed", updated_at: new Date().toISOString() })
         .eq("status", "active")
-        .limit(1)
-        .maybeSingle()
-      if (existingActive) {
-        return NextResponse.json(
-          { error: `There is already an active cycle: "${existingActive.name}". Close it before activating another.` },
-          { status: 400 }
-        )
+      if (deactivateError) {
+        log.error({ err: String(deactivateError) }, "Error deactivating existing active cycles during POST")
+        return NextResponse.json({ error: "Failed to deactivate existing active cycles" }, { status: 500 })
       }
     }
 
@@ -196,20 +192,16 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Locked cycles cannot be modified" }, { status: 400 })
     }
 
-    // Prevent two active cycles
+    // Automatically close other active cycles if this one is being activated
     if (updates.status === "active") {
-      const { data: existingActive } = await adminSupabase
+      const { error: deactivateError } = await adminSupabase
         .from("review_cycles")
-        .select("id, name")
+        .update({ status: "closed", updated_at: new Date().toISOString() })
         .eq("status", "active")
         .neq("id", id)
-        .limit(1)
-        .maybeSingle()
-      if (existingActive) {
-        return NextResponse.json(
-          { error: `"${existingActive.name}" is already active. Close it first.` },
-          { status: 400 }
-        )
+      if (deactivateError) {
+        log.error({ err: String(deactivateError) }, "Error deactivating existing active cycles during PATCH")
+        return NextResponse.json({ error: "Failed to deactivate existing active cycles" }, { status: 500 })
       }
     }
 
