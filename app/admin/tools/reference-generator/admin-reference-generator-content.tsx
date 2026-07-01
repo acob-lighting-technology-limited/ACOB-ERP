@@ -253,6 +253,12 @@ export function AdminReferenceGeneratorContent({
         if (!["approved", "sent", "filed"].includes(r.status) || !r.reference_number) {
           return "-";
         }
+
+        const copyToClipboard = (text: string) => {
+          navigator.clipboard.writeText(text);
+          toast.success(`Copied: ${text}`);
+        };
+
         if (r.letter_type === "external" && r.simulated_sequence) {
           const lastSlashIndex = r.reference_number.lastIndexOf("/")
           if (lastSlashIndex !== -1) {
@@ -262,8 +268,21 @@ export function AdminReferenceGeneratorContent({
             if (simulatedRef !== r.reference_number) {
               return (
                 <span className="font-medium flex flex-wrap items-center gap-x-1">
-                  <span>{r.reference_number}</span>
-                  <span className="text-xs text-muted-foreground font-normal">
+                  <span
+                    className="cursor-pointer hover:underline"
+                    onClick={() => copyToClipboard(r.reference_number!)}
+                    title="Click to copy original reference"
+                  >
+                    {r.reference_number}
+                  </span>
+                  <span
+                    className="text-xs text-muted-foreground font-normal cursor-pointer hover:underline"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      copyToClipboard(simulatedRef);
+                    }}
+                    title="Click to copy simulated reference"
+                  >
                     ({simulatedRef})
                   </span>
                 </span>
@@ -271,7 +290,15 @@ export function AdminReferenceGeneratorContent({
             }
           }
         }
-        return <span className="font-medium">{r.reference_number}</span>
+        return (
+          <span
+            className="font-medium cursor-pointer hover:underline"
+            onClick={() => copyToClipboard(r.reference_number!)}
+            title="Click to copy reference"
+          >
+            {r.reference_number}
+          </span>
+        )
       },
     },
     {
