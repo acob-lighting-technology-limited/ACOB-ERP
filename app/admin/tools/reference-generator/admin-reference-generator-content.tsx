@@ -249,11 +249,30 @@ export function AdminReferenceGeneratorContent({
       resizable: true,
       initialWidth: 220,
       accessor: (r) => r.reference_number,
-      render: (r) => (
-        <span className="font-medium">
-          {["approved", "sent", "filed"].includes(r.status) ? r.reference_number || "-" : "-"}
-        </span>
-      ),
+      render: (r) => {
+        if (!["approved", "sent", "filed"].includes(r.status) || !r.reference_number) {
+          return "-";
+        }
+        if (r.letter_type === "external" && r.simulated_sequence) {
+          const lastSlashIndex = r.reference_number.lastIndexOf("/")
+          if (lastSlashIndex !== -1) {
+            const prefix = r.reference_number.substring(0, lastSlashIndex + 1)
+            const seqStr = String(r.simulated_sequence).padStart(3, "0")
+            const simulatedRef = `${prefix}${seqStr}`
+            if (simulatedRef !== r.reference_number) {
+              return (
+                <span className="font-medium flex flex-wrap items-center gap-x-1">
+                  <span>{r.reference_number}</span>
+                  <span className="text-xs text-muted-foreground font-normal">
+                    ({simulatedRef})
+                  </span>
+                </span>
+              )
+            }
+          }
+        }
+        return <span className="font-medium">{r.reference_number}</span>
+      },
     },
     {
       key: "letter_type",

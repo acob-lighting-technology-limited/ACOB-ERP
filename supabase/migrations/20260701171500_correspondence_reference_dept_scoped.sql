@@ -8,7 +8,7 @@
 --   Format remains: ACOB/{dept}/{recipient}/{year}/[number]
 --   Counter key: outgoing:external:{dept} (shared across all recipients)
 --   Prefix query matches: v_company/v_dept/%/v_year/%
---   Sequence extraction uses substring(reference_number FROM '[^/]+$')
+--   Sequence extraction counts all existing records for the department and year.
 
 CREATE OR REPLACE FUNCTION public.generate_correspondence_reference(
   p_department_code TEXT,
@@ -86,22 +86,13 @@ BEGIN
     VALUES (v_key, v_year, 0, now(), now())
     ON CONFLICT (counter_key, year) DO NOTHING;
 
-    -- Lock the row and advance to MAX(counter, highest existing ref for this dept & year) + 1.
+    -- Lock the row and advance to GREATEST(counter, COUNT(*) of existing references for this dept & year) + 1.
     UPDATE public.correspondence_counters
     SET
       last_number = GREATEST(
         last_number,
         (
-          SELECT COALESCE(
-            MAX(
-              CASE
-                WHEN substring(reference_number FROM '[^/]+$') ~ '^[0-9]+$'
-                THEN substring(reference_number FROM '[^/]+$')::integer
-                ELSE 0
-              END
-            ),
-            0
-          )
+          SELECT COALESCE(COUNT(*), 0)
           FROM public.correspondence_records
           WHERE reference_number LIKE v_company || '/' || v_dept || '/%/' || v_year::TEXT || '/%'
             AND letter_type = 'external'

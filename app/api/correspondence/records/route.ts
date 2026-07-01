@@ -187,7 +187,24 @@ async function realignCorrespondenceCounter(params: {
   if (counterError) throw counterError
 
   const currentLast = Number(counterRow?.last_number || 0)
-  const alignedLast = Math.max(currentLast, maxFromReferences)
+  
+  let alignedLast: number
+  if (isInternal) {
+    const maxFromReferences = (references || []).reduce((maxValue, row) => {
+      const reference = row.reference_number || ""
+      const match = reference.match(/\/([0-9]+)$/)
+      if (match) {
+        const numeric = parseInt(match[1], 10)
+        if (Number.isFinite(numeric)) {
+          return Math.max(maxValue, numeric)
+        }
+      }
+      return maxValue
+    }, 0)
+    alignedLast = Math.max(currentLast, maxFromReferences)
+  } else {
+    alignedLast = Math.max(currentLast, references?.length || 0)
+  }
 
   const { error: upsertError } = await params.dataClient.from("correspondence_counters").upsert(
     {
@@ -356,12 +373,67 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query.range(from, to)
     if (error) throw error
 
+    const records = (data || []) as CreatedCorrespondenceRecord[]
+
+    // Find unique department + year pairs for external records
+    const deptYearPairs = new Map<string, { departmentCode: string; year: number }>()
+    for (const r of records) {
+      if (r.letter_type === "external" && r.department_code && r.created_at) {
+        const year = new Date(r.created_at).getFullYear()
+        const key = `${r.department_code}:${year}`
+        if (!deptYearPairs.has(key)) {
+          deptYearPairs.set(key, { departmentCode: r.department_code, year })
+        }
+      }
+    }
+
+    // Fetch chronological sequences for each pair
+    const sequenceMaps = new Map<string, Map<string, number>>()
+    for (const [key, { departmentCode, year }] of deptYearPairs.entries()) {
+      const startOfYear = `${year}-01-01T00:00:00.000Z`
+      const endOfYear = `${year}-12-31T23:59:59.999Z`
+
+      const { data: seqData } = await supabase
+        .from("correspondence_records")
+        .select("id")
+        .eq("department_code", departmentCode)
+        .eq("letter_type", "external")
+        .gte("created_at", startOfYear)
+        .lte("created_at", endOfYear)
+        .order("created_at", { ascending: true })
+
+      const map = new Map<string, number>()
+      if (seqData) {
+        seqData.forEach((row, index) => {
+          map.set(String(row.id), index + 1)
+        })
+      }
+      sequenceMaps.set(key, map)
+    }
+
+    // Enrich the records with simulated_sequence
+    const enrichedData = records.map((r) => {
+      let simulated_sequence: number | null = null
+      if (r.letter_type === "external" && r.department_code && r.created_at) {
+        const year = new Date(r.created_at).getFullYear()
+        const key = `${r.department_code}:${year}`
+        const map = sequenceMaps.get(key)
+        if (map) {
+          simulated_sequence = map.get(String(r.id)) ?? null
+        }
+      }
+      return {
+        ...r,
+        simulated_sequence,
+      }
+    })
+
     return NextResponse.json({
-      data: (data || []) as CorrespondenceListRecord[],
+      data: enrichedData as any[],
       total: count || 0,
       page: paginationParsed.data.page,
       limit: paginationParsed.data.limit,
-      pagination: paginatedResponse((data || []) as CorrespondenceListRecord[], count || 0, pagination).pagination,
+      pagination: paginatedResponse(enrichedData as any[], count || 0, pagination).pagination,
     })
   } catch (error) {
     log.error({ err: String(error) }, "Error in GET /api/correspondence/records:")
