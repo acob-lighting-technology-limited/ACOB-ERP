@@ -449,7 +449,8 @@ export function AdminReferenceGeneratorContent({
         isLoading={isLoading}
         pagination={{ pageSize: 50, serverSide: true }}
         totalRows={total}
-        onPageChange={setPage}
+        currentPage={page - 1}
+        onPageChange={(p) => setPage(p + 1)}
         onSearchChange={setSearchQuery}
         rowActions={[
           {
