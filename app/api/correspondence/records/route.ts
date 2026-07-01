@@ -145,25 +145,36 @@ async function realignCorrespondenceCounter(params: {
 }): Promise<void> {
   const departmentCode = params.departmentCode.trim().toUpperCase()
   const recipientCode = params.recipientCode.trim().toUpperCase()
-  const categoryCode = await resolveCategoryCodeForReference(params.dataClient, params.categoryInput)
   const isInternal = (params.letterType || "external").toLowerCase() === "internal"
-  const seg1 = isInternal ? recipientCode : departmentCode
-  const seg2 = isInternal ? departmentCode : recipientCode
-  const counterKey = `outgoing:${seg1}:${seg2}:${categoryCode || ""}`
-  const prefix = categoryCode
-    ? `ACOB/${seg1}/${seg2}/${categoryCode}/${params.referenceYear}/`
-    : `ACOB/${seg1}/${seg2}/${params.referenceYear}/`
+
+  let counterKey: string
+  let queryPattern: string
+
+  if (isInternal) {
+    counterKey = `outgoing:${recipientCode}:${departmentCode}`
+    queryPattern = `ACOB/${recipientCode}/${departmentCode}/${params.referenceYear}/%`
+  } else {
+    counterKey = `outgoing:external:${departmentCode}`
+    queryPattern = `ACOB/${departmentCode}/%/${params.referenceYear}/%`
+  }
 
   const { data: references, error: refsError } = await params.dataClient
     .from("correspondence_records")
     .select("reference_number")
-    .ilike("reference_number", `${prefix}%`)
+    .ilike("reference_number", queryPattern)
     .returns<ReferenceRow[]>()
   if (refsError) throw refsError
 
   const maxFromReferences = (references || []).reduce((maxValue, row) => {
     const reference = row.reference_number || ""
-    return Math.max(maxValue, extractTrailingRefNumber(reference, prefix))
+    const match = reference.match(/\/([0-9]+)$/)
+    if (match) {
+      const numeric = parseInt(match[1], 10)
+      if (Number.isFinite(numeric)) {
+        return Math.max(maxValue, numeric)
+      }
+    }
+    return maxValue
   }, 0)
 
   const { data: counterRow, error: counterError } = await params.dataClient

@@ -16,11 +16,13 @@ import { getCurrentOfficeWeek } from "@/lib/meeting-week"
 import { fetchWeeklyReportLockState, getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { normalizeDepartmentName } from "@/shared/departments"
+import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 
 type EmployeeOption = {
   id: string
   full_name: string
   department: string
+  employment_status?: string | null
 }
 
 type AuthUser = {
@@ -93,7 +95,6 @@ export function WeekSetupCard() {
         .from("profiles")
         .select("id, full_name, department, employment_status")
         .not("department", "is", null)
-        .or("employment_status.neq.exited,employment_status.is.null")
         .order("full_name", { ascending: true })
 
       if (error) throw new Error(error.message)
@@ -106,6 +107,7 @@ export function WeekSetupCard() {
           id: row.id,
           full_name: row.full_name,
           department: normalizeDepartmentName(row.department),
+          employment_status: row.employment_status || null,
         }))
     },
   })
@@ -124,10 +126,13 @@ export function WeekSetupCard() {
     () =>
       employees
         .filter(
-          (employee) => normalizeDepartmentName(employee.department) === normalizeDepartmentName(kssDepartmentInput)
+          (employee) =>
+            normalizeDepartmentName(employee.department) === normalizeDepartmentName(kssDepartmentInput) &&
+            (isAssignableEmploymentStatus(employee.employment_status, { allowLegacyNullStatus: false }) ||
+              employee.id === kssPresenterIdInput)
         )
         .sort((a, b) => a.full_name.localeCompare(b.full_name)),
-    [employees, kssDepartmentInput]
+    [employees, kssDepartmentInput, kssPresenterIdInput]
   )
 
   const { data: lockState } = useQuery({

@@ -286,9 +286,9 @@ export function KssRosterTable({
   const selectedWeekDoc = docByWeekYear.get(`${yearNumber}-${weekNumber}`) || null
   const canUploadMissingForLockedWeek =
     isSelectedWeekLocked && Boolean(selectedWeekExistingRow) && !selectedWeekDoc && !readOnly
-  const isFormLocked = Boolean(editingId)
+  const isFormLocked = (Boolean(editingId)
     ? isSelectedWeekLocked && Boolean(selectedWeekDoc)
-    : isSelectedWeekLocked && Boolean(selectedWeekExistingRow) && Boolean(selectedWeekDoc)
+    : isSelectedWeekLocked && Boolean(selectedWeekExistingRow) && Boolean(selectedWeekDoc)) && !hasGraceOverride
 
   useEffect(() => {
     if (!canUploadMissingForLockedWeek || !selectedWeekExistingRow || editingId) return
@@ -1037,47 +1037,6 @@ export function KssRosterTable({
               </div>
 
               <div className="space-y-2">
-                <Label>Presenter</Label>
-                {presenterType === "employee" ? (
-                  <Select
-                    value={presenterId}
-                    onValueChange={(val) => {
-                      setPresenterId(val)
-                      if (val !== "none") {
-                        const emp = employees.find((e) => e.id === val)
-                        if (emp?.department) {
-                          setDepartment(emp.department)
-                        }
-                      }
-                    }}
-                    disabled={isFormLocked || canUploadMissingForLockedWeek}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select presenter" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Select presenter</SelectItem>
-                      {presenterOptions.map((emp) => (
-                        <SelectItem key={emp.id} value={emp.id}>
-                          {emp.full_name}
-                          {!isAssignableEmploymentStatus(emp.employment_status, { allowLegacyNullStatus: false })
-                            ? " (exited)"
-                            : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <Input
-                    value={visitorPresenterName}
-                    onChange={(e) => setVisitorPresenterName(e.target.value)}
-                    placeholder="Enter visitor full name"
-                    disabled={isFormLocked || canUploadMissingForLockedWeek}
-                  />
-                )}
-              </div>
-
-              <div className="space-y-2">
                 <Label>Department</Label>
                 <Select
                   value={department}
@@ -1099,6 +1058,47 @@ export function KssRosterTable({
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Presenter</Label>
+                {presenterType === "employee" ? (
+                  <Select
+                    value={presenterId}
+                    onValueChange={(val) => {
+                      setPresenterId(val)
+                      if (val !== "none") {
+                        const emp = employees.find((e) => e.id === val)
+                        if (emp?.department) {
+                          setDepartment(emp.department)
+                        }
+                      }
+                    }}
+                    disabled={isFormLocked || canUploadMissingForLockedWeek || department === "none"}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select presenter" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">Select presenter</SelectItem>
+                      {presenterOptions.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id}>
+                          {emp.full_name}
+                          {!isAssignableEmploymentStatus(emp.employment_status, { allowLegacyNullStatus: false })
+                            ? " (exited)"
+                            : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <Input
+                    value={visitorPresenterName}
+                    onChange={(e) => setVisitorPresenterName(e.target.value)}
+                    placeholder="Enter visitor full name"
+                    disabled={isFormLocked || canUploadMissingForLockedWeek || department === "none"}
+                  />
+                )}
               </div>
 
               <div className="space-y-2">
