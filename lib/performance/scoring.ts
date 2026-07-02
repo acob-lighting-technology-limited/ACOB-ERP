@@ -1,6 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { toLocalISODate } from "@/lib/utils/date"
-import { isLate } from "@/lib/hr/attendance-utils"
+import { isLateWithPolicy, isEarlyDeparture } from "@/lib/hr/attendance-status"
+import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
+import { getLateSteps } from "@/lib/hr/attendance-utils"
 
 type GoalScoreBreakdown = {
   goal_id: string
@@ -112,6 +114,15 @@ export async function computeIndividualPerformanceScore(
   params: { userId: string; cycleId?: string | null }
 ) {
   const cycle = await getCycleWindow(supabase, params.cycleId)
+
+  // Load attendance policy configuration
+  const { data: settingRow } = await supabase
+    .from("system_settings")
+    .select("value")
+    .eq("key", "attendance_policy")
+    .maybeSingle()
+  const policy = (settingRow?.value as AttendancePolicy) || DEFAULT_ATTENDANCE_POLICY
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("department, attendance_exempt")
@@ -228,11 +239,14 @@ export async function computeIndividualPerformanceScore(
     present: 0,
     total: 0,
     score: null,
+    late_penalty_total_ngn: 0,
+    late_penalty_steps_total: 0,
+    late_days: 0,
   }
 
-  // Attendance credit: full credit for present/wfh/remote/permission statuses, partial for late, zero for absent.
+  // Attendance credit: full credit for early/wfh/remote/permission statuses, partial for late, zero for absent.
   const ATTENDANCE_CREDIT: Record<string, number> = {
-    present: 1.0,
+    early: 1.0,
     wfh: 1.0,
     remote: 1.0,
     late: 0.5,
@@ -323,7 +337,7 @@ export async function computeIndividualPerformanceScore(
 
   if (workdays.length > 0) {
     let creditSum = 0
-    let latePenaltyTotalNgn = 0
+    const latePenaltyTotalNgn = 0
     let latePenaltyStepsTotal = 0
     let lateDays = 0
     let presentDays = 0
@@ -361,32 +375,24 @@ export async function computeIndividualPerformanceScore(
             : !row.clock_in && !row.clock_out
               ? "absent"
               : row.clock_in && row.clock_out
-                ? isLate(row.clock_in)
+                ? isLateWithPolicy(row.clock_in, policy.lateCutoff) || isEarlyDeparture(row.clock_out, policy.endTime)
                   ? "late"
-                  : "present"
+                  : "early"
                 : "incomplete"
       const baseCredit = ATTENDANCE_CREDIT[status] ?? 0
 
       let timelinessFactor = 1
       const clockInRaw = String((row as { clock_in?: string | null }).clock_in || "")
-      const [hourText, minuteText] = clockInRaw.split(":")
-      const hour = Number(hourText)
-      const minute = Number(minuteText)
-      if (Number.isFinite(hour) && Number.isFinite(minute)) {
-        const clockInMinutes = hour * 60 + minute
-        if (clockInMinutes > cutoffMinutes) {
+      if (clockInRaw && (status === "early" || status === "late")) {
+        const lateSteps = getLateSteps(clockInRaw, policy)
+        if (lateSteps > 0) {
           lateDays += 1
-          const penaltySteps =
-            clockInMinutes >= firstPenaltyHourMinutes
-              ? Math.floor((clockInMinutes - firstPenaltyHourMinutes) / 60) + 1
-              : 0
-          latePenaltyStepsTotal += penaltySteps
-          latePenaltyTotalNgn += penaltySteps * penaltyPerStepNgn
-          timelinessFactor = Math.max(0, 1 - penaltySteps * 0.1)
+          latePenaltyStepsTotal += lateSteps
+          timelinessFactor = Math.max(0, 1 - lateSteps * 0.1)
         }
       }
 
-      if (status === "present") presentDays++
+      if (status === "early") presentDays++
       creditSum += baseCredit * timelinessFactor
     }
 

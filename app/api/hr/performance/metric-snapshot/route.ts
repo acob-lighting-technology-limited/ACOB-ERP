@@ -6,7 +6,7 @@ import { logger } from "@/lib/logger"
 import { computeIndividualPerformanceScore } from "@/lib/performance/scoring"
 import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
-import { dayCredit, toLocalISODate } from "@/lib/hr/attendance-utils"
+import { dayCredit, toLocalISODate, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 
 const log = logger("hr-performance-metric-snapshot")
@@ -81,6 +81,7 @@ function fullName(user: ScopedUserRow) {
 export async function GET(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const policy = await loadAttendancePolicy(supabase)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -325,8 +326,8 @@ export async function GET(request: NextRequest) {
               if (day === todayIso && rec?.clock_in && !rec?.clock_out) continue
 
               scorableDays++
-              const status = deriveUnifiedAttendanceStatus({ record: rec ?? undefined, recordDate: day })
-              creditSum += dayCredit(status, rec?.clock_in ?? undefined, rec?.clock_out ?? undefined)
+              const status = deriveUnifiedAttendanceStatus({ record: rec ?? undefined, recordDate: day }, policy)
+              creditSum += dayCredit(status, rec?.clock_in ?? undefined, rec?.clock_out ?? undefined, policy)
             }
 
             rateByUser.set(userId, scorableDays > 0 ? Math.round((creditSum / scorableDays) * 10000) / 100 : null)
