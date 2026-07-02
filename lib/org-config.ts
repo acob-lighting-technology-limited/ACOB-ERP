@@ -106,3 +106,23 @@ export const HELP_DESK_SLA: Record<"urgent" | "high" | "medium" | "low", SlaBudg
     value: Number(process.env.SLA_LOW_DAYS ?? 7),
   },
 }
+
+// ---------------------------------------------------------------------------
+// Attendance and Timeliness policy
+// ---------------------------------------------------------------------------
+
+export interface AttendancePolicy {
+  startTime: string        // e.g. "08:00"
+  endTime: string          // e.g. "17:00"
+  lateCutoff: string       // e.g. "08:20"
+  incompletePenalty: number // e.g. 1.0 (credits)
+  totalCredits: number      // e.g. 10
+}
+
+export const DEFAULT_ATTENDANCE_POLICY: AttendancePolicy = {
+  startTime: "08:00",
+  endTime: "17:00",
+  lateCutoff: "08:20",
+  incompletePenalty: 1.0,
+  totalCredits: 10,
+}

@@ -335,6 +335,7 @@ const adminNavigation: NavItem[] = [
           { name: "KSS", href: "/admin/reports/general-meeting/kss" },
           { name: "Minutes of Meeting", href: "/admin/reports/general-meeting/minutes-of-meeting" },
           { name: "Weekly Reports", href: "/admin/reports/general-meeting/weekly-reports" },
+          { name: "Records", href: "/admin/reports/general-meeting/records" },
         ],
       },
     ],

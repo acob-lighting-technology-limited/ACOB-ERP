@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
+import { getServiceRoleClientOrFallback, syncEmploymentStatusToAuth } from "@/lib/supabase/admin"
 import { canAccessAdminSection, resolveAdminScope } from "@/lib/admin/rbac"
 import { getExitBlockers } from "@/lib/hr/exit-blockers"
 import { logger } from "@/lib/logger"
@@ -137,6 +137,10 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         .eq("employee_id", ctx.employeeId)
         .eq("is_active", true)
     }
+
+    // Sync new status into JWT metadata so the middleware fast-path sees it immediately.
+    // Also invalidates the active session so the user is forced to re-authenticate.
+    await syncEmploymentStatusToAuth(ctx.employeeId, status)
 
     log.info({ employeeId: ctx.employeeId, newStatus: status, changedBy: ctx.user.id }, "Employment status updated")
     return NextResponse.json({ message: "Status updated successfully" })
