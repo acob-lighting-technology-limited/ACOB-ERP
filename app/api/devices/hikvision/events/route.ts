@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
-import { isLate } from "@/lib/hr/attendance-utils"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
+import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 
 const log = logger("hikvision-events")
@@ -32,6 +33,14 @@ async function processHikvisionEvent(event: ParsedEvent) {
   const supabase = createClient(supabaseUrl, supabaseServiceKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   })
+
+  // Load attendance policy configuration
+  const { data: settingRow } = await supabase
+    .from("system_settings")
+    .select("value")
+    .eq("key", "attendance_policy")
+    .maybeSingle()
+  const policy = (settingRow?.value as AttendancePolicy) || DEFAULT_ATTENDANCE_POLICY
 
   const { dateTime, AccessControllerEvent: ace } = event
   const { employeeNoString, attendanceStatus } = ace
@@ -97,7 +106,10 @@ async function processHikvisionEvent(event: ParsedEvent) {
 
   // ── Write attendance record ─────────────────────────────────────────────────
   if (action === "in") {
-    const status = isLate(time) ? "late" : "present"
+    const status = deriveUnifiedAttendanceStatus({
+      record: { clock_in: time, clock_out: null, status: null, waived: false },
+      recordDate: date
+    }, policy)
     const { data: upserted, error } = await supabase
       .from("attendance_records")
       .upsert(
@@ -144,9 +156,20 @@ async function processHikvisionEvent(event: ParsedEvent) {
     const clockOut = new Date(`${date}T${time}Z`)
     const totalHours = Math.max(0, (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60))
 
+    const status = deriveUnifiedAttendanceStatus({
+      record: { clock_in: existing.clock_in, clock_out: time, status: null, waived: false },
+      recordDate: date
+    }, policy)
+
     const { error } = await supabase
       .from("attendance_records")
-      .update({ clock_out: time, total_hours: totalHours, source: "hikvision", clock_out_source: "hikvision" })
+      .update({
+        clock_out: time,
+        total_hours: totalHours,
+        status,
+        source: "hikvision",
+        clock_out_source: "hikvision"
+      })
       .eq("user_id", userId)
       .eq("date", date)
 
@@ -161,7 +184,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
         action: "update",
         entityType: "attendance_record",
         entityId: existing.id,
-        newValues: { clock_out: time, total_hours: totalHours, source: "hikvision" },
+        newValues: { clock_out: time, total_hours: totalHours, status, source: "hikvision" },
         context: { actorId: userId, source: "system", route: "/api/devices/hikvision/events" },
       },
       { failOpen: true }
