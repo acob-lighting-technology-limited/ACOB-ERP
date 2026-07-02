@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
-import { getWorkdaysInMonth, monthBounds, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
+import { getWorkdaysInMonth, monthBounds, toLocalISODate, toLocalYearMonth, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 
 type AttendanceRow = {
@@ -36,6 +36,7 @@ function expandIsoDateRange(startDate: string, endDate: string): string[] {
 
 export async function GET(request: NextRequest) {
   const supabase = await createClient()
+  const policy = await loadAttendancePolicy(supabase)
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -114,7 +115,7 @@ export async function GET(request: NextRequest) {
         isOnLeave: leaveDates.has(date),
         isExempted: Boolean(profile?.attendance_exempt) || exemptDates.has(date),
         recordDate: date,
-      })
+      }, policy)
       return { date, record: rec, status }
     })
 

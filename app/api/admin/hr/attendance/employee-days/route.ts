@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
-import { getWorkdaysInMonth, monthBounds, toLocalISODate } from "@/lib/hr/attendance-utils"
+import { getWorkdaysInMonth, monthBounds, toLocalISODate, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
   const scopeResult = await requireApiAdminScope()
   if (!scopeResult.ok) return scopeResult.response
   const { scope, supabase } = scopeResult
+  const policy = await loadAttendancePolicy(supabase)
 
   const userId = String(request.nextUrl.searchParams.get("user_id") || "")
   const yearMonth = String(request.nextUrl.searchParams.get("year_month") || "")
@@ -165,7 +166,7 @@ export async function GET(request: NextRequest) {
         isOnLeave: ctx.isOnLeave(userId, date),
         isExempted: exemptHint || Boolean(profile?.attendance_exempt) || ctx.isExempt(userId, date),
         recordDate: date,
-      })
+      }, policy)
       return { date, record: rec, status, manual_by: manualByDate(date) }
     })
 

@@ -5,6 +5,7 @@ import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-gu
 import { normalizeDepartmentName } from "@/shared/departments"
 import { missedHours, dayCredit, toLocalISODate, toLocalYearMonth, getWorkdaysInMonth } from "@/lib/hr/attendance-utils"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
 import { logger } from "@/lib/logger"
 
@@ -55,6 +56,14 @@ export async function GET(request: NextRequest) {
     const requestedUserId = String(params.get("user_id") || "").trim()
 
     const dataClient = getServiceRoleClientOrFallback(supabase)
+
+    // Load attendance policy configuration
+    const { data: settingRow } = await dataClient
+      .from("system_settings")
+      .select("value")
+      .eq("key", "attendance_policy")
+      .maybeSingle()
+    const policy = (settingRow?.value as AttendancePolicy) || DEFAULT_ATTENDANCE_POLICY
 
     const scopedDepartmentSet =
       routeAccess.dataScope === "all"
@@ -151,7 +160,8 @@ export async function GET(request: NextRequest) {
     // Calculate workday-based summaries — missing days count as absent
     const summaries = allowedProfiles.map((profile) => {
       const empRecords = recordsByEmployee.get(profile.id) ?? new Map<string, AttendanceRow>()
-      let present_days = 0,
+      let early_days = 0,
+        present_days = 0,
         late_days = 0,
         incomplete_days = 0,
         absent_days = 0,
@@ -186,7 +196,7 @@ export async function GET(request: NextRequest) {
           continue
         }
 
-        const derived = deriveUnifiedAttendanceStatus({ record: rec, recordDate: workday })
+        const derived = deriveUnifiedAttendanceStatus({ record: rec, recordDate: workday }, policy)
 
         if (derived === "waiver") {
           waived_days++
@@ -200,9 +210,11 @@ export async function GET(request: NextRequest) {
         // Now we are at scorable/available days!
         available_days++
 
+        const totalCredits = policy.totalCredits ?? 10
+
         if (!rec) {
           absent_days++
-          total_missed_hours += 9
+          total_missed_hours += totalCredits
           continue
         }
 
@@ -211,18 +223,30 @@ export async function GET(request: NextRequest) {
           attendance_credits += 1.0
         } else if (derived === "lateness_with_permission") {
           lateness_with_permission_days++
+          present_days++
           attendance_credits += 1.0
           total_hours += Number(rec.total_hours ?? 0)
-        } else if (derived === "present" || derived === "late") {
-          derived === "late" ? late_days++ : present_days++
-          attendance_credits += dayCredit(derived, rec.clock_in, rec.clock_out)
+        } else if (derived === "early") {
+          early_days++
+          present_days++
+          attendance_credits += dayCredit("early", rec.clock_in, rec.clock_out, policy)
           total_hours += Number(rec.total_hours ?? 0)
-          total_missed_hours += missedHours(rec.clock_in, rec.clock_out)
+          total_missed_hours += (totalCredits - dayCredit("early", rec.clock_in, rec.clock_out, policy) * totalCredits)
+        } else if (derived === "late") {
+          late_days++
+          present_days++
+          attendance_credits += dayCredit("late", rec.clock_in, rec.clock_out, policy)
+          total_hours += Number(rec.total_hours ?? 0)
+          total_missed_hours += (totalCredits - dayCredit("late", rec.clock_in, rec.clock_out, policy) * totalCredits)
         } else if (derived === "incomplete") {
           incomplete_days++
+          present_days++
+          attendance_credits += dayCredit("incomplete", rec.clock_in, rec.clock_out, policy)
+          total_hours += Number(rec.total_hours ?? 0)
+          total_missed_hours += (totalCredits - dayCredit("incomplete", rec.clock_in, rec.clock_out, policy) * totalCredits)
         } else {
           absent_days++
-          total_missed_hours += 9
+          total_missed_hours += totalCredits
         }
       }
 
@@ -237,6 +261,7 @@ export async function GET(request: NextRequest) {
         user_name: name,
         department: String(profile.department || "N/A"),
         total_days: total_working_days,
+        early_days,
         present_days,
         late_days,
         incomplete_days,

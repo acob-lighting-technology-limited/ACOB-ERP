@@ -8,7 +8,7 @@ import { writeAuditLog } from "@/lib/audit/write-audit"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { resolvePendingAppealOnManualStatus } from "@/lib/hr/attendance-appeals"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
-import { toLocalISODate } from "@/lib/hr/attendance-utils"
+import { toLocalISODate, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
 import {
@@ -46,6 +46,7 @@ export async function GET(request: NextRequest) {
     const scopeResult = await requireApiAdminScope()
     if (!scopeResult.ok) return scopeResult.response
     const { scope, supabase } = scopeResult
+    const policy = await loadAttendancePolicy(supabase)
 
     const depts = getScopedDepartments(scope)
     const { searchParams } = request.nextUrl
@@ -183,7 +184,7 @@ export async function GET(request: NextRequest) {
         isOnLeave: ctx.isOnLeave(r.user_id, r.date),
         isExempted: Boolean(p?.attendance_exempt) || ctx.isExempt(r.user_id, r.date),
         recordDate: r.date,
-      })
+      }, policy)
 
       const editorUserId = editorIdByRecordId.get(r.id)
       const editorProfile = editorUserId ? editorProfileMap.get(editorUserId) : null
@@ -269,7 +270,7 @@ export async function GET(request: NextRequest) {
             isOnLeave: onLeaveSet.has(p.id),
             isExempted: Boolean(p.attendance_exempt) || exemptPeriodSet.has(p.id),
             recordDate: day,
-          })
+          }, policy)
           records.push({
             id: `missing-${p.id}-${day}`,
             user_id: p.id,
@@ -315,6 +316,7 @@ export async function POST(request: NextRequest) {
     const scopeResult = await requireApiAdminScope()
     if (!scopeResult.ok) return scopeResult.response
     const { scope, supabase } = scopeResult
+    const policy = await loadAttendancePolicy(supabase)
 
     const parsed = CreateSchema.safeParse(await request.json())
     if (!parsed.success) {
@@ -357,7 +359,7 @@ export async function POST(request: NextRequest) {
         : deriveUnifiedAttendanceStatus({
             record: { clock_in, clock_out, waived: false, status: explicitStatus },
             recordDate: date,
-          }))
+          }, policy))
     const isCoveredWithoutTimes =
       status === "waiver" || status === "absent_with_permission" || status === "out_of_station"
     const isLWP = status === "lateness_with_permission"

@@ -12,6 +12,7 @@ import {
   isPermissionAttendanceStatus,
 } from "@/lib/hr/attendance-status"
 import { requireApiAdminScope } from "@/lib/admin/api-scope"
+import { loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 
 const log = logger("admin-hr-attendance-record-patch")
 
@@ -39,6 +40,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const auth = await requireApiAdminScope()
     if (!auth.ok) return auth.response
     const { supabase } = auth
+    const policy = await loadAttendancePolicy(supabase)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -83,7 +85,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         : deriveUnifiedAttendanceStatus({
             record: { clock_in: clockIn, clock_out: clockOut, waived: false, status: record.status },
             recordDate: record.date,
-          }))
+          }, policy))
     const isCoveredWithoutTimes =
       nextStatus === "waiver" || nextStatus === "absent_with_permission" || nextStatus === "out_of_station"
     const isLWP = nextStatus === "lateness_with_permission"

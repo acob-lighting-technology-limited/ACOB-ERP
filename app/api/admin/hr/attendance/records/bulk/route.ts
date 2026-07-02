@@ -12,6 +12,7 @@ import {
   isPermissionAttendanceStatus,
 } from "@/lib/hr/attendance-status"
 import { toLocalISODate } from "@/lib/utils/date"
+import { loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 
 const log = logger("admin-hr-attendance-records-bulk")
 export const dynamic = "force-dynamic"
@@ -50,6 +51,7 @@ export async function POST(request: NextRequest) {
     const scopeResult = await requireApiAdminScope()
     if (!scopeResult.ok) return scopeResult.response
     const { scope, supabase } = scopeResult
+    const policy = await loadAttendancePolicy(supabase)
 
     const parsed = BulkCreateSchema.safeParse(await request.json())
     if (!parsed.success) {
@@ -276,6 +278,7 @@ export async function DELETE(request: NextRequest) {
     const scopeResult = await requireApiAdminScope()
     if (!scopeResult.ok) return scopeResult.response
     const { scope, supabase } = scopeResult
+    const policy = await loadAttendancePolicy(supabase)
 
     const parsed = BulkDeleteSchema.safeParse(await request.json())
     if (!parsed.success) {
@@ -343,7 +346,7 @@ export async function DELETE(request: NextRequest) {
       const revertedStatus = deriveUnifiedAttendanceStatus({
         record: { clock_in: row.clock_in, clock_out: row.clock_out, waived: false, status: preservedStatus },
         recordDate: row.date,
-      })
+      }, policy)
       await dataClient
         .from("attendance_records")
         .update({ status: revertedStatus, waived: false, manual_comment: null })

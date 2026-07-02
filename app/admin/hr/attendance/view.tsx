@@ -46,6 +46,7 @@ interface AttendanceReport {
   user_name: string
   department: string
   total_days: number
+  early_days?: number
   present_days: number
   late_days: number
   incomplete_days?: number
@@ -800,6 +801,7 @@ export function AttendanceReportsPage({
     "Name",
     "Department",
     "Total Days",
+    "Early",
     "Present",
     "Late",
     "LWP",
@@ -822,6 +824,7 @@ export function AttendanceReportsPage({
       r.user_name,
       r.department,
       r.total_days,
+      r.early_days ?? 0,
       r.present_days,
       r.late_days,
       r.lateness_with_permission_days ?? 0,
@@ -953,11 +956,20 @@ export function AttendanceReportsPage({
       initialWidth: 200,
     },
     {
+      key: "early_days",
+      label: "Early",
+      sortable: true,
+      accessor: (r) => r.early_days ?? 0,
+      render: (r) => <span className="text-green-600">{r.early_days ?? 0}</span>,
+      align: "center",
+      hideOnMobile: true,
+    },
+    {
       key: "present_days",
       label: "Present",
       sortable: true,
       accessor: (r) => r.present_days,
-      render: (r) => <span className="text-green-600">{r.present_days}</span>,
+      render: (r) => <span className="text-blue-600">{r.present_days}</span>,
       align: "center",
       hideOnMobile: true,
     },

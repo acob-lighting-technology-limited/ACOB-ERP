@@ -6,7 +6,7 @@ import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { toLocalISODate, toLocalTimeString, toLocalYearMonth } from "@/lib/utils/date"
-import { distanceMetres } from "@/lib/hr/attendance-utils"
+import { distanceMetres, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { matchSelfieToReference } from "@/lib/azure/face"
 import { getOneDriveService } from "@/lib/onedrive"
@@ -29,6 +29,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const supabase = await createClient()
+    const policy = await loadAttendancePolicy(supabase)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -163,7 +164,7 @@ export async function POST(request: NextRequest) {
     const status = deriveUnifiedAttendanceStatus({
       record: { clock_in: record.clock_in, clock_out: clockOutTime, waived: false },
       recordDate: today,
-    })
+    }, policy)
 
     const updateData: Record<string, unknown> = {
       clock_out: clockOutTime,

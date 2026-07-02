@@ -6,6 +6,7 @@ import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { toLocalISODate, toLocalTimeString } from "@/lib/utils/date"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import { loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 
 const log = logger("hr-attendance-clock-out")
 
@@ -18,6 +19,7 @@ export async function PATCH(_request: NextRequest) {
     )
   try {
     const supabase = await createClient()
+    const policy = await loadAttendancePolicy(supabase)
 
     const {
       data: { user },
@@ -57,7 +59,7 @@ export async function PATCH(_request: NextRequest) {
     const status = deriveUnifiedAttendanceStatus({
       record: { clock_in: record.clock_in, clock_out: clockOutTime, waived: false },
       recordDate: today,
-    })
+    }, policy)
 
     // Update attendance record
     const { data: updatedRecord, error } = await supabase

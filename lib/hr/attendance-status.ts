@@ -1,10 +1,20 @@
 import { isLate } from "@/lib/hr/attendance-utils"
 import { toLocalISODate } from "@/lib/utils/date"
+import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
+
+export function isLateWithPolicy(clockIn: string | null | undefined, lateCutoff: string): boolean {
+  if (!clockIn) return false
+  const [h, m] = clockIn.split(":").map(Number)
+  const [ch, cm] = lateCutoff.split(":").map(Number)
+  if (isNaN(h) || isNaN(m) || isNaN(ch) || isNaN(cm)) return false
+  return h * 60 + m > ch * 60 + cm
+}
 
 export type UnifiedAttendanceStatus =
   | "holiday"
   | "exempted"
   | "waiver"
+  | "early"
   | "present"
   | "late"
   | "lateness_with_permission"
@@ -16,7 +26,8 @@ export type UnifiedAttendanceStatus =
 
 /** Tailwind colour classes for every canonical attendance status. */
 export const ATTENDANCE_STATUS_COLORS: Record<UnifiedAttendanceStatus, string> = {
-  present: "bg-green-100 text-green-800",
+  early: "bg-green-100 text-green-800",
+  present: "bg-blue-100 text-blue-800",
   late: "bg-yellow-100 text-yellow-800",
   lateness_with_permission:
     "bg-gradient-to-r from-amber-100 to-green-100 text-green-800 border-amber-200 dark:from-amber-950/40 dark:to-green-950/40 dark:text-green-300",
@@ -33,6 +44,7 @@ export const ATTENDANCE_STATUS_COLORS: Record<UnifiedAttendanceStatus, string> =
 
 /** Human-readable labels for statuses whose raw value would look bad in the UI. */
 export const ATTENDANCE_STATUS_LABELS: Record<UnifiedAttendanceStatus, string> = {
+  early: "Early",
   present: "Present",
   late: "Late",
   lateness_with_permission: "LWP",
@@ -46,6 +58,7 @@ export const ATTENDANCE_STATUS_LABELS: Record<UnifiedAttendanceStatus, string> =
   holiday: "Holiday",
 }
 export const DB_WRITABLE_STATUSES = [
+  "early",
   "present",
   "late",
   "absent",
@@ -66,6 +79,7 @@ export type PermissionAttendanceStatus = (typeof PERMISSION_ATTENDANCE_STATUSES)
 
 export const MANUAL_ATTENDANCE_STATUS_OPTIONS: Array<{ value: DbAttendanceStatus | "auto"; label: string }> = [
   { value: "auto", label: "Auto-derived" },
+  { value: "early", label: "Early" },
   { value: "present", label: "Present" },
   { value: "late", label: "Late" },
   { value: "incomplete", label: "Incomplete" },
@@ -95,11 +109,12 @@ export type AttendanceLike = {
   waived?: boolean | null
 }
 
-/** Returns true if a clock_out time string is before 17:00. */
-export function isEarlyDeparture(clockOut: string): boolean {
+/** Returns true if a clock_out time string is before endTime. */
+export function isEarlyDeparture(clockOut: string, endTime: string = "17:00"): boolean {
   const [h, m] = clockOut.split(":").map(Number)
-  if (!Number.isFinite(h) || !Number.isFinite(m)) return false
-  return h * 60 + m < 17 * 60
+  const [eh, em] = endTime.split(":").map(Number)
+  if (!Number.isFinite(h) || !Number.isFinite(m) || !Number.isFinite(eh) || !Number.isFinite(em)) return false
+  return h * 60 + m < eh * 60 + em
 }
 
 export interface ManualStatusEditOptions {
@@ -148,13 +163,16 @@ export function getManualStatusEditOptions(
   return { isOnTimePresent, showLWP, showAWP, options, initialStatus }
 }
 
-export function deriveUnifiedAttendanceStatus(input: {
-  record?: AttendanceLike | null
-  isHoliday?: boolean
-  isOnLeave?: boolean
-  isExempted?: boolean
-  recordDate?: string
-}): UnifiedAttendanceStatus {
+export function deriveUnifiedAttendanceStatus(
+  input: {
+    record?: AttendanceLike | null
+    isHoliday?: boolean
+    isOnLeave?: boolean
+    isExempted?: boolean
+    recordDate?: string
+  },
+  policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY
+): UnifiedAttendanceStatus {
   if (input.isHoliday) return "holiday"
   if (input.isOnLeave) return "on_leave"
   if (input.isExempted) return "exempted"
@@ -171,14 +189,14 @@ export function deriveUnifiedAttendanceStatus(input: {
 
   // clock_in present, no clock_out:
   // - past day  → incomplete (no second punch on a finished day)
-  // - today (still in progress) → optimistic present/late based on 08:20 cutoff
+  // - today (still in progress) → optimistic early/late based on policy grace cutoff
   if (rec.clock_in && !rec.clock_out) {
-    return isPastDate ? "incomplete" : isLate(rec.clock_in) ? "late" : "present"
+    return isPastDate ? "incomplete" : isLateWithPolicy(rec.clock_in, policy.lateCutoff) ? "late" : "early"
   }
   if (!rec.clock_in) return "incomplete"
   // Same-second double-fire — treat as incomplete
   if (rec.clock_out && rec.clock_out <= rec.clock_in) return "incomplete"
-  // Clocked out before 17:00 → late, unless an admin explicitly marks LWP.
-  if (rec.clock_out && isEarlyDeparture(rec.clock_out)) return "late"
-  return isLate(rec.clock_in) ? "late" : "present"
+  // Clocked out before configured end_time → late
+  if (rec.clock_out && isEarlyDeparture(rec.clock_out, policy.endTime)) return "late"
+  return isLateWithPolicy(rec.clock_in, policy.lateCutoff) ? "late" : "early"
 }

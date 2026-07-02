@@ -1,4 +1,5 @@
 import { toLocalISODate, toLocalYearMonth } from "@/lib/utils/date"
+import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 export { toLocalISODate, toLocalYearMonth }
 
 /** Returns true if the clock-in time is after the 8:20am grace period. */
@@ -22,6 +23,46 @@ export function missedHours(clockIn: string | null | undefined, clockOut: string
   const outMin = oh * 60 + om
   const workMinutes = Math.max(0, Math.min(outMin, 17 * 60) - Math.max(inMin, 8 * 60))
   return Math.max(0, 9 - workMinutes / 60)
+}
+
+/** Returns the number of hourly late steps starting from the grace cutoff. */
+export function getLateSteps(clockIn: string, policy: AttendancePolicy): number {
+  const [sh, sm] = policy.startTime.split(":").map(Number)
+  const [ch, cm] = clockIn.split(":").map(Number)
+  const [lh, lm] = policy.lateCutoff.split(":").map(Number)
+  if (isNaN(sh) || isNaN(sm) || isNaN(ch) || isNaN(cm) || isNaN(lh) || isNaN(lm)) return 0
+  const startMin = sh * 60 + sm
+  const clockInMin = ch * 60 + cm
+  const cutoffMin = lh * 60 + lm
+  if (clockInMin <= cutoffMin) return 0
+  const penaltyStartMin = startMin + 60 // e.g. 09:00 AM (1 hour after 08:00 AM)
+  if (clockInMin <= penaltyStartMin) return 1
+  return 1 + Math.ceil((clockInMin - penaltyStartMin) / 60)
+}
+
+/** Returns the number of hourly early departure steps. */
+export function getEarlyOutSteps(clockOut: string, policy: AttendancePolicy): number {
+  const [eh, em] = policy.endTime.split(":").map(Number)
+  const [ch, cm] = clockOut.split(":").map(Number)
+  if (isNaN(eh) || isNaN(em) || isNaN(ch) || isNaN(cm)) return 0
+  const endMin = eh * 60 + em
+  const clockOutMin = ch * 60 + cm
+  if (clockOutMin >= endMin) return 0
+  return Math.ceil((endMin - clockOutMin) / 60)
+}
+
+/** Loads the active attendance policy from system_settings or returns the default. */
+export async function loadAttendancePolicy(supabase: any): Promise<AttendancePolicy> {
+  try {
+    const { data } = await supabase
+      .from("system_settings")
+      .select("value")
+      .eq("key", "attendance_policy")
+      .maybeSingle()
+    return { ...DEFAULT_ATTENDANCE_POLICY, ...(data?.value ?? {}) }
+  } catch {
+    return DEFAULT_ATTENDANCE_POLICY
+  }
 }
 
 /**
@@ -56,11 +97,17 @@ export function getWorkdaysInMonth(yearMonth: string): string[] {
 
 /**
  * Fractional day credit for attendance rate calculation.
- * Present/Late: proportional to hours worked in the 8am–5pm window.
+ * Early: 1.0.
  * Covered (waiver/exempted/on_leave/holiday/OOS/AWP/LWP): 1.0.
- * Absent/Incomplete: 0.0.
+ * Present/Late/Incomplete: Step-based deduction out of totalCredits.
+ * Absent: 0.0.
  */
-export function dayCredit(status: string, clockIn?: string | null, clockOut?: string | null): number {
+export function dayCredit(
+  status: string,
+  clockIn?: string | null,
+  clockOut?: string | null,
+  policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY
+): number {
   if (
     status === "waiver" ||
     status === "exempted" ||
@@ -72,10 +119,35 @@ export function dayCredit(status: string, clockIn?: string | null, clockOut?: st
   ) {
     return 1.0
   }
-  if (status === "half_day") return dayCredit("late", clockIn, clockOut)
-  if (status === "present" || status === "late") {
-    const missed = missedHours(clockIn, clockOut)
-    return Math.max(0, Math.min(1.0, (9 - missed) / 9))
+  if (status === "half_day") return dayCredit("present", clockIn, clockOut, policy)
+  if (status === "early") return 1.0
+
+  if (status === "present" || status === "late" || status === "incomplete") {
+    const totalCredits = policy.totalCredits ?? 10
+    let credits = totalCredits
+
+    if (clockIn && clockOut) {
+      if (clockOut < policy.lateCutoff) {
+        return 0.0
+      }
+      const lateSteps = getLateSteps(clockIn, policy)
+      const earlyOutSteps = getEarlyOutSteps(clockOut, policy)
+      
+      const totalDeduction = Math.min(totalCredits - 1, lateSteps + earlyOutSteps)
+      credits -= totalDeduction
+    } else {
+      // Incomplete: missing one punch
+      if (clockIn) {
+        const lateSteps = getLateSteps(clockIn, policy)
+        credits -= lateSteps
+      } else if (clockOut) {
+        const earlyOutSteps = getEarlyOutSteps(clockOut, policy)
+        credits -= earlyOutSteps
+      }
+      credits -= policy.incompletePenalty
+    }
+
+    return Math.max(0.0, Math.min(1.0, credits / totalCredits))
   }
   return 0.0
 }
