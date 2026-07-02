@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { QUERY_KEYS } from "@/lib/query-keys"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -95,6 +96,7 @@ const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingm
 const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 type UploadPhase = "idle" | "saving" | "converting" | "uploading"
 type PresenterType = "employee" | "visitor"
+const GUEST_DEPARTMENT = "Guest"
 
 interface Props {
   employees: Employee[]
@@ -141,6 +143,7 @@ export function KssRosterTable({
   enableScoring = false,
 }: Props) {
   const supabase = createClient()
+  const queryClient = useQueryClient()
   const currentOfficeWeek = getCurrentOfficeWeek()
   const defaultWeek = currentOfficeWeek.week
   const defaultYear = currentOfficeWeek.year
@@ -500,7 +503,12 @@ export function KssRosterTable({
       }
       resetForm()
       setShowCreate(false)
-      await Promise.all([refetchRoster(), refetchDocs()])
+      await Promise.all([
+        refetchRoster(),
+        refetchDocs(),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminWeeklyReportLockState(weekNumber, yearNumber) }),
+        queryClient.invalidateQueries({ queryKey: ["general-meeting-week-setup", weekNumber, yearNumber] }),
+      ])
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Failed to save KSS")
     } finally {
@@ -531,7 +539,12 @@ export function KssRosterTable({
       if (!res.ok) throw new Error(payload.error || "Failed to delete KSS roster")
       toast.success("KSS deleted")
       setPendingDeleteRow(null)
-      await Promise.all([refetchRoster(), refetchDocs()])
+      await Promise.all([
+        refetchRoster(),
+        refetchDocs(),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminWeeklyReportLockState(row.meeting_week, row.meeting_year) }),
+        queryClient.invalidateQueries({ queryKey: ["general-meeting-week-setup", row.meeting_week, row.meeting_year] }),
+      ])
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Delete failed")
     }
@@ -962,6 +975,11 @@ export function KssRosterTable({
         <Dialog
           open={showCreate}
           onOpenChange={(open) => {
+            // Opening the override-confirm AlertDialog on top of this Dialog can trigger a
+            // spurious Radix "outside interaction" close event on this Dialog. Ignore close
+            // requests while the override confirmation is pending so form state (department,
+            // presenter, week/year) isn't wiped out before "Yes, Override and Save" runs.
+            if (!open && showOverrideConfirm) return
             setShowCreate(open)
             if (!open) resetForm()
           }}
@@ -1023,6 +1041,7 @@ export function KssRosterTable({
                     setPresenterType(value)
                     setPresenterId("none")
                     setVisitorPresenterName("")
+                    setDepartment(value === "visitor" ? GUEST_DEPARTMENT : "none")
                   }}
                   disabled={isFormLocked || canUploadMissingForLockedWeek}
                 >
@@ -1044,13 +1063,16 @@ export function KssRosterTable({
                     setDepartment(value)
                     setPresenterId("none")
                   }}
-                  disabled={isFormLocked || canUploadMissingForLockedWeek}
+                  disabled={isFormLocked || canUploadMissingForLockedWeek || presenterType === "visitor"}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select department" />
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">Select department</SelectItem>
+                    {presenterType === "visitor" && !departments.includes(GUEST_DEPARTMENT) ? (
+                      <SelectItem value={GUEST_DEPARTMENT}>{GUEST_DEPARTMENT}</SelectItem>
+                    ) : null}
                     {departments.map((dept) => (
                       <SelectItem key={dept} value={dept}>
                         {dept}
@@ -1096,7 +1118,7 @@ export function KssRosterTable({
                     value={visitorPresenterName}
                     onChange={(e) => setVisitorPresenterName(e.target.value)}
                     placeholder="Enter visitor full name"
-                    disabled={isFormLocked || canUploadMissingForLockedWeek || department === "none"}
+                    disabled={isFormLocked || canUploadMissingForLockedWeek}
                   />
                 )}
               </div>

@@ -1,7 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { formatWATDate } from "@/lib/utils/date"
 
-export type MeetingDocumentType = "knowledge_sharing_session" | "minutes" | "action_points"
+export type MeetingDocumentType =
+  | "knowledge_sharing_session"
+  | "minutes"
+  | "action_points"
+  | "attendance"
+  | "transcript"
 
 type ResolveMeetingDateClient = Pick<SupabaseClient, "rpc" | "from">
 export const DEFAULT_MEETING_TIME = "08:30"
@@ -87,6 +92,14 @@ export function buildMeetingDocumentFileName({
 
   if (documentType === "minutes") {
     return `ACOB Minutes of Meeting - ${dateLabel} - W${meetingWeek}.${ext}`
+  }
+
+  if (documentType === "attendance") {
+    return `ACOB Attendance - ${dateLabel} - W${meetingWeek}.${ext}`
+  }
+
+  if (documentType === "transcript") {
+    return `ACOB Transcript - ${dateLabel} - W${meetingWeek}.${ext}`
   }
 
   return `ACOB Action Points - ${dateLabel} - W${meetingWeek}.${ext}`

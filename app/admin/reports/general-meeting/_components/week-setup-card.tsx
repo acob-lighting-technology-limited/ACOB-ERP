@@ -312,6 +312,9 @@ export function WeekSetupCard() {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminWeeklyReportLockState(weekNumber, yearNumber) }),
         queryClient.invalidateQueries({ queryKey: ["general-meeting-week-setup", weekNumber, yearNumber] }),
+        queryClient.invalidateQueries({ queryKey: ["kss-roster-table"] }),
+        queryClient.invalidateQueries({ queryKey: ["kss-documents-table"] }),
+        queryClient.invalidateQueries({ queryKey: ["kss-selected-week-lock", weekNumber, yearNumber] }),
       ])
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Failed to save week setup")
