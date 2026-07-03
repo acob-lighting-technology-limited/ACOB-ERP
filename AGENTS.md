@@ -52,6 +52,26 @@ Examples:
 - When working with joins, type the selected result shape explicitly instead of relying on deep inference.
 - Prefer local row types over broad casts.
 
+## Database Security Standard — RLS, Grants & Functions (Mandatory)
+
+**Core principle:** the Supabase `anon` key is public and ships in the browser. PostgREST exposes every table and RPC directly to the internet at `/rest/v1/*` and `/rest/v1/rpc/*`, **bypassing Next.js, middleware, `lib/admin/rbac.ts`, and `lib/admin/policy-v2.ts` entirely.** App-layer authorization does **not** protect this path. The **only** server-side boundary on the anon path is database Row-Level Security (RLS) and function `EXECUTE` grants. Treat every table and `SECURITY DEFINER` function as internet-facing.
+
+Non-negotiable rules:
+
+1. **Every new table enables RLS in the same migration that creates it**, with at least one explicit policy. A `CREATE TABLE` without `ENABLE ROW LEVEL SECURITY` is world-readable *and* world-writable via the anon key (the `anon`/`authenticated` roles hold blanket table grants in this project).
+2. **Never write a permissive policy for untrusted roles.** No `USING (true)` and no policy with role `public` or `anon` on any table holding non-public data. Scope every policy `TO authenticated` and gate it with `has_role(...)`, `auth.uid() = <owner_col>`, or an equivalent predicate.
+3. **Never disable RLS on a production table to "fix" a query.** Empty results or `permission denied` mean the policy is wrong or the wrong client is used — fix the policy, or read via the service-role client in a server route. Disabling RLS turns the table wide open and is the exact cause of past incidents.
+4. **Browser code never relies on loose RLS.** Sensitive reads/writes go through server API routes using the service-role client (`getServiceRoleClientOrFallback` / `getServiceClient`), which bypasses RLS. The RLS policy is the backstop, not the app's data path.
+5. **`SECURITY DEFINER` functions:**
+   - Never trust a caller-supplied identity. Derive it from `auth.uid()`; if a `p_user_id`-style parameter is unavoidable, guard with `IF auth.uid() IS NOT NULL AND p_user_id <> auth.uid() THEN RAISE EXCEPTION ...` (this allows the service role, whose `auth.uid()` is null, while blocking authenticated impersonation).
+   - **Always `REVOKE EXECUTE ON FUNCTION ... FROM anon, PUBLIC` in the creating migration.** Postgres grants `EXECUTE` to `PUBLIC` by default and `anon` inherits it — revoking from `anon` alone is not enough. Then `GRANT EXECUTE` explicitly only to the roles that need it (`authenticated` and/or `service_role`).
+   - Functions that return or mutate sensitive data must check role internally (do not rely on the app layer to gate a directly-callable RPC).
+6. **Sequence / counter RPCs** (employee numbers, correspondence references, etc.) require an authenticated privileged role plus rate limiting — never anon/`PUBLIC`.
+7. **Migrations are the only way to change schema, policies, or grants in production.** No hand edits in the Supabase dashboard or SQL editor — they drift from the repo (which cannot see them) and leave no audit trail.
+8. **Review/CI gate — reject a migration if it:** creates a table without `ENABLE ROW LEVEL SECURITY` + a policy; adds a policy with role `public`/`anon` on non-public data; or defines a `SECURITY DEFINER` function without a matching `REVOKE EXECUTE ... FROM PUBLIC`.
+9. **Verify after every RLS/grant/function change** by impersonating the anon role: `BEGIN; SET LOCAL ROLE anon; <attempt the access>; ROLLBACK;` — confirm intended access is denied. Do not assume the repo reflects production; check live state.
+10. **Governance:** MFA must be enabled on all Supabase org members; direct production DDL access must be restricted; keep public sign-up (`disable_signup`) off unless a self-service flow explicitly requires it (an open `auth.users` signup lets anyone mint a valid UUID regardless of the in-app approval workflow).
+
 ## Query Construction Rules
 
 Be cautious with helper wrappers around Supabase queries in build-sensitive code.
