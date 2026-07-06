@@ -3,7 +3,16 @@ import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
 import { normalizeDepartmentName } from "@/shared/departments"
-import { missedHours, dayCredit, toLocalISODate, toLocalYearMonth, getWorkdaysInMonth } from "@/lib/hr/attendance-utils"
+import {
+  missedHours,
+  dayCredit,
+  toLocalISODate,
+  toLocalYearMonth,
+  monthBounds,
+  getWorkdaysInRange,
+  timeToMinutes,
+  overtimeHoursFor,
+} from "@/lib/hr/attendance-utils"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
@@ -117,12 +126,12 @@ export async function GET(request: NextRequest) {
 
     const allowedProfileIds = allowedProfiles.map((p) => p.id)
 
-    // Workdays in the selected period up to today
+    // Workdays in the selected period (month or quarter range) up to today
     const todayIso = toLocalISODate()
-    const ym = startDate?.slice(0, 7) ?? toLocalYearMonth()
-    const periodWorkdays = getWorkdaysInMonth(ym).filter(
-      (d) => (!startDate || d >= startDate) && (!endDate || d <= endDate) && d <= todayIso
-    )
+    const defaultBounds = monthBounds(toLocalYearMonth())
+    const rangeStart = startDate ?? defaultBounds.start
+    const rangeEnd = endDate ?? defaultBounds.end
+    const periodWorkdays = getWorkdaysInRange(rangeStart, rangeEnd).filter((d) => d <= todayIso)
 
     if (periodWorkdays.length === 0) {
       return NextResponse.json({ data: [], departments: [] })
@@ -139,6 +148,20 @@ export async function GET(request: NextRequest) {
     const { data: attendanceRows, error: attendanceError } = await attendanceQuery.returns<AttendanceRow[]>()
     if (attendanceError) {
       return NextResponse.json({ error: attendanceError.message }, { status: 500 })
+    }
+
+    // Appeals filed for days within the selected range, per employee
+    const { data: appealRows } = await dataClient
+      .from("attendance_appeals")
+      .select("user_id")
+      .in("user_id", allowedProfileIds)
+      .gte("appeal_date", rangeStart)
+      .lte("appeal_date", rangeEnd)
+      .returns<{ user_id: string }[]>()
+
+    const appealCountByEmployee = new Map<string, number>()
+    for (const row of appealRows ?? []) {
+      appealCountByEmployee.set(row.user_id, (appealCountByEmployee.get(row.user_id) ?? 0) + 1)
     }
 
     // Org holidays, approved leave, and exemption periods covering the range —
@@ -174,7 +197,10 @@ export async function GET(request: NextRequest) {
         waived_days = 0,
         leave_days = 0,
         holiday_days = 0,
-        attendance_credits = 0
+        attendance_credits = 0,
+        overtime_hours = 0,
+        clock_in_minutes_sum = 0,
+        clock_in_days = 0
       let available_days = 0
 
       for (const workday of periodWorkdays) {
@@ -248,6 +274,13 @@ export async function GET(request: NextRequest) {
           absent_days++
           total_missed_hours += totalCredits
         }
+
+        const clockInMin = timeToMinutes(rec.clock_in)
+        if (clockInMin !== null) {
+          clock_in_minutes_sum += clockInMin
+          clock_in_days++
+        }
+        overtime_hours += overtimeHoursFor(rec.clock_out, policy)
       }
 
       const total_working_days = available_days
@@ -278,6 +311,9 @@ export async function GET(request: NextRequest) {
         total_missed_hours: Math.round(total_missed_hours * 10) / 10,
         attendance_rate,
         attendance_exempt: Boolean(profile.attendance_exempt),
+        overtime_hours: Math.round(overtime_hours * 10) / 10,
+        avg_clock_in_minutes: clock_in_days > 0 ? Math.round(clock_in_minutes_sum / clock_in_days) : null,
+        appeal_count: appealCountByEmployee.get(profile.id) ?? 0,
       }
     })
 
