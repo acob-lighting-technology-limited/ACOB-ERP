@@ -1,16 +1,16 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Loader2, X } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { EmployeeRecipientPicker, type DirectoryEmployee } from "@/components/admin/employee-recipient-picker"
 
 export type MeetingSource = {
   id: string
@@ -42,8 +42,11 @@ export function MeetingSourceDialog({ open, onOpenChange, editing, onSaved }: Pr
   const [organizerToLoad, setOrganizerToLoad] = useState("")
   const [joinWebUrl, setJoinWebUrl] = useState("")
   const [label, setLabel] = useState("")
-  const [recipients, setRecipients] = useState<string[]>([])
-  const [recipientInput, setRecipientInput] = useState("")
+  const [employees, setEmployees] = useState<DirectoryEmployee[]>([])
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([])
+  // Recipient emails from before this dialog picked from the employee directory — kept
+  // as removable badges so editing an existing meeting never silently drops them.
+  const [externalEmails, setExternalEmails] = useState<string[]>([])
   const [emailEnabled, setEmailEnabled] = useState(true)
   const [isActive, setIsActive] = useState(true)
 
@@ -53,11 +56,36 @@ export function MeetingSourceDialog({ open, onOpenChange, editing, onSaved }: Pr
     setOrganizerToLoad("")
     setJoinWebUrl(editing?.join_web_url || "")
     setLabel(editing?.label || "")
-    setRecipients(editing?.recipients || [])
-    setRecipientInput("")
+    setSelectedEmployeeIds([])
+    setExternalEmails(editing?.recipients || [])
     setEmailEnabled(editing?.email_enabled ?? true)
     setIsActive(editing?.is_active ?? true)
   }, [open, editing])
+
+  const handleEmployeesLoaded = (loaded: DirectoryEmployee[]) => {
+    setEmployees(loaded)
+    setExternalEmails((currentExternal) => {
+      const matchedIds: string[] = []
+      const stillExternal: string[] = []
+      for (const email of currentExternal) {
+        const match = loaded.find((e) => e.email?.toLowerCase() === email.toLowerCase())
+        if (match) matchedIds.push(match.id)
+        else stillExternal.push(email)
+      }
+      if (matchedIds.length > 0) {
+        setSelectedEmployeeIds((prev) => Array.from(new Set([...prev, ...matchedIds])))
+      }
+      return stillExternal
+    })
+  }
+
+  const recipients = useMemo(() => {
+    const resolvedEmails = employees
+      .filter((e) => selectedEmployeeIds.includes(e.id))
+      .map((e) => e.email)
+      .filter((email): email is string => Boolean(email))
+    return Array.from(new Set([...resolvedEmails, ...externalEmails]))
+  }, [employees, selectedEmployeeIds, externalEmails])
 
   const { data: meetings = [], isFetching: loadingMeetings } = useQuery({
     queryKey: ["meeting-artifact-calendar", organizerToLoad],
@@ -69,21 +97,6 @@ export function MeetingSourceDialog({ open, onOpenChange, editing, onSaved }: Pr
       return payload.data || []
     },
   })
-
-  const addRecipient = () => {
-    const email = recipientInput.trim().toLowerCase()
-    if (!email) return
-    if (!EMAIL_RE.test(email)) {
-      toast.error("Invalid email address")
-      return
-    }
-    if (recipients.includes(email)) {
-      toast.error("Email already added")
-      return
-    }
-    setRecipients((prev) => [...prev, email])
-    setRecipientInput("")
-  }
 
   const save = useMutation({
     mutationFn: async () => {
@@ -181,42 +194,17 @@ export function MeetingSourceDialog({ open, onOpenChange, editing, onSaved }: Pr
 
           <div className="space-y-2">
             <Label>Recipients</Label>
-            <div className="flex gap-2">
-              <Input
-                type="email"
-                placeholder="person@acoblighting.com"
-                value={recipientInput}
-                onChange={(e) => setRecipientInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault()
-                    addRecipient()
-                  }
-                }}
-              />
-              <Button type="button" variant="outline" onClick={addRecipient}>
-                Add
-              </Button>
-            </div>
-            {recipients.length > 0 ? (
-              <div className="flex flex-wrap gap-2 pt-1">
-                {recipients.map((email) => (
-                  <Badge key={email} variant="secondary" className="gap-1">
-                    {email}
-                    <button
-                      type="button"
-                      onClick={() => setRecipients((prev) => prev.filter((r) => r !== email))}
-                      className="hover:text-destructive ml-1 rounded-full"
-                      aria-label={`Remove ${email}`}
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
-                  </Badge>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-xs">No recipients — artifacts will be stored but not emailed.</p>
-            )}
+            <EmployeeRecipientPicker
+              selectedIds={selectedEmployeeIds}
+              onChange={setSelectedEmployeeIds}
+              onEmployeesLoaded={handleEmployeesLoaded}
+              extraBadges={externalEmails.map((email) => ({
+                key: email,
+                label: email,
+                onRemove: () => setExternalEmails((prev) => prev.filter((e) => e !== email)),
+              }))}
+              emptyHint="No recipients — artifacts will be stored but not emailed."
+            />
           </div>
 
           <div className="flex items-center justify-between rounded-lg border p-3">
