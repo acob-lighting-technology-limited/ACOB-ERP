@@ -9,7 +9,9 @@ import { CalendarView } from "./_components/calendar-view"
 import type { EmployeeOption } from "./_components/calendar-view"
 import { ExceptionsView } from "./_components/exceptions-view"
 import { AppealsView } from "./_components/appeals-view"
+import { LeaderboardView } from "./_components/leaderboard-view"
 import { AttendanceManagerDialog } from "./_components/attendance-manager-dialog"
+import { AttendanceReportDialog } from "./_components/attendance-report-dialog"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StatCard } from "@/components/ui/stat-card"
@@ -25,10 +27,17 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { BarChart3, Download, FileText, Users, Clock, AlertCircle, Pencil, Info, Settings2 } from "lucide-react"
+import { BarChart3, Download, FileText, Users, Clock, AlertCircle, Pencil, Info, Settings2, Mail } from "lucide-react"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
-import { getWorkdaysInMonth, monthBounds, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
+import {
+  ATTENDANCE_TRACKING_START,
+  getWorkdaysInMonth,
+  monthBounds,
+  quarterBounds,
+  toLocalISODate,
+  toLocalYearMonth,
+} from "@/lib/hr/attendance-utils"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import {
   ATTENDANCE_STATUS_COLORS,
@@ -62,6 +71,9 @@ interface AttendanceReport {
   total_hours: number
   total_missed_hours?: number
   attendance_rate: number
+  overtime_hours?: number
+  avg_clock_in_minutes?: number | null
+  appeal_count?: number
   attendance_exempt?: boolean
   attendance_exempt_until?: string | null
   period_label?: string
@@ -202,14 +214,6 @@ type UnifiedDayPayload = {
     status: DayStatus
     manual_by?: string | null
   }>
-}
-
-function quarterBounds(year: number, quarter: "Q1" | "Q2" | "Q3" | "Q4") {
-  const monthStart = quarter === "Q1" ? 1 : quarter === "Q2" ? 4 : quarter === "Q3" ? 7 : 10
-  const start = `${year}-${String(monthStart).padStart(2, "0")}-01`
-  const monthEnd = monthStart + 2
-  const endDate = toLocalISODate(new Date(Date.UTC(year, monthEnd, 0)))
-  return { start, end: endDate }
 }
 
 function currentYearMonth() {
@@ -684,11 +688,12 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   )
 }
 
-type AttendanceTab = "summary" | "daily" | "calendar" | "exceptions" | "appeals"
+type AttendanceTab = "summary" | "daily" | "calendar" | "exceptions" | "appeals" | "leaderboard"
 
 const ATTENDANCE_TABS: DataTableTab[] = [
   { key: "daily", label: "Daily Roster" },
   { key: "summary", label: "Summary" },
+  { key: "leaderboard", label: "Leaderboard" },
   { key: "calendar", label: "Calendar" },
   { key: "exceptions", label: "Exceptions" },
   { key: "appeals", label: "Appeals" },
@@ -711,6 +716,7 @@ export function AttendanceReportsPage({
   const [holidays, setHolidays] = useState<Array<{ holiday_date: string; name?: string | null }>>([])
   // Unified Attendance Manager dialog
   const [managerOpen, setManagerOpen] = useState(false)
+  const [reportDialogOpen, setReportDialogOpen] = useState(false)
 
   const refreshSingleEmployeeSummary = useCallback(
     async (userId: string) => {
@@ -898,8 +904,9 @@ export function AttendanceReportsPage({
     const currentYear = now.getFullYear()
     const currentMonth = now.getMonth()
 
-    const startYear = 2026
-    const startMonth = 3 // April is index 3
+    const [trackingStartYear, trackingStartMonth] = ATTENDANCE_TRACKING_START.split("-").map(Number)
+    const startYear = trackingStartYear
+    const startMonth = trackingStartMonth - 1
 
     let y = currentYear
     let m = currentMonth
@@ -1119,7 +1126,9 @@ export function AttendanceReportsPage({
             ? "All check-in records for a selected date."
             : activeTab === "calendar"
               ? "Month-view calendar for an individual employee."
-              : "Records needing attention — late arrivals, missing clock-outs, absences."
+              : activeTab === "leaderboard"
+                ? "Rankings across punctuality, hours, and reliability for the selected period."
+                : "Records needing attention — late arrivals, missing clock-outs, absences."
       }
       icon={BarChart3}
       backLink={{ href: backLinkHref ?? "/admin/hr", label: "Back to HR" }}
@@ -1128,6 +1137,10 @@ export function AttendanceReportsPage({
       onTabChange={(t) => setActiveTab(t as AttendanceTab)}
       actions={
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setReportDialogOpen(true)} size="sm">
+            <Mail className="mr-2 h-4 w-4" />
+            Reports
+          </Button>
           <Button variant="outline" onClick={() => setManagerOpen(true)} size="sm">
             <Settings2 className="mr-2 h-4 w-4" />
             Attendance Manager
@@ -1167,6 +1180,9 @@ export function AttendanceReportsPage({
       }
     >
       {activeTab === "daily" && <DailyRosterView departments={departments} lockedDepartment={lockedDepartment} />}
+      {activeTab === "leaderboard" && (
+        <LeaderboardView departments={departments} lockedDepartment={lockedDepartment} />
+      )}
       {activeTab === "calendar" && <CalendarView employees={employeeOptions} />}
       {activeTab === "exceptions" && <ExceptionsView departments={departments} lockedDepartment={lockedDepartment} />}
       {activeTab === "appeals" && <AppealsView lockedDepartment={lockedDepartment} />}
@@ -1226,6 +1242,8 @@ export function AttendanceReportsPage({
         onReportChanged={() => void generateReport()}
         lockedDepartment={lockedDepartment}
       />
+
+      <AttendanceReportDialog open={reportDialogOpen} onOpenChange={setReportDialogOpen} />
     </DataTablePage>
   )
 }

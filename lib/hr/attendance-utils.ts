@@ -2,6 +2,9 @@ import { toLocalISODate, toLocalYearMonth } from "@/lib/utils/date"
 import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 export { toLocalISODate, toLocalYearMonth }
 
+/** Earliest month digital attendance tracking began — the floor for "all time" ranges and period pickers. */
+export const ATTENDANCE_TRACKING_START = "2026-04-01"
+
 /** Returns true if the clock-in time is after the 8:20am grace period. */
 export function isLate(clockIn: string | null | undefined): boolean {
   if (!clockIn) return false
@@ -38,6 +41,25 @@ export function getLateSteps(clockIn: string, policy: AttendancePolicy): number 
   const penaltyStartMin = startMin + 60 // e.g. 09:00 AM (1 hour after 08:00 AM)
   if (clockInMin <= penaltyStartMin) return 1
   return 1 + Math.ceil((clockInMin - penaltyStartMin) / 60)
+}
+
+/** Parses a "HH:MM" time string into minutes since midnight, or null if invalid. */
+export function timeToMinutes(value: string | null | undefined): number | null {
+  if (!value) return null
+  const [h, m] = value.split(":").map(Number)
+  if (!Number.isFinite(h) || !Number.isFinite(m)) return null
+  return h * 60 + m
+}
+
+/** Hours worked past the policy end time (0 if clocked out at/before end time). */
+export function overtimeHoursFor(
+  clockOut: string | null | undefined,
+  policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY
+): number {
+  const outMin = timeToMinutes(clockOut)
+  const endMin = timeToMinutes(policy.endTime)
+  if (outMin === null || endMin === null || outMin <= endMin) return 0
+  return (outMin - endMin) / 60
 }
 
 /** Returns the number of hourly early departure steps. */
@@ -152,10 +174,38 @@ export function dayCredit(
   return 0.0
 }
 
+/** Returns all Mon–Fri dates (YYYY-MM-DD) between start and end, inclusive. */
+export function getWorkdaysInRange(start: string, end: string): string[] {
+  const [sy, sm, sd] = start.split("-").map(Number)
+  const [ey, em, ed] = end.split("-").map(Number)
+  const date = new Date(sy, sm - 1, sd)
+  const endDate = new Date(ey, em - 1, ed)
+  const days: string[] = []
+  while (date <= endDate) {
+    const dow = date.getDay()
+    if (dow !== 0 && dow !== 6) {
+      days.push(toLocalISODate(date))
+    }
+    date.setDate(date.getDate() + 1)
+  }
+  return days
+}
+
 /** Returns first and last date of a YYYY-MM month as YYYY-MM-DD strings. */
 export function monthBounds(yearMonth: string): { start: string; end: string } {
   const [year, month] = yearMonth.split("-").map(Number)
   const start = toLocalISODate(new Date(year, month - 1, 1))
   const end = toLocalISODate(new Date(year, month, 0))
+  return { start, end }
+}
+
+export type Quarter = "Q1" | "Q2" | "Q3" | "Q4"
+
+/** Returns first and last date of a calendar quarter as YYYY-MM-DD strings. */
+export function quarterBounds(year: number, quarter: Quarter): { start: string; end: string } {
+  const monthStart = quarter === "Q1" ? 1 : quarter === "Q2" ? 4 : quarter === "Q3" ? 7 : 10
+  const start = `${year}-${String(monthStart).padStart(2, "0")}-01`
+  const monthEnd = monthStart + 2
+  const end = toLocalISODate(new Date(Date.UTC(year, monthEnd, 0)))
   return { start, end }
 }
