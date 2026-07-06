@@ -1,5 +1,5 @@
 import { createClient } from "@/lib/supabase/server"
-import { sendNotificationEmail } from "@/lib/notifications/email-gateway"
+import { sendNotificationEmail, sendNotificationEmailsIndividuallyWithRetry } from "@/lib/notifications/email-gateway"
 import { ORG_EMAIL_SENDERS } from "@/lib/org-config"
 import { withSubjectPrefix } from "@/lib/notifications/subject-policy"
 import { isSystemNotificationChannelEnabled, resolveChannelEligibleUserIds } from "@/lib/notifications/delivery-policy"
@@ -115,7 +115,7 @@ export async function sendHelpDeskMail(payload: HelpDeskMailPayload) {
 
   if (!recipients.length) return
 
-  await sendNotificationEmail({
+  await sendNotificationEmailsIndividuallyWithRetry({
     from: ORG_EMAIL_SENDERS.helpDesk,
     to: recipients,
     subject: withSubjectPrefix("Help Desk", payload.subject),

@@ -343,19 +343,29 @@ async function processSource(
     let emailed = false
     if (newArtifacts.length > 0 && source.email_enabled && source.recipients.length > 0) {
       try {
-        await sendEmail({
-          to: source.recipients,
-          from: EDGE_SENDERS.meeting,
-          subject: `${source.label} — attendance & transcript`,
-          html: buildArtifactEmailHtml({
-            meetingLabel: source.label,
-            files: newArtifacts.map((a) => a.filename),
-            intro: `New attendance and transcript for the <strong>${source.label}</strong> are attached.`,
-          }),
-          attachments: newArtifacts.map((a) => ({ filename: a.filename, content: a.base64 })),
-          traceLabel: "meeting-artifacts",
-        })
-        emailed = true
+        const results: Array<{ to: string; success: boolean; emailId?: string; error?: string }> = []
+        for (const [index, to] of source.recipients.entries()) {
+          try {
+            const data = await sendEmail({
+              to,
+              from: EDGE_SENDERS.meeting,
+              subject: `${source.label} — attendance & transcript`,
+              html: buildArtifactEmailHtml({
+                meetingLabel: source.label,
+                files: newArtifacts.map((a) => a.filename),
+                intro: `New attendance and transcript for the <strong>${source.label}</strong> are attached.`,
+              }),
+              attachments: newArtifacts.map((a) => ({ filename: a.filename, content: a.base64 })),
+              traceLabel: `meeting-artifacts:${index + 1}/${source.recipients.length}:${to}`,
+            })
+            results.push({ to, success: true, emailId: data.id })
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err)
+            console.error(`[sync-meeting-artifacts] Failed to send to ${to}:`, errMsg)
+            results.push({ to, success: false, error: errMsg })
+          }
+        }
+        emailed = results.some((r) => r.success)
         await supabase
           .from("meeting_artifact_ledger")
           .update({ emailed_at: new Date().toISOString() })
@@ -432,19 +442,29 @@ async function sendStoredArtifacts(
   }
   if (attachments.length === 0) return { sent: false, reason: "no matching documents found" }
 
-  await sendEmail({
-    to: recipients,
-    from: EDGE_SENDERS.meeting,
-    subject: `${source.label} — attendance & transcript`,
-    html: buildArtifactEmailHtml({
-      meetingLabel: source.label,
-      files: attachments.map((a) => a.filename),
-    }),
-    attachments,
-    traceLabel: "meeting-artifacts-manual",
-  })
+  const results: Array<{ to: string; success: boolean; emailId?: string; error?: string }> = []
+  for (const [index, to] of recipients.entries()) {
+    try {
+      const data = await sendEmail({
+        to,
+        from: EDGE_SENDERS.meeting,
+        subject: `${source.label} — attendance & transcript`,
+        html: buildArtifactEmailHtml({
+          meetingLabel: source.label,
+          files: attachments.map((a) => a.filename),
+        }),
+        attachments,
+        traceLabel: `meeting-artifacts-manual:${index + 1}/${recipients.length}:${to}`,
+      })
+      results.push({ to, success: true, emailId: data.id })
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err)
+      console.error(`[sync-meeting-artifacts] Manual send failed for ${to}:`, errMsg)
+      results.push({ to, success: false, error: errMsg })
+    }
+  }
   await notifyRecipients(supabase, recipients, source.label)
-  return { sent: true, files: attachments.map((a) => a.filename), to: recipients }
+  return { sent: results.some((r) => r.success), files: attachments.map((a) => a.filename), to: recipients }
 }
 
 serve(async (req) => {

@@ -1,4 +1,4 @@
-import { sendNotificationEmail } from "@/lib/notifications/email-gateway"
+import { sendNotificationEmailsIndividuallyWithRetry } from "@/lib/notifications/email-gateway"
 import { ORG_EMAIL_SENDERS } from "@/lib/org-config"
 
 export interface CorrespondenceApprovalEmailPayload {
@@ -144,7 +144,7 @@ export async function sendCorrespondenceDecisionEmail(payload: CorrespondenceDec
   if (!recipients.length) return
   const typeLabel = getTypeLabel(payload.letterType)
   const decisionLabel = getDecisionLabel(payload.decision)
-  await sendNotificationEmail({
+  await sendNotificationEmailsIndividuallyWithRetry({
     from: ORG_EMAIL_SENDERS.correspondence,
     to: recipients,
     subject: `${typeLabel} Correspondence ${decisionLabel}: ${payload.referenceNumber}`,

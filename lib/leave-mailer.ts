@@ -1,4 +1,4 @@
-import { sendNotificationEmail } from "@/lib/notifications/email-gateway"
+import { sendNotificationEmailsIndividuallyWithRetry } from "@/lib/notifications/email-gateway"
 import { ORG_EMAIL_SENDERS } from "@/lib/org-config"
 import { withSubjectPrefix } from "@/lib/notifications/subject-policy"
 
@@ -63,7 +63,7 @@ export async function sendLeaveWorkflowEmail(payload: LeaveWorkflowEmailPayload)
   const recipients = Array.from(new Set(payload.to.map((email) => email.trim().toLowerCase()).filter(Boolean)))
   if (!recipients.length) return
 
-  await sendNotificationEmail({
+  await sendNotificationEmailsIndividuallyWithRetry({
     from: ORG_EMAIL_SENDERS.hr,
     to: recipients,
     subject: withSubjectPrefix("Leave", payload.subject),
