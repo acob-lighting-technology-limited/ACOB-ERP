@@ -56,15 +56,16 @@ def main():
         },
         {
             'name': 'Attendance',
-            'start_date': '01/07/2026',
+            'start_date': '02/07/2026',
             'desc': (
                 "Central time-tracking hub. It logs check-ins/outs, enforces boundary validation via geo-fencing "
                 "and IP restrictions, manages remote approvals, and keeps historical records.\n\n"
-                "📌 [RECENT TASKS COMPLETED - 01/07/2026]:\n"
+                "📌 [RECENT TASKS COMPLETED - 02/07/2026]:\n"
                 "• Attendance Configuration: Implemented Admin feedback regarding tracking requirements and immediately implemented the changes in the ERP.\n"
                 "• Export Optimization: Optimized the ERP Excel sheet export functionality to match the Admin department's required format.\n"
                 "• Attendance Rules: Added 'early' status to replace 'present' for easier understanding.\n"
-                "• Credit System: Updated the credit system."
+                "• Credit System: Updated the credit system.\n"
+                "• Daily Report Mailer: Developed a daily report mailer that automatically emails the attendance report to HR at 11:00 AM and 11:00 PM every workday."
             ),
             'status': 'Completed',
             'timeline': 'Done',
@@ -80,8 +81,12 @@ def main():
         },
         {
             'name': 'Reports & General Meeting',
-            'start_date': '14/02/2026',
-            'desc': 'Handles meeting outputs and administrative reports. It compiles weekly reports, catalogs Knowledge Sharing Session (KSS) files, and tracks meeting action items.',
+            'start_date': '02/07/2026',
+            'desc': (
+                "Handles meeting outputs and administrative reports. It compiles weekly reports, catalogs Knowledge Sharing Session (KSS) files, and tracks meeting action items.\n\n"
+                "📌 [RECENT TASKS COMPLETED - 02/07/2026]:\n"
+                "• Teams Meeting Records Route: Added records route to automatically fetch transcript and attendance data from Teams meetings for the week, store them in the ERP, and autosend the compilation to the Admin department."
+            ),
             'status': 'Completed',
             'timeline': 'Done',
             'challenges': None
@@ -138,6 +143,14 @@ def main():
             'status': 'Completed',
             'timeline': 'Done',
             'challenges': 'Requires testing and user validation to refine vehicle and meeting room booking logic.'
+        },
+        {
+            'name': 'Network Monitoring',
+            'start_date': '03/07/2026',
+            'desc': 'Monitors and logs company network traffic. It tracks visited domains, matched employee identifiers, source IPs, and device hostnames, and classifies activity (normal, review, system noise) to detect potential security threats.',
+            'status': 'Completed',
+            'timeline': 'Done',
+            'challenges': 'Requires fine-tuning classification filters to minimize false-positive review alerts from system background noise.'
         }
     ]
 
@@ -199,9 +212,11 @@ def main():
     current_row = 2
     for mod in core_modules:
         if mod['name'] == 'Attendance':
-            dest_ws.row_dimensions[current_row].height = 140.0
+            dest_ws.row_dimensions[current_row].height = 160.0
         elif mod['name'] == 'Correspondence':
             dest_ws.row_dimensions[current_row].height = 90.0
+        elif mod['name'] == 'Reports & General Meeting':
+            dest_ws.row_dimensions[current_row].height = 110.0
         else:
             dest_ws.row_dimensions[current_row].height = 42.0
         
