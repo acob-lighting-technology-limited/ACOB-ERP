@@ -301,6 +301,7 @@ export async function updateSession(request: NextRequest) {
     !pathname.startsWith("/employee/new") &&
     !pathname.startsWith("/api/public") &&
     !pathname.startsWith("/api/devices") &&
+    !pathname.startsWith("/api/ingest/network-activity") &&
     !pathname.startsWith("/kss")
   ) {
     const url = request.nextUrl.clone()

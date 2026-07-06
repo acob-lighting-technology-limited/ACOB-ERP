@@ -173,4 +173,9 @@ export const QUERY_KEYS = {
 
   // Communications
   adminReminderSchedules: (mode: string) => ["admin-reminder-schedules", mode],
+
+  // Security
+  adminSecurityEmployees: () => ["admin-security-employees"],
+  adminSecurityNetworkActivity: (filters?: Record<string, unknown>) =>
+    filters ? ["admin-security-network-activity", filters] : ["admin-security-network-activity"],
 } as const

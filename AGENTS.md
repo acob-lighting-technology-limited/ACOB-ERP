@@ -646,6 +646,25 @@ For any leave workflow event, always use `notifyUsers` from `lib/hr/leave-workfl
 - **Next app** (`lib/`, `app/api/`): import from `ORG_EMAIL_SENDERS` in `lib/org-config.ts` (`.notification`, `.hr`, `.helpDesk`, `.correspondence`). Add a new key there rather than writing `` `ACOB X <notifications@...>` `` inline.
 - **Edge functions** (`supabase/functions/`, Deno — cannot import `lib/`): import from `EDGE_SENDERS` / `edgeDepartmentSender()` / `edgeDepartmentSenderBare()` in `supabase/functions/_shared/senders.ts`.
 
-The canonical HR/People sender is **`ACOB Admin & HR Department`** — never "ACOB HR ...". Department-derived senders (exit, asset, broadcast) resolve the label from the lead's `lead_departments` (which is "Admin & HR"), so they already produce the correct name.
+The canonical HR/People sender is **`ACOB Admin & HR`** — never "ACOB HR ..." and never "... Admin & HR Department" (no "Department" suffix). Department-derived senders (exit, asset, broadcast) resolve the label from the lead's `lead_departments` (which is "Admin & HR") via `orgDepartmentSenderBare()` / `edgeDepartmentSenderBare()` — use the *bare* variant for HR; the non-bare `orgDepartmentSender()` / `edgeDepartmentSender()` always appends "Department" and is only for genuinely departmental senders (e.g. "ACOB Finance Department").
 
 Edge functions are excluded from `tsc`/`eslint` and can't be validated locally without Deno — **smoke-test any sender change on deploy**.
+
+## Email Template Standard — Header, Footer, and Dark-Mode Lock (Mandatory)
+
+**Every email sent from this ERP must use the branded ACOB shell**: black header bar with the ACOB logo, green (`#16a34a`) top/bottom borders, a white 600–680px content wrapper, and a matching black footer with the company name + subsystem line + automated-notice text. Do not invent a one-off lighter/plainer template — copy the shell from an existing sender (`supabase/functions/_shared/artifact-email.ts` or `supabase/functions/send-meeting-reminder/index.ts` are the reference implementations) and only swap the body content.
+
+**The header/footer black bars must be dark-mode-locked**, or Gmail/Outlook dark mode will invert them to a white bar with unreadable text. Every black header/footer `<table>` cell must carry all of the following together — no partial subset:
+
+```html
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000"
+  style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">
+  <tr><td align="center" style="padding:20px 0;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;">
+    <!-- logo or footer text -->
+  </td></tr>
+</table>
+```
+
+The `background-image:linear-gradient(color,color) !important` is the load-bearing part — Gmail's dark-mode algorithm inverts flat `background-color` values but leaves elements with a `background-image` alone. `background:` alone (as used in `_shared/artifact-email.ts` before this was fixed) is **not sufficient** and will still get inverted in Gmail dark mode.
+
+Before adding a new email template (Next.js `lib/email-templates/`, `lib/*-mailer.ts`, or a Supabase edge function), verify the header/footer table matches this exact pattern. If you copy an existing template as a starting point, grep it for `linear-gradient` first — `send-birthday-emails`, `send-communications-mail`, `send-email-notification`, `send-weekly-report`, and `send-meeting-reminder` already have it correctly.

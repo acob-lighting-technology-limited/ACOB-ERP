@@ -237,7 +237,7 @@ function buildMeetingReminderHtml(
   const displayTime = formatTimeWithMeridiem(meetingTime)
   const preparedBy = escapeHtml(preparedByName?.trim() || "ACOB Team")
   const designation = escapeHtml(preparedByDesignation?.trim() || "")
-  const department = escapeHtml(preparedByDepartment?.trim() || "Admin & HR Department")
+  const department = escapeHtml(preparedByDepartment?.trim() || "Admin & HR")
   const presenterName = getKnowledgePresenterName(kssPresenter)
   const isGuestPresenter = Boolean(presenterName) && !kssPresenter?.id
   const presenterDisplayText = presenterName ? `${presenterName}${isGuestPresenter ? " (Guest)" : ""}` : ""
@@ -625,17 +625,22 @@ serve(async (req) => {
         ? Math.floor((parsedMeetingDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
         : null
 
+      // Prefer the office week derived from the meeting date. The date is
+      // regenerated on every recurring send, whereas an explicit
+      // meetingWeek/meetingYear may be a stale value frozen into the schedule's
+      // meeting_config at creation time. Trusting the stale week caused
+      // reminders to announce meeting dates weeks in the past.
       const resolvedOfficeWeek =
-        typeof body?.meetingWeek === "number" && typeof body?.meetingYear === "number"
-          ? { week: body.meetingWeek, year: body.meetingYear }
-          : parsedMeetingDate && dayDiffFromToday !== null && Math.abs(dayDiffFromToday) <= 7
-            ? getOfficeWeekFromDate(
-                new Date(
-                  parsedMeetingDate.getUTCFullYear(),
-                  parsedMeetingDate.getUTCMonth(),
-                  parsedMeetingDate.getUTCDate()
-                )
+        parsedMeetingDate && dayDiffFromToday !== null && Math.abs(dayDiffFromToday) <= 7
+          ? getOfficeWeekFromDate(
+              new Date(
+                parsedMeetingDate.getUTCFullYear(),
+                parsedMeetingDate.getUTCMonth(),
+                parsedMeetingDate.getUTCDate()
               )
+            )
+          : typeof body?.meetingWeek === "number" && typeof body?.meetingYear === "number"
+            ? { week: body.meetingWeek, year: body.meetingYear }
             : getCurrentOfficeWeek()
 
       effectiveMeetingDate = await resolveEffectiveMeetingDateIso(
@@ -763,7 +768,7 @@ serve(async (req) => {
           kss_roster_status: kssRosterStatus || null,
           prepared_by: meetingPreparedByName || null,
           prepared_by_designation: meetingPreparedByDesignation || null,
-          prepared_by_department: meetingPreparedByDepartment || "Admin & HR Department",
+          prepared_by_department: meetingPreparedByDepartment || "Admin & HR",
         },
       })
     } catch (auditErr) {

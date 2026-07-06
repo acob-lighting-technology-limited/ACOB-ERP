@@ -190,7 +190,7 @@ export async function POST(req: Request) {
           caller.email ||
           "Admin & HR Lead",
         designation: callerProfile?.designation || null,
-        department: callerProfile?.department || "Admin & HR Department",
+        department: callerProfile?.department || "Admin & HR",
       },
     })
 

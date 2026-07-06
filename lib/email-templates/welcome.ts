@@ -36,7 +36,7 @@ export function renderWelcomeEmail({ pendingUser, tempPassword, portalUrl, prepa
   const safePortalUrl = escapeHtml(portalUrl)
   const preparedByName = escapeHtml((preparedBy?.name || "Admin & HR").trim())
   const preparedByDesignation = escapeHtml((preparedBy?.designation || "").trim())
-  const preparedByDepartment = escapeHtml((preparedBy?.department || "Admin & HR Department").trim())
+  const preparedByDepartment = escapeHtml((preparedBy?.department || "Admin & HR").trim())
 
   return `
 <!DOCTYPE html>

@@ -21,7 +21,7 @@ export function renderInternalNotificationEmail({ pendingUser, preparedBy }: Int
   const address = pendingUser.residential_address ? escapeHtml(pendingUser.residential_address) : "N/A"
   const preparedByName = escapeHtml((preparedBy?.name || "Admin & HR Lead").trim())
   const preparedByDesignation = escapeHtml((preparedBy?.designation || "").trim())
-  const preparedByDepartment = escapeHtml((preparedBy?.department || "Admin & HR Department").trim())
+  const preparedByDepartment = escapeHtml((preparedBy?.department || "Admin & HR").trim())
   return `
 <!DOCTYPE html>
 <html lang="en">
