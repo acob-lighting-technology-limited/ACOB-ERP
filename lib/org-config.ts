@@ -57,16 +57,21 @@ export const ORG_EMAIL_SENDERS = {
   /** Generic system notifications / approvals (env-overridable). */
   notification: ORG_NOTIFICATION_SENDER,
   /** Admin & HR department mail — leave, exit notices, HR communications. */
-  hr: orgSender(`${ORG_CODE} Admin & HR Department`),
+  hr: orgSender(`${ORG_CODE} Admin & HR`),
   /** Help desk tickets. */
   helpDesk: orgSender(`${ORG_CODE} Help Desk`),
   /** Correspondence module. */
   correspondence: orgSender(`${ORG_CODE} Correspondence System`),
 } as const
 
-/** Dynamic department sender, e.g. "ACOB Admin & HR Department" (label resolved at runtime). */
+/** Dynamic department sender, e.g. "ACOB Finance Department" (label resolved at runtime). */
 export function orgDepartmentSender(departmentLabel: string): string {
   return orgSender(`${ORG_CODE} ${departmentLabel} Department`)
+}
+
+/** Dynamic department sender without the "Department" suffix, e.g. "ACOB Admin & HR". */
+export function orgDepartmentSenderBare(departmentLabel: string): string {
+  return orgSender(`${ORG_CODE} ${departmentLabel}`)
 }
 
 // ---------------------------------------------------------------------------

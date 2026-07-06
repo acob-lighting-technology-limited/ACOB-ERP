@@ -412,6 +412,13 @@ const adminNavigation: NavItem[] = [
     ],
   },
   {
+    section: "security",
+    name: "Security",
+    href: "/admin/security/network-activity",
+    icon: ShieldCheck,
+    roles: ["developer", "super_admin", "admin"],
+  },
+  {
     section: "dev",
     name: "Login Logs",
     href: "/admin/dev/login-logs",
@@ -452,6 +459,7 @@ const adminSections = [
   { key: "management", label: "Management" },
   { key: "operations", label: "Operations" },
   { key: "compliance", label: "Compliance" },
+  { key: "security", label: "Security" },
   { key: "dev", label: "DEV" },
 ]
 
