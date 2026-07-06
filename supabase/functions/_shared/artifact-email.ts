@@ -42,9 +42,10 @@ export function buildArtifactEmailHtml(params: {
     ".card-header { padding:12px 18px; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; border-bottom:1px solid #d1d5db; background:#ecfdf5; color:#065f46; }" +
     "</style></head><body>" +
     '<div style="background:#f3f4f6;padding:24px 0;">' +
-    // Header
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;">' +
-    '<tr><td align="center" style="padding:20px 0;background:#000000 !important;">' +
+    // Header — background-color + linear-gradient(color,color) + mso-line-height-rule
+    // together stop Gmail/Outlook dark mode from inverting this to a white bar.
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">' +
+    '<tr><td align="center" style="padding:20px 0;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;">' +
     '<img src="https://erp.acoblighting.com/images/acob-logo-dark.png" height="60" alt="ACOB Lighting">' +
     "</td></tr></table>" +
     // Body
@@ -58,9 +59,9 @@ export function buildArtifactEmailHtml(params: {
     "</table></div>" +
     '<p class="text" style="color:#6b7280;font-size:13px;">These documents are also stored in the ERP under Reports &rsaquo; General Meeting &rsaquo; Meeting Records.</p>' +
     "</div>" +
-    // Footer
-    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;">' +
-    '<tr><td align="center" style="padding:20px;background:#000000 !important;font-size:11px;color:#d1d5db;">' +
+    // Footer — same dark-mode lock as the header
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">' +
+    '<tr><td align="center" style="padding:20px;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;font-size:11px;color:#d1d5db;">' +
     '<strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>' +
     '<span style="color:#16a34a;font-weight:600;">Meeting Records System</span><br><br>' +
     '<i style="color:#9ca3af;">This is an automated system notification. Please do not reply directly to this email.</i>' +
