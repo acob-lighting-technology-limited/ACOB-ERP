@@ -668,3 +668,15 @@ Edge functions are excluded from `tsc`/`eslint` and can't be validated locally w
 The `background-image:linear-gradient(color,color) !important` is the load-bearing part — Gmail's dark-mode algorithm inverts flat `background-color` values but leaves elements with a `background-image` alone. `background:` alone (as used in `_shared/artifact-email.ts` before this was fixed) is **not sufficient** and will still get inverted in Gmail dark mode.
 
 Before adding a new email template (Next.js `lib/email-templates/`, `lib/*-mailer.ts`, or a Supabase edge function), verify the header/footer table matches this exact pattern. If you copy an existing template as a starting point, grep it for `linear-gradient` first — `send-birthday-emails`, `send-communications-mail`, `send-email-notification`, `send-weekly-report`, and `send-meeting-reminder` already have it correctly.
+
+## Email Delivery Standard — Loop Over Recipients Individually (Mandatory)
+
+**Never send a system/automated email to multiple recipients in a single `to` array/list.** Doing this puts all recipients in the email header's `to` field, exposing everyone's email address to all other recipients (acting like an unintentional public "CC").
+
+- **Standard Policy**: If an email needs to go to multiple people, always loop over the recipient list and call the email dispatch helper (`sendEmail` or equivalent) individually for each recipient, so that each person receives a separate email where they are the sole recipient.
+- **Reference Implementations**:
+  - `send-meeting-reminder` (loops through `recipients` individually).
+  - `send-attendance-daily-report` (loops through `recipientEmails` individually).
+  - `send-weekly-report` (uses `processRecipientBatch` to send to each recipient individually).
+  - `send-communications-mail` (uses `processRecipientBatch` to send to each recipient individually).
+

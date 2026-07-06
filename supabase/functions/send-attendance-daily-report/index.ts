@@ -452,13 +452,24 @@ serve(async (req) => {
       year: "numeric",
     }).format(new Date(`${today}T00:00:00Z`))
 
-    await sendEmail({
-      to: recipientEmails,
-      subject: `Daily Attendance Report — ${dateLabelShort}`,
-      html,
-      from: EDGE_SENDERS.hr,
-      traceLabel: "attendance-daily-report",
-    })
+    const results: Array<{ to: string; success: boolean; emailId?: string; error?: string }> = []
+    for (const [index, to] of recipientEmails.entries()) {
+      try {
+        const data = await sendEmail({
+          to,
+          subject: `Daily Attendance Report — ${dateLabelShort}`,
+          html,
+          from: EDGE_SENDERS.hr,
+          traceLabel: `attendance-daily-report:${index + 1}/${recipientEmails.length}:${to}`,
+        })
+        results.push({ to, success: true, emailId: data.id })
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : String(err)
+        console.error(`[attendance-daily-report] Failed to send to ${to}:`, errMsg)
+        results.push({ to, success: false, error: errMsg })
+      }
+    }
+
 
     if (!isTest) {
       await supabase.from("system_settings").upsert(
