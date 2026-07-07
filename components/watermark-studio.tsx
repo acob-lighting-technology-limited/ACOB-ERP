@@ -46,7 +46,7 @@ const WATERMARK_PRESETS: WatermarkPreset[] = [
     id: "website-optimized",
     name: "Website Optimized",
     description: "Perfect for website images - balanced protection & aesthetics",
-    config: { position: "center-down-20", opacity: 0.3, size: 18 },
+    config: { position: "center-down-25", opacity: 0.44, size: 20 },
   },
   {
     id: "subtle",
@@ -74,9 +74,9 @@ export function WatermarkStudio() {
   const [mediaType, setMediaType] = useState<"image" | "video" | null>(null)
   const [watermarks, setWatermarks] = useState(DEFAULT_WATERMARKS)
   const [selectedWatermark, setSelectedWatermark] = useState(DEFAULT_WATERMARKS[0].path)
-  const [selectedPreset, setSelectedPreset] = useState<string>("custom")
+  const [selectedPreset, setSelectedPreset] = useState<string>("website-optimized")
   const [customFileName, setCustomFileName] = useState<string>("")
-  const [config, setConfig] = useState<WatermarkConfig>({ position: "middle-right", opacity: 0.44, size: 25 })
+  const [config, setConfig] = useState<WatermarkConfig>({ position: "center-down-25", opacity: 0.44, size: 20 })
   const [isProcessing, setIsProcessing] = useState(false)
   const [processedUrl, setProcessedUrl] = useState<string | null>(null)
 
