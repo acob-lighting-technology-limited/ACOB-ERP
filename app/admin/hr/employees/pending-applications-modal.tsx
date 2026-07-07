@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -43,6 +44,9 @@ interface PendingUser {
   office_location?: string
   created_at: string
   status: string
+  employment_type?: string
+  contract_category_id?: string
+  contract_categories?: { name: string; code: string } | null
 }
 
 interface PendingApplicationsModalProps {
@@ -90,8 +94,8 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
   const [selectedUser, setSelectedUser] = useState<PendingUser | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [pendingReject, setPendingReject] = useState(false)
-  const [employeeId, setEmployeeId] = useState("")
-  const [hireDate, setHireDate] = useState(toLocalISODate())
+  const [employmentType, setEmploymentType] = useState<"full_time" | "part_time" | "contract">("full_time")
+  const [contractCategoryCode, setContractCategoryCode] = useState("")
   const [pendingEmailDispatch, setPendingEmailDispatch] = useState<PendingEmailDispatch | null>(null)
   const [isSendingEmails, setIsSendingEmails] = useState(false)
 
@@ -104,15 +108,40 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
     enabled: isOpen,
   })
 
-  const { data: approvalEmailPreview, isLoading: isLoadingApprovalPreview } = useQuery<ApprovalEmailPreview>({
-    queryKey: ["pending-approval-email-preview", selectedUser?.id, employeeId],
+  const [hireDate, setHireDate] = useState(toLocalISODate())
+
+  const { data: contractCategories = [] } = useQuery<any[]>({
+    queryKey: ["contract-categories"],
     queryFn: async () => {
-      if (!selectedUser?.id || !employeeId) {
+      const { data, error } = await supabase
+        .from("contract_categories")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+      if (error) throw error
+      return data || []
+    },
+    enabled: isOpen,
+  })
+
+  const { data: approvalEmailPreview, isLoading: isLoadingApprovalPreview } = useQuery<ApprovalEmailPreview>({
+    queryKey: ["pending-approval-email-preview", selectedUser?.id, employmentType, contractCategoryCode],
+    queryFn: async () => {
+      if (!selectedUser?.id) {
         throw new Error("Missing approval preview context")
       }
 
+      // Construct a valid dummy ID for the preview API route matching regex
+      const currentYear = new Date().getFullYear()
+      const dummyId =
+        employmentType === "full_time"
+          ? `ACOB/${currentYear}/999`
+          : employmentType === "part_time"
+            ? `ACOB/PT/${currentYear}/999`
+            : `ACOB/${contractCategoryCode || "SIWES"}/${currentYear}/999`
+
       const response = await fetch(
-        `/api/admin/pending-users/${selectedUser.id}/approval-preview?employeeId=${encodeURIComponent(employeeId)}`
+        `/api/admin/pending-users/${selectedUser.id}/approval-preview?employeeId=${encodeURIComponent(dummyId)}`
       )
       const result = await response.json()
 
@@ -122,45 +151,14 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
 
       return result as ApprovalEmailPreview
     },
-    enabled: isOpen && !!selectedUser?.id && !!employeeId,
+    enabled: isOpen && !!selectedUser?.id,
   })
 
-  const fetchSuggestedId = useCallback(async () => {
-    try {
-      const { data: lastProfile } = await supabase
-        .from("profiles")
-        .select("employee_number")
-        .not("employee_number", "is", null)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single()
-
-      let nextIdNumber = 1
-      const currentYear = new Date().getFullYear()
-
-      if (lastProfile && lastProfile.employee_number) {
-        const parts = lastProfile.employee_number.split("/")
-        if (parts.length === 3) {
-          const lastNum = parseInt(parts[2], 10)
-          if (!isNaN(lastNum)) {
-            nextIdNumber = lastNum + 1
-          }
-        }
-      }
-      setEmployeeId(`ACOB/${currentYear}/${nextIdNumber.toString().padStart(3, "0")}`)
-    } catch (err) {
-      log.error("Error suggesting ID:", err)
-      setEmployeeId(`ACOB/${new Date().getFullYear()}/001`)
-    }
-  }, [supabase])
-
-  const handleUserSelect = useCallback(
-    (user: PendingUser) => {
-      setSelectedUser(user)
-      void fetchSuggestedId()
-    },
-    [fetchSuggestedId]
-  )
+  const handleUserSelect = useCallback((user: PendingUser) => {
+    setSelectedUser(user)
+    setEmploymentType((user.employment_type as any) || "full_time")
+    setContractCategoryCode(user.contract_categories?.code || "")
+  }, [])
 
   // Auto-select first user when data loads
   useEffect(() => {
@@ -172,13 +170,6 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
   const handleApprove = async () => {
     if (!selectedUser) return
 
-    // Validate ID format before sending
-    const empNumPattern = /^ACOB\/[0-9]{4}\/[0-9]{3}$/
-    if (employeeId && !empNumPattern.test(employeeId)) {
-      toast.error("Employee ID MUST be in format: ACOB/YEAR/NUMBER (e.g., ACOB/2026/001)")
-      return
-    }
-
     setIsProcessing(true)
 
     try {
@@ -187,9 +178,10 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pendingUserId: selectedUser.id,
-          employeeId: employeeId,
           hireDate: hireDate,
           sendEmails: false,
+          employmentType: employmentType,
+          contractCategoryCode: contractCategoryCode || null,
         }),
       })
 
@@ -207,7 +199,6 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
         handleUserSelect(remaining[0])
       } else {
         setSelectedUser(null)
-        setEmployeeId("")
       }
       onEmployeeCreated()
 
@@ -247,7 +238,6 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
         handleUserSelect(remaining[0])
       } else {
         setSelectedUser(null)
-        setEmployeeId("")
       }
     } catch (error: unknown) {
       log.error("Rejection error:", error)
@@ -361,18 +351,49 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                             className="bg-primary/5 border-primary/20 focus-visible:ring-primary h-9 w-40 font-mono text-xs font-bold"
                           />
                         </div>
-                        <div className="flex flex-col items-end">
-                          <span className="text-muted-foreground mb-1 text-[10px] font-bold uppercase">Assign ID</span>
-                          <div className="relative w-44">
-                            <Hash className="text-primary absolute top-2.5 left-2.5 h-3.5 w-3.5" />
-                            <Input
-                              value={employeeId}
-                              onChange={(e) => setEmployeeId(e.target.value)}
-                              className="bg-primary/5 border-primary/20 focus-visible:ring-primary h-9 pl-8 font-mono text-xs font-bold"
-                              placeholder="ACOB/2026/001"
-                            />
-                          </div>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="text-muted-foreground text-[10px] font-bold uppercase">Employment Type</span>
+                          <Select
+                            value={employmentType}
+                            onValueChange={(value: any) => {
+                              setEmploymentType(value)
+                              if (value !== "contract") {
+                                setContractCategoryCode("")
+                              } else if (contractCategories.length > 0) {
+                                setContractCategoryCode(contractCategories[0].code)
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="bg-primary/5 border-primary/20 h-9 w-32 text-xs font-bold">
+                              <SelectValue placeholder="Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="full_time">Full Time</SelectItem>
+                              <SelectItem value="part_time">Part Time</SelectItem>
+                              <SelectItem value="contract">Contract</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
+                        {employmentType === "contract" && (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="text-muted-foreground text-[10px] font-bold uppercase">Category</span>
+                            <Select
+                              value={contractCategoryCode}
+                              onValueChange={(value) => setContractCategoryCode(value)}
+                            >
+                              <SelectTrigger className="bg-primary/5 border-primary/20 h-9 w-32 text-xs font-bold">
+                                <SelectValue placeholder="Category" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {contractCategories.map((cat) => (
+                                  <SelectItem key={cat.id} value={cat.code}>
+                                    {cat.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                         <Badge variant="outline" className="mb-1 self-end py-0.5 text-[10px] font-bold">
                           PENDING APPROVAL
                         </Badge>
@@ -392,7 +413,16 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                           <DetailRow label="Department" value={selectedUser.department} />
                           <DetailRow label="Designation" value={selectedUser.designation} />
                           <DetailRow label="System Email" value={selectedUser.company_email} />
-                          <DetailRow label="Assigned ID" value={employeeId} />
+                          <DetailRow
+                            label="Expected Company ID"
+                            value={
+                              employmentType === "full_time"
+                                ? `ACOB/${new Date().getFullYear()}/... (Auto-generated)`
+                                : employmentType === "part_time"
+                                  ? `ACOB/PT/${new Date().getFullYear()}/... (Auto-generated)`
+                                  : `ACOB/${contractCategoryCode || "SIWES"}/${new Date().getFullYear()}/... (Auto-generated)`
+                            }
+                          />
                           <DetailRow label="Office Location" value={selectedUser.office_location || "N/A"} />
                         </div>
                       </div>

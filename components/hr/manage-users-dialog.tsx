@@ -114,7 +114,8 @@ const createSchema = z.object({
   phoneNumber: z.string(),
   role: z.string(),
   admin_routes: z.array(z.string()),
-  employeeNumber: z.string(),
+  employmentType: z.enum(["full_time", "part_time", "contract"]),
+  contractCategoryCode: z.string().optional(),
 })
 type CreateFormValues = z.infer<typeof createSchema>
 
@@ -166,7 +167,8 @@ export function ManageUsersDialog({
       phoneNumber: "",
       role: "employee",
       admin_routes: [],
-      employeeNumber: "",
+      employmentType: "full_time",
+      contractCategoryCode: "",
     },
   })
   const {
@@ -177,6 +179,34 @@ export function ManageUsersDialog({
     reset: resetCreate,
   } = rhf
   const roleValue = watch("role")
+  const employmentTypeValue = watch("employmentType")
+  const contractCategoryCodeValue = watch("contractCategoryCode")
+
+  const { data: contractCategories = [] } = useQuery<any[]>({
+    queryKey: ["contract-categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contract_categories")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+      if (error) throw error
+      return data || []
+    },
+    enabled: open,
+  })
+
+  const getPreviewId = () => {
+    const currentYear = new Date().getFullYear()
+    if (employmentTypeValue === "full_time") {
+      return `ACOB/${currentYear}/...`
+    } else if (employmentTypeValue === "part_time") {
+      return `ACOB/PT/${currentYear}/...`
+    } else {
+      const catCode = contractCategoryCodeValue || "CATEGORY"
+      return `ACOB/${catCode}/${currentYear}/...`
+    }
+  }
 
   const handleCreateUser = async () => {
     if (isCreating || !canManageUsers) return
@@ -204,7 +234,8 @@ export function ManageUsersDialog({
           phoneNumber: v.phoneNumber,
           role: v.role,
           admin_routes: v.admin_routes,
-          employeeNumber: v.employeeNumber,
+          employmentType: v.employmentType,
+          contractCategoryCode: v.contractCategoryCode || null,
         }),
       })
       const data = await res.json()
@@ -560,18 +591,59 @@ export function ManageUsersDialog({
                       className="mt-1.5"
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="cu_empnum">
-                      Employee Number <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="cu_empnum"
-                      value={watch("employeeNumber")}
-                      onChange={(e) => setValue("employeeNumber", e.target.value.toUpperCase())}
-                      placeholder="ACOB/2026/058"
-                      className="mt-1.5 font-mono"
-                    />
-                    <p className="text-muted-foreground mt-1 text-xs">Format: ACOB/YEAR/NUMBER</p>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <Label htmlFor="cu_employment_type">Employment Type</Label>
+                      <Select
+                        value={employmentTypeValue}
+                        onValueChange={(value) => {
+                          setValue("employmentType", value as any)
+                          if (value !== "contract") {
+                            setValue("contractCategoryCode", "")
+                          } else if (contractCategories.length > 0) {
+                            setValue("contractCategoryCode", contractCategories[0].code)
+                          }
+                        }}
+                      >
+                        <SelectTrigger id="cu_employment_type" className="mt-1.5">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="full_time">Full Time</SelectItem>
+                          <SelectItem value="part_time">Part Time</SelectItem>
+                          <SelectItem value="contract">Contract</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {employmentTypeValue === "contract" && (
+                      <div>
+                        <Label htmlFor="cu_contract_category">Contract Category</Label>
+                        <Select
+                          value={contractCategoryCodeValue}
+                          onValueChange={(value) => setValue("contractCategoryCode", value)}
+                        >
+                          <SelectTrigger id="cu_contract_category" className="mt-1.5">
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {contractCategories.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.code}>
+                                {cat.name} ({cat.code})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-muted/30 rounded-lg border p-3">
+                    <span className="text-muted-foreground text-xs font-semibold uppercase">Assigned ID Preview</span>
+                    <p className="text-primary mt-1 font-mono text-sm font-bold">{getPreviewId()}</p>
+                    <p className="text-muted-foreground mt-0.5 text-xs">
+                      The exact number will be generated automatically.
+                    </p>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>

@@ -45,7 +45,7 @@ export async function GET() {
 
   const { data, error } = await supabaseAdmin
     .from("pending_users")
-    .select("*")
+    .select("*, contract_categories(*)")
     .eq("status", "pending")
     .order("created_at", { ascending: false })
 

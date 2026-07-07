@@ -69,7 +69,19 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { firstName, lastName, otherNames, email, department, designation, phoneNumber, role, employeeNumber } = body
+    const {
+      firstName,
+      lastName,
+      otherNames,
+      email,
+      department,
+      designation,
+      phoneNumber,
+      role,
+      employmentType,
+      contractCategoryCode,
+    } = body
+    const resolvedEmploymentType = employmentType || "full_time"
     const resolvedDesignation = String(designation ?? body?.companyRole ?? "").trim()
     const adminRoutes = Array.isArray(body?.admin_routes)
       ? body.admin_routes
@@ -140,26 +152,53 @@ export async function PATCH(request: NextRequest) {
     }
 
     // Validate required fields (department is optional for executives like MD)
-    if (!firstName || !lastName || !email || !employeeNumber) {
+    if (!firstName || !lastName || !email) {
       return NextResponse.json(
         {
           success: false,
-          error: "First name, last name, email, and employee number are required",
+          error: "First name, last name, and email are required",
         },
         { status: 400 }
       )
     }
 
-    // Validate employee number format: ACOB/YEAR/NUMBER (e.g., ACOB/2026/058)
-    const empNumPattern = /^ACOB\/[0-9]{4}\/[0-9]{3}$/
-    if (!empNumPattern.test(employeeNumber)) {
+    // Generate employee number server-side
+    const { data: employeeNumber, error: genError } = await serviceSupabase.rpc("generate_staff_number", {
+      p_type: resolvedEmploymentType,
+      p_category_code: contractCategoryCode || null,
+    })
+
+    if (genError || !employeeNumber) {
+      log.error({ err: String(genError) }, "[Create User] Employee ID generation error:")
       return NextResponse.json(
         {
           success: false,
-          error: "Employee number must be in format: ACOB/YEAR/NUMBER (e.g., ACOB/2026/058)",
+          error: `Failed to generate employee number: ${genError?.message ?? "unknown error"}`,
         },
-        { status: 400 }
+        { status: 500 }
       )
+    }
+
+    // Resolve contract category ID if contract
+    let contractCategoryId = null
+    if (resolvedEmploymentType === "contract" && contractCategoryCode) {
+      const { data: catData, error: catError } = await serviceSupabase
+        .from("contract_categories")
+        .select("id")
+        .eq("code", contractCategoryCode.toUpperCase())
+        .eq("is_active", true)
+        .single()
+
+      if (catError || !catData) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: `Invalid or inactive contract category code: ${contractCategoryCode}`,
+          },
+          { status: 400 }
+        )
+      }
+      contractCategoryId = catData.id
     }
 
     // Validate email format and domain
@@ -241,6 +280,8 @@ export async function PATCH(request: NextRequest) {
         lead_departments: [],
         employment_status: "active", // Explicitly set employment status
         employee_number: employeeNumber || null, // Employee number (ACOB/YEAR/NUMBER)
+        employment_type: resolvedEmploymentType,
+        contract_category_id: contractCategoryId,
       })
       .eq("id", authData.user.id)
 
@@ -263,7 +304,14 @@ export async function PATCH(request: NextRequest) {
         action: "create",
         entityType: "user",
         entityId: authData.user.id,
-        newValues: { email, department, role: targetRole, employee_number: employeeNumber || null },
+        newValues: {
+          email,
+          department,
+          role: targetRole,
+          employee_number: employeeNumber || null,
+          employment_type: resolvedEmploymentType,
+          contract_category_id: contractCategoryId,
+        },
         context: { actorId: user.id, source: "api", route: "/api/admin/create-user" },
       },
       { failOpen: true }

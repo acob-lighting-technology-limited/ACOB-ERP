@@ -4,6 +4,8 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
 import { useEffect } from "react"
+import { useQuery } from "@tanstack/react-query"
+import { createClient } from "@/lib/supabase/client"
 import {
   Dialog,
   DialogContent,
@@ -34,7 +36,8 @@ const createUserSchema = z.object({
   phoneNumber: z.string(),
   role: z.string(),
   admin_routes: z.array(z.string()),
-  employeeNumber: z.string(),
+  employmentType: z.enum(["full_time", "part_time", "contract"]),
+  contractCategoryCode: z.string(),
 })
 
 type CreateUserFormValues = z.infer<typeof createUserSchema>
@@ -49,7 +52,8 @@ interface CreateUserForm {
   phoneNumber: string
   role: UserRole
   admin_routes: string[]
-  employeeNumber: string
+  employmentType: "full_time" | "part_time" | "contract"
+  contractCategoryCode: string
 }
 
 interface CreateUserDialogProps {
@@ -75,6 +79,21 @@ export function CreateUserDialog({
 }: CreateUserDialogProps) {
   const { departments: DEPARTMENTS } = useDepartments()
 
+  const { data: contractCategories = [] } = useQuery<any[]>({
+    queryKey: ["contract-categories"],
+    queryFn: async () => {
+      const supabase = createClient()
+      const { data, error } = await supabase
+        .from("contract_categories")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+      if (error) throw error
+      return data || []
+    },
+    enabled: isOpen,
+  })
+
   const rhf = useForm<CreateUserFormValues>({
     resolver: zodResolver(createUserSchema),
     defaultValues: {
@@ -87,7 +106,8 @@ export function CreateUserDialog({
       phoneNumber: parentForm.phoneNumber,
       role: parentForm.role,
       admin_routes: parentForm.admin_routes,
-      employeeNumber: parentForm.employeeNumber,
+      employmentType: parentForm.employmentType || "full_time",
+      contractCategoryCode: parentForm.contractCategoryCode || "",
     },
   })
 
@@ -111,7 +131,8 @@ export function CreateUserDialog({
         phoneNumber: values.phoneNumber ?? "",
         role: (values.role ?? "employee") as UserRole,
         admin_routes: (values.admin_routes ?? []).filter((value): value is string => Boolean(value)),
-        employeeNumber: values.employeeNumber ?? "",
+        employmentType: (values.employmentType ?? "full_time") as "full_time" | "part_time" | "contract",
+        contractCategoryCode: values.contractCategoryCode ?? "",
       })
     })
     return () => subscription.unsubscribe()
@@ -130,7 +151,8 @@ export function CreateUserDialog({
         phoneNumber: parentForm.phoneNumber,
         role: parentForm.role,
         admin_routes: parentForm.admin_routes,
-        employeeNumber: parentForm.employeeNumber,
+        employmentType: parentForm.employmentType || "full_time",
+        contractCategoryCode: parentForm.contractCategoryCode || "",
       })
     }
   }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -145,6 +167,20 @@ export function CreateUserDialog({
   const lastNameValue = watch("lastName")
   const emailValue = watch("email")
   const departmentValue = watch("department")
+  const employmentTypeValue = watch("employmentType")
+  const contractCategoryCodeValue = watch("contractCategoryCode")
+
+  const getPreviewId = () => {
+    const currentYear = new Date().getFullYear()
+    if (employmentTypeValue === "full_time") {
+      return `ACOB/${currentYear}/...`
+    } else if (employmentTypeValue === "part_time") {
+      return `ACOB/PT/${currentYear}/...`
+    } else {
+      const catCode = contractCategoryCodeValue || "CATEGORY"
+      return `ACOB/${catCode}/${currentYear}/...`
+    }
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -190,19 +226,57 @@ export function CreateUserDialog({
             />
           </div>
 
-          <div>
-            <Label htmlFor="create_employee_number">
-              Employee Number <span className="text-destructive">*</span>
-            </Label>
-            <Input
-              id="create_employee_number"
-              value={watch("employeeNumber")}
-              onChange={(e) => setValue("employeeNumber", e.target.value.toUpperCase())}
-              placeholder="e.g., ACOB/2026/058"
-              className="mt-1.5 font-mono"
-              required
-            />
-            <p className="text-muted-foreground mt-1 text-xs">Format: ACOB/YEAR/NUMBER (e.g., ACOB/2026/058)</p>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label htmlFor="create_employment_type">Employment Type</Label>
+              <Select
+                value={employmentTypeValue}
+                onValueChange={(value) => {
+                  setValue("employmentType", value as any)
+                  if (value !== "contract") {
+                    setValue("contractCategoryCode", "")
+                  } else if (contractCategories.length > 0) {
+                    setValue("contractCategoryCode", contractCategories[0].code)
+                  }
+                }}
+              >
+                <SelectTrigger id="create_employment_type" className="mt-1.5">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="full_time">Full Time</SelectItem>
+                  <SelectItem value="part_time">Part Time</SelectItem>
+                  <SelectItem value="contract">Contract</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {employmentTypeValue === "contract" && (
+              <div>
+                <Label htmlFor="create_contract_category">Contract Category</Label>
+                <Select
+                  value={contractCategoryCodeValue}
+                  onValueChange={(value) => setValue("contractCategoryCode", value)}
+                >
+                  <SelectTrigger id="create_contract_category" className="mt-1.5">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {contractCategories.map((cat) => (
+                      <SelectItem key={cat.id} value={cat.code}>
+                        {cat.name} ({cat.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+          </div>
+
+          <div className="bg-muted/30 rounded-lg border p-3">
+            <span className="text-muted-foreground text-xs font-semibold uppercase">Assigned ID Preview</span>
+            <p className="text-primary mt-1 font-mono text-sm font-bold">{getPreviewId()}</p>
+            <p className="text-muted-foreground mt-0.5 text-xs">The exact number will be generated automatically.</p>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
