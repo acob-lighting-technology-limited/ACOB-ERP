@@ -9,6 +9,7 @@ const PolicySchema = z.object({
   lateCutoff: z.string().regex(/^\d{2}:\d{2}$/, "Grace cutoff must be in HH:MM format"),
   incompletePenalty: z.number().nonnegative("Incomplete penalty must be a positive number"),
   totalCredits: z.number().positive("Total credits must be a positive number"),
+  emailNotificationsEnabled: z.boolean().optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -32,19 +33,24 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.errors[0].message }, { status: 400 })
     }
 
-    const { startTime, endTime, lateCutoff, incompletePenalty, totalCredits } = parsed.data
+    const { startTime, endTime, lateCutoff, incompletePenalty, totalCredits, emailNotificationsEnabled } = parsed.data
 
-    const { error } = await supabase
-      .from("system_settings")
-      .upsert(
-        {
-          key: "attendance_policy",
-          value: { startTime, endTime, lateCutoff, incompletePenalty, totalCredits },
-          description: "Workday timing configurations and lateness/incomplete penalties",
-          updated_by: user.id,
+    const { error } = await supabase.from("system_settings").upsert(
+      {
+        key: "attendance_policy",
+        value: {
+          startTime,
+          endTime,
+          lateCutoff,
+          incompletePenalty,
+          totalCredits,
+          emailNotificationsEnabled: emailNotificationsEnabled ?? true,
         },
-        { onConflict: "key" }
-      )
+        description: "Workday timing configurations and lateness/incomplete penalties",
+        updated_by: user.id,
+      },
+      { onConflict: "key" }
+    )
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })

@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { Loader2, Save } from "lucide-react"
 import { AttendancePolicy } from "@/lib/org-config"
 
@@ -84,7 +85,7 @@ export function AttendanceForm({ initialPolicy }: AttendanceFormProps) {
                 required
                 className="w-full font-medium"
               />
-              <p className="text-[11px] text-muted-foreground">Official opening hour. Default is 08:00 AM.</p>
+              <p className="text-muted-foreground text-[11px]">Official opening hour. Default is 08:00 AM.</p>
             </div>
 
             <div className="space-y-2">
@@ -97,7 +98,9 @@ export function AttendanceForm({ initialPolicy }: AttendanceFormProps) {
                 required
                 className="w-full font-medium"
               />
-              <p className="text-[11px] text-muted-foreground">Clock-ins after this time are marked Late. Default is 08:20 AM.</p>
+              <p className="text-muted-foreground text-[11px]">
+                Clock-ins after this time are marked Late. Default is 08:20 AM.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -110,7 +113,7 @@ export function AttendanceForm({ initialPolicy }: AttendanceFormProps) {
                 required
                 className="w-full font-medium"
               />
-              <p className="text-[11px] text-muted-foreground">Official closing hour. Default is 05:00 PM.</p>
+              <p className="text-muted-foreground text-[11px]">Official closing hour. Default is 05:00 PM.</p>
             </div>
 
             <div className="space-y-2">
@@ -126,7 +129,9 @@ export function AttendanceForm({ initialPolicy }: AttendanceFormProps) {
                 required
                 className="w-full font-medium"
               />
-              <p className="text-[11px] text-muted-foreground">Deduction applied when an employee misses clock-out. Default is 1.0.</p>
+              <p className="text-muted-foreground text-[11px]">
+                Deduction applied when an employee misses clock-out. Default is 1.0.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -141,12 +146,31 @@ export function AttendanceForm({ initialPolicy }: AttendanceFormProps) {
                 required
                 className="w-full font-medium"
               />
-              <p className="text-[11px] text-muted-foreground">Total credit budget for a full workday. Default is 10.</p>
+              <p className="text-muted-foreground text-[11px]">
+                Total credit budget for a full workday. Default is 10.
+              </p>
             </div>
           </div>
+
+          <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
+            <div className="space-y-1">
+              <Label htmlFor="emailNotificationsEnabled" className="text-sm font-semibold">
+                Email Notifications
+              </Label>
+              <p className="text-muted-foreground text-[11px]">
+                When on, manual attendance alterations and LWP/AWP appeal decisions email the affected employee and the
+                Admin &amp; HR lead.
+              </p>
+            </div>
+            <Switch
+              id="emailNotificationsEnabled"
+              checked={formData.emailNotificationsEnabled}
+              onCheckedChange={(checked) => setFormData({ ...formData, emailNotificationsEnabled: checked })}
+            />
+          </div>
         </CardContent>
-        <CardFooter className="flex justify-end pt-6 border-t border-muted">
-          <Button type="submit" disabled={isPending} className="px-6 font-semibold flex items-center gap-2">
+        <CardFooter className="border-muted flex justify-end border-t pt-6">
+          <Button type="submit" disabled={isPending} className="flex items-center gap-2 px-6 font-semibold">
             {isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />

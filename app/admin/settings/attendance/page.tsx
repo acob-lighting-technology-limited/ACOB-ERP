@@ -27,7 +27,10 @@ export default async function AttendanceSettingsPage() {
     .eq("key", "attendance_policy")
     .maybeSingle()
 
-  const initialPolicy = (settingRow?.value as AttendancePolicy) || DEFAULT_ATTENDANCE_POLICY
+  const initialPolicy: AttendancePolicy = {
+    ...DEFAULT_ATTENDANCE_POLICY,
+    ...((settingRow?.value as Partial<AttendancePolicy>) ?? {}),
+  }
 
   return (
     <PageWrapper maxWidth="full" background="gradient">
@@ -37,7 +40,7 @@ export default async function AttendanceSettingsPage() {
         icon={Clock}
         backLink={{ href: "/admin/settings", label: "Back to Settings" }}
       />
-      <div className="max-w-2xl mx-auto py-8">
+      <div className="mx-auto max-w-2xl py-8">
         <AttendanceForm initialPolicy={initialPolicy} />
       </div>
     </PageWrapper>

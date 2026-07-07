@@ -3,6 +3,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
+import { notifyAttendanceMail } from "@/lib/hr/attendance-notify"
 import { logger } from "@/lib/logger"
 
 const log = logger("admin-hr-attendance-appeals")
@@ -158,7 +159,7 @@ export async function PATCH(request: NextRequest) {
     // Fetch the appeal
     const { data: appeal, error: fetchError } = await dataClient
       .from("attendance_appeals")
-      .select("id, user_id, appeal_date, current_status, requested_status, attendance_record_id, status")
+      .select("id, user_id, appeal_date, current_status, requested_status, appeal_reason, attendance_record_id, status")
       .eq("id", appealId)
       .maybeSingle<{
         id: string
@@ -166,6 +167,7 @@ export async function PATCH(request: NextRequest) {
         appeal_date: string
         current_status: string
         requested_status: string
+        appeal_reason: string | null
         attendance_record_id: string | null
         status: string
       }>()
@@ -280,6 +282,19 @@ export async function PATCH(request: NextRequest) {
     } catch (notifyErr) {
       log.error({ err: String(notifyErr) }, "Failed to notify employee of appeal decision")
     }
+
+    // Email the requester + Admin & HR lead with the decision, reasons and timestamp.
+    await notifyAttendanceMail(dataClient, {
+      affectedUserId: appeal.user_id,
+      actorId: scope.userId,
+      date: appeal.appeal_date,
+      fromStatus: appeal.current_status,
+      toStatus: action === "approve" ? appeal.requested_status : appeal.current_status,
+      decision: action === "approve" ? "approved" : "rejected",
+      requesterComment: appeal.appeal_reason,
+      approverComment: resolutionNote || null,
+      occurredAt: now,
+    })
 
     return NextResponse.json({ data: updatedAppeal })
   } catch (err) {

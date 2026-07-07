@@ -7,6 +7,7 @@ import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { resolvePendingAppealOnManualStatus } from "@/lib/hr/attendance-appeals"
+import { notifyAttendanceInApp } from "@/lib/hr/attendance-notify"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
 import { toLocalISODate, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
@@ -178,13 +179,16 @@ export async function GET(request: NextRequest) {
       const p = profileMap.get(r.user_id)
       const name = p?.full_name?.trim() || [p?.first_name, p?.last_name].filter(Boolean).join(" ") || "Unknown"
 
-      const derivedStatus = deriveUnifiedAttendanceStatus({
-        record: r,
-        isHoliday: ctx.isHoliday(r.date),
-        isOnLeave: ctx.isOnLeave(r.user_id, r.date),
-        isExempted: Boolean(p?.attendance_exempt) || ctx.isExempt(r.user_id, r.date),
-        recordDate: r.date,
-      }, policy)
+      const derivedStatus = deriveUnifiedAttendanceStatus(
+        {
+          record: r,
+          isHoliday: ctx.isHoliday(r.date),
+          isOnLeave: ctx.isOnLeave(r.user_id, r.date),
+          isExempted: Boolean(p?.attendance_exempt) || ctx.isExempt(r.user_id, r.date),
+          recordDate: r.date,
+        },
+        policy
+      )
 
       const editorUserId = editorIdByRecordId.get(r.id)
       const editorProfile = editorUserId ? editorProfileMap.get(editorUserId) : null
@@ -264,13 +268,16 @@ export async function GET(request: NextRequest) {
 
         for (const p of missing) {
           const name = p.full_name?.trim() || [p.first_name, p.last_name].filter(Boolean).join(" ") || "Unknown"
-          const derivedStatus = deriveUnifiedAttendanceStatus({
-            record: null,
-            isHoliday,
-            isOnLeave: onLeaveSet.has(p.id),
-            isExempted: Boolean(p.attendance_exempt) || exemptPeriodSet.has(p.id),
-            recordDate: day,
-          }, policy)
+          const derivedStatus = deriveUnifiedAttendanceStatus(
+            {
+              record: null,
+              isHoliday,
+              isOnLeave: onLeaveSet.has(p.id),
+              isExempted: Boolean(p.attendance_exempt) || exemptPeriodSet.has(p.id),
+              recordDate: day,
+            },
+            policy
+          )
           records.push({
             id: `missing-${p.id}-${day}`,
             user_id: p.id,
@@ -356,10 +363,13 @@ export async function POST(request: NextRequest) {
       explicitStatus ??
       (waived
         ? "waiver"
-        : deriveUnifiedAttendanceStatus({
-            record: { clock_in, clock_out, waived: false, status: explicitStatus },
-            recordDate: date,
-          }, policy))
+        : deriveUnifiedAttendanceStatus(
+            {
+              record: { clock_in, clock_out, waived: false, status: explicitStatus },
+              recordDate: date,
+            },
+            policy
+          ))
     const isCoveredWithoutTimes =
       status === "waiver" || status === "absent_with_permission" || status === "out_of_station"
     const isLWP = status === "lateness_with_permission"
@@ -443,6 +453,14 @@ export async function POST(request: NextRequest) {
       attendanceRecordId: created.id,
       comment: manual_comment,
       actorId: scope.userId,
+    })
+    await notifyAttendanceInApp(dataClient, {
+      affectedUserId: user_id,
+      actorId: scope.userId,
+      date,
+      toStatus: status,
+      action: "created",
+      entityId: created.id,
     })
 
     return NextResponse.json({ data: created, message: "Record created" }, { status: 201 })

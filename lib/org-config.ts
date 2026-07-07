@@ -117,11 +117,13 @@ export const HELP_DESK_SLA: Record<"urgent" | "high" | "medium" | "low", SlaBudg
 // ---------------------------------------------------------------------------
 
 export interface AttendancePolicy {
-  startTime: string        // e.g. "08:00"
-  endTime: string          // e.g. "17:00"
-  lateCutoff: string       // e.g. "08:20"
+  startTime: string // e.g. "08:00"
+  endTime: string // e.g. "17:00"
+  lateCutoff: string // e.g. "08:20"
   incompletePenalty: number // e.g. 1.0 (credits)
-  totalCredits: number      // e.g. 10
+  totalCredits: number // e.g. 10
+  /** When true, manual alterations and appeal decisions email the employee + Admin & HR lead. */
+  emailNotificationsEnabled: boolean
 }
 
 export const DEFAULT_ATTENDANCE_POLICY: AttendancePolicy = {
@@ -130,4 +132,5 @@ export const DEFAULT_ATTENDANCE_POLICY: AttendancePolicy = {
   lateCutoff: "08:20",
   incompletePenalty: 1.0,
   totalCredits: 10,
+  emailNotificationsEnabled: true,
 }
