@@ -80,6 +80,9 @@ interface PendingUser {
   office_location?: string
   created_at: string
   status: string
+  employment_type?: string
+  contract_category_id?: string
+  contract_categories?: { name: string; code: string } | null
 }
 
 interface ApprovalEmailPreview {
@@ -254,7 +257,8 @@ export function ManageUsersDialog({
   const [selectedUser, setSelectedUser] = useState<PendingUser | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [pendingReject, setPendingReject] = useState(false)
-  const [employeeId, setEmployeeId] = useState("")
+  const [employmentType, setEmploymentType] = useState<"full_time" | "part_time" | "contract">("full_time")
+  const [contractCategoryCode, setContractCategoryCode] = useState("")
   const [hireDate, setHireDate] = useState(today)
   const [pendingEmailDispatch, setPendingEmailDispatch] = useState<PendingEmailDispatch | null>(null)
   const [isSendingEmails, setIsSendingEmails] = useState(false)
@@ -266,50 +270,32 @@ export function ManageUsersDialog({
   })
 
   const { data: approvalEmailPreview, isLoading: isLoadingApprovalPreview } = useQuery<ApprovalEmailPreview>({
-    queryKey: ["pending-approval-email-preview", selectedUser?.id, employeeId],
+    queryKey: ["pending-approval-email-preview", selectedUser?.id, employmentType, contractCategoryCode],
     queryFn: async () => {
-      if (!selectedUser?.id || !employeeId) throw new Error("Missing context")
+      if (!selectedUser?.id) throw new Error("Missing context")
+      const currentYear = new Date().getFullYear()
+      const dummyId =
+        employmentType === "full_time"
+          ? `ACOB/${currentYear}/999`
+          : employmentType === "part_time"
+            ? `ACOB/PT/${currentYear}/999`
+            : `ACOB/${contractCategoryCode || "SIWES"}/${currentYear}/999`
+
       const res = await fetch(
-        `/api/admin/pending-users/${selectedUser.id}/approval-preview?employeeId=${encodeURIComponent(employeeId)}`
+        `/api/admin/pending-users/${selectedUser.id}/approval-preview?employeeId=${encodeURIComponent(dummyId)}`
       )
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || "Failed to load preview")
       return result as ApprovalEmailPreview
     },
-    enabled: open && activeTab === "applications" && !!selectedUser?.id && !!employeeId,
+    enabled: open && activeTab === "applications" && !!selectedUser?.id,
   })
 
-  const fetchSuggestedId = useCallback(async () => {
-    try {
-      const { data: last } = await supabase
-        .from("profiles")
-        .select("employee_number")
-        .not("employee_number", "is", null)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single()
-      let nextNum = 1
-      const year = new Date().getFullYear()
-      if (last?.employee_number) {
-        const parts = last.employee_number.split("/")
-        if (parts.length === 3) {
-          const n = parseInt(parts[2], 10)
-          if (!isNaN(n)) nextNum = n + 1
-        }
-      }
-      setEmployeeId(`ACOB/${year}/${nextNum.toString().padStart(3, "0")}`)
-    } catch {
-      setEmployeeId(`ACOB/${new Date().getFullYear()}/001`)
-    }
-  }, [supabase])
-
-  const handleUserSelect = useCallback(
-    (user: PendingUser) => {
-      setSelectedUser(user)
-      void fetchSuggestedId()
-    },
-    [fetchSuggestedId]
-  )
+  const handleUserSelect = useCallback((user: PendingUser) => {
+    setSelectedUser(user)
+    setEmploymentType((user.employment_type as any) || "full_time")
+    setContractCategoryCode(user.contract_categories?.code || "")
+  }, [])
 
   useEffect(() => {
     if (pendingUsers.length > 0 && !selectedUser) handleUserSelect(pendingUsers[0])
@@ -317,16 +303,18 @@ export function ManageUsersDialog({
 
   const handleApprove = async () => {
     if (!selectedUser) return
-    if (employeeId && !/^ACOB\/[0-9]{4}\/[0-9]{3}$/.test(employeeId)) {
-      toast.error("Employee ID must be in format: ACOB/YEAR/NUMBER")
-      return
-    }
     setIsProcessing(true)
     try {
       const res = await fetch("/api/admin/approve-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pendingUserId: selectedUser.id, employeeId, hireDate, sendEmails: false }),
+        body: JSON.stringify({
+          pendingUserId: selectedUser.id,
+          hireDate,
+          sendEmails: false,
+          employmentType,
+          contractCategoryCode: employmentType === "contract" ? contractCategoryCode : null,
+        }),
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || "Failed to approve")
@@ -336,7 +324,6 @@ export function ManageUsersDialog({
       if (remaining.length > 0) handleUserSelect(remaining[0])
       else {
         setSelectedUser(null)
-        setEmployeeId("")
       }
       onSuccess()
       if (result.profileId && result.pendingEmailPreview) {
@@ -346,9 +333,9 @@ export function ManageUsersDialog({
           internal: result.pendingEmailPreview.internal as PendingEmailDispatch["internal"],
         })
       }
-    } catch (err) {
+    } catch (err: any) {
       log.error({ err }, "Approval error")
-      toast.error(err instanceof Error ? err.message : "Failed to approve")
+      toast.error(err.message || "Failed to approve")
     } finally {
       setIsProcessing(false)
     }
@@ -371,7 +358,6 @@ export function ManageUsersDialog({
       if (remaining.length > 0) handleUserSelect(remaining[0])
       else {
         setSelectedUser(null)
-        setEmployeeId("")
       }
     } catch (err) {
       log.error({ err }, "Rejection error")
@@ -842,20 +828,51 @@ export function ManageUsersDialog({
                                   className="h-9 w-40 font-mono text-xs"
                                 />
                               </div>
-                              <div className="flex flex-col items-end">
-                                <span className="text-muted-foreground mb-1 text-[10px] font-bold uppercase">
-                                  Assign ID
-                                </span>
-                                <div className="relative w-44">
-                                  <Hash className="text-primary absolute top-2.5 left-2.5 h-3.5 w-3.5" />
-                                  <Input
-                                    value={employeeId}
-                                    onChange={(e) => setEmployeeId(e.target.value)}
-                                    className="h-9 pl-8 font-mono text-xs"
-                                    placeholder="ACOB/2026/001"
-                                  />
-                                </div>
+                              <div className="flex flex-col items-start gap-1">
+                                <span className="text-muted-foreground text-[10px] font-bold uppercase">Type</span>
+                                <Select
+                                  value={employmentType}
+                                  onValueChange={(value: any) => {
+                                    setEmploymentType(value)
+                                    if (value !== "contract") {
+                                      setContractCategoryCode("")
+                                    } else if (contractCategories.length > 0) {
+                                      setContractCategoryCode(contractCategories[0].code)
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="h-9 w-32 text-xs font-bold">
+                                    <SelectValue placeholder="Type" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="full_time">Full Time</SelectItem>
+                                    <SelectItem value="part_time">Part Time</SelectItem>
+                                    <SelectItem value="contract">Contract</SelectItem>
+                                  </SelectContent>
+                                </Select>
                               </div>
+                              {employmentType === "contract" && (
+                                <div className="flex flex-col items-start gap-1">
+                                  <span className="text-muted-foreground text-[10px] font-bold uppercase">
+                                    Category
+                                  </span>
+                                  <Select
+                                    value={contractCategoryCode}
+                                    onValueChange={(value) => setContractCategoryCode(value)}
+                                  >
+                                    <SelectTrigger className="h-9 w-32 text-xs font-bold">
+                                      <SelectValue placeholder="Category" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {contractCategories.map((cat) => (
+                                        <SelectItem key={cat.id} value={cat.code}>
+                                          {cat.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
                               <Badge variant="outline" className="self-end text-[10px] font-bold">
                                 PENDING
                               </Badge>
@@ -873,7 +890,36 @@ export function ManageUsersDialog({
                               <DetailRow label="Department" value={selectedUser.department} />
                               <DetailRow label="Designation" value={selectedUser.designation} />
                               <DetailRow label="System Email" value={selectedUser.company_email} />
-                              <DetailRow label="Assigned ID" value={employeeId} />
+                              <DetailRow
+                                label="Expected Company ID"
+                                value={
+                                  employmentType === "full_time"
+                                    ? `ACOB/${new Date().getFullYear()}/... (Auto-generated)`
+                                    : employmentType === "part_time"
+                                      ? `ACOB/PT/${new Date().getFullYear()}/... (Auto-generated)`
+                                      : `ACOB/${contractCategoryCode || "SIWES"}/${new Date().getFullYear()}/... (Auto-generated)`
+                                }
+                              />
+                              <DetailRow
+                                label="Applicant Type Choice"
+                                value={
+                                  selectedUser.employment_type
+                                    ? selectedUser.employment_type
+                                        .replace("_", " ")
+                                        .replace(/\b\w/g, (c) => c.toUpperCase())
+                                    : "Not selected"
+                                }
+                              />
+                              {selectedUser.employment_type === "contract" && (
+                                <DetailRow
+                                  label="Applicant Category Choice"
+                                  value={
+                                    selectedUser.contract_categories?.name
+                                      ? `${selectedUser.contract_categories.name} (${selectedUser.contract_categories.code})`
+                                      : "Not selected"
+                                  }
+                                />
+                              )}
                               <DetailRow label="Office" value={selectedUser.office_location || "N/A"} />
                             </div>
                             <div>
