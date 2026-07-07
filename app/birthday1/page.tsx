@@ -34,7 +34,7 @@ function resolveImageSrc(firstName: string): string | null {
   return null
 }
 
-export default async function BirthdayPage() {
+export default async function BirthdayPage1() {
   const supabase = await createClient()
 
   const {
@@ -46,7 +46,6 @@ export default async function BirthdayPage() {
     redirect("/auth/login")
   }
 
-  // Fetch active employee profiles
   const { data: profiles } = await supabase
     .from("profiles")
     .select("first_name, last_name, birthday, department")
@@ -105,7 +104,7 @@ export default async function BirthdayPage() {
           </div>
           <div className="birthday-kicker">
             <Sparkles className="h-4 w-4" />
-            Birthday Spotlight
+            Spotlight v1
           </div>
 
           <div className="birthday-copy-stack">
