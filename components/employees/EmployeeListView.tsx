@@ -38,6 +38,22 @@ interface EmployeeListViewProps {
   getRoleDisplayName: (role: UserRole) => string
 }
 
+const getEmploymentTypeDisplay = (type?: string) => {
+  if (type === "full_time") return "Full Time"
+  if (type === "part_time") return "Part Time"
+  if (type === "contract") return "Contract"
+  return "Full Time"
+}
+
+const getEmploymentTypeBadgeColor = (type?: string) => {
+  if (type === "full_time") return "bg-blue-500/10 text-blue-500 hover:bg-blue-500/10 border-transparent shadow-none"
+  if (type === "part_time")
+    return "bg-purple-500/10 text-purple-500 hover:bg-purple-500/10 border-transparent shadow-none"
+  if (type === "contract")
+    return "bg-orange-500/10 text-orange-500 hover:bg-orange-500/10 border-transparent shadow-none"
+  return "bg-blue-500/10 text-blue-500 hover:bg-blue-500/10 border-transparent shadow-none"
+}
+
 export function EmployeeListView({
   employees,
   viewMode,
@@ -138,6 +154,7 @@ export function EmployeeListView({
                 <TableHead>Email</TableHead>
                 <TableHead>Department</TableHead>
                 <TableHead>Role</TableHead>
+                <TableHead>Type</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -215,6 +232,11 @@ export function EmployeeListView({
                         <div className="flex flex-wrap gap-1">
                           <Badge className={getRoleBadgeColor(member.role)}>{getRoleDisplayName(member.role)}</Badge>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge className={getEmploymentTypeBadgeColor(member.employment_type)}>
+                          {getEmploymentTypeDisplay(member.employment_type)}
+                        </Badge>
                       </TableCell>
                       <TableCell>
                         <EmployeeStatusBadge status={member.employment_status || "active"} size="sm" />
@@ -382,6 +404,9 @@ export function EmployeeListView({
                   </CardTitle>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Badge className={getRoleBadgeColor(member.role)}>{getRoleDisplayName(member.role)}</Badge>
+                    <Badge className={getEmploymentTypeBadgeColor(member.employment_type)}>
+                      {getEmploymentTypeDisplay(member.employment_type)}
+                    </Badge>
                     <EmployeeStatusBadge status={member.employment_status || "active"} size="sm" />
                     {member.is_department_lead && member.lead_departments && member.lead_departments.length > 0 && (
                       <Badge variant="outline" className="text-xs">

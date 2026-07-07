@@ -36,6 +36,8 @@ export interface Employee {
   is_department_lead: boolean
   lead_departments: string[]
   employment_status: EmploymentStatus
+  employment_type?: string | null
+  contract_categories?: { name: string; code: string } | null
   created_at: string
 }
 
@@ -70,6 +72,15 @@ export function buildEmployeeExportRows(employees: Employee[], opts: ExportOptio
     if (selectedColumns["Date of Birth"])
       row["Date of Birth"] = formatDateOfBirth(member.date_of_birth, member.birthday) || "-"
     if (selectedColumns["Employment Date"]) row["Employment Date"] = member.employment_date || "-"
+    if (selectedColumns["Employment Type"]) {
+      const type = member.employment_type || "full_time"
+      row["Employment Type"] = type === "full_time" ? "Full Time" : type === "part_time" ? "Part Time" : "Contract"
+    }
+    if (selectedColumns["Contract Category"]) {
+      row["Contract Category"] = member.contract_categories?.name
+        ? `${member.contract_categories.name} (${member.contract_categories.code})`
+        : "-"
+    }
     if (selectedColumns["Is Lead"]) row["Is Lead"] = member.is_department_lead ? "Yes" : "No"
     if (selectedColumns["Lead Departments"])
       row["Lead Departments"] = member.lead_departments?.length ? member.lead_departments.join(", ") : "-"
@@ -215,6 +226,19 @@ export async function exportEmployeesToPDF(
       if (selectedColumns["Employment Date"]) {
         row.push(member.employment_date || "-")
         headers.push("Employment Date")
+      }
+      if (selectedColumns["Employment Type"]) {
+        const type = member.employment_type || "full_time"
+        row.push(type === "full_time" ? "Full Time" : type === "part_time" ? "Part Time" : "Contract")
+        headers.push("Employment Type")
+      }
+      if (selectedColumns["Contract Category"]) {
+        row.push(
+          member.contract_categories?.name
+            ? `${member.contract_categories.name} (${member.contract_categories.code})`
+            : "-"
+        )
+        headers.push("Contract Category")
       }
       if (selectedColumns["Is Lead"]) {
         row.push(member.is_department_lead ? "Yes" : "No")
