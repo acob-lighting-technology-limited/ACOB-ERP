@@ -37,12 +37,18 @@ const formSchema = z.object({
   additional_phone_number: z.string().optional(),
   residential_address: z.string().min(5, "Address is required"),
   office_location: z.string().optional(),
+  employment_type: z.enum(["full_time", "part_time", "contract"], { message: "Employment type is required" }),
+  contract_category_code: z.string().optional(),
   honeypot: z.string().optional(),
 })
 
 type FormValues = z.infer<typeof formSchema>
 
-async function fetchOnboardingOptions(): Promise<{ departments: string[]; officeLocations: string[] }> {
+async function fetchOnboardingOptions(): Promise<{
+  departments: string[]
+  officeLocations: string[]
+  contractCategories?: { name: string; code: string }[]
+}> {
   const res = await fetch("/api/public/onboarding-options")
   if (!res.ok) throw new Error("Failed to load form options")
   return res.json()
@@ -60,6 +66,7 @@ export default function EmployeeOnboardingForm() {
 
   const departments = onboardingOptions?.departments ?? []
   const officeLocations = onboardingOptions?.officeLocations ?? []
+  const contractCategories = onboardingOptions?.contractCategories ?? []
 
   const {
     register,
@@ -76,6 +83,8 @@ export default function EmployeeOnboardingForm() {
       additional_phone_number: "",
       other_department: "",
       office_location: "",
+      employment_type: "full_time",
+      contract_category_code: "",
       honeypot: "",
     },
   })
@@ -85,6 +94,8 @@ export default function EmployeeOnboardingForm() {
   const selectedDepartment = watch("department")
   const selectedGender = watch("gender")
   const selectedOfficeLocation = watch("office_location")
+  const selectedEmploymentType = watch("employment_type")
+  const selectedContractCategory = watch("contract_category_code")
   const watchedValues = watch()
 
   useEffect(() => {
@@ -107,6 +118,8 @@ export default function EmployeeOnboardingForm() {
         additional_phone_number: parsed.additional_phone_number || "",
         residential_address: parsed.residential_address || "",
         office_location: parsed.office_location || "",
+        employment_type: parsed.employment_type || "full_time",
+        contract_category_code: parsed.contract_category_code || "",
         honeypot: "",
       })
     } catch {
@@ -133,6 +146,18 @@ export default function EmployeeOnboardingForm() {
   const companyEmail =
     safeFirst && safeLast ? `${safeLast.charAt(0)}.${safeFirst}@org.acoblighting.com` : "Wait for name input..."
 
+  const getPreviewId = () => {
+    const currentYear = new Date().getFullYear()
+    if (selectedEmploymentType === "full_time") {
+      return `ACOB/${currentYear}/...`
+    } else if (selectedEmploymentType === "part_time") {
+      return `ACOB/PT/${currentYear}/...`
+    } else {
+      const catCode = selectedContractCategory || "CATEGORY"
+      return `ACOB/${catCode}/${currentYear}/...`
+    }
+  }
+
   async function onSubmit(data: FormValues) {
     if (data.honeypot) return
 
@@ -157,6 +182,8 @@ export default function EmployeeOnboardingForm() {
         additional_phone_number: data.additional_phone_number || null,
         residential_address: data.residential_address,
         office_location: data.office_location,
+        employment_type: data.employment_type || "full_time",
+        contract_category_code: data.employment_type === "contract" ? data.contract_category_code || null : null,
         status: "pending",
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
@@ -306,12 +333,7 @@ export default function EmployeeOnboardingForm() {
                     <label className="text-foreground text-sm font-medium">
                       Date of Birth <span className="text-muted-foreground text-xs">(optional)</span>
                     </label>
-                    <Input
-                      className="h-11"
-                      type="date"
-                      max={toLocalISODate()}
-                      {...register("date_of_birth")}
-                    />
+                    <Input className="h-11" type="date" max={toLocalISODate()} {...register("date_of_birth")} />
                     {errors.date_of_birth && (
                       <p className="text-destructive mt-1 text-sm">{errors.date_of_birth.message}</p>
                     )}
@@ -376,16 +398,78 @@ export default function EmployeeOnboardingForm() {
                   <Briefcase className="text-muted-foreground h-5 w-5" /> Role & Department
                 </h3>
                 <div className="bg-muted/50 border-border flex flex-col justify-between gap-4 rounded-xl border p-5 md:flex-row md:items-center">
-                  <div>
-                    <label className="text-primary text-xs font-bold tracking-wider uppercase">
-                      Expected Company ID
-                    </label>
-                    <div className="text-foreground mt-1 font-mono text-xl font-bold tracking-tight">
-                      {companyEmail}
+                  <div className="grid w-full grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="text-primary text-xs font-bold tracking-wider uppercase">
+                        Expected Company ID (Staff ID Preview)
+                      </label>
+                      <div className="text-foreground mt-1 font-mono text-lg font-bold tracking-tight">
+                        {getPreviewId()}
+                      </div>
                     </div>
-                    <p className="text-muted-foreground mt-1 text-sm">This will be your official system username.</p>
+                    <div>
+                      <label className="text-primary text-xs font-bold tracking-wider uppercase">
+                        Expected System Username (Email)
+                      </label>
+                      <div className="text-foreground mt-1 font-mono text-lg font-bold tracking-tight">
+                        {companyEmail}
+                      </div>
+                    </div>
                   </div>
                 </div>
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-foreground text-sm font-medium">
+                      Employment Type <span className="text-destructive">*</span>
+                    </label>
+                    <Select
+                      onValueChange={(val) => {
+                        setValue("employment_type", val as any)
+                        if (val !== "contract") {
+                          setValue("contract_category_code", "")
+                        } else if (contractCategories.length > 0) {
+                          setValue("contract_category_code", contractCategories[0].code)
+                        }
+                      }}
+                      value={selectedEmploymentType || "full_time"}
+                    >
+                      <SelectTrigger className="h-11">
+                        <SelectValue placeholder="Select Type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="full_time">Full Time</SelectItem>
+                        <SelectItem value="part_time">Part Time</SelectItem>
+                        <SelectItem value="contract">Contract</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {errors.employment_type && (
+                      <p className="text-destructive mt-1 text-sm">{errors.employment_type.message}</p>
+                    )}
+                  </div>
+                  {selectedEmploymentType === "contract" && (
+                    <div className="space-y-2">
+                      <label className="text-foreground text-sm font-medium">
+                        Contract Category <span className="text-destructive">*</span>
+                      </label>
+                      <Select
+                        onValueChange={(val) => setValue("contract_category_code", val)}
+                        value={selectedContractCategory}
+                      >
+                        <SelectTrigger className="h-11">
+                          <SelectValue placeholder="Select Category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {contractCategories.map((cat: any) => (
+                            <SelectItem key={cat.code} value={cat.code}>
+                              {cat.name} ({cat.code})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-foreground text-sm font-medium">
@@ -400,7 +484,7 @@ export default function EmployeeOnboardingForm() {
                     <label className="text-foreground text-sm font-medium">
                       Department <span className="text-muted-foreground text-xs">(optional)</span>
                     </label>
-                    <Select onValueChange={(val) => setValue("department", val)} defaultValue={selectedDepartment}>
+                    <Select onValueChange={(val) => setValue("department", val)} value={selectedDepartment}>
                       <SelectTrigger className="h-11">
                         <SelectValue placeholder="Select Department" />
                       </SelectTrigger>

@@ -19,6 +19,8 @@ const OnboardingSubmitSchema = z.object({
   residential_address: z.string().trim().min(5),
   office_location: z.string().trim().optional().nullable(),
   status: z.string().trim().default("pending"),
+  employment_type: z.enum(["full_time", "part_time", "contract"]).optional().default("full_time"),
+  contract_category_code: z.string().trim().optional().nullable(),
   honeypot: z.string().optional().nullable(),
 })
 
@@ -79,6 +81,18 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: pendingError.message }, { status: 500 })
   }
 
+  // Resolve contract category ID if contract
+  let contractCategoryId = null
+  if (parsed.data.employment_type === "contract" && parsed.data.contract_category_code) {
+    const { data: catData } = await supabase
+      .from("contract_categories")
+      .select("id")
+      .eq("code", parsed.data.contract_category_code.toUpperCase())
+      .eq("is_active", true)
+      .single()
+    contractCategoryId = catData?.id || null
+  }
+
   const payload = {
     first_name: parsed.data.first_name,
     last_name: parsed.data.last_name,
@@ -95,6 +109,8 @@ export async function POST(req: Request) {
     residential_address: parsed.data.residential_address,
     office_location: parsed.data.office_location || null,
     status: "pending",
+    employment_type: parsed.data.employment_type || "full_time",
+    contract_category_id: contractCategoryId,
     updated_at: nowIso,
   }
 
