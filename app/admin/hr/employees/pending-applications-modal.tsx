@@ -25,6 +25,8 @@ import { format } from "date-fns"
 import { cn, formatName } from "@/lib/utils"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { toLocalISODate } from "@/lib/utils/date"
+import { useDepartments } from "@/hooks/use-departments"
+import { OFFICE_LOCATIONS } from "@/lib/office-locations"
 
 import { logger } from "@/lib/logger"
 
@@ -99,6 +101,20 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
   const [pendingEmailDispatch, setPendingEmailDispatch] = useState<PendingEmailDispatch | null>(null)
   const [isSendingEmails, setIsSendingEmails] = useState(false)
 
+  // Edit fields states
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [otherNames, setOtherNames] = useState("")
+  const [department, setDepartment] = useState("")
+  const [designation, setDesignation] = useState("")
+  const [companyEmail, setCompanyEmail] = useState("")
+  const [personalEmailState, setPersonalEmailState] = useState("")
+  const [phoneNumber, setPhoneNumber] = useState("")
+  const [residentialAddress, setResidentialAddress] = useState("")
+  const [officeLocation, setOfficeLocation] = useState("")
+
+  const { departments: DEPARTMENTS = [] } = useDepartments()
+
   const [supabase] = useState(() => createClient())
   const queryClient = useQueryClient()
 
@@ -158,6 +174,16 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
     setSelectedUser(user)
     setEmploymentType((user.employment_type as any) || "full_time")
     setContractCategoryCode(user.contract_categories?.code || "")
+    setFirstName(user.first_name || "")
+    setLastName(user.last_name || "")
+    setOtherNames(user.other_names || "")
+    setDepartment(user.department || "")
+    setDesignation(user.designation || "")
+    setCompanyEmail(user.company_email || "")
+    setPersonalEmailState(user.personal_email || "")
+    setPhoneNumber(user.phone_number || "")
+    setResidentialAddress(user.residential_address || "")
+    setOfficeLocation(user.office_location || "")
   }, [])
 
   // Auto-select first user when data loads
@@ -173,6 +199,26 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
     setIsProcessing(true)
 
     try {
+      // 1. Update the record in pending_users with the edited details
+      const { error: updateError } = await supabase
+        .from("pending_users")
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+          other_names: otherNames || null,
+          department: department,
+          designation: designation,
+          company_email: companyEmail,
+          personal_email: personalEmailState,
+          phone_number: phoneNumber,
+          residential_address: residentialAddress,
+          office_location: officeLocation || null,
+        })
+        .eq("id", selectedUser.id)
+
+      if (updateError) throw updateError
+
+      // 2. Call the approve-user API route
       const response = await fetch("/api/admin/approve-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -247,14 +293,12 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
     }
   }
 
-  const DetailRow = ({ label, value }: { label: string; value: string | null | undefined }) => (
+  const DetailRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div className="border-border hover:bg-muted/50 grid grid-cols-4 border-b transition-colors">
       <div className="border-border bg-muted/40 flex items-center border-r p-3">
         <span className="text-muted-foreground text-xs font-bold uppercase">{label}</span>
       </div>
-      <div className="bg-background col-span-3 flex items-center p-3">
-        <span className="text-foreground text-sm font-medium">{value || "—"}</span>
-      </div>
+      <div className="bg-background col-span-3 flex items-center p-3">{value}</div>
     </div>
   )
 
@@ -402,28 +446,108 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
 
                     {/* Table Grid with full borders */}
                     <div className="border-border overflow-hidden rounded-lg border shadow-sm">
-                      <DetailRow label="First Name" value={formatName(selectedUser.first_name)} />
-                      <DetailRow label="Last Name" value={formatName(selectedUser.last_name)} />
-                      <DetailRow label="Other Names" value={formatName(selectedUser.other_names)} />
+                      <DetailRow
+                        label="First Name"
+                        value={
+                          <Input
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                          />
+                        }
+                      />
+                      <DetailRow
+                        label="Last Name"
+                        value={
+                          <Input
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                          />
+                        }
+                      />
+                      <DetailRow
+                        label="Other Names"
+                        value={
+                          <Input
+                            value={otherNames}
+                            onChange={(e) => setOtherNames(e.target.value)}
+                            className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                            placeholder="Optional other names"
+                          />
+                        }
+                      />
                       <div className="border-border grid grid-cols-1 border-b">
                         <div className="bg-muted/20 text-muted-foreground border-border border-b p-2 text-[10px] font-bold uppercase">
                           Organizational Data
                         </div>
                         <div className="grid grid-cols-1">
-                          <DetailRow label="Department" value={selectedUser.department} />
-                          <DetailRow label="Designation" value={selectedUser.designation} />
-                          <DetailRow label="System Email" value={selectedUser.company_email} />
+                          <DetailRow
+                            label="Department"
+                            value={
+                              <Select value={department} onValueChange={setDepartment}>
+                                <SelectTrigger className="h-8 w-full border-0 bg-transparent text-left font-medium shadow-none focus:ring-0">
+                                  <SelectValue placeholder="Select Department" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {DEPARTMENTS.map((dept) => (
+                                    <SelectItem key={dept} value={dept}>
+                                      {dept}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            }
+                          />
+                          <DetailRow
+                            label="Designation"
+                            value={
+                              <Input
+                                value={designation}
+                                onChange={(e) => setDesignation(e.target.value)}
+                                className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                              />
+                            }
+                          />
+                          <DetailRow
+                            label="System Email"
+                            value={
+                              <Input
+                                value={companyEmail}
+                                onChange={(e) => setCompanyEmail(e.target.value)}
+                                className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                              />
+                            }
+                          />
                           <DetailRow
                             label="Expected Company ID"
                             value={
-                              employmentType === "full_time"
-                                ? `ACOB/${new Date().getFullYear()}/... (Auto-generated)`
-                                : employmentType === "part_time"
-                                  ? `ACOB/PT/${new Date().getFullYear()}/... (Auto-generated)`
-                                  : `ACOB/${contractCategoryCode || "SIWES"}/${new Date().getFullYear()}/... (Auto-generated)`
+                              <span className="text-foreground pl-3 text-sm font-medium">
+                                {employmentType === "full_time"
+                                  ? `ACOB/${new Date().getFullYear()}/... (Auto-generated)`
+                                  : employmentType === "part_time"
+                                    ? `ACOB/PT/${new Date().getFullYear()}/... (Auto-generated)`
+                                    : `ACOB/${contractCategoryCode || "SIWES"}/${new Date().getFullYear()}/... (Auto-generated)`}
+                              </span>
                             }
                           />
-                          <DetailRow label="Office Location" value={selectedUser.office_location || "N/A"} />
+                          <DetailRow
+                            label="Office Location"
+                            value={
+                              <Select value={officeLocation} onValueChange={setOfficeLocation}>
+                                <SelectTrigger className="h-8 w-full border-0 bg-transparent text-left font-medium shadow-none focus:ring-0">
+                                  <SelectValue placeholder="Select Location" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {OFFICE_LOCATIONS.map((loc: string) => (
+                                    <SelectItem key={loc} value={loc}>
+                                      {loc}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            }
+                          />
                         </div>
                       </div>
                       <div className="grid grid-cols-1">
@@ -431,12 +555,43 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                           Personal & Contact
                         </div>
                         <div className="grid grid-cols-1">
-                          <DetailRow label="Phone Number" value={selectedUser.phone_number} />
-                          <DetailRow label="Personal Email" value={selectedUser.personal_email} />
-                          <DetailRow label="Address" value={selectedUser.residential_address} />
+                          <DetailRow
+                            label="Phone Number"
+                            value={
+                              <Input
+                                value={phoneNumber}
+                                onChange={(e) => setPhoneNumber(e.target.value)}
+                                className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                              />
+                            }
+                          />
+                          <DetailRow
+                            label="Personal Email"
+                            value={
+                              <Input
+                                value={personalEmailState}
+                                onChange={(e) => setPersonalEmailState(e.target.value)}
+                                className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                              />
+                            }
+                          />
+                          <DetailRow
+                            label="Address"
+                            value={
+                              <Input
+                                value={residentialAddress}
+                                onChange={(e) => setResidentialAddress(e.target.value)}
+                                className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                              />
+                            }
+                          />
                           <DetailRow
                             label="Application Date"
-                            value={format(new Date(selectedUser.created_at), "PPPP")}
+                            value={
+                              <span className="text-foreground pl-3 text-sm font-medium">
+                                {format(new Date(selectedUser.created_at), "PPPP")}
+                              </span>
+                            }
                           />
                         </div>
                       </div>

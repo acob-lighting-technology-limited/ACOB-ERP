@@ -69,12 +69,8 @@ export function renderInternalNotificationEmail({ pendingUser, preparedBy }: Int
                     <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">${role}</td>
                 </tr>
                 <tr>
-                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">Phone Number</td>
-                    <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">${phoneNumber}</td>
-                </tr>
-                <tr>
-                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px;">Address</td>
-                    <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px;">${address}</td>
+                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px;">Phone Number</td>
+                    <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px;">${phoneNumber}</td>
                 </tr>
             </table>
         </div>
