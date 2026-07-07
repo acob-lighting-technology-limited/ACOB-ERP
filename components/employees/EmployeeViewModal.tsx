@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { formatWATDate } from "@/lib/utils/date"
+import { toast } from "sonner"
 import {
   Dialog,
   DialogContent,
@@ -21,6 +22,7 @@ import { AdminRoutesPicker } from "@/components/ui/admin-routes-picker"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { EmployeeStatusBadge } from "@/components/hr/employee-status-badge"
 import { ChangeStatusContent } from "@/components/hr/change-status-dialog"
 import { SignatureCreator } from "@/components/signature-creator"
@@ -28,6 +30,7 @@ import { ASSET_TYPE_MAP } from "@/lib/asset-types"
 import { formatName } from "@/lib/utils"
 import { format, differenceInDays } from "date-fns"
 import { Edit, FileSignature, ChevronDown, ChevronUp, UserCircle, ArrowRight } from "lucide-react"
+import { useQuery } from "@tanstack/react-query"
 import type { UserRole, EmploymentStatus } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
 import { useDepartments } from "@/hooks/use-departments"
@@ -45,6 +48,7 @@ interface EditForm {
   designation: string
   lead_departments: string[]
   employee_number: string
+  device_key?: string | null
   first_name: string
   last_name: string
   other_names: string
@@ -151,6 +155,23 @@ export function EmployeeViewModal({
   const { officeLocations } = useOfficeLocations()
   const supabase = createClient()
   const [innerTab, setInnerTab] = useState<"assets" | "tasks" | "docs">("assets")
+  const [convertType, setConvertType] = useState<"full_time" | "part_time" | "contract">("full_time")
+  const [convertCategory, setConvertCategory] = useState("")
+  const [isConverting, setIsConverting] = useState(false)
+
+  const { data: contractCategories = [] } = useQuery<any[]>({
+    queryKey: ["contract-categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contract_categories")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+      if (error) throw error
+      return data || []
+    },
+    enabled: isOpen,
+  })
 
   const viewEmployeeProfile = employee
   const displayedLeadDepartments =
@@ -193,7 +214,7 @@ export function EmployeeViewModal({
               : modalViewMode === "signature"
                 ? "Manage branded signature details for this employee."
                 : modalViewMode === "status"
-                  ? "Update employment status and offboarding details."
+                  ? "Update employment status, offboarding, or convert employment type."
                   : "Review profile, assets, tasks, and employment details."}
           </DialogDescription>
         </DialogHeader>
@@ -443,6 +464,23 @@ export function EmployeeViewModal({
                     <InfoRow label="Current Status">
                       <EmployeeStatusBadge status={viewEmployeeProfile.employment_status || "active"} size="lg" />
                     </InfoRow>
+                    <InfoRow label="Employment Type">
+                      <span className="capitalize">
+                        {String(viewEmployeeProfile.employment_type || "full_time").replace("_", " ")}
+                      </span>
+                    </InfoRow>
+                    {viewEmployeeProfile.employment_type === "contract" && (
+                      <InfoRow label="Contract Category">
+                        <span>
+                          {viewEmployeeProfile.contract_categories?.name
+                            ? `${viewEmployeeProfile.contract_categories.name} (${viewEmployeeProfile.contract_categories.code})`
+                            : "Not specified"}
+                        </span>
+                      </InfoRow>
+                    )}
+                    <InfoRow label="Device / Attendance No.">
+                      <span className="font-mono font-semibold">{viewEmployeeProfile.device_key || "—"}</span>
+                    </InfoRow>
                     <InfoRow label="Hire Date">
                       {viewEmployeeProfile.employment_date
                         ? formatWATDate(viewEmployeeProfile.employment_date, {
@@ -507,34 +545,174 @@ export function EmployeeViewModal({
             </ScrollArea>
           )}
 
-          {/* ── Change Status ── */}
+          {/* ── Change Status / Type ── */}
           {viewEmployeeProfile && modalViewMode === "status" && (
-            <ScrollArea className="h-full">
-              <div className="px-5 py-4 sm:px-6">
-                <ChangeStatusContent
-                  employee={
-                    {
-                      id: viewEmployeeProfile.id,
-                      first_name: viewEmployeeProfile.first_name,
-                      last_name: viewEmployeeProfile.last_name,
-                      employment_status: viewEmployeeProfile.employment_status || "active",
-                    } satisfies EmployeeStatusSummary
-                  }
-                  onSuccess={() => {
-                    setModalViewMode("employment")
-                    loadData()
-                    supabase
-                      .from("profiles")
-                      .select("*")
-                      .eq("id", viewEmployeeProfile.id)
-                      .single()
-                      .then(({ data }) => {
-                        if (data) setViewEmployeeProfile(data as EmployeeProfile)
-                      })
-                  }}
-                />
-              </div>
-            </ScrollArea>
+            <Tabs defaultValue="status" className="flex h-full w-full flex-col">
+              <TabsList className="mx-5 mt-4 sm:mx-6">
+                <TabsTrigger value="status">Employment Status</TabsTrigger>
+                <TabsTrigger value="type">Employment Type</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="status" className="min-h-0 flex-grow">
+                <ScrollArea className="h-full">
+                  <div className="px-5 py-4 sm:px-6">
+                    <ChangeStatusContent
+                      employee={
+                        {
+                          id: viewEmployeeProfile.id,
+                          first_name: viewEmployeeProfile.first_name,
+                          last_name: viewEmployeeProfile.last_name,
+                          employment_status: viewEmployeeProfile.employment_status || "active",
+                        } satisfies EmployeeStatusSummary
+                      }
+                      onSuccess={() => {
+                        setModalViewMode("employment")
+                        loadData()
+                        supabase
+                          .from("profiles")
+                          .select("*")
+                          .eq("id", viewEmployeeProfile.id)
+                          .single()
+                          .then(({ data }) => {
+                            if (data) setViewEmployeeProfile(data as EmployeeProfile)
+                          })
+                      }}
+                    />
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+
+              <TabsContent value="type" className="min-h-0 flex-grow">
+                <ScrollArea className="h-full">
+                  <div className="space-y-4 px-5 py-4 sm:px-6">
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
+                      <span className="text-xs font-semibold text-amber-700 uppercase dark:text-amber-400">Note</span>
+                      <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
+                        Converting this employee&apos;s employment type will archive their current staff ID (
+                        <strong className="font-mono">{viewEmployeeProfile.employee_number || "N/A"}</strong>) in
+                        history and generate a new ID based on the selected series. The old ID remains linked to this
+                        profile for historical reference and will not be reassigned.
+                      </p>
+                    </div>
+
+                    <div className="space-y-4">
+                      <div className="grid gap-4 md:grid-cols-2">
+                        <div>
+                          <Label htmlFor="convert_employment_type">New Employment Type</Label>
+                          <Select
+                            value={convertType}
+                            onValueChange={(value: any) => {
+                              setConvertType(value)
+                              if (value !== "contract") {
+                                setConvertCategory("")
+                              } else if (contractCategories.length > 0) {
+                                setConvertCategory(contractCategories[0].code)
+                              }
+                            }}
+                          >
+                            <SelectTrigger id="convert_employment_type" className="mt-1.5">
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="full_time">Full Time</SelectItem>
+                              <SelectItem value="part_time">Part Time</SelectItem>
+                              <SelectItem value="contract">Contract</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        {convertType === "contract" && (
+                          <div>
+                            <Label htmlFor="convert_contract_category">Contract Category</Label>
+                            <Select value={convertCategory} onValueChange={(value) => setConvertCategory(value)}>
+                              <SelectTrigger id="convert_contract_category" className="mt-1.5">
+                                <SelectValue placeholder="Select category" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {contractCategories.map((cat) => (
+                                  <SelectItem key={cat.id} value={cat.code}>
+                                    {cat.name} ({cat.code})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="bg-muted/30 rounded-lg border p-3">
+                        <span className="text-muted-foreground text-xs font-semibold uppercase">
+                          Expected ID Series Preview
+                        </span>
+                        <p className="text-primary mt-1 font-mono text-sm font-bold">
+                          {(() => {
+                            const currentYear = new Date().getFullYear()
+                            if (convertType === "full_time") {
+                              return `ACOB/${currentYear}/... (Next sequence number)`
+                            } else if (convertType === "part_time") {
+                              return `ACOB/PT/${currentYear}/... (Next part-time number)`
+                            } else {
+                              return `ACOB/${convertCategory || "SIWES"}/${currentYear}/... (Next contract number)`
+                            }
+                          })()}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex justify-end gap-2 border-t pt-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setModalViewMode("employment")
+                        }}
+                        disabled={isConverting}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={async () => {
+                          setIsConverting(true)
+                          try {
+                            const response = await fetch("/api/admin/employees/convert-type", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({
+                                profileId: viewEmployeeProfile.id,
+                                newType: convertType,
+                                newCategoryCode: convertType === "contract" ? convertCategory : null,
+                              }),
+                            })
+                            const result = await response.json()
+                            if (!response.ok) throw new Error(result.error || "Failed to convert")
+                            toast.success(result.message)
+                            loadData()
+                            // Reload profile immediately
+                            const { data: updatedProfile } = await supabase
+                              .from("profiles")
+                              .select("*, contract_categories(*)")
+                              .eq("id", viewEmployeeProfile.id)
+                              .single()
+                            if (updatedProfile) {
+                              setViewEmployeeProfile(updatedProfile as any)
+                            }
+                            setModalViewMode("employment")
+                          } catch (err: any) {
+                            toast.error(err.message || "Failed to convert type")
+                          } finally {
+                            setIsConverting(false)
+                          }
+                        }}
+                        loading={isConverting}
+                        className="gap-1.5"
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                        Confirm Conversion
+                      </Button>
+                    </div>
+                  </div>
+                </ScrollArea>
+              </TabsContent>
+            </Tabs>
           )}
 
           {/* ── Edit Profile ── */}
@@ -619,16 +797,6 @@ export function EmployeeViewModal({
                       className="rounded"
                     />
                     <Label htmlFor="is_department_lead">Department Lead</Label>
-                  </div>
-                  <div className="mt-3 flex items-center gap-2">
-                    <input
-                      id="attendance_exempt"
-                      type="checkbox"
-                      checked={editForm.attendance_exempt}
-                      onChange={(e) => setEditForm((prev) => ({ ...prev, attendance_exempt: e.target.checked }))}
-                      className="rounded"
-                    />
-                    <Label htmlFor="attendance_exempt">Exempt from attendance tracking</Label>
                   </div>
                 </div>
 
@@ -776,36 +944,6 @@ export function EmployeeViewModal({
                       </div>
 
                       <div className="space-y-4 border-t pt-4">
-                        <h4 className="text-foreground text-sm font-semibold">Banking</h4>
-                        <div>
-                          <Label>Bank Name</Label>
-                          <Input
-                            value={editForm.bank_name}
-                            onChange={(e) => setEditForm({ ...editForm, bank_name: e.target.value })}
-                            placeholder="Bank name"
-                          />
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div>
-                            <Label>Account Number</Label>
-                            <Input
-                              value={editForm.bank_account_number}
-                              onChange={(e) => setEditForm({ ...editForm, bank_account_number: e.target.value })}
-                              placeholder="Account number"
-                            />
-                          </div>
-                          <div>
-                            <Label>Account Name</Label>
-                            <Input
-                              value={editForm.bank_account_name}
-                              onChange={(e) => setEditForm({ ...editForm, bank_account_name: e.target.value })}
-                              placeholder="Account holder name"
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4 border-t pt-4">
                         <h4 className="text-foreground text-sm font-semibold">Job Information</h4>
                         <Textarea
                           value={editForm.job_description}
@@ -830,7 +968,7 @@ export function EmployeeViewModal({
                 variant="outline"
                 size="sm"
                 onClick={() => setModalViewMode(modalViewMode === "status" ? "employment" : "profile")}
-                disabled={isSaving}
+                disabled={isSaving || isConverting}
               >
                 ← Back
               </Button>
@@ -855,9 +993,19 @@ export function EmployeeViewModal({
               </Button>
             )}
             {canManageUsers && modalViewMode === "employment" && (
-              <Button size="sm" onClick={() => setModalViewMode("status")} className="gap-1.5">
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (viewEmployeeProfile) {
+                    setConvertType(viewEmployeeProfile.employment_type || "full_time")
+                    setConvertCategory(viewEmployeeProfile.contract_categories?.code || "")
+                  }
+                  setModalViewMode("status")
+                }}
+                className="gap-1.5"
+              >
                 <UserCircle className="h-3.5 w-3.5" />
-                Change Status
+                Change Status / Type
               </Button>
             )}
             {canManageUsers && modalViewMode === "signature" && (

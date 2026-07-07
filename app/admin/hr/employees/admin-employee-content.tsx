@@ -10,13 +10,27 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { formatName, cn } from "@/lib/utils"
 import { formatWATDate, formatDateOfBirth } from "@/lib/utils/date"
-import { Users, Shield, Mail, Phone, Download, Pencil, Eye, Building2, Calendar, IdCard, Settings2 } from "lucide-react"
+import {
+  Users,
+  Shield,
+  Mail,
+  Phone,
+  Download,
+  Pencil,
+  Eye,
+  Building2,
+  Calendar,
+  IdCard,
+  Settings2,
+  Tags,
+} from "lucide-react"
 import type { UserRole, EmploymentStatus } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
 import { formValidation } from "@/lib/validation"
 import { getAssignableRolesForActor } from "@/lib/role-management"
 import { logger } from "@/lib/logger"
 import { ManageUsersDialog } from "@/components/hr/manage-users-dialog"
+import { ManageContractCategoriesDialog } from "@/components/hr/manage-contract-categories-dialog"
 import { EmployeeViewModal } from "@/components/employees/EmployeeViewModal"
 import { EmployeeDeletionDialog } from "@/components/employees/EmployeeDeletionDialog"
 import { EmployeeExportDialog } from "@/components/employees/EmployeeExportDialog"
@@ -73,6 +87,7 @@ export interface Employee {
   gender?: EmployeeGender | null
   residential_address: string | null
   office_location: string | null
+  device_key?: string | null
   bank_name: string | null
   bank_account_number: string | null
   bank_account_name: string | null
@@ -83,6 +98,9 @@ export interface Employee {
   is_department_lead: boolean
   lead_departments: string[]
   employment_status: EmploymentStatus
+  employment_type?: "full_time" | "part_time" | "contract"
+  contract_category_id?: string | null
+  contract_categories?: { id: string; name: string; code: string } | null
   created_at: string
 }
 
@@ -136,6 +154,8 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     "Office Location": true,
     "Date of Birth": true,
     "Employment Date": true,
+    "Employment Type": true,
+    "Contract Category": true,
     "Lead Departments": true,
     "Created At": true,
   })
@@ -158,6 +178,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
   })
 
   const [manageUsersOpen, setManageUsersOpen] = useState(false)
+  const [categoriesDialogOpen, setCategoriesDialogOpen] = useState(false)
 
   const [editForm, setEditForm] = useState({
     role: "employee" as UserRole,
@@ -512,6 +533,30 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         render: (r) => <Badge className={getRoleBadgeColor(r.role)}>{getRoleDisplayName(r.role)}</Badge>,
       },
       {
+        key: "employment_type",
+        label: "Employee Type",
+        sortable: true,
+        accessor: (r) => r.employment_type || "full_time",
+        render: (r) => {
+          const type = r.employment_type || "full_time"
+          const display =
+            type === "full_time"
+              ? "Full Time"
+              : type === "part_time"
+                ? "Part Time"
+                : r.contract_categories?.name
+                  ? `Contract (${r.contract_categories.name})`
+                  : "Contract"
+          const badgeColor =
+            type === "full_time"
+              ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/10 border-transparent shadow-none"
+              : type === "part_time"
+                ? "bg-purple-500/10 text-purple-500 hover:bg-purple-500/10 border-transparent shadow-none"
+                : "bg-orange-500/10 text-orange-500 hover:bg-orange-500/10 border-transparent shadow-none"
+          return <Badge className={badgeColor}>{display}</Badge>
+        },
+      },
+      {
         key: "status",
         label: "Status",
         accessor: (r) => r.employment_status || "active",
@@ -601,6 +646,18 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         // Hide exited employees by default; user can opt to include them.
         defaultValues: ["active", "suspended", "on_leave"],
       },
+      {
+        key: "employment_type",
+        label: "Employment Type",
+        options: [
+          { value: "full_time", label: "Full Time" },
+          { value: "part_time", label: "Part Time" },
+          { value: "contract", label: "Contract" },
+        ],
+        placeholder: "All Types",
+        mode: "custom",
+        filterFn: (employee, selected) => selected.includes(employee.employment_type || "full_time"),
+      },
     ],
     [departments, offices]
   )
@@ -635,10 +692,16 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       actions={
         <div className="flex items-center gap-2">
           {(canManageUsers || canReviewApplications) && (
-            <Button onClick={() => setManageUsersOpen(true)} variant="default" size="sm" className="h-8 gap-2">
-              <Settings2 className="h-4 w-4" />
-              <span className="hidden sm:inline">Manage Users</span>
-            </Button>
+            <>
+              <Button onClick={() => setCategoriesDialogOpen(true)} variant="outline" size="sm" className="h-8 gap-2">
+                <Tags className="h-4 w-4" />
+                <span className="hidden sm:inline">Manage Categories</span>
+              </Button>
+              <Button onClick={() => setManageUsersOpen(true)} variant="default" size="sm" className="h-8 gap-2">
+                <Settings2 className="h-4 w-4" />
+                <span className="hidden sm:inline">Manage Users</span>
+              </Button>
+            </>
           )}
           <Button
             variant="outline"
@@ -879,6 +942,8 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         canManageUsers={canManageUsers}
         userProfile={userProfile}
       />
+
+      <ManageContractCategoriesDialog isOpen={categoriesDialogOpen} onOpenChange={setCategoriesDialogOpen} />
 
       <EmployeeDeletionDialog
         isOpen={isDeleteDialogOpen}

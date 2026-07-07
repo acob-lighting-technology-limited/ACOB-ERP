@@ -172,7 +172,8 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     phoneNumber: "",
     role: "employee" as UserRole,
     admin_routes: [] as string[],
-    employeeNumber: "",
+    employmentType: "full_time" as "full_time" | "part_time" | "contract",
+    contractCategoryCode: "",
   })
 
   // Edit form state (matches EmployeeViewModal's EditForm shape)
@@ -604,7 +605,8 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         phoneNumber: "",
         role: "employee",
         admin_routes: [],
-        employeeNumber: "",
+        employmentType: "full_time",
+        contractCategoryCode: "",
       })
       loadData()
     } catch (error: unknown) {
