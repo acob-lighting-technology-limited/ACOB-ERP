@@ -98,7 +98,6 @@ export default defineConfig([
       "app/admin/inventory/products/\\[id\\]/page.tsx",
       "app/admin/inventory/products/_components/product-form-dialog.tsx",
       "app/admin/inventory/warehouses/page.tsx",
-      "app/admin/job-descriptions/page.tsx",
       "app/admin/purchasing/orders/page.tsx",
       "app/admin/purchasing/orders/\\[id\\]/page.tsx",
       "app/admin/purchasing/orders/_components/purchase-order-form-dialog.tsx",
