@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/client"
 import type { Role } from "./role-form-dialog"
 
 export const DEFAULT_ROLES: Role[] = [
@@ -65,24 +64,14 @@ export const DEFAULT_ROLES: Role[] = [
 ]
 
 export async function fetchRolesData(): Promise<Role[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase.from("roles").select("*").order("name")
-
-  if (error) {
-    if (error.code === "42P01" || error.message?.includes("relation")) {
-      return DEFAULT_ROLES
-    }
-    throw new Error(error.message)
+  // Scoped server route resolves admin scope and reads via the service role;
+  // the browser no longer queries Supabase directly (see AGENTS.md).
+  const res = await fetch("/api/admin/settings/roles", { cache: "no-store" })
+  if (!res.ok) {
+    throw new Error(`Failed to load roles (${res.status})`)
   }
-
-  const { data: profiles } = await supabase.from("profiles").select("role")
-  const roleCounts = new Map<string, number>()
-  profiles?.forEach((p) => {
-    roleCounts.set(p.role, (roleCounts.get(p.role) || 0) + 1)
-  })
-
-  return (data || []).map((r) => ({
-    ...r,
-    user_count: roleCounts.get(r.name) || 0,
-  }))
+  const json = (await res.json()) as { data?: Role[] | null; fallback?: boolean; error?: string }
+  if (json.error) throw new Error(json.error)
+  if (json.fallback) return DEFAULT_ROLES
+  return json.data ?? []
 }
