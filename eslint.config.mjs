@@ -114,7 +114,6 @@ export default defineConfig([
       "app/admin/reports/mail/weekly-summary-content.tsx",
       "app/admin/reports/mail/_components/use-weekly-summary-send.ts",
       "app/admin/reports/weekly-reports/weekly-reports-content.tsx",
-      "app/admin/settings/roles/page.tsx",
       "app/admin/settings/users/_lib/queries.ts",
       "app/admin/tasks/management/admin-tasks-content.tsx",
       "app/admin/tasks/management/tasks-content-utils.ts",
