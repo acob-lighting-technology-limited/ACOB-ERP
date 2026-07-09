@@ -76,7 +76,6 @@ export default defineConfig([
       "app/admin/communications/_components/communications-composer.tsx",
       "app/admin/dev/tests/dev-tests-content.tsx",
       "app/admin/employees/admin-employee-content.tsx",
-      "app/admin/feedback/admin-feedback-content.tsx",
       "app/admin/finance/bills/view.tsx",
       "app/admin/finance/bills/\\[id\\]/page.tsx",
       "app/admin/finance/bills/_components/bill-form-dialog.tsx",
