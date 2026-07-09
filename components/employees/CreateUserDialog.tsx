@@ -25,19 +25,25 @@ import type { UserRole } from "@/types/database"
 import { getRoleDisplayName } from "@/lib/permissions"
 import { getAssignableRolesForActor } from "@/lib/role-management"
 import type { UserProfile } from "@/app/admin/hr/employees/admin-employee-content"
+import { OFFICE_LOCATIONS } from "@/lib/office-locations"
 
 const createUserSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
-  otherNames: z.string(),
+  firstName: z.string().min(2, "First name must be at least 2 characters"),
+  lastName: z.string().min(2, "Last name must be at least 2 characters"),
+  otherNames: z.string().optional(),
   email: z.string().min(1, "Email is required").email("Invalid email address"),
   department: z.string().min(1, "Department is required"),
-  companyRole: z.string(),
-  phoneNumber: z.string(),
+  companyRole: z.string().min(2, "Designation is required"),
+  phoneNumber: z.string().regex(/^0[789][01]\d{8}$/, "Must be a valid Nigerian phone number (e.g., 08012345678)"),
   role: z.string(),
   admin_routes: z.array(z.string()),
   employmentType: z.enum(["full_time", "part_time", "contract"]),
   contractCategoryCode: z.string(),
+  gender: z.enum(["male", "female"], { message: "Gender is required" }),
+  dateOfBirth: z.string().optional(),
+  additionalPhone: z.string().optional(),
+  residentialAddress: z.string().min(5, "Address must be at least 5 characters"),
+  officeLocation: z.string().optional(),
 })
 
 type CreateUserFormValues = z.infer<typeof createUserSchema>
@@ -54,6 +60,11 @@ interface CreateUserForm {
   admin_routes: string[]
   employmentType: "full_time" | "part_time" | "contract"
   contractCategoryCode: string
+  gender: "male" | "female"
+  dateOfBirth: string
+  additionalPhone: string
+  residentialAddress: string
+  officeLocation: string
 }
 
 interface CreateUserDialogProps {
@@ -108,6 +119,11 @@ export function CreateUserDialog({
       admin_routes: parentForm.admin_routes,
       employmentType: parentForm.employmentType || "full_time",
       contractCategoryCode: parentForm.contractCategoryCode || "",
+      gender: parentForm.gender || "male",
+      dateOfBirth: parentForm.dateOfBirth || "",
+      additionalPhone: parentForm.additionalPhone || "",
+      residentialAddress: parentForm.residentialAddress || "",
+      officeLocation: parentForm.officeLocation || "",
     },
   })
 
@@ -133,6 +149,11 @@ export function CreateUserDialog({
         admin_routes: (values.admin_routes ?? []).filter((value): value is string => Boolean(value)),
         employmentType: (values.employmentType ?? "full_time") as "full_time" | "part_time" | "contract",
         contractCategoryCode: values.contractCategoryCode ?? "",
+        gender: (values.gender ?? "male") as "male" | "female",
+        dateOfBirth: values.dateOfBirth ?? "",
+        additionalPhone: values.additionalPhone ?? "",
+        residentialAddress: values.residentialAddress ?? "",
+        officeLocation: values.officeLocation ?? "",
       })
     })
     return () => subscription.unsubscribe()
@@ -153,6 +174,11 @@ export function CreateUserDialog({
         admin_routes: parentForm.admin_routes,
         employmentType: parentForm.employmentType || "full_time",
         contractCategoryCode: parentForm.contractCategoryCode || "",
+        gender: parentForm.gender || "male",
+        dateOfBirth: parentForm.dateOfBirth || "",
+        additionalPhone: parentForm.additionalPhone || "",
+        residentialAddress: parentForm.residentialAddress || "",
+        officeLocation: parentForm.officeLocation || "",
       })
     }
   }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -169,6 +195,7 @@ export function CreateUserDialog({
   const departmentValue = watch("department")
   const employmentTypeValue = watch("employmentType")
   const contractCategoryCodeValue = watch("contractCategoryCode")
+  const selectedGender = watch("gender")
 
   const getPreviewId = () => {
     const currentYear = new Date().getFullYear()
@@ -202,14 +229,14 @@ export function CreateUserDialog({
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <Label htmlFor="create_first_name">
-                First Name * <span className="text-destructive">*</span>
+                First Name <span className="text-destructive">*</span>
               </Label>
               <Input id="create_first_name" {...register("firstName")} placeholder="John" className="mt-1.5" />
               {errors.firstName && <p className="text-destructive mt-1 text-xs">{errors.firstName.message}</p>}
             </div>
             <div>
               <Label htmlFor="create_last_name">
-                Last Name * <span className="text-destructive">*</span>
+                Last Name <span className="text-destructive">*</span>
               </Label>
               <Input id="create_last_name" {...register("lastName")} placeholder="Doe" className="mt-1.5" />
               {errors.lastName && <p className="text-destructive mt-1 text-xs">{errors.lastName.message}</p>}
@@ -224,6 +251,29 @@ export function CreateUserDialog({
               placeholder="Middle name or other names (optional)"
               className="mt-1.5"
             />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label htmlFor="create_gender">
+                Gender <span className="text-destructive">*</span>
+              </Label>
+              <Select value={selectedGender} onValueChange={(value) => setValue("gender", value as "male" | "female")}>
+                <SelectTrigger id="create_gender" className="mt-1.5">
+                  <SelectValue placeholder="Select Gender" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="male">Male</SelectItem>
+                  <SelectItem value="female">Female</SelectItem>
+                </SelectContent>
+              </Select>
+              {errors.gender && <p className="text-destructive mt-1 text-xs">{errors.gender.message}</p>}
+            </div>
+            <div>
+              <Label htmlFor="create_dob">Date of Birth</Label>
+              <Input id="create_dob" type="date" {...register("dateOfBirth")} className="mt-1.5" />
+              {errors.dateOfBirth && <p className="text-destructive mt-1 text-xs">{errors.dateOfBirth.message}</p>}
+            </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -282,7 +332,7 @@ export function CreateUserDialog({
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <Label htmlFor="create_email">
-                Email * <span className="text-destructive">*</span>
+                Email <span className="text-destructive">*</span>
               </Label>
               <Input
                 id="create_email"
@@ -294,21 +344,71 @@ export function CreateUserDialog({
               {errors.email && <p className="text-destructive mt-1 text-xs">{errors.email.message}</p>}
             </div>
             <div>
-              <Label htmlFor="create_phone">Phone Number</Label>
+              <Label htmlFor="create_phone">
+                Phone Number <span className="text-destructive">*</span>
+              </Label>
               <Input
                 id="create_phone"
                 type="tel"
                 {...register("phoneNumber")}
-                placeholder="+234 800 000 0000"
+                placeholder="e.g., 08012345678"
                 className="mt-1.5"
               />
+              {errors.phoneNumber && <p className="text-destructive mt-1 text-xs">{errors.phoneNumber.message}</p>}
             </div>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
+              <Label htmlFor="create_additional_phone">Additional Phone (Optional)</Label>
+              <Input
+                id="create_additional_phone"
+                type="tel"
+                {...register("additionalPhone")}
+                placeholder="e.g., 08012345678"
+                className="mt-1.5"
+              />
+              {errors.additionalPhone && (
+                <p className="text-destructive mt-1 text-xs">{errors.additionalPhone.message}</p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="create_address">
+                Residential Address <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="create_address"
+                {...register("residentialAddress")}
+                placeholder="Full home address"
+                className="mt-1.5"
+              />
+              {errors.residentialAddress && (
+                <p className="text-destructive mt-1 text-xs">{errors.residentialAddress.message}</p>
+              )}
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="create_office_location">Office Location (Optional)</Label>
+            <Select value={watch("officeLocation")} onValueChange={(value) => setValue("officeLocation", value)}>
+              <SelectTrigger id="create_office_location" className="mt-1.5">
+                <SelectValue placeholder="Select Office Location" />
+              </SelectTrigger>
+              <SelectContent>
+                {OFFICE_LOCATIONS.map((loc) => (
+                  <SelectItem key={loc} value={loc}>
+                    {loc}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {errors.officeLocation && <p className="text-destructive mt-1 text-xs">{errors.officeLocation.message}</p>}
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
               <Label htmlFor="create_department">
-                Department * <span className="text-destructive">*</span>
+                Department <span className="text-destructive">*</span>
               </Label>
               <Select value={departmentValue} onValueChange={(value) => setValue("department", value)}>
                 <SelectTrigger className="mt-1.5">
@@ -360,26 +460,50 @@ export function CreateUserDialog({
           )}
 
           <div>
-            <Label htmlFor="create_designation">Designation</Label>
+            <Label htmlFor="create_designation">
+              Designation <span className="text-destructive">*</span>
+            </Label>
             <Input
               id="create_designation"
               {...register("companyRole")}
               placeholder="e.g., Senior Developer, Manager"
               className="mt-1.5"
             />
+            {errors.companyRole && <p className="text-destructive mt-1 text-xs">{errors.companyRole.message}</p>}
           </div>
         </div>
-        <DialogFooter className="border-t pt-4">
+        <DialogFooter className="gap-2 border-t pt-4">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => {
+              rhf.reset({
+                firstName: "",
+                lastName: "",
+                otherNames: "",
+                email: "",
+                department: "",
+                companyRole: "",
+                phoneNumber: "",
+                role: "employee",
+                admin_routes: [],
+                employmentType: "full_time",
+                contractCategoryCode: "",
+                gender: "male",
+                dateOfBirth: "",
+                additionalPhone: "",
+                residentialAddress: "",
+                officeLocation: "",
+              })
+            }}
+            disabled={isCreating}
+          >
+            Reset
+          </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isCreating}>
             Cancel
           </Button>
-          <Button
-            onClick={onCreate}
-            disabled={
-              isCreating || !firstNameValue.trim() || !lastNameValue.trim() || !emailValue.trim() || !departmentValue
-            }
-            className="gap-2"
-          >
+          <Button onClick={rhf.handleSubmit(() => onCreate())} disabled={isCreating} className="gap-2">
             {isCreating ? (
               "Creating..."
             ) : (

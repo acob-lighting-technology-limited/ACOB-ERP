@@ -14,7 +14,7 @@ import { Lock, CheckCircle, Eye, EyeOff } from "lucide-react"
 import Image from "next/image"
 import { useTheme } from "next-themes"
 import { getSeasonalLogoPaths } from "@/lib/seasonal-branding"
-import { FormPageSkeleton } from "@/components/skeletons"
+import { AuthPageSkeleton } from "@/components/skeletons"
 
 export default function SetPasswordPage() {
   const [password, setPassword] = useState("")
@@ -100,7 +100,7 @@ export default function SetPasswordPage() {
   }
 
   if (isChecking) {
-    return <FormPageSkeleton sections={2} fieldsPerSection={3} showSidebar={false} />
+    return <AuthPageSkeleton />
   }
 
   return (

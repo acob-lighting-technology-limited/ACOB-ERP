@@ -4,6 +4,7 @@ export interface UserProfile {
   last_name: string
   other_names: string | null
   company_email: string
+  personal_email?: string | null
   department: string
   designation: string | null
   role: string

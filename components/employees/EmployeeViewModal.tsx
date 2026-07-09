@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { formatWATDate } from "@/lib/utils/date"
+import { formatWATDate, formatDateOfBirth } from "@/lib/utils/date"
 import { toast } from "sonner"
 import {
   Dialog,
@@ -54,6 +54,7 @@ interface EditForm {
   other_names: string
   company_email: string
   additional_email: string
+  personal_email: string
   phone_number: string
   additional_phone: string
   residential_address: string
@@ -295,6 +296,16 @@ export function EmployeeViewModal({
                         <span className="text-xs break-all sm:text-sm">{viewEmployeeProfile.company_email}</span>
                       </InfoRow>
                     )}
+                    {viewEmployeeProfile.personal_email && (
+                      <InfoRow label="Personal Email">
+                        <span className="text-xs break-all sm:text-sm">{viewEmployeeProfile.personal_email}</span>
+                      </InfoRow>
+                    )}
+                    {viewEmployeeProfile.additional_email && (
+                      <InfoRow label="Additional Email">
+                        <span className="text-xs break-all sm:text-sm">{viewEmployeeProfile.additional_email}</span>
+                      </InfoRow>
+                    )}
                     {viewEmployeeProfile.department && (
                       <InfoRow label="Department">{viewEmployeeProfile.department}</InfoRow>
                     )}
@@ -331,6 +342,11 @@ export function EmployeeViewModal({
                             </Badge>
                           ))}
                         </div>
+                      </InfoRow>
+                    )}
+                    {(viewEmployeeProfile.birthday || viewEmployeeProfile.date_of_birth) && (
+                      <InfoRow label="Birthday">
+                        {formatDateOfBirth(viewEmployeeProfile.date_of_birth, viewEmployeeProfile.birthday)}
                       </InfoRow>
                     )}
                     <InfoRow label="Hire Date">
@@ -869,7 +885,7 @@ export function EmployeeViewModal({
                             placeholder="Middle name or other names"
                           />
                         </div>
-                        <div className="grid gap-4 md:grid-cols-2">
+                        <div className="grid gap-4 md:grid-cols-3">
                           <div>
                             <Label>Company Email</Label>
                             <Input
@@ -878,6 +894,15 @@ export function EmployeeViewModal({
                               onChange={(e) => setEditForm({ ...editForm, company_email: e.target.value })}
                               disabled={!canManageUsers}
                               placeholder="email@company.com"
+                            />
+                          </div>
+                          <div>
+                            <Label>Personal Email</Label>
+                            <Input
+                              type="email"
+                              value={editForm.personal_email}
+                              onChange={(e) => setEditForm({ ...editForm, personal_email: e.target.value })}
+                              placeholder="personal@example.com"
                             />
                           </div>
                           <div>

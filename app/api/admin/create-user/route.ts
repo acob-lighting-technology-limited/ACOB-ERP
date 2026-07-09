@@ -80,6 +80,11 @@ export async function PATCH(request: NextRequest) {
       role,
       employmentType,
       contractCategoryCode,
+      gender,
+      dateOfBirth,
+      additionalPhone,
+      residentialAddress,
+      officeLocation,
     } = body
     const resolvedEmploymentType = employmentType || "full_time"
     const resolvedDesignation = String(designation ?? body?.companyRole ?? "").trim()
@@ -250,6 +255,10 @@ export async function PATCH(request: NextRequest) {
         other_names: otherNames || "",
         department: department,
         phone_number: phoneNumber || "",
+        gender: gender || "",
+        date_of_birth: dateOfBirth || "",
+        residential_address: residentialAddress || "",
+        office_location: officeLocation || "",
       },
     })
 
@@ -282,6 +291,11 @@ export async function PATCH(request: NextRequest) {
         employee_number: employeeNumber || null, // Employee number (ACOB/YEAR/NUMBER)
         employment_type: resolvedEmploymentType,
         contract_category_id: contractCategoryId,
+        gender: gender || null,
+        date_of_birth: dateOfBirth || null,
+        additional_phone: additionalPhone || null,
+        residential_address: residentialAddress || null,
+        office_location: officeLocation || null,
       })
       .eq("id", authData.user.id)
 

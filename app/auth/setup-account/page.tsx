@@ -17,7 +17,7 @@ import { getSeasonalLogoPaths } from "@/lib/seasonal-branding"
 import { formValidation } from "@/lib/validation"
 import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { FormPageSkeleton } from "@/components/skeletons"
+import { AuthPageSkeleton } from "@/components/skeletons"
 
 import { logger } from "@/lib/logger"
 
@@ -475,7 +475,7 @@ function SetupAccountContent() {
 
 export default function SetupAccountPage() {
   return (
-    <Suspense fallback={<FormPageSkeleton sections={2} fieldsPerSection={4} showSidebar={true} />}>
+    <Suspense fallback={<AuthPageSkeleton />}>
       <SetupAccountContent />
     </Suspense>
   )

@@ -17,7 +17,7 @@ def main():
         {
             'start_date': '22/06/2026',
             'focal_area': 'Healthcare Electrification & Solarization',
-            'desc': 'Configure project schemas and metrics to track healthcare electrification, tertiary hospital solarization, and primary healthcare facility solar installations.',
+            'desc': 'Configure project schemas and metrics to track healthcare electrification, tertiary hospital solarization, and primary healthcare facility solar installations. Add some Kaduna sites and its matrix to the system.',
             'timeline': '06/07/2026',
             'status': 'In Progress',
             'challenges': 'Requires gathering the project data (images and descriptions) to populate, followed by AI assistance (Claude) for implementation.'

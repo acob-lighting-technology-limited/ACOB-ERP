@@ -40,6 +40,7 @@ export interface Employee {
   other_names: string | null
   company_email: string
   additional_email: string | null
+  personal_email: string | null
   department: string
   designation: string | null
   role: UserRole
@@ -174,6 +175,11 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     admin_routes: [] as string[],
     employmentType: "full_time" as "full_time" | "part_time" | "contract",
     contractCategoryCode: "",
+    gender: "male" as "male" | "female",
+    dateOfBirth: "",
+    additionalPhone: "",
+    residentialAddress: "",
+    officeLocation: "",
   })
 
   // Edit form state (matches EmployeeViewModal's EditForm shape)
@@ -191,6 +197,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     other_names: "",
     company_email: "",
     additional_email: "",
+    personal_email: "",
     phone_number: "",
     additional_phone: "",
     residential_address: "",
@@ -256,6 +263,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           other_names: fullProfile.other_names || "",
           company_email: fullProfile.company_email || "",
           additional_email: fullProfile.additional_email || "",
+          personal_email: fullProfile.personal_email || "",
           phone_number: fullProfile.phone_number || "",
           additional_phone: fullProfile.additional_phone || "",
           residential_address: fullProfile.residential_address || "",
@@ -283,6 +291,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           other_names: employee.other_names || "",
           company_email: employee.company_email || "",
           additional_email: employee.additional_email || "",
+          personal_email: employee.personal_email || "",
           phone_number: employee.phone_number || "",
           additional_phone: "",
           residential_address: employee.residential_address || "",
@@ -436,6 +445,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
 
       const companyEmail = editForm.company_email.trim().toLowerCase()
       const additionalEmail = editForm.additional_email.trim().toLowerCase()
+      const personalEmail = editForm.personal_email.trim().toLowerCase()
 
       if (!companyEmail) {
         toast.error("Company email is required")
@@ -495,6 +505,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         other_names: editForm.other_names || null,
         company_email: companyEmail,
         additional_email: additionalEmail || null,
+        personal_email: personalEmail || null,
         phone_number: editForm.phone_number || null,
         additional_phone: editForm.additional_phone || null,
         residential_address: editForm.residential_address || null,
@@ -607,6 +618,11 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         admin_routes: [],
         employmentType: "full_time",
         contractCategoryCode: "",
+        gender: "male",
+        dateOfBirth: "",
+        additionalPhone: "",
+        residentialAddress: "",
+        officeLocation: "",
       })
       loadData()
     } catch (error: unknown) {

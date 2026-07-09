@@ -78,6 +78,7 @@ export interface Employee {
   other_names: string | null
   company_email: string
   additional_email: string | null
+  personal_email: string | null
   department: string
   designation: string | null
   role: UserRole
@@ -194,6 +195,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     other_names: "",
     company_email: "",
     additional_email: "",
+    personal_email: "",
     phone_number: "",
     additional_phone: "",
     residential_address: "",
@@ -254,6 +256,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             other_names: fullProfile.other_names || "",
             company_email: fullProfile.company_email || "",
             additional_email: fullProfile.additional_email || "",
+            personal_email: fullProfile.personal_email || "",
             phone_number: fullProfile.phone_number || "",
             additional_phone: fullProfile.additional_phone || "",
             residential_address: fullProfile.residential_address || "",
@@ -338,6 +341,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
 
       const companyEmail = editForm.company_email.trim().toLowerCase()
       const additionalEmail = editForm.additional_email.trim().toLowerCase()
+      const personalEmail = editForm.personal_email.trim().toLowerCase()
 
       if (!companyEmail || !formValidation.isCompanyEmail(companyEmail)) {
         toast.error("Valid company email is required")
@@ -373,8 +377,9 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         job_description: editForm.job_description || null,
       }
 
-      // attendance_exempt is not in the generated DB type yet — cast to allow it
+      // attendance_exempt and personal_email are not in the generated DB type yet — cast to allow them
       ;(updateData as Record<string, unknown>).attendance_exempt = editForm.attendance_exempt
+      ;(updateData as Record<string, unknown>).personal_email = personalEmail || null
 
       const emailSyncResponse = await fetch(`/api/admin/hr/employees/${selectedEmployee.id}/email`, {
         method: "PATCH",

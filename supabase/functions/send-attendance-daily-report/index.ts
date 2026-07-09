@@ -303,12 +303,29 @@ serve(async (req) => {
     }
 
     let today = lagosNow().dateIso
-    const { hhmm: nowHHMM, dow } = lagosNow()
+    const { hhmm: nowHHMM } = lagosNow()
     if (customDate) {
       today = customDate
+    } else {
+      const hour = Number(nowHHMM.split(":")[0])
+      if (hour < 4) {
+        // Between 12:00 AM and 3:59 AM Lagos time, report on the day that just ended (yesterday)
+        const yesterday = new Date()
+        yesterday.setDate(yesterday.getDate() - 1)
+        const dateParts = new Intl.DateTimeFormat("en-CA", {
+          timeZone: TIME_ZONE,
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        }).formatToParts(yesterday)
+        const get = (parts: Intl.DateTimeFormatPart[], type: string) => parts.find((p) => p.type === type)?.value ?? ""
+        today = `${get(dateParts, "year")}-${get(dateParts, "month")}-${get(dateParts, "day")}`
+      }
     }
 
-    if (!isTest && (dow === 0 || dow === 6)) {
+    const targetDow = new Date(`${today}T00:00:00Z`).getUTCDay()
+
+    if (!isTest && (targetDow === 0 || targetDow === 6)) {
       return new Response(JSON.stringify({ skipped: true, reason: "weekend" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       })
@@ -358,7 +375,10 @@ serve(async (req) => {
       recipientEmails = Array.from(
         new Set(
           (recipientProfiles ?? [])
-            .map((p: { company_email: string | null; additional_email: string | null }) => p.company_email || p.additional_email)
+            .map(
+              (p: { company_email: string | null; additional_email: string | null }) =>
+                p.company_email || p.additional_email
+            )
             .filter((email: string | null): email is string => Boolean(email))
         )
       )
@@ -470,12 +490,13 @@ serve(async (req) => {
       }
     }
 
-
     if (!isTest) {
-      await supabase.from("system_settings").upsert(
-        { key: SETTINGS_KEY, value: { ...config, lastSentByTime: { ...lastSentByTime, [dueTime]: today } } },
-        { onConflict: "key" }
-      )
+      await supabase
+        .from("system_settings")
+        .upsert(
+          { key: SETTINGS_KEY, value: { ...config, lastSentByTime: { ...lastSentByTime, [dueTime]: today } } },
+          { onConflict: "key" }
+        )
     }
 
     return new Response(

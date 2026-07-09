@@ -146,11 +146,19 @@ def main():
         },
         {
             'name': 'Network Monitoring',
-            'start_date': '03/07/2026',
-            'desc': 'Monitors and logs company network traffic. It tracks visited domains, matched employee identifiers, source IPs, and device hostnames, and classifies activity (normal, review, system noise) to detect potential security threats.',
+            'start_date': '05/07/2026',
+            'desc': 'Monitors and logs company network traffic. It tracks visited domains, resolves employee profiles, identifies device specifications (MAC address, vendor, OS, browser), logs bandwidth consumption (upload/download), and alerts admins to unrecognized devices and suspicious activity.',
             'status': 'Completed',
             'timeline': 'Done',
             'challenges': 'Requires fine-tuning classification filters to minimize false-positive review alerts from system background noise.'
+        },
+        {
+            'name': 'Employee Onboarding',
+            'start_date': '07/07/2026',
+            'desc': 'Public onboarding form for new hires. It collects personal, residential, and job details, auto-generates company email previews, tracks draft progress in local storage, and securely submits applications for HR approval.',
+            'status': 'Completed',
+            'timeline': 'Done',
+            'challenges': 'Requires configuring public-facing API routes with honeypot fields to block automated spam submissions.'
         }
     ]
 

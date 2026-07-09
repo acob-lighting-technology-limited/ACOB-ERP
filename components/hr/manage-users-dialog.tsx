@@ -109,17 +109,22 @@ async function fetchPendingApplications(): Promise<PendingUser[]> {
 // ─── Create user schema ────────────────────────────────────────────────────────
 
 const createSchema = z.object({
-  firstName: z.string().min(1, "Required"),
-  lastName: z.string().min(1, "Required"),
-  otherNames: z.string(),
-  email: z.string().min(1).email("Invalid email"),
-  department: z.string().min(1, "Required"),
-  companyRole: z.string(),
-  phoneNumber: z.string(),
+  firstName: z.string().min(2, "First name must be at least 2 characters"),
+  lastName: z.string().min(2, "Last name must be at least 2 characters"),
+  otherNames: z.string().optional(),
+  email: z.string().min(1, "Email is required").email("Invalid email address"),
+  department: z.string().min(1, "Department is required"),
+  companyRole: z.string().min(2, "Designation is required"),
+  phoneNumber: z.string().regex(/^0[789][01]\d{8}$/, "Must be a valid Nigerian phone number (e.g., 08012345678)"),
   role: z.string(),
   admin_routes: z.array(z.string()),
   employmentType: z.enum(["full_time", "part_time", "contract"]),
   contractCategoryCode: z.string().optional(),
+  gender: z.enum(["male", "female"], { message: "Gender is required" }),
+  dateOfBirth: z.string().optional(),
+  additionalPhone: z.string().optional(),
+  residentialAddress: z.string().min(5, "Address must be at least 5 characters"),
+  officeLocation: z.string().optional(),
 })
 type CreateFormValues = z.infer<typeof createSchema>
 
@@ -173,6 +178,11 @@ export function ManageUsersDialog({
       admin_routes: [],
       employmentType: "full_time",
       contractCategoryCode: "",
+      gender: "male",
+      dateOfBirth: "",
+      additionalPhone: "",
+      residentialAddress: "",
+      officeLocation: "",
     },
   })
   const {
@@ -185,6 +195,7 @@ export function ManageUsersDialog({
   const roleValue = watch("role")
   const employmentTypeValue = watch("employmentType")
   const contractCategoryCodeValue = watch("contractCategoryCode")
+  const selectedGender = watch("gender")
 
   const { data: contractCategories = [] } = useQuery<any[]>({
     queryKey: ["contract-categories"],
@@ -215,10 +226,6 @@ export function ManageUsersDialog({
   const handleCreateUser = async () => {
     if (isCreating || !canManageUsers) return
     const v = rhf.getValues()
-    if (!v.firstName.trim() || !v.lastName.trim() || !v.email.trim() || !v.department) {
-      toast.error("Required fields are missing")
-      return
-    }
     if (!formValidation.isCompanyEmail(v.email)) {
       toast.error("Invalid email domain")
       return
@@ -240,6 +247,11 @@ export function ManageUsersDialog({
           admin_routes: v.admin_routes,
           employmentType: v.employmentType,
           contractCategoryCode: v.contractCategoryCode || null,
+          gender: v.gender,
+          dateOfBirth: v.dateOfBirth || null,
+          additionalPhone: v.additionalPhone || null,
+          residentialAddress: v.residentialAddress,
+          officeLocation: v.officeLocation || null,
         }),
       })
       const data = await res.json()
@@ -618,6 +630,34 @@ export function ManageUsersDialog({
                       className="mt-1.5"
                     />
                   </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <Label htmlFor="cu_gender">
+                        Gender <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={selectedGender}
+                        onValueChange={(value) => setValue("gender", value as "male" | "female")}
+                      >
+                        <SelectTrigger id="cu_gender" className="mt-1.5">
+                          <SelectValue placeholder="Select Gender" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="male">Male</SelectItem>
+                          <SelectItem value="female">Female</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {errors.gender && <p className="text-destructive mt-1 text-xs">{errors.gender.message}</p>}
+                    </div>
+                    <div>
+                      <Label htmlFor="cu_dob">Date of Birth</Label>
+                      <Input id="cu_dob" type="date" {...register("dateOfBirth")} className="mt-1.5" />
+                      {errors.dateOfBirth && (
+                        <p className="text-destructive mt-1 text-xs">{errors.dateOfBirth.message}</p>
+                      )}
+                    </div>
+                  </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
                       <Label htmlFor="cu_employment_type">Employment Type</Label>
@@ -687,15 +727,72 @@ export function ManageUsersDialog({
                       {errors.email && <p className="text-destructive mt-1 text-xs">{errors.email.message}</p>}
                     </div>
                     <div>
-                      <Label htmlFor="cu_phone">Phone Number</Label>
+                      <Label htmlFor="cu_phone">
+                        Phone Number <span className="text-destructive">*</span>
+                      </Label>
                       <Input
                         id="cu_phone"
                         type="tel"
                         {...register("phoneNumber")}
-                        placeholder="+234 800 000 0000"
+                        placeholder="e.g., 08012345678"
                         className="mt-1.5"
                       />
+                      {errors.phoneNumber && (
+                        <p className="text-destructive mt-1 text-xs">{errors.phoneNumber.message}</p>
+                      )}
                     </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <Label htmlFor="cu_additional_phone">Additional Phone (Optional)</Label>
+                      <Input
+                        id="cu_additional_phone"
+                        type="tel"
+                        {...register("additionalPhone")}
+                        placeholder="e.g., 08012345678"
+                        className="mt-1.5"
+                      />
+                      {errors.additionalPhone && (
+                        <p className="text-destructive mt-1 text-xs">{errors.additionalPhone.message}</p>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="cu_address">
+                        Residential Address <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="cu_address"
+                        {...register("residentialAddress")}
+                        placeholder="Full home address"
+                        className="mt-1.5"
+                      />
+                      {errors.residentialAddress && (
+                        <p className="text-destructive mt-1 text-xs">{errors.residentialAddress.message}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="cu_office_location">Office Location (Optional)</Label>
+                    <Select
+                      value={watch("officeLocation")}
+                      onValueChange={(value) => setValue("officeLocation", value)}
+                    >
+                      <SelectTrigger id="cu_office_location" className="mt-1.5">
+                        <SelectValue placeholder="Select Office Location" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {OFFICE_LOCATIONS.map((loc) => (
+                          <SelectItem key={loc} value={loc}>
+                            {loc}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {errors.officeLocation && (
+                      <p className="text-destructive mt-1 text-xs">{errors.officeLocation.message}</p>
+                    )}
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
@@ -753,13 +850,18 @@ export function ManageUsersDialog({
                     </div>
                   )}
                   <div>
-                    <Label htmlFor="cu_desig">Designation</Label>
+                    <Label htmlFor="cu_desig">
+                      Designation <span className="text-destructive">*</span>
+                    </Label>
                     <Input
                       id="cu_desig"
                       {...register("companyRole")}
                       placeholder="e.g., Senior Developer"
                       className="mt-1.5"
                     />
+                    {errors.companyRole && (
+                      <p className="text-destructive mt-1 text-xs">{errors.companyRole.message}</p>
+                    )}
                   </div>
                 </div>
               </ScrollArea>
@@ -767,17 +869,7 @@ export function ManageUsersDialog({
                 <Button variant="outline" onClick={() => resetCreate()} disabled={isCreating}>
                   Reset
                 </Button>
-                <Button
-                  onClick={handleCreateUser}
-                  disabled={
-                    isCreating ||
-                    !watch("firstName").trim() ||
-                    !watch("lastName").trim() ||
-                    !watch("email").trim() ||
-                    !watch("department")
-                  }
-                  className="gap-2"
-                >
+                <Button onClick={rhf.handleSubmit(() => handleCreateUser())} disabled={isCreating} className="gap-2">
                   {isCreating ? (
                     "Creating…"
                   ) : (
