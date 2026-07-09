@@ -23,8 +23,17 @@ BEGIN
     supabase_url := 'https://itqegqxeqkeogwrvlzlj.supabase.co';
   END IF;
 
+  -- Service key is sourced at runtime from Vault (never hardcoded). The
+  -- production service_role JWT that previously lived here has been removed and
+  -- must be rotated. Superseded by 20260709122000_secrets_vault_only.sql.
   IF service_key IS NULL OR service_key = '' THEN
-    service_key := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0cWVncXhlcWtlb2d3cnZsemxqIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2MTY0MjQ1NywiZXhwIjoyMDc3MjE4NDU3fQ.uUEg9q9jT9IsERFmmhmYMxdIr_xgakdf52EmMEZbf50';
+    SELECT decrypted_secret INTO service_key
+    FROM vault.decrypted_secrets WHERE name = 'service_role_key';
+  END IF;
+
+  IF service_key IS NULL OR service_key = '' THEN
+    RAISE NOTICE 'service_role_key not configured; skipping digest schedule processing';
+    RETURN;
   END IF;
 
   SELECT * INTO current_info FROM public.get_current_iso_week();
