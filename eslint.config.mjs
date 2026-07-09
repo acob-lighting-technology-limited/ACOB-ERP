@@ -44,5 +44,85 @@ export default defineConfig([
       ],
     },
   },
+  // ---------------------------------------------------------------------------
+  // AGENTS.md enforcement: admin & dept client components must NOT query
+  // Supabase directly from the browser — it bypasses middleware scope injection
+  // (no x-admin-scope / x-dept-scope header). They must call a scoped /api route.
+  // ---------------------------------------------------------------------------
+  {
+    files: ["app/admin/**/*.{ts,tsx}", "app/dept/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/lib/supabase/client",
+              message:
+                "Admin/dept client components must not query Supabase directly (bypasses middleware scope injection). Fetch a scoped /api route that calls getRequestScope() instead — see AGENTS.md 'Admin Route Scoping Standard'.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Temporary allowlist — pre-existing violators pending migration to scoped API
+  // routes (Phase 3b). Remove each entry as its module is migrated; delete this
+  // block once empty. DO NOT add new files here.
+  {
+    files: [
+      "app/admin/assets/admin-assets-content.tsx",
+      "app/admin/assets/issues/view.tsx",
+      "app/admin/communications/_components/communications-composer.tsx",
+      "app/admin/dev/tests/dev-tests-content.tsx",
+      "app/admin/employees/admin-employee-content.tsx",
+      "app/admin/feedback/admin-feedback-content.tsx",
+      "app/admin/finance/bills/view.tsx",
+      "app/admin/finance/bills/\\[id\\]/page.tsx",
+      "app/admin/finance/bills/_components/bill-form-dialog.tsx",
+      "app/admin/finance/invoices/view.tsx",
+      "app/admin/finance/invoices/\\[id\\]/page.tsx",
+      "app/admin/finance/invoices/_components/invoice-form-dialog.tsx",
+      "app/admin/finance/reports/view.tsx",
+      "app/admin/hr/departments/view.tsx",
+      "app/admin/hr/employees/admin-employee-content.tsx",
+      "app/admin/hr/employees/pending-applications-modal.tsx",
+      "app/admin/hr/employees/\\[userId\\]/page.tsx",
+      "app/admin/hr/leave/test/leave-flow-test-content.tsx",
+      "app/admin/hr/leave/view.tsx",
+      "app/admin/hr/office-location/view.tsx",
+      "app/admin/hr/view.tsx",
+      "app/admin/inventory/categories/page.tsx",
+      "app/admin/inventory/movements/page.tsx",
+      "app/admin/inventory/page.tsx",
+      "app/admin/inventory/products/page.tsx",
+      "app/admin/inventory/products/\\[id\\]/page.tsx",
+      "app/admin/inventory/products/_components/product-form-dialog.tsx",
+      "app/admin/inventory/warehouses/page.tsx",
+      "app/admin/job-descriptions/page.tsx",
+      "app/admin/purchasing/orders/page.tsx",
+      "app/admin/purchasing/orders/\\[id\\]/page.tsx",
+      "app/admin/purchasing/orders/_components/purchase-order-form-dialog.tsx",
+      "app/admin/purchasing/page.tsx",
+      "app/admin/purchasing/receipts/page.tsx",
+      "app/admin/purchasing/suppliers/page.tsx",
+      "app/admin/purchasing/suppliers/\\[id\\]/page.tsx",
+      "app/admin/purchasing/suppliers/_components/supplier-form-dialog.tsx",
+      "app/admin/reports/action-tracker/action-tracker-content.tsx",
+      "app/admin/reports/general-meeting/_components/week-setup-card.tsx",
+      "app/admin/reports/mail/mail-digest-content.tsx",
+      "app/admin/reports/mail/weekly-summary-content.tsx",
+      "app/admin/reports/mail/_components/use-weekly-summary-send.ts",
+      "app/admin/reports/weekly-reports/weekly-reports-content.tsx",
+      "app/admin/settings/roles/page.tsx",
+      "app/admin/settings/roles/_components/roles-data.ts",
+      "app/admin/settings/users/_lib/queries.ts",
+      "app/admin/tasks/management/admin-tasks-content.tsx",
+      "app/admin/tasks/management/tasks-content-utils.ts",
+    ],
+    rules: {
+      "no-restricted-imports": "off",
+    },
+  },
   globalIgnores(["scripts/**"]),
 ])
