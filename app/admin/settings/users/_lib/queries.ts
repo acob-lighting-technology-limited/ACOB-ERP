@@ -1,4 +1,3 @@
-import { createClient } from "@/lib/supabase/client"
 import { formatWATDate } from "@/lib/utils/date"
 
 export interface User {
@@ -21,50 +20,18 @@ export interface UsersSettingsData {
 }
 
 export async function fetchUsersSettingsData(): Promise<UsersSettingsData> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from("profiles")
-    .select("id, company_email, first_name, last_name, role, admin_routes, department, employment_status, created_at")
-    .order("created_at", { ascending: false })
-
-  if (error) throw new Error(error.message)
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const users = (data || []).map((u: any) => ({
-    ...u,
-    email: u.company_email,
-    is_active: u.employment_status === "active",
-    employment_status: u.employment_status || "active",
-  }))
-
-  const {
-    data: { user: currentUser },
-  } = await supabase.auth.getUser()
-  let currentUserRole = ""
-  if (currentUser?.id) {
-    const { data: me } = await supabase.from("profiles").select("role").eq("id", currentUser.id).single()
-    currentUserRole = me?.role || ""
-  }
-
-  return { users, currentUserRole }
+  // Scoped server route resolves admin scope and reads via the service role.
+  const res = await fetch("/api/admin/settings/users", { cache: "no-store" })
+  const json = await res.json()
+  if (!res.ok) throw new Error(json?.error || "Failed to load users")
+  return { users: (json.users || []) as User[], currentUserRole: json.currentUserRole || "" }
 }
 
 export async function fetchAllUsersForPicker(): Promise<User[]> {
-  const supabase = createClient()
-  const { data } = await supabase
-    .from("profiles")
-    .select("id, company_email, first_name, last_name, role, department, employment_status, created_at")
-    .eq("employment_status", "active")
-    .order("first_name")
-
-  if (!data) return []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return data.map((u: any) => ({
-    ...u,
-    email: u.company_email,
-    is_active: u.employment_status === "active",
-    employment_status: u.employment_status || "active",
-  }))
+  const res = await fetch("/api/admin/settings/users?picker=1", { cache: "no-store" })
+  if (!res.ok) return []
+  const json = await res.json()
+  return (json.users || []) as User[]
 }
 
 export function formatDate(date: string) {
