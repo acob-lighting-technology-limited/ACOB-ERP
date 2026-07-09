@@ -350,14 +350,32 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // CSRF: validate Origin header for state-changing requests
+  // CSRF: validate Origin for state-changing requests.
+  // The Origin allow-list is the app's PRIMARY cross-origin defense. The
+  // double-submit token check further below is currently inert (no client sends
+  // x-csrf-token yet — see follow-up). Keep the Origin check strict.
   const method = request.method.toUpperCase()
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
     const origin = request.headers.get("origin")
     const host = request.headers.get("host")
-    const allowedOrigins = [process.env.NEXT_PUBLIC_SITE_URL, `https://${host}`, `http://${host}`].filter(Boolean)
+    // Exact-match allow-list. A prefix match (previous `origin.startsWith(o)`)
+    // let hostile origins like `https://erp.acoblighting.com.attacker.tld` pass.
+    const allowedOrigins = [process.env.NEXT_PUBLIC_SITE_URL, `https://${host}`, `http://${host}`]
+      .filter(Boolean)
+      .map((o) => o!.replace(/\/+$/, ""))
+    const isApiRoute = pathname.startsWith("/api/")
+    const hasBearerAuth = request.headers.get("authorization")?.startsWith("Bearer ")
 
-    if (origin && !allowedOrigins.some((o) => origin.startsWith(o!))) {
+    if (origin) {
+      const normalizedOrigin = origin.replace(/\/+$/, "")
+      if (!allowedOrigins.includes(normalizedOrigin)) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+    } else if (isApiRoute && !hasBearerAuth && user) {
+      // A real authenticated browser session always sends an Origin on mutations.
+      // Its absence on a cookie-authed API write is a forged/stripped-header CSRF
+      // attempt — fail closed. Unauthenticated ingress (device/ingest/public) has
+      // no `user`, and non-browser clients use bearer auth, so neither is affected.
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
   }
@@ -370,6 +388,10 @@ export async function updateSession(request: NextRequest) {
       const cookieToken = request.cookies.get("csrf_token")?.value
       const headerToken = request.headers.get("x-csrf-token")
 
+      // Double-submit token check. Only enforced when a header is present because
+      // no client currently sends x-csrf-token — the Origin check above is the
+      // active defense. FOLLOW-UP: inject x-csrf-token into all mutations via a
+      // central fetch layer, then require both cookie+header here (fail closed).
       if (cookieToken && headerToken) {
         if (headerToken.length !== cookieToken.length || !timingSafeEqualText(headerToken, cookieToken)) {
           return NextResponse.json({ error: "Invalid CSRF token" }, { status: 403 })
