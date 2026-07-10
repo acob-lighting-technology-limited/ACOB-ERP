@@ -5,7 +5,6 @@ import { useParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -29,22 +28,11 @@ interface Product {
   created_at: string
 }
 
-interface ProductRow extends Product {
-  category?: {
-    name: string | null
-  } | null
-}
-
 async function fetchProduct(id: string): Promise<Product> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from("products")
-    .select("*, category:product_categories(name)")
-    .eq("id", id)
-    .single()
-  if (error) throw new Error(error.message)
-  const product = data as ProductRow
-  return { ...product, category_name: product.category?.name || undefined }
+  const res = await fetch(`/api/admin/inventory/products/${id}`, { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load product")
+  const json = await res.json()
+  return json.data as Product
 }
 
 export default function ProductDetailPage() {

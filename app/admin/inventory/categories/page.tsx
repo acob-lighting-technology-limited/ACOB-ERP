@@ -5,7 +5,6 @@ import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Boxes, FolderOpen, Layers3, Pencil, Plus, Tag, Trash2 } from "lucide-react"
 import { toast } from "sonner"
-import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -35,28 +34,10 @@ interface Category {
 }
 
 async function fetchCategoriesList(): Promise<Category[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase.from("product_categories").select("*").order("name")
-
-  if (error) {
-    if (error.code === "42P01") {
-      return []
-    }
-    throw new Error(error.message)
-  }
-
-  const categoriesWithCounts = await Promise.all(
-    (data || []).map(async (category) => {
-      const { count } = await supabase
-        .from("products")
-        .select("*", { count: "exact", head: true })
-        .eq("category_id", category.id)
-
-      return { ...category, product_count: count || 0 }
-    })
-  )
-
-  return categoriesWithCounts
+  const res = await fetch("/api/admin/inventory/categories", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load categories")
+  const json = await res.json()
+  return (json.data || []) as Category[]
 }
 
 function getProductBand(productCount: number) {
@@ -88,22 +69,21 @@ export default function CategoriesPage() {
     e.preventDefault()
 
     try {
-      const supabase = createClient()
-
       if (editingCategory) {
-        const { error: updateError } = await supabase
-          .from("product_categories")
-          .update({ name: formData.name, description: formData.description || null })
-          .eq("id", editingCategory.id)
-
-        if (updateError) throw updateError
+        const res = await fetch(`/api/admin/inventory/categories/${editingCategory.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: formData.name, description: formData.description || null }),
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to update category")
         toast.success("Category updated")
       } else {
-        const { error: insertError } = await supabase
-          .from("product_categories")
-          .insert({ name: formData.name, description: formData.description || null })
-
-        if (insertError) throw insertError
+        const res = await fetch("/api/admin/inventory/categories", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: formData.name, description: formData.description || null }),
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to create category")
         toast.success("Category created")
       }
 
@@ -118,10 +98,8 @@ export default function CategoriesPage() {
 
   async function handleDelete(category: Category) {
     try {
-      const supabase = createClient()
-      const { error: deleteError } = await supabase.from("product_categories").delete().eq("id", category.id)
-
-      if (deleteError) throw deleteError
+      const res = await fetch(`/api/admin/inventory/categories/${category.id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to delete category")
 
       toast.success("Category deleted")
       await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminCategories() })

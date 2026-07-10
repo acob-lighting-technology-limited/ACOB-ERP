@@ -5,7 +5,6 @@ import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { BadgeCheck, MapPin, Pencil, Plus, Trash2, Warehouse, WarehouseIcon, XCircle } from "lucide-react"
 import { toast } from "sonner"
-import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -37,14 +36,10 @@ interface WarehouseData {
 }
 
 async function fetchWarehousesList(): Promise<WarehouseData[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase.from("warehouses").select("*").order("name")
-
-  if (error && error.code !== "42P01") {
-    throw new Error(error.message)
-  }
-
-  return data || []
+  const res = await fetch("/api/admin/inventory/warehouses", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load warehouses")
+  const json = await res.json()
+  return (json.data || []) as WarehouseData[]
 }
 
 function getRegionFromAddress(address: string | null) {
@@ -78,30 +73,28 @@ export default function WarehousesPage() {
     e.preventDefault()
 
     try {
-      const supabase = createClient()
+      const payload = {
+        name: formData.name,
+        code: formData.code,
+        address: formData.address || null,
+        is_active: formData.is_active,
+      }
 
       if (editing) {
-        const { error: updateError } = await supabase
-          .from("warehouses")
-          .update({
-            name: formData.name,
-            code: formData.code,
-            address: formData.address || null,
-            is_active: formData.is_active,
-          })
-          .eq("id", editing.id)
-
-        if (updateError) throw updateError
+        const res = await fetch(`/api/admin/inventory/warehouses/${editing.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to update warehouse")
         toast.success("Warehouse updated")
       } else {
-        const { error: insertError } = await supabase.from("warehouses").insert({
-          name: formData.name,
-          code: formData.code,
-          address: formData.address || null,
-          is_active: formData.is_active,
+        const res = await fetch("/api/admin/inventory/warehouses", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         })
-
-        if (insertError) throw insertError
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to create warehouse")
         toast.success("Warehouse created")
       }
 
@@ -116,10 +109,8 @@ export default function WarehousesPage() {
 
   async function handleDelete(warehouse: WarehouseData) {
     try {
-      const supabase = createClient()
-      const { error: deleteError } = await supabase.from("warehouses").delete().eq("id", warehouse.id)
-
-      if (deleteError) throw deleteError
+      const res = await fetch(`/api/admin/inventory/warehouses/${warehouse.id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to delete warehouse")
 
       toast.success("Warehouse deleted")
       await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminWarehouses() })
