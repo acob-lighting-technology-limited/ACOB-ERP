@@ -1,20 +1,14 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
-import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Award, Calendar, Clock, Users, CheckCircle, AlertCircle, FileText, Building, MapPin } from "lucide-react"
 import Link from "next/link"
 import { PageWrapper, PageHeader, Section } from "@/components/layout"
 import { StatCard } from "@/components/ui/stat-card"
-import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import type { Database } from "@/types/database"
-import { getDepartmentAliases, normalizeDepartmentName } from "@/shared/departments"
 import { useAdminScope } from "@/components/admin-scope-context"
-import type { ClientAdminScope } from "@/components/admin-scope-context"
-import { toLocalISODate } from "@/lib/utils/date"
 
 interface DashboardStats {
   pendingLeaveRequests: number
@@ -33,107 +27,12 @@ interface HRAdminDashboardProps {
   showResourceBooking?: boolean
 }
 
-type ProfileIdRow = Pick<Database["public"]["Tables"]["profiles"]["Row"], "id">
-type AttendanceRow = {
-  id: string
-  user_id: string
-}
-type ReviewRow = {
-  id: string
-  user_id: string
-}
-type LocationRow = Pick<Database["public"]["Tables"]["profiles"]["Row"], "office_location" | "department">
-
-function expandScopedDepartments(departments: string[]): string[] {
-  return Array.from(
-    new Set(departments.flatMap((departmentName) => getDepartmentAliases(departmentName)).filter(Boolean))
-  )
-}
-
-async function fetchHrDashboardStats(scope: ClientAdminScope): Promise<DashboardStats> {
-  const supabase = createClient()
-
-  // Derive scoped departments from the already-resolved AdminScope from context —
-  // no extra round-trip to /api/admin/scope-mode needed.
-  const isAdminLike = scope.isAdminLike
-  const isLeadMode = scope.scopeMode === "lead"
-  let scopedDepartments: string[] = []
-
-  if (!isAdminLike || isLeadMode) {
-    // Lead or admin in lead mode: scope to managed departments
-    scopedDepartments = scope.managedDepartments.filter(Boolean)
-  }
-  // isAdminLike in global mode: scopedDepartments stays [] → no filter
-
-  const queryScopedDepartments = expandScopedDepartments(scopedDepartments)
-  const scopedDepartmentTokens = new Set(
-    scopedDepartments.map((departmentName) => normalizeDepartmentName(departmentName))
-  )
-  const scopedUserIds = queryScopedDepartments.length
-    ? (await supabase.from("profiles").select("id").in("department", queryScopedDepartments)).data?.map(
-        (row: ProfileIdRow) => row.id
-      ) || []
-    : []
-
-  let pendingLeaveCount = 0
-  try {
-    const queueRes = await fetch("/api/hr/leave/queue")
-    const queuePayload = await queueRes.json()
-    if (queueRes.ok) {
-      pendingLeaveCount = Array.isArray(queuePayload.data) ? queuePayload.data.length : 0
-    }
-  } catch {
-    pendingLeaveCount = 0
-  }
-
-  const today = toLocalISODate()
-  const { data: attendance } = await supabase
-    .from("attendance_records")
-    .select("id, user_id")
-    .eq("date", today)
-    .returns<AttendanceRow[]>()
-  const attendanceRows =
-    scopedUserIds.length > 0 ? attendance?.filter((row) => scopedUserIds.includes(row.user_id)) : attendance
-
-  const { data: reviews } = await supabase
-    .from("performance_reviews")
-    .select("id, user_id")
-    .eq("status", "draft")
-    .returns<ReviewRow[]>()
-  const reviewRows = scopedUserIds.length > 0 ? reviews?.filter((row) => scopedUserIds.includes(row.user_id)) : reviews
-
-  let employeeCountQuery = supabase.from("profiles").select("*", { count: "exact", head: true })
-  if (queryScopedDepartments.length > 0) {
-    employeeCountQuery = employeeCountQuery.in("department", queryScopedDepartments)
-  }
-  const { count: employeeCount } = await employeeCountQuery
-  let departmentCountQuery = supabase.from("departments").select("*", { count: "exact", head: true })
-  if (queryScopedDepartments.length > 0) {
-    departmentCountQuery = departmentCountQuery.in("name", queryScopedDepartments)
-  }
-  const { count: departmentCount } = await departmentCountQuery
-  const { data: locations } = await supabase.from("profiles").select("office_location, department, employment_status")
-  const locationRows =
-    scopedDepartmentTokens.size > 0
-      ? (locations || []).filter(
-          (row: LocationRow & { employment_status?: string | null }) =>
-            isAssignableEmploymentStatus(row.employment_status, { allowLegacyNullStatus: false }) &&
-            scopedDepartmentTokens.has(normalizeDepartmentName(String(row.department || "")))
-        )
-      : (locations || []).filter((row: LocationRow & { employment_status?: string | null }) =>
-          isAssignableEmploymentStatus(row.employment_status, { allowLegacyNullStatus: false })
-        )
-
-  return {
-    pendingLeaveRequests: pendingLeaveCount,
-    todayAttendance: attendanceRows?.length || 0,
-    upcomingReviews: reviewRows?.length || 0,
-    totalEmployees: employeeCount || 0,
-    totalDepartments: departmentCount || 0,
-    totalOfficeLocations: new Set(
-      locationRows.map((location) => (location.office_location || "").trim()).filter(Boolean)
-    ).size,
-  }
+async function fetchHrDashboardStats(): Promise<DashboardStats> {
+  // Department scoping is resolved server-side via getScopedDepartments() —
+  // no client-side scope derivation needed.
+  const res = await fetch("/api/admin/hr/dashboard-stats", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load HR dashboard stats")
+  return res.json()
 }
 
 export function HRAdminDashboard({
@@ -159,7 +58,7 @@ export function HRAdminDashboard({
   } = useQuery({
     // Include scope-relevant fields so toggling lead mode auto-invalidates
     queryKey: [...QUERY_KEYS.adminHrDashboard(), scope.scopeMode, scope.managedDepartments.join(",")],
-    queryFn: () => fetchHrDashboardStats(scope),
+    queryFn: () => fetchHrDashboardStats(),
   })
 
   return (

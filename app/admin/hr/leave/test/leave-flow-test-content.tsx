@@ -10,9 +10,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CheckCircle, XCircle, Loader2, PlayCircle, FlaskConical, SkipForward, Route } from "lucide-react"
 import { toast } from "sonner"
-import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
-import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { logger } from "@/lib/logger"
 
 const log = logger("leave-flow-test")
@@ -47,20 +45,6 @@ type DiagnosticsResult = {
   total: number
 }
 
-type ProfileOptionRow = {
-  id: string
-  full_name?: string | null
-  first_name?: string | null
-  last_name?: string | null
-  company_email?: string | null
-  employment_status?: string | null
-}
-
-type LeaveTypeOptionRow = {
-  id: string
-  name: string
-}
-
 const FIX_HINTS: Record<string, string> = {
   md: 'Set someone\'s profile: is_department_lead = true AND department = "Executive Management" (or add "Executive Management" to their lead_departments array)',
   hcs: 'Set someone\'s profile: is_department_lead = true AND department = "Corporate Services" (or add it to lead_departments)',
@@ -86,29 +70,11 @@ export function LeaveFlowTestContent() {
 
   useEffect(() => {
     async function load() {
-      const supabase = createClient()
-      const [profilesRes, typesRes] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("id, full_name, first_name, last_name, company_email, employment_status")
-          .order("first_name"),
-        supabase.from("leave_types").select("id, name").order("name"),
-      ])
-
-      const profileOptions = ((profilesRes.data || []) as ProfileOptionRow[])
-        .filter((profile) => isAssignableEmploymentStatus(profile.employment_status, { allowLegacyNullStatus: false }))
-        .map((p) => ({
-          value: p.id,
-          label: p.full_name?.trim() || `${p.first_name || ""} ${p.last_name || ""}`.trim() || p.company_email || p.id,
-        }))
-
-      const typeOptions = ((typesRes.data || []) as LeaveTypeOptionRow[]).map((t) => ({
-        value: t.id,
-        label: t.name,
-      }))
-
-      setEmployees(profileOptions)
-      setLeaveTypes(typeOptions)
+      const res = await fetch("/api/admin/hr/leave/test/form-data", { cache: "no-store" })
+      if (!res.ok) throw new Error("Failed to load form data")
+      const json = await res.json()
+      setEmployees(json.employees || [])
+      setLeaveTypes(json.leaveTypes || [])
     }
 
     load().catch((err) => log.error({ err: String(err) }, "load failed"))
