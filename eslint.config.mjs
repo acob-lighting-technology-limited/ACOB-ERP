@@ -76,7 +76,6 @@ export default defineConfig([
       "app/admin/communications/_components/communications-composer.tsx",
       "app/admin/dev/tests/dev-tests-content.tsx",
       "app/admin/employees/admin-employee-content.tsx",
-      "app/admin/hr/departments/view.tsx",
       "app/admin/hr/employees/admin-employee-content.tsx",
       "app/admin/hr/employees/pending-applications-modal.tsx",
       "app/admin/hr/leave/view.tsx",
