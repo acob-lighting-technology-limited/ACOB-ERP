@@ -6,7 +6,6 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Ban, Building2, CheckCircle2, Eye, Mail, Pencil, Plus, Trash2, Users } from "lucide-react"
 import { toast } from "sonner"
-import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
 import {
@@ -37,17 +36,10 @@ interface Supplier {
 }
 
 async function fetchSuppliersList(): Promise<Supplier[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase.from("suppliers").select("*").order("name")
-
-  if (error) {
-    if (error.code === "42P01") {
-      return []
-    }
-    throw new Error(error.message)
-  }
-
-  return data || []
+  const res = await fetch("/api/admin/purchasing/suppliers", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load suppliers")
+  const json = await res.json()
+  return (json.data || []) as Supplier[]
 }
 
 function getContactState(supplier: Supplier) {
@@ -77,10 +69,8 @@ export default function SuppliersPage() {
 
   async function handleDelete(supplier: Supplier) {
     try {
-      const supabase = createClient()
-      const { error: deleteError } = await supabase.from("suppliers").delete().eq("id", supplier.id)
-
-      if (deleteError) throw deleteError
+      const res = await fetch(`/api/admin/purchasing/suppliers/${supplier.id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to delete supplier")
 
       toast.success("Supplier deleted")
       await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminSuppliers() })

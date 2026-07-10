@@ -6,7 +6,6 @@ import { useParams } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -44,20 +43,10 @@ interface SupplierPageData {
 }
 
 async function fetchSupplierDetail(id: string): Promise<SupplierPageData> {
-  const supabase = createClient()
-  const [{ data: sup, error: supError }, { data: pos }] = await Promise.all([
-    supabase.from("suppliers").select("*").eq("id", id).single(),
-    supabase
-      .from("purchase_orders")
-      .select("id, po_number, order_date, total_amount, status")
-      .eq("supplier_id", id)
-      .order("order_date", { ascending: false })
-      .limit(10),
-  ])
-
-  if (supError || !sup) throw new Error(supError?.message ?? "Supplier not found")
-
-  return { supplier: sup, orders: pos || [] }
+  const res = await fetch(`/api/admin/purchasing/suppliers/${id}`, { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Supplier not found")
+  const json = await res.json()
+  return json.data as SupplierPageData
 }
 
 function formatCurrency(amount: number) {

@@ -1,7 +1,6 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
-import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -17,27 +16,10 @@ interface PurchasingStats {
   totalOrderValue: number
 }
 
-interface PurchaseOrderRow {
-  status?: string | null
-  total_amount?: number | null
-}
-
 async function fetchPurchasingStats(): Promise<PurchasingStats> {
-  const supabase = createClient()
-  const { data: suppliers } = await supabase.from("suppliers").select("*")
-  const { data: orders } = await supabase.from("purchase_orders").select("*")
-
-  const orderRows = (orders || []) as PurchaseOrderRow[]
-  const activeOrders = orderRows.filter((order) => order.status === "pending" || order.status === "approved")
-  const pendingReceipts = orderRows.filter((order) => order.status === "approved").length
-  const totalValue = orderRows.reduce((sum, order) => sum + (order.total_amount || 0), 0)
-
-  return {
-    totalSuppliers: suppliers?.length || 0,
-    activeOrders: activeOrders.length,
-    pendingReceipts,
-    totalOrderValue: totalValue,
-  }
+  const res = await fetch("/api/admin/purchasing/stats", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load purchasing stats")
+  return res.json()
 }
 
 export default function PurchasingDashboard() {

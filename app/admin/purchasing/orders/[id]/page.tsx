@@ -4,7 +4,6 @@ import { useParams } from "next/navigation"
 import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -42,28 +41,11 @@ interface POItem {
 
 type BadgeVariant = "default" | "destructive" | "secondary" | "outline"
 
-type PurchaseOrderDetailRow = PurchaseOrder & {
-  supplier?: { name?: string | null } | null
-  items?: POItem[]
-}
-
 async function fetchPurchaseOrderDetail(id: string): Promise<PurchaseOrder> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from("purchase_orders")
-    .select("*, supplier:suppliers(name), items:purchase_order_items(*, product:products(name))")
-    .eq("id", id)
-    .single()
-
-  if (error) throw new Error(error.message)
-
-  const detail = data as PurchaseOrderDetailRow
-
-  return {
-    ...detail,
-    supplier_name: detail.supplier?.name || undefined,
-    items: detail.items?.map((item) => ({ ...item, product_name: item.product?.name || undefined })) || [],
-  }
+  const res = await fetch(`/api/admin/purchasing/orders/${id}`, { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load purchase order")
+  const json = await res.json()
+  return json.data as PurchaseOrder
 }
 
 function formatCurrency(amount: number, currency: string = "NGN") {
@@ -86,8 +68,12 @@ export default function PurchaseOrderDetailPage() {
 
   async function updateStatus(status: string) {
     try {
-      const supabase = createClient()
-      await supabase.from("purchase_orders").update({ status }).eq("id", id)
+      const res = await fetch(`/api/admin/purchasing/orders/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      })
+      if (!res.ok) throw new Error()
       toast.success(`Status updated to ${status}`)
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminPurchaseOrderDetail(id) })
     } catch {

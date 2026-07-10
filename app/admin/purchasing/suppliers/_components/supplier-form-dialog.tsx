@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -55,7 +54,6 @@ export function SupplierFormDialog({ open, onOpenChange, queryClient, supplier =
     e.preventDefault()
     setSaving(true)
     try {
-      const supabase = createClient()
       const payload = {
         name: formData.name,
         code: formData.code,
@@ -67,13 +65,21 @@ export function SupplierFormDialog({ open, onOpenChange, queryClient, supplier =
       }
 
       if (supplier?.id) {
-        const { error } = await supabase.from("suppliers").update(payload).eq("id", supplier.id)
-        if (error) throw error
+        const res = await fetch(`/api/admin/purchasing/suppliers/${supplier.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to update supplier")
         toast.success("Supplier updated")
         await queryClient?.invalidateQueries({ queryKey: QUERY_KEYS.adminSupplierDetail(supplier.id) })
       } else {
-        const { error } = await supabase.from("suppliers").insert(payload)
-        if (error) throw error
+        const res = await fetch("/api/admin/purchasing/suppliers", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to create supplier")
         toast.success("Supplier created")
       }
 

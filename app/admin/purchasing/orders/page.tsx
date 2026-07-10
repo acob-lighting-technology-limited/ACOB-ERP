@@ -5,7 +5,6 @@ import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "next/navigation"
 import { BadgeCheck, CalendarClock, Eye, Plus, ShoppingCart, Wallet } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -37,28 +36,11 @@ const statusColors: Record<PurchaseOrder["status"], BadgeVariant> = {
   cancelled: "destructive",
 }
 
-type PurchaseOrderRow = PurchaseOrder & {
-  supplier?: { name?: string | null } | null
-}
-
 async function fetchPurchaseOrdersList(): Promise<PurchaseOrder[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from("purchase_orders")
-    .select("*, supplier:suppliers(name)")
-    .order("created_at", { ascending: false })
-
-  if (error) {
-    if (error.code === "42P01") {
-      return []
-    }
-    throw new Error(error.message)
-  }
-
-  return ((data || []) as PurchaseOrderRow[]).map((order) => ({
-    ...order,
-    supplier_name: order.supplier?.name || undefined,
-  }))
+  const res = await fetch("/api/admin/purchasing/orders", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load purchase orders")
+  const json = await res.json()
+  return (json.data || []) as PurchaseOrder[]
 }
 
 function formatCurrency(amount: number, currency = "NGN") {
