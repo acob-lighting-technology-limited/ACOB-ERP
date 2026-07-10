@@ -5,7 +5,6 @@ import { formatWATDate } from "@/lib/utils/date"
 import { useParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { createClient } from "@/lib/supabase/client"
 import { AdminTablePage } from "@/components/admin/admin-table-page"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -67,14 +66,10 @@ interface InvoicePageData {
 }
 
 async function fetchInvoiceDetail(id: string): Promise<InvoicePageData> {
-  const supabase = createClient()
-  const [{ data: invoiceData, error: invoiceError }, { data: itemsData, error: itemsError }] = await Promise.all([
-    supabase.from("invoices").select("*").eq("id", id).single(),
-    supabase.from("invoice_items").select("*").eq("invoice_id", id).order("created_at"),
-  ])
-  if (invoiceError) throw new Error(invoiceError.message)
-  if (itemsError) throw new Error(itemsError.message)
-  return { invoice: invoiceData, items: itemsData || [] }
+  const res = await fetch(`/api/admin/finance/invoices/${id}`, { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load invoice")
+  const json = await res.json()
+  return json.data as InvoicePageData
 }
 
 export default function InvoiceDetailPage() {
@@ -94,9 +89,12 @@ export default function InvoiceDetailPage() {
   async function markAsSent() {
     if (!invoice) return
     try {
-      const supabase = createClient()
-      const { error } = await supabase.from("invoices").update({ status: "sent" }).eq("id", invoice.id)
-      if (error) throw error
+      const res = await fetch(`/api/admin/finance/invoices/${invoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "status", status: "sent" }),
+      })
+      if (!res.ok) throw new Error()
       toast.success("Invoice marked as sent")
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminInvoiceDetail(id) })
     } catch (error) {
@@ -108,12 +106,12 @@ export default function InvoiceDetailPage() {
   async function markAsPaid() {
     if (!invoice) return
     try {
-      const supabase = createClient()
-      const { error } = await supabase
-        .from("invoices")
-        .update({ status: "paid", amount_paid: invoice.total_amount, balance_due: 0 })
-        .eq("id", invoice.id)
-      if (error) throw error
+      const res = await fetch(`/api/admin/finance/invoices/${invoice.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ mode: "status", status: "paid" }),
+      })
+      if (!res.ok) throw new Error()
       toast.success("Invoice marked as paid")
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminInvoiceDetail(id) })
     } catch (error) {

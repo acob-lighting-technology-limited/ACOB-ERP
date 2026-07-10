@@ -5,7 +5,6 @@ import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "next/navigation"
 import { CheckCircle, CircleDollarSign, Eye, FileClock, Plus, Receipt, Wallet } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -13,9 +12,6 @@ import { StatCard } from "@/components/ui/stat-card"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { BillFormDialog } from "./_components/bill-form-dialog"
-import { logger } from "@/lib/logger"
-
-const log = logger("finance-bills")
 
 export interface Bill {
   id: string
@@ -42,19 +38,10 @@ const statusColors: Record<Bill["status"], BillStatusVariant> = {
 }
 
 async function fetchBillsList(): Promise<Bill[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase.from("bills").select("*").order("created_at", { ascending: false })
-
-  if (error) {
-    if (error.code === "42P01") {
-      log.debug("Bills table does not exist yet")
-      return []
-    }
-
-    throw new Error(error.message)
-  }
-
-  return data || []
+  const res = await fetch("/api/admin/finance/bills", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load bills")
+  const json = await res.json()
+  return (json.data || []) as Bill[]
 }
 
 function formatCurrency(amount: number, currency = "NGN") {

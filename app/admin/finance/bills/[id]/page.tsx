@@ -4,7 +4,6 @@ import { useParams } from "next/navigation"
 import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { createClient } from "@/lib/supabase/client"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -40,10 +39,10 @@ interface BillItem {
 type BillStatusVariant = "default" | "destructive" | "secondary" | "outline"
 
 async function fetchBill(id: string): Promise<Bill> {
-  const supabase = createClient()
-  const { data, error } = await supabase.from("bills").select("*, items:bill_items(*)").eq("id", id).single()
-  if (error) throw new Error(error.message)
-  return data
+  const res = await fetch(`/api/admin/finance/bills/${id}`, { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load bill")
+  const json = await res.json()
+  return json.data as Bill
 }
 
 export default function BillDetailPage() {
@@ -58,8 +57,8 @@ export default function BillDetailPage() {
 
   async function markAsPaid() {
     try {
-      const supabase = createClient()
-      await supabase.from("bills").update({ status: "paid" }).eq("id", id)
+      const res = await fetch(`/api/admin/finance/bills/${id}`, { method: "PATCH" })
+      if (!res.ok) throw new Error()
       toast.success("Marked as paid")
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminBillDetail(id) })
     } catch {

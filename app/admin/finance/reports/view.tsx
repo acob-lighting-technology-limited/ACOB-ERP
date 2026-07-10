@@ -4,7 +4,6 @@ import { useMemo, useState } from "react"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import { useQuery } from "@tanstack/react-query"
 import { Calendar, DollarSign, BarChart3, TrendingDown, TrendingUp } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -13,7 +12,6 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { EmptyState } from "@/components/ui/patterns"
 import { Badge } from "@/components/ui/badge"
-import { normalizeDepartmentName } from "@/shared/departments"
 
 interface FinancePaymentRow {
   id: string
@@ -35,48 +33,13 @@ interface FinanceReportData {
   paymentsByCategory: { category: string; amount: number }[]
 }
 
-type FinancePaymentQueryRow = {
-  id: string
-  title: string
-  amount: number | null
-  category: string | null
-  created_at: string
-  status: string | null
-  currency: string | null
-  department?: { name?: string | null } | null
-}
-
-async function fetchFinanceReportData(lockedDepartment?: string): Promise<FinanceReportData> {
-  const supabase = createClient()
-
-  const { data, error } = await supabase
-    .from("department_payments")
-    .select("id, title, amount, category, created_at, status, currency, department:departments(name)")
-    .order("created_at", { ascending: false })
-
-  if (error) {
-    if (error.code === "42P01") {
-      return { totalRevenue: 0, totalExpenses: 0, netIncome: 0, paymentsByMonth: [], paymentsByCategory: [], rows: [] }
-    }
-    throw new Error(error.message)
-  }
-
-  const rows = ((data || []) as FinancePaymentQueryRow[])
-    .map((payment) => ({
-      id: payment.id,
-      title: payment.title,
-      amount: payment.amount || 0,
-      category: payment.category || "Other",
-      created_at: payment.created_at,
-      department_name: payment.department?.name || "Unknown",
-      status: payment.status || "unknown",
-      currency: payment.currency || "NGN",
-    }))
-    .filter(
-      (payment) =>
-        !lockedDepartment ||
-        normalizeDepartmentName(payment.department_name) === normalizeDepartmentName(lockedDepartment)
-    )
+async function fetchFinanceReportData(): Promise<FinanceReportData> {
+  // Department scoping is resolved server-side from the caller's admin/dept scope
+  // (getScopedDepartments) — no client-side lock parameter needed.
+  const res = await fetch("/api/admin/finance/reports", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load finance reports")
+  const json = await res.json()
+  const rows = (json.data || []) as FinanceReportData["rows"]
 
   const totalExpenses = rows.reduce((sum, payment) => sum + payment.amount, 0)
 
@@ -137,7 +100,7 @@ export function FinanceReportsPage({
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: [...QUERY_KEYS.adminFinanceReports(), lockedDepartment ?? "all"],
-    queryFn: () => fetchFinanceReportData(lockedDepartment),
+    queryFn: () => fetchFinanceReportData(),
   })
 
   const reportData = data ?? {

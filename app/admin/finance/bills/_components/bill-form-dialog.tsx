@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -103,49 +102,28 @@ export function BillFormDialog({ open, onOpenChange, queryClient }: BillFormDial
 
     setSaving(true)
     try {
-      const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return toast.error("You must be logged in")
-
-      const { total } = calculateTotals()
-      const billNumber = `BILL-${Date.now().toString(36).toUpperCase()}`
-      const { data: bill, error: billError } = await supabase
-        .from("bills")
-        .insert({
-          bill_number: billNumber,
+      const res = await fetch("/api/admin/finance/bills", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           supplier_name: formData.supplier_name,
           supplier_email: formData.supplier_email || null,
           bill_date: formData.bill_date,
           due_date: formData.due_date,
-          subtotal: total,
-          tax_amount: 0,
-          total_amount: total,
-          amount_paid: 0,
-          balance_due: total,
           currency: formData.currency,
-          status: "pending",
           notes: formData.notes || null,
-          created_by: user.id,
-        })
-        .select()
-        .single()
+          items: items.map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            amount: item.amount,
+          })),
+        }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(json?.error || "Failed to create bill")
 
-      if (billError) throw billError
-
-      const billItems = items.map((item) => ({
-        bill_id: bill.id,
-        description: item.description,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        tax_rate: 0,
-        amount: item.amount,
-      }))
-      const { error: itemsError } = await supabase.from("bill_items").insert(billItems)
-      if (itemsError) throw itemsError
-
-      toast.success(`Bill ${billNumber} created successfully!`)
+      toast.success(`Bill ${json?.bill_number ?? ""} created successfully!`)
       await queryClient?.invalidateQueries({ queryKey: QUERY_KEYS.adminBills() })
       handleOpenChange(false)
       router.refresh()
