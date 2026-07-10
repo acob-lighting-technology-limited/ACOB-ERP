@@ -28,7 +28,6 @@ import {
   Repeat,
   Trash2,
 } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import { getCurrentOfficeWeek } from "@/lib/meeting-week"
 import { toLocalISODate, formatWATDateTime } from "@/lib/utils/date"
 
@@ -82,7 +81,6 @@ interface Props {
 }
 
 export function MailDigestContent({ employees, currentUser }: Props) {
-  const supabase = createClient()
   const currentOfficeWeek = getCurrentOfficeWeek()
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -118,16 +116,15 @@ export function MailDigestContent({ employees, currentUser }: Props) {
   // ── Fetch active schedules ──────────────────────────────────────────────────
   const fetchSchedules = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from("digest_schedules")
-        .select("*")
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-      if (!error && data) setActiveSchedules(data as DigestSchedule[])
+      const res = await fetch("/api/admin/reports/digest-schedules", { cache: "no-store" })
+      if (res.ok) {
+        const json = await res.json()
+        setActiveSchedules((json.data || []) as DigestSchedule[])
+      }
     } catch {
       /* ignore */
     }
-  }, [supabase])
+  }, [])
 
   useEffect(() => {
     fetchSchedules()
@@ -295,17 +292,21 @@ export function MailDigestContent({ employees, currentUser }: Props) {
         return
       }
 
-      const { error } = await supabase.from("digest_schedules").insert({
-        schedule_type: "one_time",
-        meeting_week: weekNumber,
-        meeting_year: yearNumber,
-        recipients: resolvedRecipients,
-        content_choice: contentChoice,
-        next_run_at: scheduledDateTime.toISOString(),
+      const res = await fetch("/api/admin/reports/digest-schedules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schedule_type: "one_time",
+          meeting_week: weekNumber,
+          meeting_year: yearNumber,
+          recipients: resolvedRecipients,
+          content_choice: contentChoice,
+          next_run_at: scheduledDateTime.toISOString(),
+        }),
       })
-
-      if (error) {
-        toast.error("Failed to save schedule: " + error.message)
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null)
+        toast.error("Failed to save schedule: " + (payload?.error || "unknown error"))
         return
       }
 
@@ -332,17 +333,21 @@ export function MailDigestContent({ employees, currentUser }: Props) {
       nextRun.setDate(now.getDate() + daysUntil)
       nextRun.setHours(parseInt(h, 10), parseInt(m, 10), 0, 0)
 
-      const { error } = await supabase.from("digest_schedules").insert({
-        schedule_type: "recurring",
-        recipients: resolvedRecipients,
-        content_choice: "both", // Recurring always sends both reports
-        send_day: recurringDay,
-        send_time: recurringTime,
-        next_run_at: nextRun.toISOString(),
+      const res = await fetch("/api/admin/reports/digest-schedules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schedule_type: "recurring",
+          recipients: resolvedRecipients,
+          content_choice: "both", // Recurring always sends both reports
+          send_day: recurringDay,
+          send_time: recurringTime,
+          next_run_at: nextRun.toISOString(),
+        }),
       })
-
-      if (error) {
-        toast.error("Failed to save recurring schedule: " + error.message)
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null)
+        toast.error("Failed to save recurring schedule: " + (payload?.error || "unknown error"))
         return
       }
 
@@ -413,8 +418,8 @@ export function MailDigestContent({ employees, currentUser }: Props) {
   }
 
   const deactivateSchedule = async (id: string) => {
-    const { error } = await supabase.from("digest_schedules").update({ is_active: false }).eq("id", id)
-    if (error) {
+    const res = await fetch(`/api/admin/reports/digest-schedules/${id}`, { method: "PATCH" })
+    if (!res.ok) {
       toast.error("Failed to deactivate schedule")
     } else {
       toast.success("Schedule deactivated")
