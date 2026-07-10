@@ -4,8 +4,8 @@ import { fetchWeeklyReportLockState } from "@/lib/weekly-report-lock"
 
 export const dynamic = "force-dynamic"
 
-// Whether the meeting reminder form is locked for this office week (mirrors
-// the weekly_report_lock_state RPC used by the reports lock UI).
+// Whether the weekly report / meeting reminder is locked for a given office
+// week. Shared across the reports/communications admin screens.
 export async function GET(request: NextRequest) {
   const scopeResult = await requireApiAdminScope()
   if (!scopeResult.ok) return scopeResult.response

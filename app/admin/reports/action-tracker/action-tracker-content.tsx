@@ -4,7 +4,6 @@ import { useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { formatWATDateTime } from "@/lib/utils/date"
-import { createClient } from "@/lib/supabase/client"
 import { getCurrentOfficeWeek, getOfficeWeekMonday } from "@/lib/meeting-week"
 import { toast } from "sonner"
 import { CheckCircle2, Clock, Download, Eye, FileSpreadsheet, RefreshCw } from "lucide-react"
@@ -17,7 +16,6 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { fetchWeeklyReportLockState } from "@/lib/weekly-report-lock"
 import { type ActionItem } from "@/lib/export-utils"
 import { logger } from "@/lib/logger"
 
@@ -155,7 +153,6 @@ export function ActionTrackerContent({
   })
   const [viewingDepartment, setViewingDepartment] = useState<DepartmentActionRow | null>(null)
 
-  const supabase = createClient()
   const canMutateTask = (task: ActionTask) => canGlobalEdit || editableDepartments.includes(task.department)
 
   const {
@@ -170,7 +167,13 @@ export function ActionTrackerContent({
 
   const { data: lockState } = useQuery({
     queryKey: QUERY_KEYS.adminWeeklyReportLockState(weekFilter, yearFilter),
-    queryFn: () => fetchWeeklyReportLockState(supabase, weekFilter, yearFilter),
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/reports/weekly-lock-state?week=${weekFilter}&year=${yearFilter}`, {
+        cache: "no-store",
+      })
+      if (!res.ok) throw new Error("Failed to resolve lock state")
+      return res.json()
+    },
   })
 
   const tasksQueryKey = QUERY_KEYS.adminActionTrackerTasks({ weekFilter, yearFilter, deptFilter, scopedDepartments })

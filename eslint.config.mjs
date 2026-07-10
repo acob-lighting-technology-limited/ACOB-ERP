@@ -75,8 +75,6 @@ export default defineConfig([
       "app/admin/hr/employees/admin-employee-content.tsx",
       "app/admin/hr/employees/pending-applications-modal.tsx",
       "app/admin/hr/leave/view.tsx",
-      "app/admin/reports/action-tracker/action-tracker-content.tsx",
-      "app/admin/reports/general-meeting/_components/week-setup-card.tsx",
       "app/admin/reports/mail/mail-digest-content.tsx",
       "app/admin/reports/mail/weekly-summary-content.tsx",
       "app/admin/reports/mail/_components/use-weekly-summary-send.ts",

@@ -261,7 +261,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
     const resolveActiveMeetingWeek = async () => {
       try {
         const res = await fetch(
-          `/api/admin/communications/meeting-lock-state?week=${currentOfficeWeekWeek}&year=${currentOfficeWeekYear}`,
+          `/api/admin/reports/weekly-lock-state?week=${currentOfficeWeekWeek}&year=${currentOfficeWeekYear}`,
           { cache: "no-store" }
         )
         if (!res.ok) throw new Error("Failed to resolve meeting lock state")
