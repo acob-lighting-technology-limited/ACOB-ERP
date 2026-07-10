@@ -78,7 +78,6 @@ export default defineConfig([
       "app/admin/reports/mail/mail-digest-content.tsx",
       "app/admin/reports/mail/weekly-summary-content.tsx",
       "app/admin/reports/mail/_components/use-weekly-summary-send.ts",
-      "app/admin/reports/weekly-reports/weekly-reports-content.tsx",
       "app/admin/tasks/management/admin-tasks-content.tsx",
       "app/admin/tasks/management/tasks-content-utils.ts",
     ],

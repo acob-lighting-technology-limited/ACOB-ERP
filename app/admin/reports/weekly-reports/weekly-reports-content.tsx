@@ -5,10 +5,9 @@ import { useMemo, useState } from "react"
 import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { createClient } from "@/lib/supabase/client"
 import { getCurrentOfficeWeek } from "@/lib/meeting-week"
 import { toast } from "sonner"
-import { fetchWeeklyReportLockState, getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
+import { getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
 import { getDepartmentAliases, normalizeDepartmentName } from "@/shared/departments"
 import { CalendarDays, Download, FileBarChart, FileSpreadsheet, Plus } from "lucide-react"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
@@ -36,51 +35,22 @@ interface AdminWeeklyReportsData {
   trackingData: TrackerStatus[]
 }
 
-function expandDepartmentScope(departments: string[]) {
-  const scoped = new Set<string>()
-  departments.forEach((department) => {
-    getDepartmentAliases(department).forEach((alias) => scoped.add(alias))
+async function fetchAdminWeeklyReports(weekFilter: number, yearFilter: number): Promise<AdminWeeklyReportsData> {
+  const res = await fetch(`/api/admin/reports/weekly-reports?week=${weekFilter}&year=${yearFilter}`, {
+    cache: "no-store",
   })
-  return Array.from(scoped)
-}
-
-async function fetchAdminWeeklyReports(
-  supabase: ReturnType<typeof createClient>,
-  weekFilter: number,
-  yearFilter: number,
-  initialDepartments: string[]
-): Promise<AdminWeeklyReportsData> {
-  const query = supabase
-    .from("weekly_reports")
-    .select(
-      "id, department, week_number, year, work_done, tasks_new_week, challenges, status, user_id, created_at, updated_at, profiles(first_name, last_name)"
-    )
-    .eq("status", "submitted")
-    .eq("week_number", weekFilter)
-    .eq("year", yearFilter)
-    .order("department", { ascending: true })
-
-  const { data, error } = await query
-  if (error) throw new Error(error.message)
-
-  const sortedData = sortReportsByDepartment((data || []) as WeeklyReport[])
-
-  const { data: actions, error: actionsError } = await supabase
-    .from("tasks")
-    .select("id, department, status")
-    .eq("category", "weekly_action")
-    .eq("week_number", weekFilter)
-    .eq("year", yearFilter)
-    .in("department", expandDepartmentScope(initialDepartments))
-
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load weekly reports")
+  const json = await res.json()
   return {
-    reports: sortedData,
-    trackingData: actionsError ? [] : ((actions || []) as TrackerStatus[]),
+    reports: sortReportsByDepartment((json.reports || []) as WeeklyReport[]),
+    trackingData: (json.trackingData || []) as TrackerStatus[],
   }
 }
 
-async function fetchAdminWeeklyReportLockState(supabase: ReturnType<typeof createClient>, week: number, year: number) {
-  return fetchWeeklyReportLockState(supabase, week, year)
+async function fetchAdminWeeklyReportLockState(week: number, year: number) {
+  const res = await fetch(`/api/admin/reports/weekly-lock-state?week=${week}&year=${year}`, { cache: "no-store" })
+  if (!res.ok) throw new Error("Failed to resolve lock state")
+  return res.json()
 }
 
 interface TrackerStatus {
@@ -144,7 +114,6 @@ export function WeeklyReportsContent({
     kind: "all",
   })
 
-  const supabase = createClient()
   const queryClient = useQueryClient()
   const normalizedRole = (currentUser.role || "").trim().toLowerCase()
   const isGlobalReportsEditor =
@@ -174,7 +143,7 @@ export function WeeklyReportsContent({
     error,
   } = useQuery({
     queryKey: QUERY_KEYS.adminWeeklyReports({ weekFilter, yearFilter }),
-    queryFn: () => fetchAdminWeeklyReports(supabase, weekFilter, yearFilter, initialDepartments),
+    queryFn: () => fetchAdminWeeklyReports(weekFilter, yearFilter),
   })
 
   const reports = useMemo(() => reportsData?.reports ?? [], [reportsData?.reports])
@@ -182,7 +151,7 @@ export function WeeklyReportsContent({
 
   const { data: lockState } = useQuery({
     queryKey: QUERY_KEYS.adminWeeklyReportLockState(weekFilter, yearFilter),
-    queryFn: () => fetchAdminWeeklyReportLockState(supabase, weekFilter, yearFilter),
+    queryFn: () => fetchAdminWeeklyReportLockState(weekFilter, yearFilter),
   })
 
   const isFilteredWeekLocked = lockState?.isLocked ?? false
@@ -195,16 +164,14 @@ export function WeeklyReportsContent({
       toast.error("You can only modify reports you created")
       return
     }
-    if (target) {
-      const lock = await fetchWeeklyReportLockState(supabase, target.week_number, target.year)
-      if (lock.isLocked) {
-        toast.error("This report week is locked. Delete is no longer allowed.")
+    try {
+      // Server re-checks mutate permission + week lock before deleting.
+      const res = await fetch(`/api/admin/reports/weekly-reports/${id}`, { method: "DELETE" })
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null)
+        toast.error(payload?.error || "Delete failed")
         return
       }
-    }
-    try {
-      const { error: deleteError } = await supabase.from("weekly_reports").delete().eq("id", id)
-      if (deleteError) throw deleteError
       toast.success("Report deleted")
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminWeeklyReports() })
     } catch {
