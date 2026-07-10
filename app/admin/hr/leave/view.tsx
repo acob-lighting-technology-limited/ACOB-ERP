@@ -12,7 +12,6 @@ import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/component
 import { StatCard } from "@/components/ui/stat-card"
 import { PromptDialog } from "@/components/ui/prompt-dialog"
 import { LeaveDetailDialog } from "./_components/leave-detail-dialog"
-import { createClient } from "@/lib/supabase/client"
 import { formatName } from "@/lib/utils"
 import { formatWATDateTime } from "@/lib/utils/date"
 
@@ -284,12 +283,12 @@ export function LeaveApprovePage({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        setCurrentUserId(data.user.id)
-      }
-    })
+    fetch("/api/admin/current-user", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.userId) setCurrentUserId(json.userId)
+      })
+      .catch(() => {})
   }, [])
 
   const { data, isLoading, error, refetch } = useQuery({
