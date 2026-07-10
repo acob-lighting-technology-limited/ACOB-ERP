@@ -3,8 +3,6 @@
 import { useState, useCallback } from "react"
 import { formatWATDateTime } from "@/lib/utils/date"
 import { toast } from "sonner"
-import { createClient } from "@/lib/supabase/client"
-import { writeAuditLogClient } from "@/lib/audit/client"
 import { logger } from "@/lib/logger"
 
 const log = logger("reports-mail-weekly-summary-send")
@@ -185,7 +183,6 @@ export function useWeeklySummarySend({
 }: UseSendParams) {
   // Sorted array of selected weeks for iteration
   const weekNumbers = Array.from(selectedWeeks).sort((a, b) => a - b)
-  const supabase = createClient()
   const [isSending, setIsSending] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [sendResult, setSendResult] = useState<any>(null)
@@ -193,28 +190,16 @@ export function useWeeklySummarySend({
   const logMailAudit = useCallback(
     async (params: { action: string; entityId: string; metadata?: Record<string, unknown> }) => {
       try {
-        await writeAuditLogClient(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          supabase as any,
-          {
-            action: "send",
-            entityType: "mail_summary",
-            entityId: params.entityId,
-            metadata: { ...(params.metadata || {}), event: params.action },
-            context: {
-              actorId: currentUser?.id || undefined,
-              department: currentUser?.department || "Admin & HR",
-              source: "ui",
-              route: "/admin/reports/weekly-summary",
-            },
-          },
-          { failOpen: true }
-        )
+        await fetch("/api/admin/reports/mail-audit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(params),
+        })
       } catch (error) {
         log.error("[weekly-report] Failed to write audit log", error)
       }
     },
-    [currentUser?.department, currentUser?.id, supabase]
+    []
   )
 
   const doSend = useCallback(async () => {
@@ -446,18 +431,22 @@ export function useWeeklySummarySend({
         return
       }
 
-      const { error } = await supabase.from("weekly_report_schedules").insert({
-        schedule_type: "one_time",
-        meeting_week: weekNumbers[0],
-        meeting_weeks: weekNumbers,
-        meeting_year: yearNumber,
-        recipients: resolvedRecipients,
-        content_choice: scheduleContentChoice,
-        next_run_at: scheduledDateTime.toISOString(),
+      const res = await fetch("/api/admin/reports/weekly-report-schedules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schedule_type: "one_time",
+          meeting_week: weekNumbers[0],
+          meeting_weeks: weekNumbers,
+          meeting_year: yearNumber,
+          recipients: resolvedRecipients,
+          content_choice: scheduleContentChoice,
+          next_run_at: scheduledDateTime.toISOString(),
+        }),
       })
-
-      if (error) {
-        toast.error("Failed to save schedule: " + error.message)
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null)
+        toast.error("Failed to save schedule: " + (payload?.error || "unknown error"))
         return
       }
 
@@ -497,17 +486,21 @@ export function useWeeklySummarySend({
       const recurringContentChoice: "weekly_report" | "action_point" | "both" =
         includeWeeklyReport && includeActionPoint ? "both" : includeWeeklyReport ? "weekly_report" : "action_point"
 
-      const { error } = await supabase.from("weekly_report_schedules").insert({
-        schedule_type: "recurring",
-        recipients: resolvedRecipients,
-        content_choice: recurringContentChoice,
-        send_day: recurringDay,
-        send_time: recurringTime,
-        next_run_at: nextRun.toISOString(),
+      const res = await fetch("/api/admin/reports/weekly-report-schedules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          schedule_type: "recurring",
+          recipients: resolvedRecipients,
+          content_choice: recurringContentChoice,
+          send_day: recurringDay,
+          send_time: recurringTime,
+          next_run_at: nextRun.toISOString(),
+        }),
       })
-
-      if (error) {
-        toast.error("Failed to save recurring schedule: " + error.message)
+      if (!res.ok) {
+        const payload = await res.json().catch(() => null)
+        toast.error("Failed to save recurring schedule: " + (payload?.error || "unknown error"))
         return
       }
 
@@ -530,22 +523,21 @@ export function useWeeklySummarySend({
     recurringTime,
     weekNumbers,
     yearNumber,
-    supabase,
     fetchSchedules,
     doSend,
   ])
 
   const deactivateSchedule = useCallback(
     async (id: string) => {
-      const { error } = await supabase.from("weekly_report_schedules").update({ is_active: false }).eq("id", id)
-      if (error) {
+      const res = await fetch(`/api/admin/reports/weekly-report-schedules/${id}`, { method: "PATCH" })
+      if (!res.ok) {
         toast.error("Failed to deactivate schedule")
       } else {
         toast.success("Schedule deactivated")
         fetchSchedules()
       }
     },
-    [supabase, fetchSchedules]
+    [fetchSchedules]
   )
 
   return { isSending, sendResult, handleSend, deactivateSchedule }

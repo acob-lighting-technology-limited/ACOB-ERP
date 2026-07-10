@@ -74,8 +74,6 @@ export default defineConfig([
       "app/admin/employees/admin-employee-content.tsx",
       "app/admin/hr/employees/admin-employee-content.tsx",
       "app/admin/hr/employees/pending-applications-modal.tsx",
-      "app/admin/reports/mail/weekly-summary-content.tsx",
-      "app/admin/reports/mail/_components/use-weekly-summary-send.ts",
     ],
     rules: {
       "no-restricted-imports": "off",

@@ -4,9 +4,8 @@ import { useState, useMemo, useCallback, useEffect, useRef } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { PageWrapper, PageHeader } from "@/components/layout"
 import { Mail, FileText, ClipboardList } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import { getCurrentOfficeWeek } from "@/lib/meeting-week"
-import { buildMeetingDocumentFileName, resolveEffectiveMeetingDateIso } from "@/lib/reports/meeting-date"
+import { buildMeetingDocumentFileName } from "@/lib/reports/meeting-date"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { toast } from "sonner"
 import { RecipientSelector } from "./_components/RecipientSelector"
@@ -113,7 +112,6 @@ function parsePresenterFromKssFileName(fileName: string): string | null {
 }
 
 export function WeeklySummaryContent({ employees, presenterDirectory = [], currentUser }: Props) {
-  const supabase = createClient()
   const currentOfficeWeek = getCurrentOfficeWeek()
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -145,16 +143,13 @@ export function WeeklySummaryContent({ employees, presenterDirectory = [], curre
   const { data: activeSchedules = [] } = useQuery({
     queryKey: QUERY_KEYS.adminWeeklySummaryMail(),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("weekly_report_schedules")
-        .select("*")
-        .eq("is_active", true)
-        .order("created_at", { ascending: false })
-      if (error) {
-        if (error.code === "42P01") return []
-        throw new Error(error.message)
+      const res = await fetch("/api/admin/reports/weekly-report-schedules", { cache: "no-store" })
+      if (!res.ok) {
+        if (res.status === 500) return []
+        throw new Error((await res.json().catch(() => null))?.error || "Failed to load schedules")
       }
-      return data || []
+      const json = await res.json()
+      return json.data || []
     },
   })
 
@@ -189,7 +184,14 @@ export function WeeklySummaryContent({ employees, presenterDirectory = [], curre
 
   const { data: resolvedMeetingDate } = useQuery({
     queryKey: ["meeting-mail-effective-date", representativeWeek, yearNumber],
-    queryFn: async () => resolveEffectiveMeetingDateIso(supabase, representativeWeek, yearNumber),
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/reports/meeting-date?week=${representativeWeek}&year=${yearNumber}`, {
+        cache: "no-store",
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to resolve meeting date")
+      const json = await res.json()
+      return json.meetingDate as string
+    },
   })
 
   const toMailDocRef = useCallback(
