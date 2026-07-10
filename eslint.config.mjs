@@ -71,7 +71,6 @@ export default defineConfig([
   // block once empty. DO NOT add new files here.
   {
     files: [
-      "app/admin/communications/_components/communications-composer.tsx",
       "app/admin/employees/admin-employee-content.tsx",
       "app/admin/hr/employees/admin-employee-content.tsx",
       "app/admin/hr/employees/pending-applications-modal.tsx",

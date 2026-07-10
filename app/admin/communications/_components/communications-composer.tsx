@@ -7,7 +7,6 @@ import { toast } from "sonner"
 import { PageWrapper, PageHeader } from "@/components/layout"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Megaphone, Users, Calendar, Clock } from "lucide-react"
-import { writeAuditLogClient } from "@/lib/audit/client"
 import { logger } from "@/lib/logger"
 import {
   DEFAULT_TEAMS_LINK,
@@ -18,7 +17,6 @@ import {
   stripHtmlToText,
 } from "./composer-utils"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { createClient } from "@/lib/supabase/client"
 import { MeetingReminderForm } from "./MeetingReminderForm"
 import { KnowledgeSessionForm } from "./KnowledgeSessionForm"
 import { BroadcastForm } from "./BroadcastForm"
@@ -27,7 +25,7 @@ import { SchedulingOptions } from "./SchedulingOptions"
 import { SendSummary } from "./SendSummary"
 import { ReminderTypeSelector } from "./ReminderTypeSelector"
 import { getCurrentOfficeWeek, getOfficeWeekFromDate } from "@/lib/meeting-week"
-import { fetchWeeklyReportLockState, getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
+import { getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
 
 const log = logger("communications-composer")
 
@@ -147,7 +145,6 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
     [currentOfficeWeekYear]
   )
 
-  const [supabase] = useState(() => createClient())
   const queryClient = useQueryClient()
   const currentUserDept = (currentUser?.department || "").trim()
   const currentUserName = (currentUser?.full_name || "").trim()
@@ -263,7 +260,12 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
     let cancelled = false
     const resolveActiveMeetingWeek = async () => {
       try {
-        const currentLock = await fetchWeeklyReportLockState(supabase, currentOfficeWeekWeek, currentOfficeWeekYear)
+        const res = await fetch(
+          `/api/admin/communications/meeting-lock-state?week=${currentOfficeWeekWeek}&year=${currentOfficeWeekYear}`,
+          { cache: "no-store" }
+        )
+        if (!res.ok) throw new Error("Failed to resolve meeting lock state")
+        const currentLock = (await res.json()) as { isLocked: boolean; meetingDate: string }
         if (cancelled) return
 
         // Advance to next week if:
@@ -299,7 +301,6 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
     mode,
     nextOfficeWeekWeek,
     nextOfficeWeekYear,
-    supabase,
   ])
 
   useEffect(() => {
@@ -431,16 +432,10 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
   const { data: schedulesData } = useQuery({
     queryKey: QUERY_KEYS.adminReminderSchedules(mode),
     queryFn: async () => {
-      const allowedTypes =
-        mode === "communications" ? (["admin_broadcast"] as const) : (["meeting", "knowledge_sharing"] as const)
-      const { data, error } = await supabase
-        .from("reminder_schedules")
-        .select("*")
-        .eq("is_active", true)
-        .in("reminder_type", [...allowedTypes])
-        .order("created_at", { ascending: false })
-      if (error) throw new Error(error.message)
-      return data || []
+      const res = await fetch(`/api/admin/communications/reminder-schedules?mode=${mode}`, { cache: "no-store" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load schedules")
+      const json = await res.json()
+      return json.data || []
     },
   })
 
@@ -540,28 +535,21 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
       metadata?: Record<string, unknown>
     }) => {
       try {
-        await writeAuditLogClient(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          supabase as any,
-          {
-            action: "send",
-            entityType: "communications_mail",
+        await fetch("/api/admin/communications/audit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: params.action,
             entityId: params.entityId,
-            metadata: { ...(params.metadata || {}), event: params.action },
-            context: {
-              actorId: currentUser?.id || undefined,
-              department: params.department || null,
-              source: "ui",
-              route: "/admin/communications",
-            },
-          },
-          { failOpen: true }
-        )
+            department: params.department || null,
+            metadata: params.metadata,
+          }),
+        })
       } catch (error) {
         log.error({ err: String(error) }, "Failed to write audit log")
       }
     },
-    [currentUser?.id, supabase]
+    []
   )
 
   const resolveMeetingContext = useCallback((dateValue: string, meetingWeek: number, meetingYear: number) => {
@@ -731,8 +719,12 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
           schedulePayload.next_run_at = nextRun.toISOString()
         }
 
-        const { error } = await supabase.from("reminder_schedules").insert(schedulePayload)
-        if (error) throw error
+        const res = await fetch("/api/admin/communications/reminder-schedules", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(schedulePayload),
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to save schedule")
 
         toast.success(
           sendTiming === "scheduled"
@@ -896,8 +888,8 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
   }, [agendaText, meetingDraftStorageKey, queryClient, teamsLink])
 
   const deactivateSchedule = async (id: string) => {
-    const { error } = await supabase.from("reminder_schedules").update({ is_active: false }).eq("id", id)
-    if (error) {
+    const res = await fetch(`/api/admin/communications/reminder-schedules/${id}`, { method: "PATCH" })
+    if (!res.ok) {
       toast.error("Failed to deactivate schedule")
       return
     }
