@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { createClient } from "@/lib/supabase/client"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
@@ -26,9 +25,7 @@ import { Mail, MapPin, Pencil, Plus, Users } from "lucide-react"
 import { toast } from "sonner"
 import { StatCard } from "@/components/ui/stat-card"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { logger } from "@/lib/logger"
-import { normalizeDepartmentName } from "@/shared/departments"
 
 const log = logger("hr-office-locations")
 
@@ -70,80 +67,11 @@ export interface OfficeLocationsData {
 }
 
 async function fetchOfficeLocationsData(): Promise<OfficeLocationsData> {
-  const supabase = createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  let canManageLocations = false
-  let managedDepartments: string[] = []
-  let scopeMode: "global" | "lead" = "global"
-  if (user) {
-    const [{ data: profile }, scopeResponse] = await Promise.all([
-      supabase.from("profiles").select("role").eq("id", user.id).single(),
-      fetch("/api/admin/scope-mode", { cache: "no-store" }).catch(() => null),
-    ])
-    canManageLocations = ["developer", "super_admin", "admin"].includes(profile?.role || "")
-    if (scopeResponse?.ok) {
-      const scopePayload = (await scopeResponse.json().catch(() => null)) as {
-        mode?: "global" | "lead"
-        managedDepartments?: string[]
-      } | null
-      scopeMode = scopePayload?.mode === "lead" ? "lead" : "global"
-      managedDepartments = Array.isArray(scopePayload?.managedDepartments) ? scopePayload!.managedDepartments : []
-      if (scopeMode === "lead") {
-        canManageLocations = false
-      }
-    }
-  }
-
-  const [{ data: locations, error }, { data: departments }] = await Promise.all([
-    supabase.from("office_locations").select("*").order("name"),
-    supabase.from("departments").select("name").eq("is_active", true).order("name"),
-  ])
-  if (error) throw new Error(error.message)
-
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select(
-      "id, first_name, last_name, company_email, additional_email, designation, office_location, employment_status"
-    )
-
-  const byLocation: Record<string, LocationEmployee[]> = {}
-  for (const profile of (profiles || ([] as LocationEmployee[])).filter((employee) =>
-    isAssignableEmploymentStatus(employee.employment_status, { allowLegacyNullStatus: false })
-  )) {
-    const locationName = profile.office_location?.trim() || "Unassigned"
-    if (!byLocation[locationName]) byLocation[locationName] = []
-    byLocation[locationName].push(profile)
-  }
-
-  const scopedDepartmentSet = new Set(
-    managedDepartments.map((departmentName) => normalizeDepartmentName(departmentName)).filter(Boolean)
-  )
-  const shouldScopeToDepartments = scopeMode === "lead" && scopedDepartmentSet.size > 0
-
-  const locationsWithCounts = (locations || [])
-    .filter((location) => {
-      if (!shouldScopeToDepartments) return true
-      return scopedDepartmentSet.has(normalizeDepartmentName(String(location.department || "")))
-    })
-    .map((location) => ({
-      ...location,
-      employee_count: byLocation[location.name]?.length || 0,
-    }))
-
-  const scopedDepartments = shouldScopeToDepartments
-    ? (departments || []).filter((department) => scopedDepartmentSet.has(normalizeDepartmentName(department.name)))
-    : departments || []
-
-  return {
-    locations: locationsWithCounts,
-    locationEmployees: byLocation,
-    canManageLocations,
-    departments: scopedDepartments.map((department) => department.name),
-  }
+  // Admin/dept scope is resolved server-side (requireApiAdminScope +
+  // getScopedDepartments) — no client-side scope-mode round trip needed.
+  const res = await fetch("/api/admin/hr/office-locations", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load office locations")
+  return res.json()
 }
 
 function employeeName(employee: LocationEmployee) {
@@ -230,41 +158,33 @@ export function OfficeLocationsPage({
         return
       }
 
-      const supabase = createClient()
+      const payload = {
+        name: formData.name.trim(),
+        type: formData.type,
+        department: formData.department || null,
+        description: formData.description || null,
+        is_active: formData.is_active,
+      }
 
       if (editingLocation) {
         const oldName = editingLocation.name?.trim() || ""
-        const newName = formData.name.trim()
-        const { error: updateError, data: updatedRows } = await supabase
-          .from("office_locations")
-          .update({
-            name: newName,
-            type: formData.type,
-            department: formData.department || null,
-            description: formData.description || null,
-            is_active: formData.is_active,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", editingLocation.id)
-          .select()
-
-        if (updateError) throw updateError
-        if (!updatedRows || updatedRows.length === 0) {
-          throw new Error("Update was blocked by a database policy. Check office location permissions.")
-        }
+        const newName = payload.name
+        const res = await fetch(`/api/admin/hr/office-locations/${editingLocation.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to update office location")
 
         toast.success("Office location updated successfully")
         await cascadeRename("office_location", oldName, newName)
       } else {
-        const { error: createError } = await supabase.from("office_locations").insert({
-          name: formData.name.trim(),
-          type: formData.type,
-          department: formData.department || null,
-          description: formData.description || null,
-          is_active: formData.is_active,
+        const res = await fetch("/api/admin/hr/office-locations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
         })
-
-        if (createError) throw createError
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to create office location")
         toast.success("Office location created successfully")
       }
 
