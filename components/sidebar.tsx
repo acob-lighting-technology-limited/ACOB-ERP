@@ -21,9 +21,11 @@ import {
   Package,
   Settings,
   ShieldCheck,
+  Ticket,
   User,
   Users,
   Wrench,
+  FolderKanban,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn, formatName, getInitials } from "@/lib/utils"
@@ -75,8 +77,9 @@ type NavItemDef = { name: string; href: string; icon: React.ElementType; childre
 const navigation: NavItemDef[] = [
   { name: "Home", href: "/profile", icon: LayoutDashboard },
   { name: "Directory", href: "/directory", icon: Users },
+  { name: "Projects", href: "/project", icon: FolderKanban },
   { name: "Tasks", href: "/tasks", icon: ClipboardList },
-  { name: "Help Desk", href: "/help-desk", icon: ClipboardList },
+  { name: "Help Desk", href: "/help-desk", icon: Ticket },
   {
     name: "Reports",
     href: "/reports",

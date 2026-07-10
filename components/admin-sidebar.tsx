@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Package,
   ClipboardList,
+  Ticket,
   FileText,
   ScrollText,
   LogOut,
@@ -30,6 +31,7 @@ import {
   User,
   Building2,
   Bot,
+  FolderKanban,
 } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
@@ -167,7 +169,7 @@ function buildDeptNavigation(deptId: string): NavItem[] {
       section: "operations",
       name: "Help Desk",
       href: `${base}/help-desk`,
-      icon: ClipboardList,
+      icon: Ticket,
       roles: [],
     },
     {
@@ -308,6 +310,13 @@ const adminNavigation: NavItem[] = [
   },
   {
     section: "management",
+    name: "Projects",
+    href: "/admin/project",
+    icon: FolderKanban,
+    roles: ["developer", "super_admin", "admin"],
+  },
+  {
+    section: "management",
     name: "Tasks",
     href: "/admin/tasks",
     icon: ClipboardList,
@@ -317,7 +326,7 @@ const adminNavigation: NavItem[] = [
     section: "operations",
     name: "Help Desk",
     href: "/admin/help-desk",
-    icon: ClipboardList,
+    icon: Ticket,
     roles: ["developer", "super_admin", "admin"],
   },
   {
