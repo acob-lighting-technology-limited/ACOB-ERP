@@ -1,5 +1,6 @@
 import { Ratelimit } from "@upstash/ratelimit"
 import { Redis } from "@upstash/redis"
+import { createClient as createServiceClient } from "@supabase/supabase-js"
 
 interface Window {
   count: number
@@ -11,6 +12,13 @@ const limiterCache = new Map<string, Ratelimit>()
 const hasRedisConfig = Boolean(process.env.UPSTASH_REDIS_REST_URL)
 const redis = hasRedisConfig ? Redis.fromEnv() : null
 let hasWarnedAboutMemoryFallback = false
+
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+const hasPostgresFallbackConfig = Boolean(supabaseUrl && serviceRoleKey)
+const postgresClient = hasPostgresFallbackConfig
+  ? createServiceClient(supabaseUrl!, serviceRoleKey!, { auth: { persistSession: false, autoRefreshToken: false } })
+  : null
 
 // Prune expired entries every 5 minutes to avoid unbounded growth
 if (typeof setInterval !== "undefined") {
@@ -49,6 +57,31 @@ export function createRateLimiter(opts: { limit: number; windowSec: number }) {
   })
 }
 
+/**
+ * Cross-lambda fallback backed by Postgres (rate_limit_increment RPC), used
+ * when Upstash isn't configured. Correct under concurrent serverless
+ * invocations (unlike the in-memory Map, which is per-lambda-instance),
+ * at the cost of a DB round-trip per call.
+ */
+async function getPostgresRateLimitResult(key: string, opts: RateLimitOptions): Promise<RateLimitResult | null> {
+  if (!postgresClient) return null
+
+  const { data, error } = await postgresClient
+    .rpc("rate_limit_increment", { p_key: key, p_window_seconds: opts.windowSec, p_limit: opts.limit })
+    .single<{ allowed: boolean; remaining: number; reset_at: string }>()
+
+  if (error || !data) {
+    console.error("Postgres rate limit check failed, failing open", error)
+    return null
+  }
+
+  return {
+    allowed: data.allowed,
+    remaining: data.remaining,
+    resetAt: new Date(data.reset_at).getTime(),
+  }
+}
+
 function getMemoryRateLimitResult(key: string, opts: RateLimitOptions): RateLimitResult {
   if (!hasWarnedAboutMemoryFallback) {
     console.warn("Rate limiting falling back to in-memory — not suitable for production")
@@ -79,6 +112,8 @@ function getMemoryRateLimitResult(key: string, opts: RateLimitOptions): RateLimi
  */
 export async function rateLimit(key: string, opts: RateLimitOptions): Promise<RateLimitResult> {
   if (!redis) {
+    const postgresResult = await getPostgresRateLimitResult(key, opts)
+    if (postgresResult) return postgresResult
     return getMemoryRateLimitResult(key, opts)
   }
 
