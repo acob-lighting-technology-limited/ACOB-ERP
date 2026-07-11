@@ -21,6 +21,7 @@
     "ui:ensure-loading": "node scripts/ui/ensure-loading.mjs",
     "ui:audit": "node scripts/ui/audit-reusables.mjs",
     "ui:audit:baseline": "node scripts/ui/audit-reusables.mjs --write-allowlist",
+    "security:anon-probe": "node scripts/anon-security-probe.mjs",
     "check-all": "npm run lint && npm run format:check && npm run type-check && npm run ui:audit",
     "prepare": "husky"
   },
