@@ -14,7 +14,10 @@ const leadContext: AccessContextV2 = {
   isAdminLike: false,
   adminRoutes: null,
   actingContext: "department_lead",
-  managedDepartments: ["accounts", "it"],
+  // These must be canonical names (as buildAccessContextV2 would normalize them
+  // to) since canMutateV2/isDepartmentManaged normalize the department it's
+  // checking against before comparing.
+  managedDepartments: ["Accounts", "IT and Communications"],
 }
 
 const adminReportsContext: AccessContextV2 = {
@@ -30,7 +33,15 @@ const adminGlobalContext: AccessContextV2 = {
   baseRole: "admin",
   isDepartmentLead: false,
   isAdminLike: true,
-  adminRoutes: ["reports.weekly", "reports.other", "hr.main", "jobdescriptions.main", "hr.fleet", "hr.resources", "hr.pms.cbt.manage"],
+  adminRoutes: [
+    "reports.weekly",
+    "reports.other",
+    "hr.main",
+    "jobdescriptions.main",
+    "hr.fleet",
+    "hr.resources",
+    "hr.pms.cbt.manage",
+  ],
   actingContext: "global_admin",
   managedDepartments: [],
 }
@@ -66,7 +77,7 @@ test("lead gets global report visibility but limited mutations", () => {
 
 test("lead gets department-scoped CRUD on tasks", () => {
   assert.equal(canAccessRouteV2(leadContext, "tasks.main"), true)
-  assert.deepEqual(getDataScopeV2(leadContext, "tasks.main"), ["accounts", "it"])
+  assert.deepEqual(getDataScopeV2(leadContext, "tasks.main"), ["Accounts", "IT and Communications"])
   assert.equal(canMutateV2(leadContext, "tasks.main", "it"), true)
   assert.equal(canMutateV2(leadContext, "tasks.main", "legal"), false)
 })
