@@ -2,36 +2,14 @@
 import { redirect } from "next/navigation"
 import { Sparkles, Stars } from "lucide-react"
 import { createClient } from "@/lib/supabase/server"
-import fs from "node:fs"
-import path from "node:path"
+import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
+import { getAvatarSignedUrls } from "@/lib/profile-photos"
 
 interface Celebrant {
   displayName: string
   imageSrc: string | null
   department: string
   birthday: string
-}
-
-function resolveImageSrc(firstName: string): string | null {
-  const nameLower = firstName.trim().toLowerCase()
-  const possibleNames = [nameLower]
-  if (nameLower === "eliah") possibleNames.push("elijah")
-  if (nameLower === "elijah") possibleNames.push("eliah")
-
-  for (const name of possibleNames) {
-    const fileName = `${name}.jpg`
-    const absolutePath = path.join(process.cwd(), "public", "images", "birthday", fileName)
-    let stat: fs.Stats
-    try {
-      stat = fs.statSync(absolutePath)
-      if (stat.size >= 1024) {
-        return `/images/birthday/${fileName}?v=${Math.floor(stat.mtimeMs)}`
-      }
-    } catch {
-      // Continue to next possible spelling
-    }
-  }
-  return null
 }
 
 export default async function BirthdayPage() {
@@ -49,9 +27,13 @@ export default async function BirthdayPage() {
   // Fetch active employee profiles
   const { data: profiles } = await supabase
     .from("profiles")
-    .select("first_name, last_name, birthday, department")
+    .select("first_name, last_name, birthday, department, avatar_path")
     .eq("employment_status", "active")
     .not("birthday", "is", null)
+
+  const dataClient = getServiceRoleClientOrFallback(supabase)
+  const avatarPaths = (profiles || []).map((p) => p.avatar_path).filter((path): path is string => Boolean(path))
+  const signedUrlsByPath = await getAvatarSignedUrls(dataClient, avatarPaths)
 
   const celebrants: Celebrant[] = (profiles || [])
     .filter((p) => {
@@ -61,7 +43,7 @@ export default async function BirthdayPage() {
       return bday >= "05-25" && bday <= "07-04"
     })
     .map((p) => {
-      const imageSrc = resolveImageSrc(p.first_name)
+      const imageSrc = p.avatar_path ? (signedUrlsByPath.get(p.avatar_path) ?? null) : null
       const displayName = p.first_name.trim().toLowerCase() === "eliah" ? "Elijah" : p.first_name
 
       return {

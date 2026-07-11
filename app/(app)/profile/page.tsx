@@ -4,6 +4,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { ProfileContent } from "./profile-content"
 import { buildRecentActivity, normalizeToken } from "@/components/admin/dashboard-helpers"
 import type { PersonalRecentActivityItem } from "@/components/profile/personal-recent-activity-feed"
+import { getAvatarSignedUrl } from "@/lib/profile-photos"
 
 export interface UserProfile {
   id: string
@@ -26,6 +27,7 @@ export interface UserProfile {
   updated_at: string
   additional_email?: string | null
   birthday?: string | null
+  avatar_path?: string | null
 }
 
 export interface Task {
@@ -203,6 +205,7 @@ async function getProfileData() {
   if (profileError || !profileData) {
     return {
       profile: null,
+      avatarUrl: null,
       tasks: [],
       assets: [],
       documentation: [],
@@ -467,8 +470,11 @@ async function getProfileData() {
 
   const recentActivity = buildRecentActivity(filteredRawActivity, actorMap) as PersonalRecentActivityItem[]
 
+  const avatarUrl = await getAvatarSignedUrl(dataClient, profileData.avatar_path)
+
   return {
     profile: profileData,
+    avatarUrl,
     tasks: allTasks,
     assets: allAssets,
     documentation: (docsData || []) as Documentation[],
@@ -496,6 +502,7 @@ export default async function ProfilePage() {
   return (
     <ProfileContent
       profile={profileData.profile}
+      avatarUrl={profileData.avatarUrl}
       tasks={profileData.tasks}
       assets={profileData.assets}
       documentation={profileData.documentation}

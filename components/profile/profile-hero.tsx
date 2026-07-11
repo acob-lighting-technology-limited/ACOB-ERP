@@ -1,13 +1,16 @@
 "use client"
 
+import { useRef, useState } from "react"
+import { toast } from "sonner"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Pencil, Mail, Phone, Cake, Home } from "lucide-react"
-import { formatName } from "@/lib/utils"
+import { Pencil, Mail, Phone, Cake, Home, Camera, X, Loader2 } from "lucide-react"
+import { formatName, cn } from "@/lib/utils"
 import { formatWATDate, formatBirthdayLabel } from "@/lib/utils/date"
 import { getRoleBadgeColor, getRoleDisplayName } from "@/lib/permissions"
+import { apiFetch } from "@/lib/api-client"
 import type { UserRole } from "@/types/database"
 
 interface ProfileHeroProps {
@@ -29,6 +32,8 @@ interface ProfileHeroProps {
     role: string
     is_department_lead?: boolean | null
   }
+  avatarUrl?: string | null
+  onAvatarChange?: (url: string | null) => void
   onEdit: () => void
 }
 
@@ -67,10 +72,53 @@ function ContactField({
   )
 }
 
-export function ProfileHero({ profile, onEdit }: ProfileHeroProps) {
+export function ProfileHero({ profile, avatarUrl, onAvatarChange, onEdit }: ProfileHeroProps) {
   const fullName = [formatName(profile.first_name), formatName(profile.other_names), formatName(profile.last_name)]
     .filter(Boolean)
     .join(" ")
+
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
+
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const response = await apiFetch("/api/profile/avatar", { method: "POST", body: formData })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to upload photo")
+      }
+      onAvatarChange?.(payload?.data?.avatarUrl ?? null)
+      toast.success("Profile photo updated")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to upload photo")
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  async function handleRemovePhoto() {
+    setIsUploading(true)
+    try {
+      const response = await apiFetch("/api/profile/avatar", { method: "DELETE" })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        throw new Error(payload?.error || "Failed to remove photo")
+      }
+      onAvatarChange?.(null)
+      toast.success("Profile photo removed")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove photo")
+    } finally {
+      setIsUploading(false)
+    }
+  }
 
   const tenure = getTenureLabel(profile.employment_date)
   const joinedDate = profile.employment_date
@@ -81,9 +129,7 @@ export function ProfileHero({ profile, onEdit }: ProfileHeroProps) {
 
   const metaParts = [
     profile.department,
-    profile.office_location && profile.office_location !== profile.department
-      ? profile.office_location
-      : null,
+    profile.office_location && profile.office_location !== profile.department ? profile.office_location : null,
     joinedDate ? `Joined ${joinedDate}${tenure ? ` · ${tenure}` : ""}` : null,
   ].filter(Boolean)
 
@@ -91,7 +137,7 @@ export function ProfileHero({ profile, onEdit }: ProfileHeroProps) {
     <Card className="overflow-hidden border shadow-sm">
       {/* Banner */}
       <div className="from-primary/20 relative h-24 bg-gradient-to-r to-transparent sm:h-28">
-        <div className="absolute right-4 top-4 z-10">
+        <div className="absolute top-4 right-4 z-10">
           <Button
             onClick={onEdit}
             variant="outline"
@@ -107,21 +153,52 @@ export function ProfileHero({ profile, onEdit }: ProfileHeroProps) {
       <CardContent className="px-5 pb-5 sm:px-6 sm:pb-6">
         {/* Identity — avatar bleeds over banner */}
         <div className="-mt-10 flex items-end gap-4 sm:-mt-12">
-          <Avatar className="border-background h-20 w-20 shrink-0 border-4 shadow-md sm:h-24 sm:w-24">
-            <AvatarFallback className="bg-primary text-primary-foreground text-xl font-bold sm:text-2xl">
-              {getInitials(profile.first_name, profile.last_name)}
-            </AvatarFallback>
-          </Avatar>
+          <div className="group relative shrink-0">
+            <Avatar className="border-background h-20 w-20 border-4 shadow-md sm:h-24 sm:w-24">
+              {avatarUrl && <AvatarImage src={avatarUrl} alt={fullName || "Profile photo"} />}
+              <AvatarFallback className="bg-primary text-primary-foreground text-xl font-bold sm:text-2xl">
+                {getInitials(profile.first_name, profile.last_name)}
+              </AvatarFallback>
+            </Avatar>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/jpg,image/png,image/webp"
+              className="hidden"
+              onChange={handleFileSelected}
+            />
+
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              aria-label="Change profile photo"
+              className={cn(
+                "bg-background/80 border-border/50 absolute inset-0 flex items-center justify-center rounded-full border opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100",
+                isUploading && "opacity-100"
+              )}
+            >
+              {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
+            </button>
+
+            {avatarUrl && !isUploading && (
+              <button
+                type="button"
+                onClick={handleRemovePhoto}
+                aria-label="Remove profile photo"
+                className="bg-background border-border/50 absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border shadow-sm"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            )}
+          </div>
 
           <div className="flex min-w-0 flex-1 flex-col justify-end pb-0.5">
             <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="min-w-0">
-                <h1 className="text-foreground text-xl font-bold tracking-tight sm:text-2xl">
-                  {fullName || "—"}
-                </h1>
-                {profile.designation && (
-                  <p className="text-muted-foreground mt-0.5 text-sm">{profile.designation}</p>
-                )}
+                <h1 className="text-foreground text-xl font-bold tracking-tight sm:text-2xl">{fullName || "—"}</h1>
+                {profile.designation && <p className="text-muted-foreground mt-0.5 text-sm">{profile.designation}</p>}
               </div>
               <div className="flex shrink-0 flex-wrap gap-1.5 pt-1">
                 <Badge

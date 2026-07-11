@@ -26,6 +26,7 @@ import type {
 
 interface ProfileContentProps {
   profile: UserProfile | null
+  avatarUrl: string | null
   tasks: Task[]
   assets: Asset[]
   documentation: Documentation[]
@@ -41,6 +42,7 @@ interface ProfileContentProps {
 
 export function ProfileContent({
   profile,
+  avatarUrl: initialAvatarUrl,
   tasks,
   assets,
   documentation,
@@ -54,6 +56,7 @@ export function ProfileContent({
   initialError,
 }: ProfileContentProps) {
   const [isEditOpen, setIsEditOpen] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState(initialAvatarUrl)
 
   useEffect(() => {
     if (initialError) {
@@ -75,7 +78,12 @@ export function ProfileContent({
 
   return (
     <div className="container mx-auto max-w-full space-y-6 p-4 md:p-6 lg:p-8">
-      <ProfileHero profile={profile} onEdit={() => setIsEditOpen(true)} />
+      <ProfileHero
+        profile={profile}
+        avatarUrl={avatarUrl}
+        onAvatarChange={setAvatarUrl}
+        onEdit={() => setIsEditOpen(true)}
+      />
 
       <NeedsAttention tasks={tasks} leave={leave} helpDesk={helpDesk} correspondence={correspondence} />
 
