@@ -30,6 +30,7 @@ import { getCurrentOfficeWeek } from "@/lib/meeting-week"
 import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { REPORT_DOC_MAX_SIZE_BYTES, formatLimitMb } from "@/lib/reports/document-upload-limits"
 import { buildMeetingDocumentFileName } from "@/lib/reports/meeting-date"
+import { apiFetch } from "@/lib/api-client"
 import {
   CalendarDays,
   Download,
@@ -193,7 +194,7 @@ export function KssRosterTable({
   } = useQuery({
     queryKey: ["kss-roster-table"],
     queryFn: async (): Promise<KssRosterEntry[]> => {
-      const res = await fetch("/api/reports/kss-roster")
+      const res = await apiFetch("/api/reports/kss-roster")
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Failed to fetch KSS roster")
       return payload.data || []
@@ -208,7 +209,7 @@ export function KssRosterTable({
   } = useQuery({
     queryKey: ["kss-documents-table"],
     queryFn: async (): Promise<KssDocument[]> => {
-      const res = await fetch(
+      const res = await apiFetch(
         "/api/reports/meeting-week-documents?documentType=knowledge_sharing_session&currentOnly=true"
       )
       const payload = await res.json()
@@ -221,7 +222,7 @@ export function KssRosterTable({
     queryKey: ["kss-results-table"],
     enabled: enableScoring && Boolean(currentUserId),
     queryFn: async (): Promise<KssResult[]> => {
-      const res = await fetch("/api/reports/kss-results")
+      const res = await apiFetch("/api/reports/kss-results")
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Failed to fetch KSS scores")
       return payload.data || []
@@ -289,9 +290,10 @@ export function KssRosterTable({
   const selectedWeekDoc = docByWeekYear.get(`${yearNumber}-${weekNumber}`) || null
   const canUploadMissingForLockedWeek =
     isSelectedWeekLocked && Boolean(selectedWeekExistingRow) && !selectedWeekDoc && !readOnly
-  const isFormLocked = (Boolean(editingId)
-    ? isSelectedWeekLocked && Boolean(selectedWeekDoc)
-    : isSelectedWeekLocked && Boolean(selectedWeekExistingRow) && Boolean(selectedWeekDoc)) && !hasGraceOverride
+  const isFormLocked =
+    (Boolean(editingId)
+      ? isSelectedWeekLocked && Boolean(selectedWeekDoc)
+      : isSelectedWeekLocked && Boolean(selectedWeekExistingRow) && Boolean(selectedWeekDoc)) && !hasGraceOverride
 
   useEffect(() => {
     if (!canUploadMissingForLockedWeek || !selectedWeekExistingRow || editingId) return
@@ -430,7 +432,7 @@ export function KssRosterTable({
         }
         savedRoster = selectedWeekExistingRow
       } else {
-        const rosterRes = await fetch("/api/reports/kss-roster", {
+        const rosterRes = await apiFetch("/api/reports/kss-roster", {
           method: editingId ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
@@ -485,7 +487,7 @@ export function KssRosterTable({
           }, 1200)
         }
 
-        const uploadRes = await fetch("/api/reports/meeting-week-documents", {
+        const uploadRes = await apiFetch("/api/reports/meeting-week-documents", {
           method: "POST",
           body: fd,
         })
@@ -529,12 +531,12 @@ export function KssRosterTable({
     try {
       const doc = docByWeekYear.get(`${row.meeting_year}-${row.meeting_week}`)
       if (doc) {
-        const docRes = await fetch(`/api/reports/meeting-week-documents?id=${doc.id}`, { method: "DELETE" })
+        const docRes = await apiFetch(`/api/reports/meeting-week-documents?id=${doc.id}`, { method: "DELETE" })
         const docPayload = await docRes.json()
         if (!docRes.ok) throw new Error(docPayload.error || "Failed to delete KSS file")
       }
 
-      const res = await fetch(`/api/reports/kss-roster?id=${row.id}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/reports/kss-roster?id=${row.id}`, { method: "DELETE" })
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Failed to delete KSS roster")
       toast.success("KSS deleted")
@@ -542,7 +544,9 @@ export function KssRosterTable({
       await Promise.all([
         refetchRoster(),
         refetchDocs(),
-        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminWeeklyReportLockState(row.meeting_week, row.meeting_year) }),
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.adminWeeklyReportLockState(row.meeting_week, row.meeting_year),
+        }),
         queryClient.invalidateQueries({ queryKey: ["general-meeting-week-setup", row.meeting_week, row.meeting_year] }),
       ])
     } catch (error: unknown) {
@@ -561,7 +565,7 @@ export function KssRosterTable({
 
     setSavingScore(true)
     try {
-      const res = await fetch("/api/reports/kss-results", {
+      const res = await apiFetch("/api/reports/kss-results", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

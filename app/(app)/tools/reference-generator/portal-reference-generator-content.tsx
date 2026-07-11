@@ -10,6 +10,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import type { CorrespondenceRecord } from "@/types/correspondence"
 import { CreateReferenceDialog, type CreateReferenceForm } from "@/components/correspondence/create-reference-dialog"
 import { formatName } from "@/lib/utils"
+import { apiFetch } from "@/lib/api-client"
 
 interface DepartmentCodeOption {
   department_name: string
@@ -112,7 +113,7 @@ export function PortalReferenceGeneratorContent({
     let active = true
 
     async function loadRecords() {
-      const response = await fetch("/api/correspondence/records?page=1&limit=100&scope=mine", { cache: "no-store" })
+      const response = await apiFetch("/api/correspondence/records?page=1&limit=100&scope=mine", { cache: "no-store" })
       const payload = await response.json()
       if (!response.ok || !active) return
       setRecords(payload.data || [])
@@ -164,7 +165,7 @@ export function PortalReferenceGeneratorContent({
           setIsSaving(false)
           return
         }
-        const catRes = await fetch("/api/correspondence/categories", {
+        const catRes = await apiFetch("/api/correspondence/categories", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: form.custom_category_name.trim(), code: form.custom_category_code.trim() }),
@@ -191,7 +192,7 @@ export function PortalReferenceGeneratorContent({
       formPayload.append("metadata", JSON.stringify(metadata || {}))
       form.attachments.forEach((file) => formPayload.append("attachments", file))
 
-      const response = await fetch("/api/correspondence/records", { method: "POST", body: formPayload })
+      const response = await apiFetch("/api/correspondence/records", { method: "POST", body: formPayload })
       const responsePayload = await response.json()
       if (!response.ok) throw new Error(responsePayload.error || "Failed to create correspondence")
       toast.success("Correspondence created")
@@ -252,7 +253,7 @@ export function PortalReferenceGeneratorContent({
       }
       if (isResubmit) body.status = "under_review"
 
-      const res = await fetch(`/api/correspondence/records/${editingRecord.id}`, {
+      const res = await apiFetch(`/api/correspondence/records/${editingRecord.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -275,7 +276,7 @@ export function PortalReferenceGeneratorContent({
 
   async function deleteRecord(recordId: string) {
     try {
-      const res = await fetch(`/api/correspondence/records/${recordId}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/correspondence/records/${recordId}`, { method: "DELETE" })
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Failed to delete correspondence")
       toast.success("Correspondence deleted")

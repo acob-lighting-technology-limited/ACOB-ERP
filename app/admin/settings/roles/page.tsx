@@ -28,6 +28,7 @@ import type { Role, RoleFormData } from "./_components/role-form-dialog"
 import type { RoleMember } from "./_components/role-users-dialog"
 
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("settings-roles")
 
@@ -56,7 +57,7 @@ export default function RolesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     try {
-      const res = await fetch("/api/admin/settings/roles", {
+      const res = await apiFetch("/api/admin/settings/roles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -84,7 +85,7 @@ export default function RolesPage() {
       return
     }
     try {
-      const res = await fetch(`/api/admin/settings/roles?id=${encodeURIComponent(role.id)}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/admin/settings/roles?id=${encodeURIComponent(role.id)}`, { method: "DELETE" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to delete")
       toast.success("Deleted")
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminRolesSettings() })
@@ -112,7 +113,7 @@ export default function RolesPage() {
     setRoleUsersOpen(true)
     setRoleUsersLoading(true)
     try {
-      const res = await fetch(`/api/admin/settings/roles/users?role=${encodeURIComponent(roleName)}`, {
+      const res = await apiFetch(`/api/admin/settings/roles/users?role=${encodeURIComponent(roleName)}`, {
         cache: "no-store",
       })
       const json = await res.json()
@@ -128,7 +129,7 @@ export default function RolesPage() {
 
   async function fetchAllUsersForRoleModal() {
     try {
-      const res = await fetch("/api/admin/settings/roles/users", { cache: "no-store" })
+      const res = await apiFetch("/api/admin/settings/roles/users", { cache: "no-store" })
       const json = await res.json()
       if (!res.ok) throw new Error(json?.error || "Failed to load users")
       setAvailableUsers((json.data || []) as RoleMember[])
@@ -153,7 +154,7 @@ export default function RolesPage() {
     if (!selectedRoleName || !selectedUserId) return
     setAddingUser(true)
     try {
-      const response = await fetch("/api/admin/users/role", {
+      const response = await apiFetch("/api/admin/users/role", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ targetUserId: selectedUserId, role: selectedRoleName }),

@@ -22,6 +22,7 @@ import { toast } from "sonner"
 import { toLocalISODate, monthBounds, toLocalYearMonth, isLate } from "@/lib/hr/attendance-utils"
 import { MANUAL_ATTENDANCE_STATUS_OPTIONS, isEarlyDeparture } from "@/lib/hr/attendance-status"
 import { formatTime, labelSource } from "./status-badge"
+import { apiFetch } from "@/lib/api-client"
 
 interface AttendanceRecord {
   id: string
@@ -79,7 +80,7 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
     try {
       const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
       if (lockedDepartment) params.set("department", lockedDepartment)
-      const res = await fetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load")
       const all: AttendanceRecord[] = payload.records || []
@@ -132,7 +133,7 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
         manual_comment: editForm.manual_comment,
         status: editForm.status,
       }
-      const res = await fetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
+      const res = await apiFetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

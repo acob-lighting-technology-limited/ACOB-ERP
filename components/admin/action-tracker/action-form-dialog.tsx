@@ -18,6 +18,7 @@ import { toast } from "sonner"
 import { Loader2, Plus, Save, X } from "lucide-react"
 import { getCurrentOfficeWeek } from "@/lib/meeting-week"
 import { toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 interface EditableAction {
   id: string
@@ -136,7 +137,7 @@ export function ActionFormDialog({
       }
 
       if (editingAction) {
-        const response = await fetch(`/api/reports/action-tracker/${editingAction.id}`, {
+        const response = await apiFetch(`/api/reports/action-tracker/${editingAction.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -154,7 +155,7 @@ export function ActionFormDialog({
         toast.success("Action updated")
       } else {
         for (const title of finalItems) {
-          const response = await fetch("/api/reports/action-tracker", {
+          const response = await apiFetch("/api/reports/action-tracker", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

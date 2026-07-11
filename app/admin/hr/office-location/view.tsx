@@ -26,6 +26,7 @@ import { toast } from "sonner"
 import { StatCard } from "@/components/ui/stat-card"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("hr-office-locations")
 
@@ -69,7 +70,7 @@ export interface OfficeLocationsData {
 async function fetchOfficeLocationsData(): Promise<OfficeLocationsData> {
   // Admin/dept scope is resolved server-side (requireApiAdminScope +
   // getScopedDepartments) — no client-side scope-mode round trip needed.
-  const res = await fetch("/api/admin/hr/office-locations", { cache: "no-store" })
+  const res = await apiFetch("/api/admin/hr/office-locations", { cache: "no-store" })
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load office locations")
   return res.json()
 }
@@ -136,7 +137,7 @@ export function OfficeLocationsPage({
   async function cascadeRename(field: "office_location", oldName: string, newName: string) {
     if (!oldName || !newName || oldName === newName) return
     try {
-      const res = await fetch("/api/admin/hr/rename-cascade", {
+      const res = await apiFetch("/api/admin/hr/rename-cascade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ field, oldName, newName }),
@@ -169,7 +170,7 @@ export function OfficeLocationsPage({
       if (editingLocation) {
         const oldName = editingLocation.name?.trim() || ""
         const newName = payload.name
-        const res = await fetch(`/api/admin/hr/office-locations/${editingLocation.id}`, {
+        const res = await apiFetch(`/api/admin/hr/office-locations/${editingLocation.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -179,7 +180,7 @@ export function OfficeLocationsPage({
         toast.success("Office location updated successfully")
         await cascadeRename("office_location", oldName, newName)
       } else {
-        const res = await fetch("/api/admin/hr/office-locations", {
+        const res = await apiFetch("/api/admin/hr/office-locations", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

@@ -46,6 +46,7 @@ import {
   getManualStatusEditOptions,
 } from "@/lib/hr/attendance-status"
 import { StatusBadge, labelSource } from "./_components/status-badge"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("hr-attendance-reports")
 
@@ -306,7 +307,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           year_month: yearMonth,
           exempt_hint: report.attendance_exempt ? "1" : "0",
         })
-        const res = await fetch(`/api/admin/hr/attendance/employee-days?${qs.toString()}`, { cache: "no-store" })
+        const res = await apiFetch(`/api/admin/hr/attendance/employee-days?${qs.toString()}`, { cache: "no-store" })
         const payload = res.ok ? ((await res.json()) as UnifiedDayPayload) : null
         const calDays: CalendarDay[] = (payload?.data || []).map((row) => ({
           date: row.date,
@@ -354,7 +355,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           manual_comment: editForm.manual_comment,
           status: editForm.status,
         }
-        res = await fetch(`/api/admin/hr/attendance/records/${editTarget.record.id}`, {
+        res = await apiFetch(`/api/admin/hr/attendance/records/${editTarget.record.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -370,7 +371,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           clock_in: null,
           clock_out: null,
         }
-        res = await fetch("/api/admin/hr/attendance/records", {
+        res = await apiFetch("/api/admin/hr/attendance/records", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -398,7 +399,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
     setHistoryLoading(true)
     try {
       const qs = new URLSearchParams({ user_id: report.user_id, date: day.date })
-      const res = await fetch(`/api/admin/hr/attendance/timeline?${qs.toString()}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/hr/attendance/timeline?${qs.toString()}`, { cache: "no-store" })
       const payload = (await res.json().catch(() => null)) as {
         data?: { events?: TimelineEvent[]; context?: TimelineContext }
       } | null
@@ -728,7 +729,7 @@ export function AttendanceReportsPage({
           department: reportDepartment,
           user_id: userId,
         })
-        const response = await fetch(`/api/hr/attendance/reports?${params.toString()}`, { cache: "no-store" })
+        const response = await apiFetch(`/api/hr/attendance/reports?${params.toString()}`, { cache: "no-store" })
         const payload = (await response.json().catch(() => null)) as {
           data?: AttendanceReport[]
           error?: string
@@ -762,7 +763,7 @@ export function AttendanceReportsPage({
     try {
       const { start, end } = periodMode === "month" ? monthBounds(yearMonth) : quarterBounds(quarterYear, quarter)
       const params = new URLSearchParams({ start_date: start, end_date: end, department: reportDepartment })
-      const response = await fetch(`/api/hr/attendance/reports?${params.toString()}`, { cache: "no-store" })
+      const response = await apiFetch(`/api/hr/attendance/reports?${params.toString()}`, { cache: "no-store" })
       const payload = (await response.json().catch(() => null)) as {
         data?: AttendanceReport[]
         departments?: string[]
@@ -788,7 +789,7 @@ export function AttendanceReportsPage({
   }, [yearMonth, reportDepartment, periodMode, quarter, quarterYear, lockedDepartment])
 
   const loadHolidays = useCallback(async () => {
-    const response = await fetch(`/api/admin/hr/attendance/holidays?month=${yearMonth}`, { cache: "no-store" })
+    const response = await apiFetch(`/api/admin/hr/attendance/holidays?month=${yearMonth}`, { cache: "no-store" })
     const payload = (await response.json().catch(() => null)) as {
       data?: Array<{ holiday_date: string; name?: string | null }>
     } | null
@@ -1180,9 +1181,7 @@ export function AttendanceReportsPage({
       }
     >
       {activeTab === "daily" && <DailyRosterView departments={departments} lockedDepartment={lockedDepartment} />}
-      {activeTab === "leaderboard" && (
-        <LeaderboardView departments={departments} lockedDepartment={lockedDepartment} />
-      )}
+      {activeTab === "leaderboard" && <LeaderboardView departments={departments} lockedDepartment={lockedDepartment} />}
       {activeTab === "calendar" && <CalendarView employees={employeeOptions} />}
       {activeTab === "exceptions" && <ExceptionsView departments={departments} lockedDepartment={lockedDepartment} />}
       {activeTab === "appeals" && <AppealsView lockedDepartment={lockedDepartment} />}

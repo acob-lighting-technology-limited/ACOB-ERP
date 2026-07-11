@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { apiFetch } from "@/lib/api-client"
 
 type CandidateOption = {
   company_email: string | null
@@ -92,7 +93,7 @@ export default function CbtPage() {
     const loadOptions = async () => {
       setLoadingOptions(true)
       try {
-        const response = await fetch("/api/hr/performance/cbt/session", { cache: "no-store" })
+        const response = await apiFetch("/api/hr/performance/cbt/session", { cache: "no-store" })
         const payload = await response.json()
         if (!response.ok) throw new Error(payload.error || "Failed to load CBT candidates")
         setCandidateOptions(payload.data?.candidates || [])
@@ -172,7 +173,7 @@ export default function CbtPage() {
   const startSession = async () => {
     setStarting(true)
     try {
-      const response = await fetch("/api/hr/performance/cbt/session", {
+      const response = await apiFetch("/api/hr/performance/cbt/session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -195,7 +196,7 @@ export default function CbtPage() {
     if (!session) return
     setSubmitting(true)
     try {
-      const response = await fetch("/api/hr/performance/cbt/session", {
+      const response = await apiFetch("/api/hr/performance/cbt/session", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

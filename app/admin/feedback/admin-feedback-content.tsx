@@ -15,6 +15,7 @@ import { FeedbackDetailDialog } from "@/components/feedback/feedback-detail-dial
 import type { FeedbackRecord } from "@/components/feedback/types"
 import { cn, formatName } from "@/lib/utils"
 import { formatWATDate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 interface AdminFeedbackContentProps {
   initialFeedback: FeedbackRecord[]
@@ -54,7 +55,7 @@ const STATUS_COLOR_MAP: Record<string, string> = {
 }
 
 async function fetchFilterData(): Promise<FilterData> {
-  const res = await fetch("/api/admin/feedback/filters", { cache: "no-store" })
+  const res = await apiFetch("/api/admin/feedback/filters", { cache: "no-store" })
   if (!res.ok) return { employees: [], departments: [] }
   const json = await res.json()
   return { employees: json.employees || [], departments: json.departments || [] }
@@ -77,7 +78,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
     setIsUpdating(true)
 
     try {
-      const res = await fetch("/api/admin/feedback/status", {
+      const res = await apiFetch("/api/admin/feedback/status", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: selectedFeedback.id, status: newStatus, oldStatus: selectedFeedback.status }),

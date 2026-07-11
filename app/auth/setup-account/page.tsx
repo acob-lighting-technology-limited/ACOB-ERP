@@ -20,6 +20,7 @@ import { toast } from "sonner"
 import { AuthPageSkeleton } from "@/components/skeletons"
 
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("auth-setup-account")
 
@@ -207,7 +208,7 @@ function SetupAccountContent() {
         if (error) throw error
       } else {
         // Custom Initial Setup Flow
-        const response = await fetch("/api/auth/setup-password", {
+        const response = await apiFetch("/api/auth/setup-password", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token, password }),

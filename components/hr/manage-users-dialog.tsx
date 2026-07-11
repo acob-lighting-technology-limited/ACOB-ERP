@@ -51,6 +51,7 @@ import { formValidation } from "@/lib/validation"
 import { logger } from "@/lib/logger"
 import type { UserRole } from "@/types/database"
 import type { Employee, UserProfile } from "@/app/admin/hr/employees/admin-employee-content"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("manage-users-dialog")
 
@@ -100,7 +101,7 @@ interface PendingEmailDispatch {
 }
 
 async function fetchPendingApplications(): Promise<PendingUser[]> {
-  const res = await fetch("/api/admin/pending-users", { cache: "no-store" })
+  const res = await apiFetch("/api/admin/pending-users", { cache: "no-store" })
   const payload = (await res.json().catch(() => null)) as { data?: PendingUser[]; error?: string } | null
   if (!res.ok) throw new Error(payload?.error || "Failed to load applications")
   return payload?.data || []
@@ -232,7 +233,7 @@ export function ManageUsersDialog({
     }
     setIsCreating(true)
     try {
-      const res = await fetch("/api/admin/create-user", {
+      const res = await apiFetch("/api/admin/create-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -306,7 +307,7 @@ export function ManageUsersDialog({
             ? `ACOB/PT/${currentYear}/999`
             : `ACOB/${contractCategoryCode || "SIWES"}/${currentYear}/999`
 
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/admin/pending-users/${selectedUser.id}/approval-preview?employeeId=${encodeURIComponent(dummyId)}`
       )
       const result = await res.json()
@@ -360,7 +361,7 @@ export function ManageUsersDialog({
       if (updateError) throw updateError
 
       // 2. Call the approve-user API route
-      const res = await fetch("/api/admin/approve-user", {
+      const res = await apiFetch("/api/admin/approve-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -400,7 +401,7 @@ export function ManageUsersDialog({
     if (!selectedUser) return
     setIsProcessing(true)
     try {
-      const res = await fetch("/api/admin/reject-user", {
+      const res = await apiFetch("/api/admin/reject-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pendingUserId: selectedUser.id }),
@@ -484,7 +485,7 @@ export function ManageUsersDialog({
         })),
         sendNotification,
       }
-      const res = await fetch("/api/v1/hr/employees/bulk-exit", {
+      const res = await apiFetch("/api/v1/hr/employees/bulk-exit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -527,7 +528,7 @@ export function ManageUsersDialog({
     if (!succeededExitIds.length) return
     setIsSendingExitNotif(true)
     try {
-      const res = await fetch("/api/v1/hr/employees/bulk-exit", {
+      const res = await apiFetch("/api/v1/hr/employees/bulk-exit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1553,7 +1554,7 @@ export function ManageUsersDialog({
                 if (!pendingEmailDispatch) return
                 setIsSendingEmails(true)
                 try {
-                  const res = await fetch("/api/admin/send-onboarding-emails", {
+                  const res = await apiFetch("/api/admin/send-onboarding-emails", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(pendingEmailDispatch),

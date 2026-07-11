@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { downloadWeeklyReportDocx, downloadWeeklyReportPdf } from "@/lib/reports/export-download"
 import { Badge } from "@/components/ui/badge"
+import { apiFetch } from "@/lib/api-client"
 
 interface AdminWeeklyReportsData {
   reports: WeeklyReport[]
@@ -36,7 +37,7 @@ interface AdminWeeklyReportsData {
 }
 
 async function fetchAdminWeeklyReports(weekFilter: number, yearFilter: number): Promise<AdminWeeklyReportsData> {
-  const res = await fetch(`/api/admin/reports/weekly-reports?week=${weekFilter}&year=${yearFilter}`, {
+  const res = await apiFetch(`/api/admin/reports/weekly-reports?week=${weekFilter}&year=${yearFilter}`, {
     cache: "no-store",
   })
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load weekly reports")
@@ -48,7 +49,7 @@ async function fetchAdminWeeklyReports(weekFilter: number, yearFilter: number): 
 }
 
 async function fetchAdminWeeklyReportLockState(week: number, year: number) {
-  const res = await fetch(`/api/admin/reports/weekly-lock-state?week=${week}&year=${year}`, { cache: "no-store" })
+  const res = await apiFetch(`/api/admin/reports/weekly-lock-state?week=${week}&year=${year}`, { cache: "no-store" })
   if (!res.ok) throw new Error("Failed to resolve lock state")
   return res.json()
 }
@@ -166,7 +167,7 @@ export function WeeklyReportsContent({
     }
     try {
       // Server re-checks mutate permission + week lock before deleting.
-      const res = await fetch(`/api/admin/reports/weekly-reports/${id}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/admin/reports/weekly-reports/${id}`, { method: "DELETE" })
       if (!res.ok) {
         const payload = await res.json().catch(() => null)
         toast.error(payload?.error || "Delete failed")

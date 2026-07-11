@@ -14,6 +14,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { formatName } from "@/lib/utils"
 import { logger } from "@/lib/logger"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
+import { apiFetch } from "@/lib/api-client"
 import {
   exportCorrespondenceToExcel,
   exportCorrespondenceToPDF,
@@ -64,13 +65,13 @@ export function AdminReferenceGeneratorContent({
     async function fetchTabCounts() {
       try {
         const [all, external, internal] = await Promise.all([
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1" })), { cache: "no-store" }).then((r) =>
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1" })), { cache: "no-store" }).then((r) =>
             r.json()
           ),
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", letter_type: "external" })), {
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", letter_type: "external" })), {
             cache: "no-store",
           }).then((r) => r.json()),
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", letter_type: "internal" })), {
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", letter_type: "internal" })), {
             cache: "no-store",
           }).then((r) => r.json()),
         ])
@@ -87,16 +88,16 @@ export function AdminReferenceGeneratorContent({
     async function fetchGlobalCounts() {
       try {
         const [all, underReview, approved, rejected] = await Promise.all([
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1" })), { cache: "no-store" }).then((r) =>
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1" })), { cache: "no-store" }).then((r) =>
             r.json()
           ),
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "under_review" })), {
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "under_review" })), {
             cache: "no-store",
           }).then((r) => r.json()),
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "approved" })), {
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "approved" })), {
             cache: "no-store",
           }).then((r) => r.json()),
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "rejected" })), {
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "rejected" })), {
             cache: "no-store",
           }).then((r) => r.json()),
         ])
@@ -144,7 +145,7 @@ export function AdminReferenceGeneratorContent({
       if (activeTab !== "all") params.set("letter_type", activeTab)
       if (searchQuery.trim()) params.set("search", searchQuery.trim())
 
-      const res = await fetch(recordsUrl(params), { cache: "no-store" })
+      const res = await apiFetch(recordsUrl(params), { cache: "no-store" })
       const json = await res.json()
       const allMatchingRecords = json.data || []
 
@@ -180,7 +181,7 @@ export function AdminReferenceGeneratorContent({
         if (activeTab !== "all") params.set("letter_type", activeTab)
         if (searchQuery.trim()) params.set("search", searchQuery.trim())
 
-        const res = await fetch(recordsUrl(params), { cache: "no-store" })
+        const res = await apiFetch(recordsUrl(params), { cache: "no-store" })
         const json = await res.json()
         setRecords(json.data || [])
         setTotal(Number(json.total || 0))
@@ -205,7 +206,7 @@ export function AdminReferenceGeneratorContent({
     const prevRecord = records.find((r) => r.id === recordId)
     setLoadingRecordId(recordId)
     try {
-      const res = await fetch(`/api/correspondence/records/${recordId}/approvals`, {
+      const res = await apiFetch(`/api/correspondence/records/${recordId}/approvals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -251,13 +252,13 @@ export function AdminReferenceGeneratorContent({
       accessor: (r) => r.reference_number,
       render: (r) => {
         if (!["approved", "sent", "filed"].includes(r.status) || !r.reference_number) {
-          return "-";
+          return "-"
         }
 
         const copyToClipboard = (text: string) => {
-          navigator.clipboard.writeText(text);
-          toast.success(`Copied: ${text}`);
-        };
+          navigator.clipboard.writeText(text)
+          toast.success(`Copied: ${text}`)
+        }
 
         if (r.letter_type === "external" && r.simulated_sequence) {
           const lastSlashIndex = r.reference_number.lastIndexOf("/")
@@ -267,7 +268,7 @@ export function AdminReferenceGeneratorContent({
             const simulatedRef = `${prefix}${seqStr}`
             if (simulatedRef !== r.reference_number) {
               return (
-                <span className="font-medium flex flex-wrap items-center gap-x-1">
+                <span className="flex flex-wrap items-center gap-x-1 font-medium">
                   <span
                     className="cursor-pointer hover:underline"
                     onClick={() => copyToClipboard(r.reference_number!)}
@@ -276,10 +277,10 @@ export function AdminReferenceGeneratorContent({
                     {r.reference_number}
                   </span>
                   <span
-                    className="text-xs text-muted-foreground font-normal cursor-pointer hover:underline"
+                    className="text-muted-foreground cursor-pointer text-xs font-normal hover:underline"
                     onClick={(e) => {
-                      e.stopPropagation();
-                      copyToClipboard(simulatedRef);
+                      e.stopPropagation()
+                      copyToClipboard(simulatedRef)
                     }}
                     title="Click to copy simulated reference"
                   >
@@ -292,7 +293,7 @@ export function AdminReferenceGeneratorContent({
         }
         return (
           <span
-            className="font-medium cursor-pointer hover:underline"
+            className="cursor-pointer font-medium hover:underline"
             onClick={() => copyToClipboard(r.reference_number!)}
             title="Click to copy reference"
           >

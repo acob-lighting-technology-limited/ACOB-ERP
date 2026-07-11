@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { UserCheck, Upload, Trash2, Camera, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-client"
 
 interface EmployeeRemoteAccess {
   user_id: string
@@ -36,7 +37,7 @@ function formatDate(d: string | null) {
 
 async function fetchEmployees(dept: string): Promise<{ data: EmployeeRemoteAccess[]; departments: string[] }> {
   const params = dept && dept !== "all" ? `?department=${encodeURIComponent(dept)}` : ""
-  const res = await fetch(`/api/admin/hr/attendance/remote-access${params}`)
+  const res = await apiFetch(`/api/admin/hr/attendance/remote-access${params}`)
   if (!res.ok) throw new Error("Failed to load employees")
   return res.json()
 }
@@ -59,7 +60,7 @@ export default function RemoteAccessPage() {
 
   const toggleMutation = useMutation({
     mutationFn: async ({ userId, enabled }: { userId: string; enabled: boolean }) => {
-      const res = await fetch(`/api/admin/hr/attendance/remote-access/${userId}`, {
+      const res = await apiFetch(`/api/admin/hr/attendance/remote-access/${userId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ remote_checkin_enabled: enabled }),
@@ -75,7 +76,7 @@ export default function RemoteAccessPage() {
 
   const removePhotoMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const res = await fetch(`/api/admin/hr/attendance/remote-access/${userId}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/admin/hr/attendance/remote-access/${userId}`, { method: "DELETE" })
       if (!res.ok) throw new Error("Failed to remove photo")
     },
     onSuccess: () => {
@@ -99,7 +100,7 @@ export default function RemoteAccessPage() {
     try {
       const fd = new FormData()
       fd.append("photo", file)
-      const res = await fetch(`/api/admin/hr/attendance/remote-access/${uploadUserId}`, {
+      const res = await apiFetch(`/api/admin/hr/attendance/remote-access/${uploadUserId}`, {
         method: "POST",
         body: fd,
       })

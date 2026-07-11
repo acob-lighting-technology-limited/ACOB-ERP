@@ -4,6 +4,7 @@ import { useState, useCallback } from "react"
 import { formatWATDateTime } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("reports-mail-weekly-summary-send")
 
@@ -25,7 +26,7 @@ interface DocRef {
 async function fetchStoredMeetingDocumentAttachment(doc: DocRef): Promise<{ base64: string; filename: string }> {
   if (!doc.signed_url) throw new Error(`Missing download URL for ${doc.display_name || doc.file_name || doc.id}`)
 
-  const response = await fetch(doc.signed_url)
+  const response = await apiFetch(doc.signed_url)
   if (!response.ok) {
     throw new Error(`Failed to download ${doc.display_name || doc.file_name || doc.id}`)
   }
@@ -99,7 +100,7 @@ async function fetchActionPointsAttachment(params: {
   week: number
   year: number
 }): Promise<{ blob: Blob; filename: string }> {
-  const response = await fetch("/api/reports/weekly-report-export", {
+  const response = await apiFetch("/api/reports/weekly-report-export", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -136,7 +137,7 @@ async function fetchWeeklyReportAttachment(params: {
   week: number
   year: number
 }): Promise<{ blob: Blob; filename: string }> {
-  const response = await fetch("/api/reports/weekly-report-export", {
+  const response = await apiFetch("/api/reports/weekly-report-export", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -190,7 +191,7 @@ export function useWeeklySummarySend({
   const logMailAudit = useCallback(
     async (params: { action: string; entityId: string; metadata?: Record<string, unknown> }) => {
       try {
-        await fetch("/api/admin/reports/mail-audit", {
+        await apiFetch("/api/admin/reports/mail-audit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(params),
@@ -431,7 +432,7 @@ export function useWeeklySummarySend({
         return
       }
 
-      const res = await fetch("/api/admin/reports/weekly-report-schedules", {
+      const res = await apiFetch("/api/admin/reports/weekly-report-schedules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -486,7 +487,7 @@ export function useWeeklySummarySend({
       const recurringContentChoice: "weekly_report" | "action_point" | "both" =
         includeWeeklyReport && includeActionPoint ? "both" : includeWeeklyReport ? "weekly_report" : "action_point"
 
-      const res = await fetch("/api/admin/reports/weekly-report-schedules", {
+      const res = await apiFetch("/api/admin/reports/weekly-report-schedules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -529,7 +530,7 @@ export function useWeeklySummarySend({
 
   const deactivateSchedule = useCallback(
     async (id: string) => {
-      const res = await fetch(`/api/admin/reports/weekly-report-schedules/${id}`, { method: "PATCH" })
+      const res = await apiFetch(`/api/admin/reports/weekly-report-schedules/${id}`, { method: "PATCH" })
       if (!res.ok) {
         toast.error("Failed to deactivate schedule")
       } else {

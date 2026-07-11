@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { type ActionItem } from "@/lib/export-utils"
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("reports-action-tracker-action-tracker-co")
 
@@ -74,7 +75,7 @@ async function fetchAdminActionTrackerTasks(
   if (scopedDepartments.length > 0) {
     params.set("scoped_departments", scopedDepartments.join(","))
   }
-  const response = await fetch(`/api/reports/action-tracker?${params.toString()}`, { cache: "no-store" })
+  const response = await apiFetch(`/api/reports/action-tracker?${params.toString()}`, { cache: "no-store" })
   const payload = (await response.json().catch(() => null)) as { data?: ActionTask[]; error?: string } | null
   if (!response.ok) throw new Error(payload?.error || "Failed to fetch action items")
   return payload?.data || []
@@ -168,7 +169,7 @@ export function ActionTrackerContent({
   const { data: lockState } = useQuery({
     queryKey: QUERY_KEYS.adminWeeklyReportLockState(weekFilter, yearFilter),
     queryFn: async () => {
-      const res = await fetch(`/api/admin/reports/weekly-lock-state?week=${weekFilter}&year=${yearFilter}`, {
+      const res = await apiFetch(`/api/admin/reports/weekly-lock-state?week=${weekFilter}&year=${yearFilter}`, {
         cache: "no-store",
       })
       if (!res.ok) throw new Error("Failed to resolve lock state")
@@ -192,7 +193,7 @@ export function ActionTrackerContent({
     )
 
     try {
-      const response = await fetch(`/api/reports/action-tracker/${taskId}`, {
+      const response = await apiFetch(`/api/reports/action-tracker/${taskId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
@@ -210,7 +211,7 @@ export function ActionTrackerContent({
   const handleCarryForward = async () => {
     setIsCarryForwarding(true)
     try {
-      const response = await fetch("/api/reports/action-tracker/carry-forward", {
+      const response = await apiFetch("/api/reports/action-tracker/carry-forward", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ week_number: weekFilter, year: yearFilter }),

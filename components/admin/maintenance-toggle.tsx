@@ -5,6 +5,7 @@ import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("admin-maintenance-toggle")
 
@@ -20,7 +21,7 @@ export function MaintenanceToggle() {
 
   async function fetchState() {
     try {
-      const response = await fetch("/api/dev/maintenance", { cache: "no-store" })
+      const response = await apiFetch("/api/dev/maintenance", { cache: "no-store" })
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || "Failed to load maintenance settings")
 
@@ -45,7 +46,7 @@ export function MaintenanceToggle() {
         return
       }
 
-      const response = await fetch("/api/dev/maintenance", {
+      const response = await apiFetch("/api/dev/maintenance", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -12,6 +12,7 @@ import { ClipboardList, CheckCircle2, Clock, Download, Check, RotateCcw } from "
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
 import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 import {
   DAILY_TASK_STATUS_LABELS,
   DAILY_TASK_STATUS_COLORS,
@@ -69,7 +70,7 @@ export function AdminDailyActivityPage({
     try {
       const params = new URLSearchParams({ start_date: filters.start_date, end_date: filters.end_date })
       if (lockedDepartment) params.set("department", lockedDepartment)
-      const res = await fetch(`/api/admin/hr/reports/daily-activity?${params}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/hr/reports/daily-activity?${params}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load reports")
       setReports(payload.reports || [])
@@ -88,7 +89,7 @@ export function AdminDailyActivityPage({
   async function toggleAck(report: DailyReport) {
     setAcking(report.id)
     try {
-      const res = await fetch(`/api/admin/hr/reports/daily-activity/${report.id}/acknowledge`, {
+      const res = await apiFetch(`/api/admin/hr/reports/daily-activity/${report.id}/acknowledge`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ acknowledged: !report.acknowledged }),

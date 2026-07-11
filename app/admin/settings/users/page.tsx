@@ -19,6 +19,7 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent } from "@/components/ui/card"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("settings-users")
 
@@ -66,7 +67,7 @@ export default function UsersPage() {
       if (formData.role === "admin" && formData.admin_routes.length === 0) {
         throw new Error("Admin role requires at least one domain")
       }
-      const response = await fetch("/api/admin/users/role", {
+      const response = await apiFetch("/api/admin/users/role", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -220,7 +221,7 @@ export default function UsersPage() {
   async function handleAddUserToRole() {
     if (!userToAdd || roleFilter === "all") return
     try {
-      const response = await fetch("/api/admin/users/role", {
+      const response = await apiFetch("/api/admin/users/role", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ targetUserId: userToAdd, role: roleFilter }),

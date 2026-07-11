@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { apiFetch } from "@/lib/api-client"
 import {
   Dialog,
   DialogContent,
@@ -77,10 +78,10 @@ export default function PeerFeedbackPage() {
     setIsLoading(true)
     try {
       const [profilesRes, cyclesRes, myFeedbackRes, receivedRes] = await Promise.all([
-        fetch("/api/hr/profiles?all=true"),
-        fetch("/api/hr/performance/cycles"),
-        fetch("/api/hr/performance/peer-feedback?as_reviewer=true"),
-        fetch("/api/hr/performance/peer-feedback"),
+        apiFetch("/api/hr/profiles?all=true"),
+        apiFetch("/api/hr/performance/cycles"),
+        apiFetch("/api/hr/performance/peer-feedback?as_reviewer=true"),
+        apiFetch("/api/hr/performance/peer-feedback"),
       ])
       const [profilesData, cyclesData, myFeedbackData, receivedData] = await Promise.all([
         profilesRes.json().catch(() => ({})),
@@ -133,7 +134,7 @@ export default function PeerFeedbackPage() {
 
     setIsSubmitting(true)
     try {
-      const response = await fetch("/api/hr/performance/peer-feedback", {
+      const response = await apiFetch("/api/hr/performance/peer-feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

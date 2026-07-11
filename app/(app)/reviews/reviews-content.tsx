@@ -20,6 +20,7 @@ import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-tabl
 import { StatCard } from "@/components/ui/stat-card"
 import { formatName } from "@/lib/utils"
 import { formatWATDate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 interface ReviewsContentProps {
   initialReviews: Review[]
@@ -159,7 +160,7 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
     if (!selectedReview) return
     setIsSubmitting(true)
     try {
-      const response = await fetch("/api/hr/performance/reviews", {
+      const response = await apiFetch("/api/hr/performance/reviews", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

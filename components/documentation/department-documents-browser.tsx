@@ -60,6 +60,7 @@ import { toast } from "sonner"
 import JSZip from "jszip"
 import { saveAs } from "file-saver"
 import { toLocalISODate, formatWATDateTime } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 interface DepartmentDocumentsBrowserProps {
   initialPath?: string
@@ -270,7 +271,7 @@ export function DepartmentDocumentsBrowser({
         if (lockedDepartment) params.set("department", lockedDepartment)
         if (search) params.set("search", search)
 
-        const response = await fetch(`/api/onedrive?${params.toString()}`)
+        const response = await apiFetch(`/api/onedrive?${params.toString()}`)
         const data = await response.json()
 
         if (!response.ok) {
@@ -350,7 +351,7 @@ export function DepartmentDocumentsBrowser({
       params.set("path", path)
       params.set("accessMode", accessMode)
       if (lockedDepartment) params.set("department", lockedDepartment)
-      const response = await fetch(`/api/onedrive?${params.toString()}`)
+      const response = await apiFetch(`/api/onedrive?${params.toString()}`)
       const payload = (await response.json().catch(() => null)) as { data?: FileItem[]; error?: string } | null
       if (!response.ok) {
         throw new Error(payload?.error || "Failed to load folder contents")
@@ -402,7 +403,7 @@ export function DepartmentDocumentsBrowser({
       params.set("accessMode", accessMode)
       if (lockedDepartment) params.set("department", lockedDepartment)
       params.set("raw", "true")
-      const blobResponse = await fetch(`/api/onedrive/download?${params.toString()}`)
+      const blobResponse = await apiFetch(`/api/onedrive/download?${params.toString()}`)
       if (!blobResponse.ok) {
         throw new Error("Failed to download file content")
       }
@@ -542,7 +543,7 @@ export function DepartmentDocumentsBrowser({
       if (lockedDepartment) formData.set("department", lockedDepartment)
       formData.set("name", basename(folderPath))
 
-      const response = await fetch("/api/onedrive", {
+      const response = await apiFetch("/api/onedrive", {
         method: "POST",
         body: formData,
       })
@@ -721,7 +722,7 @@ export function DepartmentDocumentsBrowser({
 
     setIsMutating(true)
     try {
-      const response = await fetch("/api/onedrive", {
+      const response = await apiFetch("/api/onedrive", {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -761,7 +762,7 @@ export function DepartmentDocumentsBrowser({
       params.set("accessMode", accessMode)
       if (lockedDepartment) params.set("department", lockedDepartment)
 
-      const response = await fetch(`/api/onedrive?${params.toString()}`, {
+      const response = await apiFetch(`/api/onedrive?${params.toString()}`, {
         method: "DELETE",
       })
 

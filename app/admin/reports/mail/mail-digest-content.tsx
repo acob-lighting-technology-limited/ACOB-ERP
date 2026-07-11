@@ -30,6 +30,7 @@ import {
 } from "lucide-react"
 import { getCurrentOfficeWeek } from "@/lib/meeting-week"
 import { toLocalISODate, formatWATDateTime } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 type Employee = {
   id: string
@@ -116,7 +117,7 @@ export function MailDigestContent({ employees, currentUser }: Props) {
   // ── Fetch active schedules ──────────────────────────────────────────────────
   const fetchSchedules = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/reports/digest-schedules", { cache: "no-store" })
+      const res = await apiFetch("/api/admin/reports/digest-schedules", { cache: "no-store" })
       if (res.ok) {
         const json = await res.json()
         setActiveSchedules((json.data || []) as DigestSchedule[])
@@ -292,7 +293,7 @@ export function MailDigestContent({ employees, currentUser }: Props) {
         return
       }
 
-      const res = await fetch("/api/admin/reports/digest-schedules", {
+      const res = await apiFetch("/api/admin/reports/digest-schedules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -333,7 +334,7 @@ export function MailDigestContent({ employees, currentUser }: Props) {
       nextRun.setDate(now.getDate() + daysUntil)
       nextRun.setHours(parseInt(h, 10), parseInt(m, 10), 0, 0)
 
-      const res = await fetch("/api/admin/reports/digest-schedules", {
+      const res = await apiFetch("/api/admin/reports/digest-schedules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -418,7 +419,7 @@ export function MailDigestContent({ employees, currentUser }: Props) {
   }
 
   const deactivateSchedule = async (id: string) => {
-    const res = await fetch(`/api/admin/reports/digest-schedules/${id}`, { method: "PATCH" })
+    const res = await apiFetch(`/api/admin/reports/digest-schedules/${id}`, { method: "PATCH" })
     if (!res.ok) {
       toast.error("Failed to deactivate schedule")
     } else {

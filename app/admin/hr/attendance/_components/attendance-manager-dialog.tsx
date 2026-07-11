@@ -22,6 +22,7 @@ import { toast } from "sonner"
 import { toLocalISODate } from "@/lib/hr/attendance-utils"
 import { formatWATDate } from "@/lib/utils/date"
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("attendance-manager-dialog")
 
@@ -404,7 +405,7 @@ function ExemptionTab({
 
   const loadEntries = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/hr/attendance/exemptions?list=1", { cache: "no-store" })
+      const res = await apiFetch("/api/admin/hr/attendance/exemptions?list=1", { cache: "no-store" })
       const payload = (await res.json().catch(() => null)) as { data?: ExemptionEntry[] } | null
       setEntries(res.ok ? (payload?.data ?? []) : [])
     } catch {
@@ -436,7 +437,7 @@ function ExemptionTab({
         }
         // Additive — adds a window per selected employee without touching their others.
         for (const uid of selectedIds) {
-          const res = await fetch("/api/admin/hr/attendance/exemptions", {
+          const res = await apiFetch("/api/admin/hr/attendance/exemptions", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ user_id: uid, start_date: startDate, end_date: endDate, reason: reason.trim() }),
@@ -466,7 +467,7 @@ function ExemptionTab({
         body.weeks = weeks
       }
       if (mode === "monthly") body.months = months
-      const res = await fetch("/api/admin/hr/attendance/exemptions/bulk", {
+      const res = await apiFetch("/api/admin/hr/attendance/exemptions/bulk", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -496,10 +497,10 @@ function ExemptionTab({
     try {
       const res =
         entry.kind === "period" && entry.id
-          ? await fetch(`/api/admin/hr/attendance/exemptions?period_id=${encodeURIComponent(entry.id)}`, {
+          ? await apiFetch(`/api/admin/hr/attendance/exemptions?period_id=${encodeURIComponent(entry.id)}`, {
               method: "DELETE",
             })
-          : await fetch("/api/admin/hr/attendance/exemptions/bulk", {
+          : await apiFetch("/api/admin/hr/attendance/exemptions/bulk", {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ user_ids: [entry.user_id], mode: "off" }),
@@ -534,7 +535,7 @@ function ExemptionTab({
     setEditSaving(true)
     try {
       // Replace just this window: remove the old period, add the new one (additive).
-      const del = await fetch(`/api/admin/hr/attendance/exemptions?period_id=${encodeURIComponent(editing.id)}`, {
+      const del = await apiFetch(`/api/admin/hr/attendance/exemptions?period_id=${encodeURIComponent(editing.id)}`, {
         method: "DELETE",
       })
       if (!del.ok) {
@@ -542,7 +543,7 @@ function ExemptionTab({
         toast.error(payload?.error || "Failed to update exemption")
         return
       }
-      const res = await fetch("/api/admin/hr/attendance/exemptions", {
+      const res = await apiFetch("/api/admin/hr/attendance/exemptions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ user_id: editing.user_id, start_date: eStart, end_date: eEnd, reason: eReason.trim() }),
@@ -817,7 +818,7 @@ function HolidayTab({ onChanged }: { onChanged: () => void }) {
 
   const loadAll = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/hr/attendance/holidays", { cache: "no-store" })
+      const res = await apiFetch("/api/admin/hr/attendance/holidays", { cache: "no-store" })
       const payload = (await res.json().catch(() => null)) as { data?: Holiday[] } | null
       setAllHolidays(res.ok ? (payload?.data ?? []) : [])
     } catch {
@@ -835,7 +836,7 @@ function HolidayTab({ onChanged }: { onChanged: () => void }) {
       return
     }
     setSaving(true)
-    const res = await fetch("/api/admin/hr/attendance/holidays", {
+    const res = await apiFetch("/api/admin/hr/attendance/holidays", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -861,7 +862,7 @@ function HolidayTab({ onChanged }: { onChanged: () => void }) {
   async function removeHoliday(holidayDate: string) {
     setBusyDate(holidayDate)
     try {
-      const res = await fetch(`/api/admin/hr/attendance/holidays?holiday_date=${encodeURIComponent(holidayDate)}`, {
+      const res = await apiFetch(`/api/admin/hr/attendance/holidays?holiday_date=${encodeURIComponent(holidayDate)}`, {
         method: "DELETE",
       })
       const payload = (await res.json().catch(() => null)) as { error?: string } | null
@@ -1013,6 +1014,14 @@ function HolidayTab({ onChanged }: { onChanged: () => void }) {
 // Tab: Manual day-records (OOS / Waiver)
 // ────────────────────────────────────────────────────────────
 
+interface OpenOosPeriod {
+  id: string
+  user_id: string
+  user_name: string
+  start_date: string
+  reason: string | null
+}
+
 function ManualRecordsTab({
   reports,
   onDone,
@@ -1022,6 +1031,7 @@ function ManualRecordsTab({
   sendWaiverReason,
   placeholder,
   badge,
+  oosModes,
 }: {
   reports: AttendanceReport[]
   onDone: () => void
@@ -1031,9 +1041,12 @@ function ManualRecordsTab({
   sendWaiverReason?: boolean
   placeholder: string
   badge: string
+  oosModes?: boolean
 }) {
   const [search, setSearch] = useState("")
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [mode, setMode] = useState<"range" | "monthly" | "indefinite">("range")
+  const [month, setMonth] = useState(() => toLocalISODate().slice(0, 7))
   const [startDate, setStartDate] = useState(toLocalISODate())
   const [endDate, setEndDate] = useState(toLocalISODate())
   const [comment, setComment] = useState("")
@@ -1043,7 +1056,13 @@ function ManualRecordsTab({
   const [pastView, setPastView] = useState(false)
   const [confirmGroup, setConfirmGroup] = useState<EntryGroup | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [confirmOverride, setConfirmOverride] = useState<number | null>(null)
+  // When set: a punch conflict was detected — incomplete days will be overridden, complete days skipped.
+  const [confirmOverride, setConfirmOverride] = useState<{ incomplete: number; complete: number } | null>(null)
+
+  // Indefinite OOS directives (open-ended) — only used when oosModes is set.
+  const [openOos, setOpenOos] = useState<OpenOosPeriod[] | null>(null)
+  const [stopping, setStopping] = useState<OpenOosPeriod | null>(null)
+  const [stopBusy, setStopBusy] = useState(false)
 
   // Edit modal state
   const [editing, setEditing] = useState<EntryGroup | null>(null)
@@ -1054,7 +1073,7 @@ function ManualRecordsTab({
 
   const loadEntries = useCallback(async () => {
     try {
-      const res = await fetch(`/api/admin/hr/attendance/records/manual?status=${status}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/hr/attendance/records/manual?status=${status}`, { cache: "no-store" })
       const payload = (await res.json().catch(() => null)) as { data?: ManualRecord[] } | null
       setEntries(res.ok ? groupRecords(payload?.data ?? []) : [])
     } catch {
@@ -1062,12 +1081,32 @@ function ManualRecordsTab({
     }
   }, [status])
 
+  const loadOpenOos = useCallback(async () => {
+    if (!oosModes) return
+    try {
+      const res = await apiFetch("/api/admin/hr/attendance/oos-periods", { cache: "no-store" })
+      const payload = (await res.json().catch(() => null)) as { data?: OpenOosPeriod[] } | null
+      setOpenOos(res.ok ? (payload?.data ?? []) : [])
+    } catch {
+      setOpenOos([])
+    }
+  }, [oosModes])
+
   useEffect(() => {
     void loadEntries()
-  }, [loadEntries])
+    void loadOpenOos()
+  }, [loadEntries, loadOpenOos])
+
+  /** First and last calendar day of a YYYY-MM month (weekends are skipped server-side). */
+  function monthBounds(ym: string): { start: string; end: string } {
+    const [y, m] = ym.split("-").map(Number)
+    const start = `${ym}-01`
+    const last = new Date(Date.UTC(y, m, 0)).getUTCDate()
+    return { start, end: `${ym}-${String(last).padStart(2, "0")}` }
+  }
 
   async function deleteIds(ids: string[]): Promise<boolean> {
-    const res = await fetch("/api/admin/hr/attendance/records/bulk", {
+    const res = await apiFetch("/api/admin/hr/attendance/records/bulk", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ids }),
@@ -1085,8 +1124,8 @@ function ManualRecordsTab({
     start: string,
     end: string,
     commentText: string
-  ): Promise<{ created: number; overrode: number; overridden: number } | null> {
-    const res = await fetch("/api/admin/hr/attendance/records/bulk", {
+  ): Promise<{ created: number; overrode: number; overridden: number; skipped: number } | null> {
+    const res = await apiFetch("/api/admin/hr/attendance/records/bulk", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -1102,6 +1141,7 @@ function ManualRecordsTab({
       created?: number
       overrode?: number
       overridden?: number
+      skipped?: number
     } | null
     if (!res.ok) {
       toast.error(payload?.error || "Failed to apply")
@@ -1111,53 +1151,87 @@ function ManualRecordsTab({
       created: payload?.created ?? 0,
       overrode: payload?.overrode ?? 0,
       overridden: payload?.overridden ?? 0,
+      skipped: payload?.skipped ?? 0,
     }
   }
 
-  /** Count days in the range (for the selected employees) that already have a clock-in. */
-  async function countPunchedDays(userIds: string[], start: string, end: string): Promise<number> {
+  /**
+   * Split the selected employees' days in the range into fully-present (clock-in AND
+   * clock-out) vs incomplete (a punch but no complete day). OOS skips the former and
+   * overrides the latter; waiver overrides both.
+   */
+  async function countPunched(
+    userIds: string[],
+    start: string,
+    end: string
+  ): Promise<{ complete: number; incomplete: number }> {
     try {
       const qs = new URLSearchParams({ start_date: start, end_date: end })
-      const res = await fetch(`/api/admin/hr/attendance/records?${qs.toString()}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/hr/attendance/records?${qs.toString()}`, { cache: "no-store" })
       const payload = (await res.json().catch(() => null)) as {
         records?: Array<{ user_id: string; clock_in: string | null; clock_out: string | null }>
       } | null
       const sel = new Set(userIds)
-      return (payload?.records ?? []).filter((r) => sel.has(r.user_id) && (r.clock_in || r.clock_out)).length
+      let complete = 0
+      let incomplete = 0
+      for (const r of payload?.records ?? []) {
+        if (!sel.has(r.user_id)) continue
+        if (r.clock_in && r.clock_out) complete++
+        else if (r.clock_in || r.clock_out) incomplete++
+      }
+      return { complete, incomplete }
     } catch {
-      return 0
+      return { complete: 0, incomplete: 0 }
     }
   }
 
   async function save() {
     if (selectedIds.length === 0) return toast.error("Select at least one employee")
-    if (!startDate || !endDate || endDate < startDate) return toast.error("Set a valid date range")
     if (!comment.trim()) return toast.error("A comment is required")
 
-    // Warn first if any selected day already has a clock-in (data stays safe either way).
-    setSaving(true)
-    const punched = await countPunchedDays(selectedIds, startDate, endDate)
-    setSaving(false)
-    if (punched > 0) {
-      setConfirmOverride(punched)
-      return
+    if (oosModes && mode === "indefinite") {
+      if (!startDate) return toast.error("Choose a start date")
+      const todayIso = toLocalISODate()
+      setSaving(true)
+      const { complete, incomplete } = await countPunched(selectedIds, startDate, todayIso)
+      setSaving(false)
+      if (incomplete > 0) return setConfirmOverride({ incomplete, complete })
+      return applyIndefinite()
     }
-    await doApply()
+
+    const start = oosModes && mode === "monthly" ? monthBounds(month).start : startDate
+    const end = oosModes && mode === "monthly" ? monthBounds(month).end : endDate
+    if (!start || !end || end < start) return toast.error("Set a valid date range")
+
+    setSaving(true)
+    const { complete, incomplete } = await countPunched(selectedIds, start, end)
+    setSaving(false)
+    // OOS only overrides incomplete days (fully-present days are skipped); waiver overrides all.
+    const conflicts = status === "out_of_station" ? incomplete : complete + incomplete
+    if (conflicts > 0) return setConfirmOverride({ incomplete, complete })
+    await doApply(start, end)
   }
 
-  async function doApply() {
+  /** Dispatch the correct apply after the override confirm. */
+  async function proceed() {
+    setConfirmOverride(null)
+    if (oosModes && mode === "indefinite") return applyIndefinite()
+    const start = oosModes && mode === "monthly" ? monthBounds(month).start : startDate
+    const end = oosModes && mode === "monthly" ? monthBounds(month).end : endDate
+    await doApply(start, end)
+  }
+
+  async function doApply(start: string, end: string) {
     setConfirmOverride(null)
     setSaving(true)
     try {
-      const result = await postRange(selectedIds, startDate, endDate, comment.trim())
+      const result = await postRange(selectedIds, start, end, comment.trim())
       if (!result) return
-      if (result.overridden > 0) {
-        toast.warning(
-          `Applied — ${result.overridden} day(s) with existing attendance were overridden. Removing this entry restores them.`
-        )
-      } else {
-        toast.success(`Applied for ${selectedIds.length} employee(s)`)
-      }
+      const parts: string[] = []
+      if (result.overridden > 0) parts.push(`${result.overridden} incomplete day(s) overridden (restorable)`)
+      if (result.skipped > 0) parts.push(`${result.skipped} fully-present day(s) skipped`)
+      if (parts.length > 0) toast.warning(`Applied — ${parts.join("; ")}.`)
+      else toast.success(`Applied for ${selectedIds.length} employee(s)`)
       setSelectedIds([])
       setComment("")
       void loadEntries()
@@ -1167,6 +1241,58 @@ function ManualRecordsTab({
       toast.error("Failed to apply")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function applyIndefinite() {
+    setConfirmOverride(null)
+    setSaving(true)
+    try {
+      const res = await apiFetch("/api/admin/hr/attendance/oos-periods", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_ids: selectedIds, start_date: startDate, reason: comment.trim() }),
+      })
+      const payload = (await res.json().catch(() => null)) as { error?: string; skipped?: number } | null
+      if (!res.ok) {
+        toast.error(payload?.error || "Failed to apply indefinite OOS")
+        return
+      }
+      toast.success(
+        `Indefinite OOS applied to ${selectedIds.length} employee(s)${payload?.skipped ? ` — ${payload.skipped} fully-present day(s) skipped` : ""}`
+      )
+      setSelectedIds([])
+      setComment("")
+      void loadEntries()
+      void loadOpenOos()
+      onDone()
+    } catch (err) {
+      log.error({ err: String(err) }, "indefinite OOS save failed")
+      toast.error("Failed to apply indefinite OOS")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function stopIndefinite() {
+    if (!stopping) return
+    setStopBusy(true)
+    try {
+      const res = await apiFetch(`/api/admin/hr/attendance/oos-periods?id=${encodeURIComponent(stopping.id)}`, {
+        method: "DELETE",
+      })
+      const payload = (await res.json().catch(() => null)) as { error?: string } | null
+      if (!res.ok) {
+        toast.error(payload?.error || "Failed to stop indefinite OOS")
+        return
+      }
+      toast.success("Indefinite OOS stopped — days up to today are kept")
+      setStopping(null)
+      void loadOpenOos()
+      void loadEntries()
+      onDone()
+    } finally {
+      setStopBusy(false)
     }
   }
 
@@ -1227,21 +1353,57 @@ function ManualRecordsTab({
         search={search}
         onSearchChange={setSearch}
       />
-      <div className="grid grid-cols-2 gap-3">
+      {oosModes && (
+        <div className="space-y-2">
+          <Label>Mode</Label>
+          <Select value={mode} onValueChange={(v) => setMode(v as typeof mode)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="range">Custom date range</SelectItem>
+              <SelectItem value="monthly">Whole month</SelectItem>
+              <SelectItem value="indefinite">Indefinite (until stopped)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {oosModes && mode === "monthly" ? (
+        <div className="space-y-1">
+          <Label>Month</Label>
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            className="border-input bg-background rounded-md border px-3 py-1.5 text-sm"
+          />
+        </div>
+      ) : oosModes && mode === "indefinite" ? (
         <div className="space-y-1">
           <Label>Start Date</Label>
           <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          <p className="text-muted-foreground text-xs">
+            Applies from this date onward and keeps extending each workday until you stop it.
+          </p>
         </div>
-        <div className="space-y-1">
-          <Label>End Date</Label>
-          <Input
-            type="date"
-            min={startDate || undefined}
-            value={endDate}
-            onChange={(e) => setEndDate(e.target.value)}
-          />
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <Label>Start Date</Label>
+            <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+          </div>
+          <div className="space-y-1">
+            <Label>End Date</Label>
+            <Input
+              type="date"
+              min={startDate || undefined}
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+            />
+          </div>
         </div>
-      </div>
+      )}
       <div className="space-y-1">
         <Label>
           Comment <span className="text-destructive">*</span>
@@ -1249,8 +1411,18 @@ function ManualRecordsTab({
         <Textarea value={comment} onChange={(e) => setComment(e.target.value)} placeholder={placeholder} rows={2} />
       </div>
       <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-        ⚠ Days where the employee already clocked in <strong>will be overridden</strong>. Their clock-ins are preserved
-        — removing this entry restores the original attendance.
+        {status === "out_of_station" ? (
+          <>
+            ⚠ Days the employee was <strong>fully present</strong> (clocked in and out) are skipped — you can&apos;t be
+            out of station and in the office. A day with a clock-in but <strong>no clock-out</strong> (left mid-day) is
+            overridden; the punch is kept, so removing this entry restores it.
+          </>
+        ) : (
+          <>
+            ⚠ Days where the employee already clocked in <strong>will be overridden</strong>. Their clock-ins are
+            preserved — removing this entry restores the original attendance.
+          </>
+        )}
       </p>
       <Button
         type="button"
@@ -1260,6 +1432,26 @@ function ManualRecordsTab({
       >
         {saving ? "Saving…" : applyLabel}
       </Button>
+
+      {oosModes && (openOos?.length ?? 0) > 0 && (
+        <EntriesPanel
+          title="Active indefinite OOS"
+          loading={openOos === null}
+          count={openOos?.length ?? 0}
+          emptyText=""
+        >
+          {(openOos ?? []).map((p) => (
+            <EntryRow
+              key={p.id}
+              primary={p.user_name}
+              badge={`Indefinite • from ${formatDay(p.start_date)}`}
+              comment={p.reason}
+              onDelete={() => setStopping(p)}
+              busy={false}
+            />
+          ))}
+        </EntriesPanel>
+      )}
 
       <div className="mt-2 flex items-center gap-2">
         <Button type="button" size="sm" variant={pastView ? "outline" : "default"} onClick={() => setPastView(false)}>
@@ -1348,12 +1540,28 @@ function ManualRecordsTab({
         title="Some days have clock-ins"
         description={
           confirmOverride
-            ? `${confirmOverride} of these day(s) already have a clock-in. Applying ${badge} will override them. Their attendance is kept and restored if you remove this entry. Proceed?`
+            ? status === "out_of_station"
+              ? `${confirmOverride.incomplete} day(s) have a clock-in but no clock-out (looks like they left mid-day) — applying OOS will override those.${confirmOverride.complete > 0 ? ` ${confirmOverride.complete} fully-present day(s) are skipped.` : ""} Punches are kept and restored if you remove this entry. Proceed?`
+              : `${confirmOverride.complete + confirmOverride.incomplete} of these day(s) already have a clock-in. Applying ${badge} will override them. Their attendance is kept and restored if you remove this entry. Proceed?`
             : undefined
         }
         confirmLabel="Proceed"
-        onConfirm={() => void doApply()}
+        onConfirm={() => void proceed()}
         busy={saving}
+      />
+
+      <ConfirmDialog
+        open={stopping !== null}
+        onOpenChange={(o) => !o && setStopping(null)}
+        title="Stop indefinite OOS?"
+        description={
+          stopping
+            ? `This stops ${stopping.user_name}'s indefinite OOS at today. Every OOS day up to today is kept; no new OOS days are added going forward.`
+            : undefined
+        }
+        confirmLabel="Stop"
+        onConfirm={() => void stopIndefinite()}
+        busy={stopBusy}
       />
     </div>
   )
@@ -1388,7 +1596,7 @@ function daysInclusive(start: string, end: string): number | null {
 
 async function fetchLeaveTypeOptions(userId: string): Promise<LeaveTypeOption[]> {
   try {
-    const res = await fetch(`/api/admin/hr/attendance/leave/balances?user_id=${encodeURIComponent(userId)}`, {
+    const res = await apiFetch(`/api/admin/hr/attendance/leave/balances?user_id=${encodeURIComponent(userId)}`, {
       cache: "no-store",
     })
     const payload = (await res.json().catch(() => null)) as {
@@ -1440,7 +1648,7 @@ function LeaveTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: ()
 
   const loadEntries = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/hr/attendance/leave/manual", { cache: "no-store" })
+      const res = await apiFetch("/api/admin/hr/attendance/leave/manual", { cache: "no-store" })
       const payload = (await res.json().catch(() => null)) as { data?: ManualLeave[] } | null
       setEntries(res.ok ? (payload?.data ?? []) : [])
     } catch {
@@ -1489,7 +1697,7 @@ function LeaveTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: ()
     }
     setSaving(true)
     try {
-      const res = await fetch("/api/admin/hr/attendance/leave/manual", {
+      const res = await apiFetch("/api/admin/hr/attendance/leave/manual", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1541,7 +1749,7 @@ function LeaveTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: ()
     setEditSaving(true)
     try {
       // Edit = revoke old grant (restores balance) then create the new one.
-      const del = await fetch(`/api/admin/hr/attendance/leave/manual?id=${encodeURIComponent(editing.id)}`, {
+      const del = await apiFetch(`/api/admin/hr/attendance/leave/manual?id=${encodeURIComponent(editing.id)}`, {
         method: "DELETE",
       })
       if (!del.ok) {
@@ -1549,7 +1757,7 @@ function LeaveTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: ()
         toast.error(payload?.error || "Failed to update leave")
         return
       }
-      const res = await fetch("/api/admin/hr/attendance/leave/manual", {
+      const res = await apiFetch("/api/admin/hr/attendance/leave/manual", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -1578,7 +1786,7 @@ function LeaveTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: ()
     if (!confirmEntry) return
     setDeleting(true)
     try {
-      const res = await fetch(`/api/admin/hr/attendance/leave/manual?id=${encodeURIComponent(confirmEntry.id)}`, {
+      const res = await apiFetch(`/api/admin/hr/attendance/leave/manual?id=${encodeURIComponent(confirmEntry.id)}`, {
         method: "DELETE",
       })
       const payload = (await res.json().catch(() => null)) as { error?: string } | null
@@ -1851,6 +2059,7 @@ export function AttendanceManagerDialog({
               onDone={onReportChanged}
               status="out_of_station"
               badge="OOS"
+              oosModes
               applyLabel="Apply OOS"
               placeholder="e.g. Field assignment to Lagos branch"
               intro={

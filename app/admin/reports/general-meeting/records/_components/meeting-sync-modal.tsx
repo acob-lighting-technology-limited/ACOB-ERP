@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import { MeetingSourceDialog, type MeetingSource } from "./meeting-source-dialog"
+import { apiFetch } from "@/lib/api-client"
 
 type SourceRow = MeetingSource & {
   last_synced_at: string | null
@@ -93,7 +94,7 @@ function MeetingSendPanel({ source, occurrences }: { source: SourceRow; occurren
         body.week = week
         body.year = year
       }
-      const res = await fetch("/api/reports/meeting-artifacts/send", {
+      const res = await apiFetch("/api/reports/meeting-artifacts/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -122,7 +123,9 @@ function MeetingSendPanel({ source, occurrences }: { source: SourceRow; occurren
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="latest">Latest{occurrences[0] ? ` (${formatOccurrence(occurrences[0])})` : ""}</SelectItem>
+              <SelectItem value="latest">
+                Latest{occurrences[0] ? ` (${formatOccurrence(occurrences[0])})` : ""}
+              </SelectItem>
               {occurrences.map((o) => (
                 <SelectItem key={`${o.year}-${o.week}`} value={`${o.year}-${o.week}`}>
                   {formatOccurrence(o)}
@@ -165,7 +168,7 @@ export function MeetingSyncModal({ open, onOpenChange }: Props) {
     queryKey: ["meeting-artifact-sources"],
     enabled: open,
     queryFn: async (): Promise<SourceRow[]> => {
-      const res = await fetch("/api/reports/meeting-artifacts/sources")
+      const res = await apiFetch("/api/reports/meeting-artifacts/sources")
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Failed to load meeting sync config")
       return payload.data || []
@@ -177,8 +180,8 @@ export function MeetingSyncModal({ open, onOpenChange }: Props) {
     enabled: open,
     queryFn: async (): Promise<DocRow[]> => {
       const [att, tr] = await Promise.all([
-        fetch("/api/reports/meeting-week-documents?documentType=attendance&currentOnly=true").then((r) => r.json()),
-        fetch("/api/reports/meeting-week-documents?documentType=transcript&currentOnly=true").then((r) => r.json()),
+        apiFetch("/api/reports/meeting-week-documents?documentType=attendance&currentOnly=true").then((r) => r.json()),
+        apiFetch("/api/reports/meeting-week-documents?documentType=transcript&currentOnly=true").then((r) => r.json()),
       ])
       return [...(att.data || []), ...(tr.data || [])]
     },
@@ -196,7 +199,7 @@ export function MeetingSyncModal({ open, onOpenChange }: Props) {
     setIsSyncing(true)
     const toastId = toast.loading("Running meeting sync...")
     try {
-      const res = await fetch("/api/reports/meeting-artifacts/sync", { method: "POST" })
+      const res = await apiFetch("/api/reports/meeting-artifacts/sync", { method: "POST" })
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Sync failed")
       const imported = (payload?.data?.results || []).reduce(
@@ -218,7 +221,7 @@ export function MeetingSyncModal({ open, onOpenChange }: Props) {
     if (!window.confirm(`Stop watching "${row.label}"? Stored history is kept.`)) return
     setDeletingId(row.id)
     try {
-      const res = await fetch(`/api/reports/meeting-artifacts/sources?id=${row.id}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/reports/meeting-artifacts/sources?id=${row.id}`, { method: "DELETE" })
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Delete failed")
       toast.success("Meeting sync removed")
@@ -299,7 +302,9 @@ export function MeetingSyncModal({ open, onOpenChange }: Props) {
                     <Users className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
                     <div className="flex flex-wrap gap-1">
                       {row.recipients.length === 0 ? (
-                        <span className="text-muted-foreground text-xs">No recipients — add some to enable emailing</span>
+                        <span className="text-muted-foreground text-xs">
+                          No recipients — add some to enable emailing
+                        </span>
                       ) : (
                         row.recipients.map((email) => (
                           <Badge key={email} variant="secondary" className="text-xs font-normal">

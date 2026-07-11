@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { apiFetch } from "@/lib/api-client"
 import {
   Dialog,
   DialogContent,
@@ -133,7 +134,7 @@ export function AdminCompetenciesPage({ backLinkHref }: { backLinkHref?: string 
     setIsLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/hr/performance/competencies")
+      const res = await apiFetch("/api/hr/performance/competencies")
       const data = (await res.json().catch(() => ({}))) as { data?: Competency[]; error?: string }
       if (!res.ok) {
         throw new Error(data.error || "Failed to load competencies")
@@ -189,7 +190,7 @@ export function AdminCompetenciesPage({ backLinkHref }: { backLinkHref?: string 
     }
     setIsSubmitting(true)
     try {
-      const res = await fetch("/api/hr/performance/competencies", {
+      const res = await apiFetch("/api/hr/performance/competencies", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -220,7 +221,7 @@ export function AdminCompetenciesPage({ backLinkHref }: { backLinkHref?: string 
     if (!selected) return
     setIsSubmitting(true)
     try {
-      const res = await fetch("/api/hr/performance/competencies", {
+      const res = await apiFetch("/api/hr/performance/competencies", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -248,7 +249,7 @@ export function AdminCompetenciesPage({ backLinkHref }: { backLinkHref?: string 
 
   async function handleToggleActive(competency: Competency) {
     try {
-      const res = await fetch("/api/hr/performance/competencies", {
+      const res = await apiFetch("/api/hr/performance/competencies", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: competency.id, is_active: !competency.is_active }),
@@ -268,7 +269,7 @@ export function AdminCompetenciesPage({ backLinkHref }: { backLinkHref?: string 
     if (!selected) return
     setIsSubmitting(true)
     try {
-      const res = await fetch(`/api/hr/performance/competencies?id=${selected.id}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/hr/performance/competencies?id=${selected.id}`, { method: "DELETE" })
       const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
       if (!res.ok) {
         throw new Error(data.error || "Failed to delete competency")

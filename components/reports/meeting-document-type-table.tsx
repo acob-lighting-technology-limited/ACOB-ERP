@@ -28,6 +28,7 @@ import { createClient } from "@/lib/supabase/client"
 import { getCurrentOfficeWeek } from "@/lib/meeting-week"
 import { buildMeetingDocumentFileName } from "@/lib/reports/meeting-date"
 import { REPORT_DOC_MAX_SIZE_BYTES, formatLimitMb } from "@/lib/reports/document-upload-limits"
+import { apiFetch } from "@/lib/api-client"
 
 type DocumentType = "minutes"
 
@@ -106,7 +107,9 @@ export function MeetingDocumentTypeTable({
   } = useQuery({
     queryKey: ["meeting-doc-table", documentType],
     queryFn: async (): Promise<MeetingDocument[]> => {
-      const response = await fetch(`/api/reports/meeting-week-documents?documentType=${documentType}&currentOnly=true`)
+      const response = await apiFetch(
+        `/api/reports/meeting-week-documents?documentType=${documentType}&currentOnly=true`
+      )
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || "Failed to fetch documents")
       return payload.data || []
@@ -237,7 +240,7 @@ export function MeetingDocumentTypeTable({
         }, 1200)
       }
 
-      const response = await fetch("/api/reports/meeting-week-documents", { method: "POST", body: formData })
+      const response = await apiFetch("/api/reports/meeting-week-documents", { method: "POST", body: formData })
       if (phaseTimer) clearTimeout(phaseTimer)
       setUploadPhase("uploading")
       const payload = await response.json()
@@ -272,7 +275,7 @@ export function MeetingDocumentTypeTable({
       return
     }
     try {
-      const response = await fetch(`/api/reports/meeting-week-documents?id=${id}`, { method: "DELETE" })
+      const response = await apiFetch(`/api/reports/meeting-week-documents?id=${id}`, { method: "DELETE" })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || "Delete failed")
       toast.success("Document deleted")

@@ -17,6 +17,7 @@ import { toast } from "sonner"
 import { FormFieldGroup } from "@/components/ui/patterns"
 import type { QueryClient } from "@tanstack/react-query"
 import { toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 interface Supplier {
   id: string
@@ -52,7 +53,7 @@ interface PurchaseOrderFormDialogProps {
 }
 
 async function fetchNewPOFormData(): Promise<NewPOFormData> {
-  const res = await fetch("/api/admin/purchasing/orders/form-data", { cache: "no-store" })
+  const res = await apiFetch("/api/admin/purchasing/orders/form-data", { cache: "no-store" })
   if (!res.ok) return { suppliers: [], products: [] }
   const json = await res.json()
   return { suppliers: json.suppliers || [], products: json.products || [] }
@@ -127,7 +128,7 @@ export function PurchaseOrderFormDialog({ open, onOpenChange, queryClient }: Pur
 
     setSaving(true)
     try {
-      const res = await fetch("/api/admin/purchasing/orders", {
+      const res = await apiFetch("/api/admin/purchasing/orders", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -13,6 +13,7 @@ import { toast } from "sonner"
 import { FormFieldGroup } from "@/components/ui/patterns"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import type { QueryClient } from "@tanstack/react-query"
+import { apiFetch } from "@/lib/api-client"
 
 interface User {
   id: string
@@ -82,8 +83,8 @@ interface CreateReviewDialogProps {
  */
 async function fetchPerformanceCreateData(): Promise<PerformanceCreateData> {
   const [employeesRes, cyclesRes] = await Promise.all([
-    fetch("/api/hr/performance/employees", { cache: "no-store" }),
-    fetch("/api/hr/performance/cycles", { cache: "no-store" }),
+    apiFetch("/api/hr/performance/employees", { cache: "no-store" }),
+    apiFetch("/api/hr/performance/cycles", { cache: "no-store" }),
   ])
 
   if (!employeesRes.ok) throw new Error("Failed to load employees")
@@ -198,7 +199,9 @@ export function CreateReviewDialog({
     setLoadedSelectionKey("")
     const requestKey = `${userId}:${cycleId}`
     try {
-      const res = await fetch(`/api/hr/performance/score?user_id=${userId}&cycle_id=${cycleId}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/hr/performance/score?user_id=${userId}&cycle_id=${cycleId}`, {
+        cache: "no-store",
+      })
       const json = (await res.json()) as ScoreResponse
       if (!res.ok) throw new Error(json.error || "Failed to load performance data")
       const scoreData = json.data
@@ -265,7 +268,7 @@ export function CreateReviewDialog({
     e.preventDefault()
     setSaving(true)
     try {
-      const response = await fetch("/api/hr/performance/reviews", {
+      const response = await apiFetch("/api/hr/performance/reviews", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

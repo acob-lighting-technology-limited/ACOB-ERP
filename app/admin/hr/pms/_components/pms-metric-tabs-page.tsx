@@ -17,6 +17,7 @@ import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { exportPmsRowsToExcel, exportPmsRowsToPdf } from "@/lib/pms/export"
 import { toLocalISODate } from "@/lib/utils/date"
 import { IndividualAttendanceExpandedRow } from "./individual-attendance-expanded-row"
+import { apiFetch } from "@/lib/api-client"
 
 type MetricKey = "kpi" | "goals" | "attendance" | "behaviour"
 type TabKey = "individual" | "department" | "cycle"
@@ -126,7 +127,7 @@ function MetricAddDialog({
         setDepartment(selectedUser?.department || "")
 
         if (metric === "kpi") {
-          const response = await fetch(
+          const response = await apiFetch(
             `/api/hr/performance/reviews?user_id=${encodeURIComponent(userId)}&cycle_id=${encodeURIComponent(cycleId)}`,
             { cache: "no-store" }
           )
@@ -139,7 +140,7 @@ function MetricAddDialog({
         }
 
         if (metric === "goals") {
-          const response = await fetch(
+          const response = await apiFetch(
             `/api/hr/performance/goals?department=${encodeURIComponent(selectedUser?.department || "")}&cycle_id=${encodeURIComponent(cycleId)}`,
             { cache: "no-store" }
           )
@@ -150,7 +151,7 @@ function MetricAddDialog({
         }
 
         if (metric === "behaviour") {
-          const response = await fetch(
+          const response = await apiFetch(
             `/api/hr/performance/score?user_id=${encodeURIComponent(userId)}&cycle_id=${encodeURIComponent(cycleId)}`,
             { cache: "no-store" }
           )
@@ -204,7 +205,7 @@ function MetricAddDialog({
         const numericScore = Number(scoreValue)
         if (!Number.isFinite(numericScore) || numericScore <= 0 || numericScore > 100)
           throw new Error("KPI score must be between 1 and 100")
-        const response = await fetch("/api/hr/performance/reviews", {
+        const response = await apiFetch("/api/hr/performance/reviews", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id: userId, review_cycle_id: cycleId, kpi_score: numericScore }),
@@ -212,7 +213,7 @@ function MetricAddDialog({
         const payload = (await response.json().catch(() => null)) as { error?: string } | null
         if (!response.ok) throw new Error(payload?.error || "Failed to save")
       } else if (metric === "goals") {
-        const response = await fetch("/api/hr/performance/goals", {
+        const response = await apiFetch("/api/hr/performance/goals", {
           method: goalId ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
@@ -224,7 +225,7 @@ function MetricAddDialog({
         const payload = (await response.json().catch(() => null)) as { error?: string } | null
         if (!response.ok) throw new Error(payload?.error || "Failed to save")
       } else {
-        const response = await fetch("/api/hr/performance/reviews", {
+        const response = await apiFetch("/api/hr/performance/reviews", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -413,7 +414,7 @@ export function PmsMetricTabsPage({
     void (async () => {
       try {
         const query = cycleId ? `&cycle_id=${encodeURIComponent(cycleId)}` : ""
-        const response = await fetch(`/api/hr/performance/metric-snapshot?metric=${metric}${query}`, {
+        const response = await apiFetch(`/api/hr/performance/metric-snapshot?metric=${metric}${query}`, {
           cache: "no-store",
         })
         const payload = (await response.json().catch(() => null)) as {

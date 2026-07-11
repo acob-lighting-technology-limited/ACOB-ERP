@@ -16,6 +16,7 @@ import { ClipboardList, CheckCircle2, Plus, Trash2, Lock, Save, Send, Zap, Clock
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
 import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 import {
   DAILY_TASK_STATUS_LABELS,
   DAILY_TASK_TYPE_LABELS,
@@ -98,7 +99,9 @@ function isoDateRange(startIso: string, endIso: string): string[] {
 }
 
 function weekdayShort(dateIso: string) {
-  return new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "Africa/Lagos" }).format(new Date(`${dateIso}T00:00:00Z`))
+  return new Intl.DateTimeFormat("en-GB", { weekday: "short", timeZone: "Africa/Lagos" }).format(
+    new Date(`${dateIso}T00:00:00Z`)
+  )
 }
 
 function taskCountByStatus(tasks: SummaryTask[], status: DailyTaskStatus) {
@@ -128,7 +131,7 @@ export function DailyActivityContent() {
     setLoading(true)
     try {
       const today = toLocalISODate()
-      const res = await fetch(`/api/hr/reports/daily-activity?start=1970-01-01&end=${today}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/hr/reports/daily-activity?start=1970-01-01&end=${today}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load history")
       setSummary(payload.summary || [])
@@ -142,7 +145,7 @@ export function DailyActivityContent() {
 
   const loadDay = useCallback(async (day: string) => {
     try {
-      const res = await fetch(`/api/hr/reports/daily-activity?date=${day}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/hr/reports/daily-activity?date=${day}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load report")
       const loaded: EditableTask[] = (payload.tasks || []).map(
@@ -179,26 +182,29 @@ export function DailyActivityContent() {
 
   const dayRows = useMemo<DayTableRow[]>(() => {
     const todayIso = toLocalISODate()
-    const earliest = summary.reduce<string | null>((acc, row) => (!acc || row.report_date < acc ? row.report_date : acc), null)
+    const earliest = summary.reduce<string | null>(
+      (acc, row) => (!acc || row.report_date < acc ? row.report_date : acc),
+      null
+    )
     const defaultStart = `${todayIso.slice(0, 7)}-01`
     const start = earliest || defaultStart
     const byDate = new Map(summary.map((s) => [s.report_date, s]))
     return isoDateRange(start, todayIso)
       .filter((dateIso) => dateIso <= todayIso)
       .map((dateIso) => {
-      const report = byDate.get(dateIso) || null
-      const tasksForDay = report?.tasks || []
-      return {
-        id: report?.id || `empty-${dateIso}`,
-        report_date: dateIso,
-        weekday: weekdayShort(dateIso),
-        report,
-        completedCount: taskCountByStatus(tasksForDay, "completed"),
-        inProgressCount: taskCountByStatus(tasksForDay, "in_progress"),
-        notStartedCount: taskCountByStatus(tasksForDay, "not_started"),
-        plannedCount: taskCountByType(tasksForDay, "planned"),
-        unforeseenCount: taskCountByType(tasksForDay, "unforeseen"),
-      }
+        const report = byDate.get(dateIso) || null
+        const tasksForDay = report?.tasks || []
+        return {
+          id: report?.id || `empty-${dateIso}`,
+          report_date: dateIso,
+          weekday: weekdayShort(dateIso),
+          report,
+          completedCount: taskCountByStatus(tasksForDay, "completed"),
+          inProgressCount: taskCountByStatus(tasksForDay, "in_progress"),
+          notStartedCount: taskCountByStatus(tasksForDay, "not_started"),
+          plannedCount: taskCountByType(tasksForDay, "planned"),
+          unforeseenCount: taskCountByType(tasksForDay, "unforeseen"),
+        }
       })
       .reverse()
   }, [summary])
@@ -240,7 +246,7 @@ export function DailyActivityContent() {
       if (nextStatus === "draft" && !silent) setSavingDraft(true)
       if (nextStatus === "submitted") setSaving(true)
       try {
-        const res = await fetch("/api/hr/reports/daily-activity", {
+        const res = await apiFetch("/api/hr/reports/daily-activity", {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -275,7 +281,7 @@ export function DailyActivityContent() {
         .map((t) => ({ ...t, description: t.description.trim(), comments: t.comments.trim() }))
         .filter((t) => t.description.length > 0)
 
-      const res = await fetch("/api/hr/reports/daily-activity", {
+      const res = await apiFetch("/api/hr/reports/daily-activity", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -337,8 +343,24 @@ export function DailyActivityContent() {
 
   const tableFilters: DataTableFilter<DayTableRow>[] = [
     { key: "report_date", label: "Day", options: dayFilterOptions, placeholder: "All Days", multi: false },
-    { key: "month", label: "Month", options: monthFilterOptions, placeholder: "Month", multi: false, mode: "custom", filterFn: (r, values) => values.includes(toYearMonth(r.report_date)) },
-    { key: "cycle", label: "Cycle", options: cycleOptions, placeholder: "Cycle", multi: false, mode: "custom", filterFn: (r, values) => values.includes(weekCycle(r.report_date)) },
+    {
+      key: "month",
+      label: "Month",
+      options: monthFilterOptions,
+      placeholder: "Month",
+      multi: false,
+      mode: "custom",
+      filterFn: (r, values) => values.includes(toYearMonth(r.report_date)),
+    },
+    {
+      key: "cycle",
+      label: "Cycle",
+      options: cycleOptions,
+      placeholder: "Cycle",
+      multi: false,
+      mode: "custom",
+      filterFn: (r, values) => values.includes(weekCycle(r.report_date)),
+    },
   ]
 
   const columns: DataTableColumn<DayTableRow>[] = [
@@ -364,10 +386,38 @@ export function DailyActivityContent() {
       initialWidth: 200,
     },
     { key: "completedCount", label: "Done", sortable: true, accessor: (r) => r.completedCount, align: "center" },
-    { key: "inProgressCount", label: "In Progress", sortable: true, accessor: (r) => r.inProgressCount, align: "center", hideOnMobile: true },
-    { key: "notStartedCount", label: "Not Started", sortable: true, accessor: (r) => r.notStartedCount, align: "center", hideOnMobile: true },
-    { key: "plannedCount", label: "Planned", sortable: true, accessor: (r) => r.plannedCount, align: "center", hideOnMobile: true },
-    { key: "unforeseenCount", label: "Unforeseen", sortable: true, accessor: (r) => r.unforeseenCount, align: "center", hideOnMobile: true },
+    {
+      key: "inProgressCount",
+      label: "In Progress",
+      sortable: true,
+      accessor: (r) => r.inProgressCount,
+      align: "center",
+      hideOnMobile: true,
+    },
+    {
+      key: "notStartedCount",
+      label: "Not Started",
+      sortable: true,
+      accessor: (r) => r.notStartedCount,
+      align: "center",
+      hideOnMobile: true,
+    },
+    {
+      key: "plannedCount",
+      label: "Planned",
+      sortable: true,
+      accessor: (r) => r.plannedCount,
+      align: "center",
+      hideOnMobile: true,
+    },
+    {
+      key: "unforeseenCount",
+      label: "Unforeseen",
+      sortable: true,
+      accessor: (r) => r.unforeseenCount,
+      align: "center",
+      hideOnMobile: true,
+    },
     {
       key: "status",
       label: "Report",
@@ -394,10 +444,19 @@ export function DailyActivityContent() {
   const totalTasksLogged = tasks.filter((t) => t.description.trim()).length
 
   function exportCSV() {
-    const headers = ["Date", "Status", "Acknowledged", "Completed", "In Progress", "Not Started", "Planned", "Unforeseen"]
+    const headers = [
+      "Date",
+      "Status",
+      "Acknowledged",
+      "Completed",
+      "In Progress",
+      "Not Started",
+      "Planned",
+      "Unforeseen",
+    ]
     const rows = dayRows.map((r) => [
       r.report_date,
-      r.report ? DAILY_REPORT_STATUS_LABELS[r.report.status] ?? r.report.status : "No Report",
+      r.report ? (DAILY_REPORT_STATUS_LABELS[r.report.status] ?? r.report.status) : "No Report",
       r.report?.acknowledged ? "Yes" : "No",
       String(r.completedCount),
       String(r.inProgressCount),
@@ -477,7 +536,9 @@ export function DailyActivityContent() {
           getRowId={(r) => r.id}
           searchPlaceholder="Search day, report status, or task summary..."
           searchFn={(r, q) => {
-            const reportLabel = r.report ? DAILY_REPORT_STATUS_LABELS[r.report.status] ?? r.report.status : "no report"
+            const reportLabel = r.report
+              ? (DAILY_REPORT_STATUS_LABELS[r.report.status] ?? r.report.status)
+              : "no report"
             return [r.report_date, r.weekday, reportLabel, ...(r.report?.tasks || []).map((task) => task.description)]
               .join(" ")
               .toLowerCase()
@@ -493,15 +554,13 @@ export function DailyActivityContent() {
           rowActions={[{ label: "Open", onClick: (row) => void openEditor(row.report_date) }]}
           expandable={{
             canExpand: (row) => Boolean(row.report && row.report.tasks.length > 0),
-            render: (row) => (
-              <ExpandedDayTasks row={row} onSave={saveInlineDayTasks} />
-            ),
+            render: (row) => <ExpandedDayTasks row={row} onSave={saveInlineDayTasks} />,
           }}
           viewToggle
           cardRenderer={(row) => (
             <div className="space-y-2 p-1">
               <div className="font-medium">{formatDate(row.report_date)}</div>
-              <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
+              <div className="text-muted-foreground flex flex-wrap gap-x-4 gap-y-1 text-sm">
                 <span>Done: {row.completedCount}</span>
                 <span>In Progress: {row.inProgressCount}</span>
                 <span>Not Started: {row.notStartedCount}</span>
@@ -534,7 +593,13 @@ export function DailyActivityContent() {
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
               <div className="rounded-md border p-3">
                 <Label className="mb-2 block text-xs font-semibold tracking-wide uppercase">Report Date</Label>
-                <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} disabled={acknowledged} className="h-9" />
+                <Input
+                  type="date"
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  disabled={acknowledged}
+                  className="h-9"
+                />
               </div>
               <div className="rounded-md border p-3">
                 <Label className="mb-2 block text-xs font-semibold tracking-wide uppercase">Status</Label>
@@ -577,7 +642,7 @@ export function DailyActivityContent() {
               {tasks.map((task, index) => (
                 <div key={index} className="space-y-2 border-b p-3 last:border-b-0">
                   <div className="flex items-center gap-2">
-                    <span className="min-w-[1.5rem] text-sm text-muted-foreground">{index + 1}.</span>
+                    <span className="text-muted-foreground min-w-[1.5rem] text-sm">{index + 1}.</span>
                     <Input
                       value={task.description}
                       disabled={acknowledged}
@@ -587,35 +652,50 @@ export function DailyActivityContent() {
                       className="h-8 flex-1"
                     />
                     {!acknowledged && (
-                      <Button type="button" variant="ghost" size="icon" onClick={() => removeRow(index)} title="Remove task" className="h-8 w-8 shrink-0">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeRow(index)}
+                        title="Remove task"
+                        className="h-8 w-8 shrink-0"
+                      >
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
                     )}
                   </div>
                   <div className="grid grid-cols-2 gap-2 pl-7 sm:grid-cols-3">
                     <div className="space-y-1">
-                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Status</p>
+                      <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">Status</p>
                       <Select
                         value={task.status}
                         disabled={acknowledged}
                         onValueChange={(v) => updateTask(index, { status: v as DailyTaskStatus })}
                       >
-                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="h-8">
+                          <SelectValue />
+                        </SelectTrigger>
                         <SelectContent>
                           {(Object.keys(DAILY_TASK_STATUS_LABELS) as DailyTaskStatus[]).map((s) => (
-                            <SelectItem key={s} value={s}>{DAILY_TASK_STATUS_LABELS[s]}</SelectItem>
+                            <SelectItem key={s} value={s}>
+                              {DAILY_TASK_STATUS_LABELS[s]}
+                            </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="space-y-1">
-                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Type</p>
+                      <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">Type</p>
                       <Select
                         value={task.task_type ?? NONE_TYPE}
                         disabled={acknowledged}
-                        onValueChange={(v) => updateTask(index, { task_type: v === NONE_TYPE ? null : (v as "planned" | "unforeseen") })}
+                        onValueChange={(v) =>
+                          updateTask(index, { task_type: v === NONE_TYPE ? null : (v as "planned" | "unforeseen") })
+                        }
                       >
-                        <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
+                        <SelectTrigger className="h-8">
+                          <SelectValue />
+                        </SelectTrigger>
                         <SelectContent>
                           <SelectItem value={NONE_TYPE}>No Type</SelectItem>
                           <SelectItem value="planned">{DAILY_TASK_TYPE_LABELS.planned}</SelectItem>
@@ -624,7 +704,7 @@ export function DailyActivityContent() {
                       </Select>
                     </div>
                     <div className="col-span-2 space-y-1 sm:col-span-1">
-                      <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Comments</p>
+                      <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">Comments</p>
                       <Input
                         value={task.comments}
                         disabled={acknowledged}
@@ -742,29 +822,41 @@ function ExpandedDayTasks({ row, onSave }: ExpandedDayTasksProps) {
         {items.map((task, index) => (
           <div key={`${row.id}-${index}`} className="space-y-2 border-b p-3 last:border-0">
             <div className="flex items-start gap-2">
-              <span className="mt-0.5 min-w-[1.5rem] text-xs text-muted-foreground">{index + 1}.</span>
+              <span className="text-muted-foreground mt-0.5 min-w-[1.5rem] text-xs">{index + 1}.</span>
               <span className="flex-1 text-sm leading-snug">{task.description}</span>
             </div>
             <div className="grid grid-cols-2 gap-2 pl-5 sm:grid-cols-3">
               <div className="space-y-1">
-                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Status</p>
-                <Select value={task.status} disabled={readOnly} onValueChange={(v) => updateItem(index, { status: v as DailyTaskStatus })}>
-                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">Status</p>
+                <Select
+                  value={task.status}
+                  disabled={readOnly}
+                  onValueChange={(v) => updateItem(index, { status: v as DailyTaskStatus })}
+                >
+                  <SelectTrigger className="h-7 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     {(Object.keys(DAILY_TASK_STATUS_LABELS) as DailyTaskStatus[]).map((s) => (
-                      <SelectItem key={s} value={s}>{DAILY_TASK_STATUS_LABELS[s]}</SelectItem>
+                      <SelectItem key={s} value={s}>
+                        {DAILY_TASK_STATUS_LABELS[s]}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-1">
-                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Type</p>
+                <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">Type</p>
                 <Select
                   value={task.task_type ?? NONE_TYPE}
                   disabled={readOnly}
-                  onValueChange={(v) => updateItem(index, { task_type: v === NONE_TYPE ? null : (v as "planned" | "unforeseen") })}
+                  onValueChange={(v) =>
+                    updateItem(index, { task_type: v === NONE_TYPE ? null : (v as "planned" | "unforeseen") })
+                  }
                 >
-                  <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="h-7 text-xs">
+                    <SelectValue />
+                  </SelectTrigger>
                   <SelectContent>
                     <SelectItem value={NONE_TYPE}>No Type</SelectItem>
                     <SelectItem value="planned">{DAILY_TASK_TYPE_LABELS.planned}</SelectItem>
@@ -773,7 +865,7 @@ function ExpandedDayTasks({ row, onSave }: ExpandedDayTasksProps) {
                 </Select>
               </div>
               <div className="col-span-2 space-y-1 sm:col-span-1">
-                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wide">Comments</p>
+                <p className="text-muted-foreground text-[10px] font-medium tracking-wide uppercase">Comments</p>
                 <Input
                   className="h-7 text-xs"
                   value={task.comments}
@@ -786,7 +878,9 @@ function ExpandedDayTasks({ row, onSave }: ExpandedDayTasksProps) {
           </div>
         ))}
       </div>
-      <div className="text-xs text-muted-foreground">{saving ? "Saving changes..." : readOnly ? "Acknowledged report is read-only." : "Changes save automatically."}</div>
+      <div className="text-muted-foreground text-xs">
+        {saving ? "Saving changes..." : readOnly ? "Acknowledged report is read-only." : "Changes save automatically."}
+      </div>
     </div>
   )
 }

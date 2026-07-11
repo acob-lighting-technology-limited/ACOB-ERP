@@ -17,6 +17,7 @@ import { PageLoader } from "@/components/ui/query-states"
 import { InvoiceFormDialog } from "../_components/invoice-form-dialog"
 
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("finance-invoices")
 
@@ -66,7 +67,7 @@ interface InvoicePageData {
 }
 
 async function fetchInvoiceDetail(id: string): Promise<InvoicePageData> {
-  const res = await fetch(`/api/admin/finance/invoices/${id}`, { cache: "no-store" })
+  const res = await apiFetch(`/api/admin/finance/invoices/${id}`, { cache: "no-store" })
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load invoice")
   const json = await res.json()
   return json.data as InvoicePageData
@@ -89,7 +90,7 @@ export default function InvoiceDetailPage() {
   async function markAsSent() {
     if (!invoice) return
     try {
-      const res = await fetch(`/api/admin/finance/invoices/${invoice.id}`, {
+      const res = await apiFetch(`/api/admin/finance/invoices/${invoice.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: "status", status: "sent" }),
@@ -106,7 +107,7 @@ export default function InvoiceDetailPage() {
   async function markAsPaid() {
     if (!invoice) return
     try {
-      const res = await fetch(`/api/admin/finance/invoices/${invoice.id}`, {
+      const res = await apiFetch(`/api/admin/finance/invoices/${invoice.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ mode: "status", status: "paid" }),

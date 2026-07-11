@@ -29,6 +29,7 @@ import { useDepartments } from "@/hooks/use-departments"
 import { OFFICE_LOCATIONS } from "@/lib/office-locations"
 
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("hr-employees-pending-applications-modal")
 
@@ -85,7 +86,7 @@ interface ApprovalEmailWarning {
 }
 
 async function fetchPendingApplications(): Promise<PendingUser[]> {
-  const response = await fetch("/api/admin/pending-users", { cache: "no-store" })
+  const response = await apiFetch("/api/admin/pending-users", { cache: "no-store" })
   const payload = (await response.json().catch(() => null)) as { data?: PendingUser[]; error?: string } | null
   if (!response.ok) throw new Error(payload?.error || "Failed to load applications")
   return payload?.data || []
@@ -156,7 +157,7 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
             ? `ACOB/PT/${currentYear}/999`
             : `ACOB/${contractCategoryCode || "SIWES"}/${currentYear}/999`
 
-      const response = await fetch(
+      const response = await apiFetch(
         `/api/admin/pending-users/${selectedUser.id}/approval-preview?employeeId=${encodeURIComponent(dummyId)}`
       )
       const result = await response.json()
@@ -203,9 +204,9 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
       const { error: updateError } = await supabase
         .from("pending_users")
         .update({
-          first_name: firstName,
-          last_name: lastName,
-          other_names: otherNames || null,
+          first_name: formatName(firstName),
+          last_name: formatName(lastName),
+          other_names: otherNames ? formatName(otherNames) : null,
           department: department,
           designation: designation,
           company_email: companyEmail,
@@ -219,7 +220,7 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
       if (updateError) throw updateError
 
       // 2. Call the approve-user API route
-      const response = await fetch("/api/admin/approve-user", {
+      const response = await apiFetch("/api/admin/approve-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -269,7 +270,7 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
 
     setIsProcessing(true)
     try {
-      const response = await fetch("/api/admin/reject-user", {
+      const response = await apiFetch("/api/admin/reject-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pendingUserId: selectedUser.id }),
@@ -777,7 +778,7 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                 if (!pendingEmailDispatch) return
                 setIsSendingEmails(true)
                 try {
-                  const res = await fetch("/api/admin/send-onboarding-emails", {
+                  const res = await apiFetch("/api/admin/send-onboarding-emails", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(pendingEmailDispatch),

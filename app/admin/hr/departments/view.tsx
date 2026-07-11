@@ -26,6 +26,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { logger } from "@/lib/logger"
 import { formatWATDate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("hr-departments")
 
@@ -62,7 +63,7 @@ export interface DepartmentsData {
 async function fetchDepartmentsData(): Promise<DepartmentsData> {
   // Admin/dept scope is resolved server-side (requireApiAdminScope +
   // getScopedDepartments) — no client-side scope-mode round trip needed.
-  const res = await fetch("/api/admin/hr/departments", { cache: "no-store" })
+  const res = await apiFetch("/api/admin/hr/departments", { cache: "no-store" })
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load departments")
   return res.json()
 }
@@ -124,7 +125,7 @@ export function DepartmentsPage({
   async function cascadeRename(oldName: string, newName: string) {
     if (!oldName || !newName || oldName === newName) return
     try {
-      const res = await fetch("/api/admin/hr/rename-cascade", {
+      const res = await apiFetch("/api/admin/hr/rename-cascade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ field: "department", oldName, newName }),
@@ -150,7 +151,7 @@ export function DepartmentsPage({
       if (editingDepartment) {
         const oldName = editingDepartment.name?.trim() || ""
         const newName = formData.name.trim()
-        const res = await fetch(`/api/departments/${editingDepartment.id}`, {
+        const res = await apiFetch(`/api/departments/${editingDepartment.id}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -171,7 +172,7 @@ export function DepartmentsPage({
         toast.success("Department updated successfully")
         await cascadeRename(oldName, newName)
       } else {
-        const res = await fetch("/api/departments", {
+        const res = await apiFetch("/api/departments", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -217,7 +218,7 @@ export function DepartmentsPage({
     setIsDialogOpen(true)
 
     if (code) {
-      const res = await fetch(`/api/admin/hr/departments/reference-count?code=${encodeURIComponent(code)}`, {
+      const res = await apiFetch(`/api/admin/hr/departments/reference-count?code=${encodeURIComponent(code)}`, {
         cache: "no-store",
       })
       const json = await res.json().catch(() => null)

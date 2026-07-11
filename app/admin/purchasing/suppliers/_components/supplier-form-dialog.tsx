@@ -11,6 +11,7 @@ import { FormFieldGroup } from "@/components/ui/patterns"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { toast } from "sonner"
 import type { QueryClient } from "@tanstack/react-query"
+import { apiFetch } from "@/lib/api-client"
 
 export interface SupplierFormValues {
   id?: string
@@ -65,7 +66,7 @@ export function SupplierFormDialog({ open, onOpenChange, queryClient, supplier =
       }
 
       if (supplier?.id) {
-        const res = await fetch(`/api/admin/purchasing/suppliers/${supplier.id}`, {
+        const res = await apiFetch(`/api/admin/purchasing/suppliers/${supplier.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -74,7 +75,7 @@ export function SupplierFormDialog({ open, onOpenChange, queryClient, supplier =
         toast.success("Supplier updated")
         await queryClient?.invalidateQueries({ queryKey: QUERY_KEYS.adminSupplierDetail(supplier.id) })
       } else {
-        const res = await fetch("/api/admin/purchasing/suppliers", {
+        const res = await apiFetch("/api/admin/purchasing/suppliers", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

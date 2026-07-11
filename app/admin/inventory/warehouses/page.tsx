@@ -25,6 +25,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { FormFieldGroup } from "@/components/ui/patterns"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
+import { apiFetch } from "@/lib/api-client"
 
 interface WarehouseData {
   id: string
@@ -36,7 +37,7 @@ interface WarehouseData {
 }
 
 async function fetchWarehousesList(): Promise<WarehouseData[]> {
-  const res = await fetch("/api/admin/inventory/warehouses", { cache: "no-store" })
+  const res = await apiFetch("/api/admin/inventory/warehouses", { cache: "no-store" })
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load warehouses")
   const json = await res.json()
   return (json.data || []) as WarehouseData[]
@@ -81,7 +82,7 @@ export default function WarehousesPage() {
       }
 
       if (editing) {
-        const res = await fetch(`/api/admin/inventory/warehouses/${editing.id}`, {
+        const res = await apiFetch(`/api/admin/inventory/warehouses/${editing.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -89,7 +90,7 @@ export default function WarehousesPage() {
         if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to update warehouse")
         toast.success("Warehouse updated")
       } else {
-        const res = await fetch("/api/admin/inventory/warehouses", {
+        const res = await apiFetch("/api/admin/inventory/warehouses", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -109,7 +110,7 @@ export default function WarehousesPage() {
 
   async function handleDelete(warehouse: WarehouseData) {
     try {
-      const res = await fetch(`/api/admin/inventory/warehouses/${warehouse.id}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/admin/inventory/warehouses/${warehouse.id}`, { method: "DELETE" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to delete warehouse")
 
       toast.success("Warehouse deleted")

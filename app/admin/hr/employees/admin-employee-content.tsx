@@ -48,6 +48,7 @@ import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-tabl
 import { Badge } from "@/components/ui/badge"
 import { StatCard } from "@/components/ui/stat-card"
 import { EmployeeStatusBadge } from "@/components/hr/employee-status-badge"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("hr-employees-admin-employee-content")
 
@@ -61,7 +62,7 @@ const genderFilterOptions: { value: EmployeeGender; label: string }[] = [
 ]
 
 async function fetchAllEmployees(): Promise<Employee[]> {
-  const response = await fetch("/api/admin/employees", { cache: "no-store" })
+  const response = await apiFetch("/api/admin/employees", { cache: "no-store" })
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as { error?: string }
     throw new Error(payload.error || "Failed to fetch employees")
@@ -292,7 +293,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       setViewEmployeeData({ tasks: [], assets: [], documentation: [] })
       setIsViewDialogOpen(true)
 
-      const response = await fetch(`/api/admin/hr/employees/${employee.id}/overview`, { cache: "no-store" })
+      const response = await apiFetch(`/api/admin/hr/employees/${employee.id}/overview`, { cache: "no-store" })
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string
         profile?: EmployeeProfile
@@ -310,7 +311,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       })
 
       // Also fetch full assigned items for deletion check or detailed view
-      const detailResponse = await fetch(`/api/admin/hr/employees/${employee.id}/details`)
+      const detailResponse = await apiFetch(`/api/admin/hr/employees/${employee.id}/details`)
       if (detailResponse.ok) {
         const detailData = await detailResponse.json()
         setAssignedItems(detailData)
@@ -381,7 +382,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       ;(updateData as Record<string, unknown>).attendance_exempt = editForm.attendance_exempt
       ;(updateData as Record<string, unknown>).personal_email = personalEmail || null
 
-      const emailSyncResponse = await fetch(`/api/admin/hr/employees/${selectedEmployee.id}/email`, {
+      const emailSyncResponse = await apiFetch(`/api/admin/hr/employees/${selectedEmployee.id}/email`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ companyEmail, additionalEmail: additionalEmail || null }),

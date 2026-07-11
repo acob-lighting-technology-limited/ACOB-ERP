@@ -29,6 +29,7 @@ import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-tabl
 import { StatCard } from "@/components/ui/stat-card"
 import { Badge } from "@/components/ui/badge"
 import type { Task } from "@/types/task"
+import { apiFetch } from "@/lib/api-client"
 import {
   filterByDepartments,
   buildDepartmentLeadMap,
@@ -162,7 +163,7 @@ export function AdminTasksContent({
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const res = await fetch("/api/admin/tasks/management", { cache: "no-store" })
+      const res = await apiFetch("/api/admin/tasks/management", { cache: "no-store" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load tasks")
       const json = await res.json()
       let result = (json.data || []) as Task[]
@@ -210,7 +211,7 @@ export function AdminTasksContent({
     if (isSaving) return
     setIsSaving(true)
     try {
-      const currentUserRes = await fetch("/api/admin/current-user", { cache: "no-store" })
+      const currentUserRes = await apiFetch("/api/admin/current-user", { cache: "no-store" })
       if (!currentUserRes.ok) {
         setIsSaving(false)
         return
@@ -245,7 +246,7 @@ export function AdminTasksContent({
       }
 
       if (selectedTask) {
-        const response = await fetch(`/api/tasks/${selectedTask.id}`, {
+        const response = await apiFetch(`/api/tasks/${selectedTask.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(taskData),
@@ -255,7 +256,7 @@ export function AdminTasksContent({
         await sendUpdateNotifications(activeTaskForm, selectedTask, userId)
         toast.success(`${selectedTask.work_item_number || "Task"} updated`)
       } else {
-        const response = await fetch("/api/tasks", {
+        const response = await apiFetch("/api/tasks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(taskData),
@@ -281,7 +282,7 @@ export function AdminTasksContent({
     if (!taskToDelete || isDeleting) return
     setIsDeleting(true)
     try {
-      const response = await fetch(`/api/tasks/${taskToDelete.id}`, { method: "DELETE" })
+      const response = await apiFetch(`/api/tasks/${taskToDelete.id}`, { method: "DELETE" })
       if (!response.ok) throw new Error("Failed to delete task")
       toast.success(`${taskToDelete.work_item_number || "Task"} deleted`)
       setIsDeleteDialogOpen(false)

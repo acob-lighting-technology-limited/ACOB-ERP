@@ -19,6 +19,7 @@ import { PageHeader } from "@/components/layout/page-header"
 
 import { logger } from "@/lib/logger"
 import { toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("employee-new")
 
@@ -49,7 +50,7 @@ async function fetchOnboardingOptions(): Promise<{
   officeLocations: string[]
   contractCategories?: { name: string; code: string }[]
 }> {
-  const res = await fetch("/api/public/onboarding-options")
+  const res = await apiFetch("/api/public/onboarding-options")
   if (!res.ok) throw new Error("Failed to load form options")
   return res.json()
 }
@@ -189,7 +190,7 @@ export default function EmployeeOnboardingForm() {
         updated_at: new Date().toISOString(),
       }
 
-      const response = await fetch("/api/public/onboarding-submit", {
+      const response = await apiFetch("/api/public/onboarding-submit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...record, honeypot: data.honeypot || "" }),

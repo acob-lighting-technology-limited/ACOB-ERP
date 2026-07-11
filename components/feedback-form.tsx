@@ -14,6 +14,7 @@ import { Switch } from "@/components/ui/switch"
 import { toast } from "sonner"
 import { EyeOff } from "lucide-react"
 import type { FeedbackRecord } from "@/components/feedback/types"
+import { apiFetch } from "@/lib/api-client"
 
 interface FeedbackFormProps {
   onFeedbackSubmitted?: (feedback: FeedbackRecord) => void
@@ -44,7 +45,7 @@ export function FeedbackForm({ onFeedbackSubmitted, variant = "card" }: Feedback
     setIsLoading(true)
 
     try {
-      const response = await fetch("/api/feedback", {
+      const response = await apiFetch("/api/feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

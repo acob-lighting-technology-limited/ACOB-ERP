@@ -18,6 +18,7 @@ import { useTheme } from "next-themes"
 import { getSeasonalLogoPaths } from "@/lib/seasonal-branding"
 
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("auth-login")
 
@@ -94,7 +95,7 @@ export default function LoginPage() {
         const { error } = await trySetSession()
         if (error) throw error
 
-        await fetch("/api/dev/login-log", {
+        await apiFetch("/api/dev/login-log", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ authMethod: "otp" }),
@@ -227,7 +228,7 @@ export default function LoginPage() {
         password,
       })
       if (error) throw error
-      await fetch("/api/dev/login-log", {
+      await apiFetch("/api/dev/login-log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ authMethod: "password" }),
@@ -266,7 +267,7 @@ export default function LoginPage() {
         type: "email",
       })
       if (error) throw error
-      await fetch("/api/dev/login-log", {
+      await apiFetch("/api/dev/login-log", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ authMethod: "otp" }),

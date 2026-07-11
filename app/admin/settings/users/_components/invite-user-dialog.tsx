@@ -19,6 +19,7 @@ import { toast } from "sonner"
 import { logger } from "@/lib/logger"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import type { QueryClient } from "@tanstack/react-query"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("settings-users-invite-dialog")
 
@@ -46,7 +47,7 @@ export function InviteUserDialog({ open, onOpenChange, roleOptions, queryClient 
 
     setSending(true)
     try {
-      const response = await fetch("/api/admin/users/invite", {
+      const response = await apiFetch("/api/admin/users/invite", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),

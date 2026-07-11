@@ -47,11 +47,12 @@ import {
   exportEmployeeReportToWord,
 } from "@/lib/assets/asset-export"
 import { toLocalDateTimeInput, toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("assets-admin-assets-content")
 
 async function fetchAssetTypes(): Promise<{ label: string; code: string; requiresSerialModel: boolean }[]> {
-  const response = await fetch("/api/admin/assets/types", {
+  const response = await apiFetch("/api/admin/assets/types", {
     method: "GET",
     credentials: "include",
     cache: "no-store",
@@ -404,7 +405,7 @@ export function AdminAssetsContent({
 
     setIsCreatingAssetType(true)
     try {
-      const response = await fetch("/api/admin/assets/types", {
+      const response = await apiFetch("/api/admin/assets/types", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -451,7 +452,7 @@ export function AdminAssetsContent({
     try {
       const params = new URLSearchParams()
       if (lockedDepartment) params.set("department", lockedDepartment)
-      const response = await fetch(`/api/admin/assets/snapshot?${params.toString()}`, {
+      const response = await apiFetch(`/api/admin/assets/snapshot?${params.toString()}`, {
         method: "GET",
         credentials: "include",
         cache: "no-store",
@@ -474,7 +475,7 @@ export function AdminAssetsContent({
 
   const loadAssetHistory = async (asset: Asset) => {
     try {
-      const res = await fetch(`/api/admin/assets/${asset.id}/history`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/assets/${asset.id}/history`, { cache: "no-store" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load asset history")
       type HistoryAssignmentRow = {
         id: string
@@ -614,7 +615,7 @@ export function AdminAssetsContent({
 
   const loadAssetIssues = async (assetId: string) => {
     try {
-      const res = await fetch(`/api/admin/assets/${assetId}/issues`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/assets/${assetId}/issues`, { cache: "no-store" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load asset issues")
       const json = await res.json()
       setAssetIssues(json.data || [])
@@ -629,7 +630,7 @@ export function AdminAssetsContent({
 
     setIsAddingIssue(true)
     try {
-      const res = await fetch(`/api/admin/assets/${selectedAsset.id}/issues`, {
+      const res = await apiFetch(`/api/admin/assets/${selectedAsset.id}/issues`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: newIssueDescription.trim() }),
@@ -650,7 +651,7 @@ export function AdminAssetsContent({
 
   const handleToggleIssue = async (issue: AssetIssue) => {
     try {
-      const res = await fetch(`/api/admin/assets/${issue.asset_id}/issues/${issue.id}`, {
+      const res = await apiFetch(`/api/admin/assets/${issue.asset_id}/issues/${issue.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resolved: !issue.resolved }),
@@ -671,7 +672,7 @@ export function AdminAssetsContent({
   const handleDeleteIssue = async (issueId: string) => {
     try {
       if (!selectedAsset) return
-      const res = await fetch(`/api/admin/assets/${selectedAsset.id}/issues/${issueId}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/admin/assets/${selectedAsset.id}/issues/${issueId}`, { method: "DELETE" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to delete issue")
 
       toast.success("Issue deleted")
@@ -699,7 +700,7 @@ export function AdminAssetsContent({
       }
 
       if (asset.status === "assigned" || asset.status === "retired" || asset.status === "maintenance") {
-        const res = await fetch(`/api/admin/assets/${asset.id}/current-assignment`, { cache: "no-store" })
+        const res = await apiFetch(`/api/admin/assets/${asset.id}/current-assignment`, { cache: "no-store" })
         if (!res.ok) {
           log.error("Error fetching current assignment:", await res.text().catch(() => ""))
         }
@@ -761,7 +762,7 @@ export function AdminAssetsContent({
         assigned_at: formData.assigned_at,
       })
     } else {
-      const currentUserRes = await fetch("/api/admin/assets/current-user", { cache: "no-store" })
+      const currentUserRes = await apiFetch("/api/admin/assets/current-user", { cache: "no-store" })
       const currentUserId = currentUserRes.ok ? ((await currentUserRes.json()).userId as string | undefined) : undefined
 
       setBatchQuantity(1)
@@ -833,7 +834,7 @@ export function AdminAssetsContent({
         }
       }
 
-      const response = await fetch("/api/admin/assets", {
+      const response = await apiFetch("/api/admin/assets", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -895,7 +896,7 @@ export function AdminAssetsContent({
       }
 
       // Server resolves the caller as the default "assigned by" if left blank.
-      const res = await fetch(`/api/admin/assets/${selectedAsset.id}/reassign`, {
+      const res = await apiFetch(`/api/admin/assets/${selectedAsset.id}/reassign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -931,7 +932,7 @@ export function AdminAssetsContent({
         return
       }
 
-      const res = await fetch(`/api/admin/assets/${assetToRelease.id}/release`, { method: "POST" })
+      const res = await apiFetch(`/api/admin/assets/${assetToRelease.id}/release`, { method: "POST" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to release asset")
 
       toast.success("Asset released and returned to the available pool")
@@ -956,7 +957,7 @@ export function AdminAssetsContent({
         return
       }
 
-      const res = await fetch(`/api/admin/assets/${assetToDelete.id}/archive`, { method: "POST" })
+      const res = await apiFetch(`/api/admin/assets/${assetToDelete.id}/archive`, { method: "POST" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to archive asset")
 
       toast.success("Asset archived. You can restore it later.")
@@ -976,7 +977,7 @@ export function AdminAssetsContent({
     if (isDeleting) return
     setIsDeleting(true)
     try {
-      const res = await fetch(`/api/admin/assets/${asset.id}/restore`, { method: "POST" })
+      const res = await apiFetch(`/api/admin/assets/${asset.id}/restore`, { method: "POST" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to restore asset")
       toast.success("Asset restored successfully")
       await loadData()
@@ -999,7 +1000,7 @@ export function AdminAssetsContent({
 
     let currentUserId = ""
     try {
-      const res = await fetch(`/api/admin/assets/${asset.id}/current-assignment`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/assets/${asset.id}/current-assignment`, { cache: "no-store" })
       if (res.ok) {
         const json = (await res.json()) as { data: AssetAssignment | null; currentUserId?: string }
         if (json.data) {

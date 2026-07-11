@@ -41,6 +41,7 @@ import { PrintReceiptDialog } from "@/components/payments/print-receipt-dialog"
 import { PaymentInfoCard } from "@/components/payments/payment-info-card"
 import { PaymentMetaCard } from "@/components/payments/payment-meta-card"
 import { usePaymentSchedule } from "@/components/payments/use-payment-schedule"
+import { apiFetch } from "@/lib/api-client"
 import type {
   Payment,
   Department,
@@ -57,9 +58,9 @@ interface PaymentPageData {
 
 async function fetchPaymentPageData(id: string): Promise<PaymentPageData> {
   const [paymentRes, deptRes, catRes] = await Promise.all([
-    fetch(`/api/payments/${id}`),
-    fetch("/api/departments"),
-    fetch("/api/payments/categories"),
+    apiFetch(`/api/payments/${id}`),
+    apiFetch("/api/departments"),
+    apiFetch("/api/payments/categories"),
   ])
   const paymentJson = paymentRes.ok ? await paymentRes.json() : null
   const deptJson = deptRes.ok ? await deptRes.json() : null
@@ -197,7 +198,7 @@ export function PaymentDetailModal({
         payment_date: submittedFormData.payment_date || null,
       }
 
-      const response = await fetch(`/api/payments/${paymentId}`, {
+      const response = await apiFetch(`/api/payments/${paymentId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -221,7 +222,7 @@ export function PaymentDetailModal({
   const handleDelete = async () => {
     try {
       setDeleteLoading(true)
-      const response = await fetch(`/api/payments/${paymentId}`, { method: "DELETE" })
+      const response = await apiFetch(`/api/payments/${paymentId}`, { method: "DELETE" })
 
       if (response.ok) {
         toast.success("Payment deleted successfully")
@@ -273,7 +274,7 @@ export function PaymentDetailModal({
       }
 
       try {
-        const response = await fetch(`/api/payments/${paymentId}`, {
+        const response = await apiFetch(`/api/payments/${paymentId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -301,7 +302,7 @@ export function PaymentDetailModal({
   const updateStatus = async (newStatus: string) => {
     if (!payment) return
     try {
-      const response = await fetch(`/api/payments/${paymentId}`, {
+      const response = await apiFetch(`/api/payments/${paymentId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -351,7 +352,7 @@ export function PaymentDetailModal({
 
     setUploading(true)
     try {
-      const response = await fetch(`/api/payments/${paymentId}/documents`, { method: "POST", body: formData })
+      const response = await apiFetch(`/api/payments/${paymentId}/documents`, { method: "POST", body: formData })
 
       if (response.ok) {
         toast.success(replaceDocumentId ? `${uploadType} replaced successfully` : `${uploadType} uploaded successfully`)

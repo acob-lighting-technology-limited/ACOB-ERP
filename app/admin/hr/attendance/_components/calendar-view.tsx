@@ -25,6 +25,7 @@ import {
   isEarlyDeparture,
 } from "@/lib/hr/attendance-status"
 import { formatTime } from "./status-badge"
+import { apiFetch } from "@/lib/api-client"
 
 type DayStatus =
   | "present"
@@ -141,7 +142,7 @@ export function CalendarView({ employees }: CalendarViewProps) {
         year_month: calendarMonth,
         exempt_hint: selectedEmployee?.attendance_exempt ? "1" : "0",
       })
-      const res = await fetch(`/api/admin/hr/attendance/employee-days?${qs}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/hr/attendance/employee-days?${qs}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load")
       setDays(payload?.data ?? [])
@@ -197,7 +198,7 @@ export function CalendarView({ employees }: CalendarViewProps) {
           manual_comment: editForm.manual_comment,
           status: editForm.status,
         }
-        res = await fetch(`/api/admin/hr/attendance/records/${editTarget.record.id}`, {
+        res = await apiFetch(`/api/admin/hr/attendance/records/${editTarget.record.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -212,7 +213,7 @@ export function CalendarView({ employees }: CalendarViewProps) {
           clock_in: null,
           clock_out: null,
         }
-        res = await fetch("/api/admin/hr/attendance/records", {
+        res = await apiFetch("/api/admin/hr/attendance/records", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),

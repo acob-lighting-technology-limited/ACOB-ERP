@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { formatWATDateTime } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 type Ticket = {
   id: string
@@ -59,7 +60,7 @@ export function TicketDetailContent({
     if (!ticket || !newComment.trim()) return
     setIsSaving(true)
     try {
-      const response = await fetch(`/api/help-desk/tickets/${ticket.id}/comments`, {
+      const response = await apiFetch(`/api/help-desk/tickets/${ticket.id}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comment: newComment }),
@@ -79,7 +80,7 @@ export function TicketDetailContent({
     if (!ticket || !rating) return
     setIsSubmittingRating(true)
     try {
-      const response = await fetch(`/api/help-desk/tickets/${ticket.id}`, {
+      const response = await apiFetch(`/api/help-desk/tickets/${ticket.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -1,5 +1,7 @@
 "use client"
 
+import { apiFetch } from "@/lib/api-client"
+
 export interface ClientTelemetryPayload {
   source: "window.error" | "unhandledrejection" | "react.error_boundary" | "react.global_error_boundary"
   message: string
@@ -23,7 +25,7 @@ export async function reportClientError(payload: ClientTelemetryPayload): Promis
       if (sent) return
     }
 
-    await fetch("/api/telemetry/errors", {
+    await apiFetch("/api/telemetry/errors", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body,

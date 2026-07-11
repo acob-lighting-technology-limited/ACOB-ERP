@@ -15,6 +15,7 @@ import { QUERY_KEYS } from "@/lib/query-keys"
 import { logger } from "@/lib/logger"
 import type { QueryClient } from "@tanstack/react-query"
 import { toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("finance-invoice-dialog")
 
@@ -155,7 +156,7 @@ export function InvoiceFormDialog({
       }))
 
       if (invoice?.id) {
-        const res = await fetch(`/api/admin/finance/invoices/${invoice.id}`, {
+        const res = await apiFetch(`/api/admin/finance/invoices/${invoice.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -176,7 +177,7 @@ export function InvoiceFormDialog({
         toast.success("Invoice updated successfully!")
         await queryClient?.invalidateQueries({ queryKey: QUERY_KEYS.adminInvoiceDetail(invoice.id) })
       } else {
-        const res = await fetch("/api/admin/finance/invoices", {
+        const res = await apiFetch("/api/admin/finance/invoices", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

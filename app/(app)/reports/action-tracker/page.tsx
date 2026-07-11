@@ -21,6 +21,7 @@ import { fetchWeeklyReportLockState } from "@/lib/weekly-report-lock"
 import { type ActionItem } from "@/lib/export-utils"
 import { logger } from "@/lib/logger"
 import { fetchActionTrackerMetadata, fetchActionTrackerTasks, type ActionTask } from "./_lib/queries"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("dashboard-reports-action-tracker")
 
@@ -155,7 +156,7 @@ export default function ActionTrackerPortal() {
     })
 
     try {
-      const response = await fetch(`/api/reports/action-tracker/${taskId}`, {
+      const response = await apiFetch(`/api/reports/action-tracker/${taskId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
@@ -173,7 +174,7 @@ export default function ActionTrackerPortal() {
   const handleCarryForward = async () => {
     setIsCarryForwarding(true)
     try {
-      const response = await fetch("/api/reports/action-tracker/carry-forward", {
+      const response = await apiFetch("/api/reports/action-tracker/carry-forward", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ week_number: week, year }),

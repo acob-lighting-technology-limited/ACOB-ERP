@@ -26,6 +26,7 @@ import { SendSummary } from "./SendSummary"
 import { ReminderTypeSelector } from "./ReminderTypeSelector"
 import { getCurrentOfficeWeek, getOfficeWeekFromDate } from "@/lib/meeting-week"
 import { getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("communications-composer")
 
@@ -155,7 +156,9 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
     queryKey: ["canonical-meeting-date", activeMeetingWeek.week, activeMeetingWeek.year],
     enabled: mode !== "communications",
     queryFn: async (): Promise<{ meetingDate: string; meetingTime: string }> => {
-      const res = await fetch(`/api/reports/meeting-date?week=${activeMeetingWeek.week}&year=${activeMeetingWeek.year}`)
+      const res = await apiFetch(
+        `/api/reports/meeting-date?week=${activeMeetingWeek.week}&year=${activeMeetingWeek.year}`
+      )
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Failed to resolve meeting date")
       return {
@@ -171,7 +174,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
     queryKey: ["meeting-reminder-default-agenda"],
     enabled: mode !== "communications",
     queryFn: async (): Promise<{ agenda: string[] }> => {
-      const res = await fetch("/api/reports/meeting-agenda-default")
+      const res = await apiFetch("/api/reports/meeting-agenda-default")
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Failed to load meeting agenda")
       const agenda = Array.isArray(payload?.data?.agenda)
@@ -260,7 +263,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
     let cancelled = false
     const resolveActiveMeetingWeek = async () => {
       try {
-        const res = await fetch(
+        const res = await apiFetch(
           `/api/admin/reports/weekly-lock-state?week=${currentOfficeWeekWeek}&year=${currentOfficeWeekYear}`,
           { cache: "no-store" }
         )
@@ -386,7 +389,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
     let cancelled = false
     const autoFillFromRoster = async () => {
       try {
-        const res = await fetch(`/api/reports/kss-roster?week=${officeWeek.week}&year=${officeWeek.year}`)
+        const res = await apiFetch(`/api/reports/kss-roster?week=${officeWeek.week}&year=${officeWeek.year}`)
         const payload = await res.json()
         if (!res.ok) return
 
@@ -432,7 +435,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
   const { data: schedulesData } = useQuery({
     queryKey: QUERY_KEYS.adminReminderSchedules(mode),
     queryFn: async () => {
-      const res = await fetch(`/api/admin/communications/reminder-schedules?mode=${mode}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/communications/reminder-schedules?mode=${mode}`, { cache: "no-store" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load schedules")
       const json = await res.json()
       return json.data || []
@@ -535,7 +538,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
       metadata?: Record<string, unknown>
     }) => {
       try {
-        await fetch("/api/admin/communications/audit", {
+        await apiFetch("/api/admin/communications/audit", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -719,7 +722,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
           schedulePayload.next_run_at = nextRun.toISOString()
         }
 
-        const res = await fetch("/api/admin/communications/reminder-schedules", {
+        const res = await apiFetch("/api/admin/communications/reminder-schedules", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(schedulePayload),
@@ -865,7 +868,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
 
     setSavingMeetingDraft(true)
     try {
-      const res = await fetch("/api/reports/meeting-agenda-default", {
+      const res = await apiFetch("/api/reports/meeting-agenda-default", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ agenda: agendaItems }),
@@ -888,7 +891,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
   }, [agendaText, meetingDraftStorageKey, queryClient, teamsLink])
 
   const deactivateSchedule = async (id: string) => {
-    const res = await fetch(`/api/admin/communications/reminder-schedules/${id}`, { method: "PATCH" })
+    const res = await apiFetch(`/api/admin/communications/reminder-schedules/${id}`, { method: "PATCH" })
     if (!res.ok) {
       toast.error("Failed to deactivate schedule")
       return

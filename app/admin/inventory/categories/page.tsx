@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge"
 import { StatCard } from "@/components/ui/stat-card"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
+import { apiFetch } from "@/lib/api-client"
 
 interface Category {
   id: string
@@ -34,7 +35,7 @@ interface Category {
 }
 
 async function fetchCategoriesList(): Promise<Category[]> {
-  const res = await fetch("/api/admin/inventory/categories", { cache: "no-store" })
+  const res = await apiFetch("/api/admin/inventory/categories", { cache: "no-store" })
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load categories")
   const json = await res.json()
   return (json.data || []) as Category[]
@@ -70,7 +71,7 @@ export default function CategoriesPage() {
 
     try {
       if (editingCategory) {
-        const res = await fetch(`/api/admin/inventory/categories/${editingCategory.id}`, {
+        const res = await apiFetch(`/api/admin/inventory/categories/${editingCategory.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: formData.name, description: formData.description || null }),
@@ -78,7 +79,7 @@ export default function CategoriesPage() {
         if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to update category")
         toast.success("Category updated")
       } else {
-        const res = await fetch("/api/admin/inventory/categories", {
+        const res = await apiFetch("/api/admin/inventory/categories", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name: formData.name, description: formData.description || null }),
@@ -98,7 +99,7 @@ export default function CategoriesPage() {
 
   async function handleDelete(category: Category) {
     try {
-      const res = await fetch(`/api/admin/inventory/categories/${category.id}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/admin/inventory/categories/${category.id}`, { method: "DELETE" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to delete category")
 
       toast.success("Category deleted")

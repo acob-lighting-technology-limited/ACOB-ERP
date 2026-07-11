@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StatCard } from "@/components/ui/stat-card"
+import { apiFetch } from "@/lib/api-client"
 
 type PlanAction = {
   id: string
@@ -74,7 +75,7 @@ export default function DevelopmentPlansPage() {
     setIsLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/hr/performance/development-plans")
+      const res = await apiFetch("/api/hr/performance/development-plans")
       const data = (await res.json().catch(() => ({}))) as { data?: DevelopmentPlan[]; error?: string }
       if (!res.ok) throw new Error(data.error || "Failed to load plans")
       setPlans(data.data || [])
@@ -91,7 +92,7 @@ export default function DevelopmentPlansPage() {
 
   async function markActionDone(planId: string, actionId: string) {
     try {
-      const res = await fetch("/api/hr/performance/development-plans/actions", {
+      const res = await apiFetch("/api/hr/performance/development-plans/actions", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: actionId, status: "completed" }),

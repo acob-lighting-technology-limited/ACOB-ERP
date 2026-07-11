@@ -12,6 +12,7 @@ import { CheckCircle, XCircle, Loader2, PlayCircle, FlaskConical, SkipForward, R
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("leave-flow-test")
 
@@ -70,7 +71,7 @@ export function LeaveFlowTestContent() {
 
   useEffect(() => {
     async function load() {
-      const res = await fetch("/api/admin/hr/leave/test/form-data", { cache: "no-store" })
+      const res = await apiFetch("/api/admin/hr/leave/test/form-data", { cache: "no-store" })
       if (!res.ok) throw new Error("Failed to load form data")
       const json = await res.json()
       setEmployees(json.employees || [])
@@ -94,7 +95,7 @@ export function LeaveFlowTestContent() {
     setResult(null)
 
     try {
-      const res = await fetch("/api/dev/leave-flow-test", {
+      const res = await apiFetch("/api/dev/leave-flow-test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -125,7 +126,7 @@ export function LeaveFlowTestContent() {
     setDiagnosticsResult(null)
 
     try {
-      const res = await fetch("/api/dev/leave-route-diagnostics")
+      const res = await apiFetch("/api/dev/leave-route-diagnostics")
 
       const payload: DiagnosticsResult = await res.json()
       setDiagnosticsResult(payload)

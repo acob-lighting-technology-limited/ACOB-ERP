@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch"
 import { PageHeader, PageWrapper } from "@/components/layout"
 import { Bell } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-client"
 
 type ModuleSetting = {
   notification_key: string
@@ -46,7 +47,7 @@ const MODULE_LABELS: Record<string, string> = {
 }
 
 async function fetchNotificationSettings(): Promise<NotificationSettingsResponse> {
-  const response = await fetch("/api/settings/notifications", { cache: "no-store" })
+  const response = await apiFetch("/api/settings/notifications", { cache: "no-store" })
   const payload = (await response.json()) as NotificationSettingsResponse & { error?: string }
   if (!response.ok) throw new Error(payload.error || "Failed to load notification settings")
   return {
@@ -93,7 +94,7 @@ export default function NotificationSettingsPage() {
       global: { in_app_enabled: boolean; email_enabled: boolean }
       modules: { notification_key: string; in_app_enabled: boolean | null; email_enabled: boolean | null }[]
     }) => {
-      const response = await fetch("/api/settings/notifications", {
+      const response = await apiFetch("/api/settings/notifications", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

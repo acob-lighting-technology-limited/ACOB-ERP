@@ -38,6 +38,7 @@ import { useOfficeLocations } from "@/hooks/use-office-locations"
 import { createClient } from "@/lib/supabase/client"
 import type { UserProfile } from "@/app/admin/hr/employees/admin-employee-content"
 import type { EmployeeAssignedItems, EmployeeProfile, EmployeeStatusSummary, EmployeeViewData } from "./types"
+import { apiFetch } from "@/lib/api-client"
 
 interface EditForm {
   role: UserRole
@@ -689,7 +690,7 @@ export function EmployeeViewModal({
                         onClick={async () => {
                           setIsConverting(true)
                           try {
-                            const response = await fetch("/api/admin/employees/convert-type", {
+                            const response = await apiFetch("/api/admin/employees/convert-type", {
                               method: "POST",
                               headers: { "Content-Type": "application/json" },
                               body: JSON.stringify({

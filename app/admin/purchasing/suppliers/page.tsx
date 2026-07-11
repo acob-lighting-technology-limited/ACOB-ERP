@@ -22,6 +22,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { SupplierFormDialog } from "./_components/supplier-form-dialog"
+import { apiFetch } from "@/lib/api-client"
 
 interface Supplier {
   id: string
@@ -36,7 +37,7 @@ interface Supplier {
 }
 
 async function fetchSuppliersList(): Promise<Supplier[]> {
-  const res = await fetch("/api/admin/purchasing/suppliers", { cache: "no-store" })
+  const res = await apiFetch("/api/admin/purchasing/suppliers", { cache: "no-store" })
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load suppliers")
   const json = await res.json()
   return (json.data || []) as Supplier[]
@@ -69,7 +70,7 @@ export default function SuppliersPage() {
 
   async function handleDelete(supplier: Supplier) {
     try {
-      const res = await fetch(`/api/admin/purchasing/suppliers/${supplier.id}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/admin/purchasing/suppliers/${supplier.id}`, { method: "DELETE" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to delete supplier")
 
       toast.success("Supplier deleted")

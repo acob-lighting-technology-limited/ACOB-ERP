@@ -15,6 +15,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { toast } from "sonner"
 import { FormFieldGroup } from "@/components/ui/patterns"
 import type { QueryClient } from "@tanstack/react-query"
+import { apiFetch } from "@/lib/api-client"
 
 interface Category {
   id: string
@@ -42,7 +43,7 @@ interface ProductFormDialogProps {
 }
 
 async function fetchProductCategories(): Promise<Category[]> {
-  const res = await fetch("/api/admin/inventory/categories/options", { cache: "no-store" })
+  const res = await apiFetch("/api/admin/inventory/categories/options", { cache: "no-store" })
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load categories")
   const json = await res.json()
   return json.data || []
@@ -95,7 +96,7 @@ export function ProductFormDialog({ open, onOpenChange, queryClient, product = n
       }
 
       if (isEditing && product?.id) {
-        const res = await fetch(`/api/admin/inventory/products/${product.id}`, {
+        const res = await apiFetch(`/api/admin/inventory/products/${product.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -104,7 +105,7 @@ export function ProductFormDialog({ open, onOpenChange, queryClient, product = n
         toast.success("Product updated")
         await queryClient?.invalidateQueries({ queryKey: QUERY_KEYS.adminProductDetail(product.id) })
       } else {
-        const res = await fetch("/api/admin/inventory/products", {
+        const res = await apiFetch("/api/admin/inventory/products", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),

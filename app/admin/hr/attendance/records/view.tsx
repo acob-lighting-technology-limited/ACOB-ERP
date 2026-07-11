@@ -24,6 +24,7 @@ import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
 import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS, isEarlyDeparture } from "@/lib/hr/attendance-status"
 import { isLate } from "@/lib/hr/attendance-utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("admin-attendance-records")
 
@@ -94,7 +95,7 @@ export function AdminAttendanceRecordsPage({
     try {
       const params = new URLSearchParams({ start_date: filters.start_date, end_date: filters.end_date })
       if (lockedDepartment) params.set("department", lockedDepartment)
-      const res = await fetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load records")
       setRecords(payload.records || [])
@@ -148,7 +149,7 @@ export function AdminAttendanceRecordsPage({
         status: editForm.status,
       }
 
-      const res = await fetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
+      const res = await apiFetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

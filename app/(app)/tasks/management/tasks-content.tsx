@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { formatName } from "@/lib/utils"
 import { formatWATDate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 export type { Task, TaskUserProfile } from "@/types/task"
 
@@ -172,7 +173,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
           ? { status: mapTaskStatusToHelpDeskStatus(task, status), status_note: statusNote || null }
           : { status, comment: statusNote || undefined }
 
-      const response = await fetch(endpoint, {
+      const response = await apiFetch(endpoint, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -498,7 +499,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
           if (!newComment.trim() || !selectedTask) return
           setIsSaving(true)
           try {
-            const response = await fetch(`/api/tasks/${selectedTask.id}/comments`, {
+            const response = await apiFetch(`/api/tasks/${selectedTask.id}/comments`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ content: newComment.trim() }),

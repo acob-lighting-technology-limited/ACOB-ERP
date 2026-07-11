@@ -12,6 +12,7 @@ import { Printer, CheckCircle, Package } from "lucide-react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/page-header"
 import { PageLoader } from "@/components/ui/query-states"
+import { apiFetch } from "@/lib/api-client"
 
 interface PurchaseOrder {
   id: string
@@ -42,7 +43,7 @@ interface POItem {
 type BadgeVariant = "default" | "destructive" | "secondary" | "outline"
 
 async function fetchPurchaseOrderDetail(id: string): Promise<PurchaseOrder> {
-  const res = await fetch(`/api/admin/purchasing/orders/${id}`, { cache: "no-store" })
+  const res = await apiFetch(`/api/admin/purchasing/orders/${id}`, { cache: "no-store" })
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load purchase order")
   const json = await res.json()
   return json.data as PurchaseOrder
@@ -68,7 +69,7 @@ export default function PurchaseOrderDetailPage() {
 
   async function updateStatus(status: string) {
     try {
-      const res = await fetch(`/api/admin/purchasing/orders/${id}`, {
+      const res = await apiFetch(`/api/admin/purchasing/orders/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),

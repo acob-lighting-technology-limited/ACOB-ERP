@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { StatCard } from "@/components/ui/stat-card"
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("assets-issues")
 
@@ -66,7 +67,7 @@ interface AssetIssue {
 async function fetchAssetIssues(): Promise<AssetIssue[]> {
   // Department scoping is resolved server-side (shared between /admin/assets/issues
   // and /dept/[id]/assets/issues via getScopedDepartments) — no client-side lock.
-  const res = await fetch("/api/admin/assets/issues", { cache: "no-store" })
+  const res = await apiFetch("/api/admin/assets/issues", { cache: "no-store" })
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load asset issues")
   const json = await res.json()
   return (json.data || []) as AssetIssue[]
@@ -152,7 +153,7 @@ export function AssetIssuesPage({
 
   async function handleToggleResolved(issue: AssetIssue) {
     try {
-      const res = await fetch(`/api/admin/assets/${issue.asset_id}/issues/${issue.id}`, {
+      const res = await apiFetch(`/api/admin/assets/${issue.asset_id}/issues/${issue.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ resolved: !issue.resolved }),
@@ -168,7 +169,7 @@ export function AssetIssuesPage({
 
   async function handleDeleteIssue(issue: AssetIssue) {
     try {
-      const res = await fetch(`/api/admin/assets/${issue.asset_id}/issues/${issue.id}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/admin/assets/${issue.asset_id}/issues/${issue.id}`, { method: "DELETE" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to delete issue")
       toast.success("Issue deleted")
       void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminAssetIssues() })

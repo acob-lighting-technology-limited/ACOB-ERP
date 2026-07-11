@@ -7,6 +7,7 @@ import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-client"
 
 type PolicyRow = {
   notification_key: string
@@ -30,7 +31,7 @@ const MODULE_LABELS: Record<string, string> = {
 }
 
 async function fetchMailPolicies(): Promise<PolicyRow[]> {
-  const response = await fetch("/api/admin/settings/mail", { cache: "no-store" })
+  const response = await apiFetch("/api/admin/settings/mail", { cache: "no-store" })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(payload.error || "Failed to load mail policies")
   return Array.isArray(payload.policies)
@@ -60,7 +61,7 @@ export function MailPolicySettings() {
 
   const { mutate: savePoliciesMutate, isPending: saving } = useMutation({
     mutationFn: async (body: { policies: PolicyRow[] }) => {
-      const response = await fetch("/api/admin/settings/mail", {
+      const response = await apiFetch("/api/admin/settings/mail", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

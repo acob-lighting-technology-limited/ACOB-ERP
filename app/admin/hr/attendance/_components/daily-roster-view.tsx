@@ -21,6 +21,7 @@ import { toast } from "sonner"
 import { toLocalISODate, isLate } from "@/lib/hr/attendance-utils"
 import { MANUAL_ATTENDANCE_STATUS_OPTIONS, isEarlyDeparture } from "@/lib/hr/attendance-status"
 import { StatusBadge, formatTime, labelSource } from "./status-badge"
+import { apiFetch } from "@/lib/api-client"
 
 function parseTimeToMinutes(value: string | null | undefined): number | null {
   if (!value) return null
@@ -79,7 +80,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
     try {
       const params = new URLSearchParams({ start_date: rosterDate, end_date: rosterDate, include_all: "1" })
       if (lockedDepartment) params.set("department", lockedDepartment)
-      const res = await fetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load roster")
       setRecords(payload.records || [])
@@ -139,7 +140,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           clock_in: null,
           clock_out: null,
         }
-        res = await fetch(`/api/admin/hr/attendance/records`, {
+        res = await apiFetch(`/api/admin/hr/attendance/records`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -150,7 +151,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           manual_comment: editForm.manual_comment,
           status: editForm.status,
         }
-        res = await fetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
+        res = await apiFetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -171,7 +172,9 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
   const stats = useMemo(
     () => ({
       early: records.filter((r) => r.status === "early").length,
-      present: records.filter((r) => ["early", "present", "late", "incomplete", "lateness_with_permission"].includes(r.status ?? "")).length,
+      present: records.filter((r) =>
+        ["early", "present", "late", "incomplete", "lateness_with_permission"].includes(r.status ?? "")
+      ).length,
       late: records.filter((r) => r.status === "late").length,
       incomplete: records.filter((r) => r.status === "incomplete").length,
       absent: records.filter((r) => r.status === "absent").length,

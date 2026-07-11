@@ -14,6 +14,7 @@ import { CreateReviewDialog } from "../../../performance/_components/create-revi
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { exportPmsRowsToExcel, exportPmsRowsToPdf } from "@/lib/pms/export"
 import { toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -140,7 +141,7 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
     if (!hasLoadedRef.current) setIsInitialLoading(true)
     setError(null)
     try {
-      const res = await fetch(`/api/hr/performance/reviews?cycle_id=${encodeURIComponent(cycleId)}`, {
+      const res = await apiFetch(`/api/hr/performance/reviews?cycle_id=${encodeURIComponent(cycleId)}`, {
         cache: "no-store",
       })
       const payload = (await res.json().catch(() => null)) as { data?: ReviewRow[]; error?: string } | null
@@ -230,7 +231,7 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
   async function handleStatusUpdate(reviewId: string, status: "draft" | "submitted" | "completed") {
     const target = canonicalReviews.find((r) => r.id === reviewId)
     try {
-      const res = await fetch("/api/hr/performance/reviews", {
+      const res = await apiFetch("/api/hr/performance/reviews", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

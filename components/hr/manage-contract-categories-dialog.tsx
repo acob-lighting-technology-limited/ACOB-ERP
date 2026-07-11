@@ -18,6 +18,7 @@ import { Badge } from "@/components/ui/badge"
 import { Pencil, Layers } from "lucide-react"
 import { toast } from "sonner"
 import { createClient } from "@/lib/supabase/client"
+import { apiFetch } from "@/lib/api-client"
 
 interface ManageContractCategoriesDialogProps {
   isOpen: boolean
@@ -47,7 +48,7 @@ export function ManageContractCategoriesDialog({ isOpen, onOpenChange }: ManageC
   const { data: categories = [], isLoading } = useQuery<ContractCategory[]>({
     queryKey: ["contract-categories-all"],
     queryFn: async () => {
-      const response = await fetch("/api/admin/hr/employment-categories?include_inactive=true")
+      const response = await apiFetch("/api/admin/hr/employment-categories?include_inactive=true")
       if (!response.ok) throw new Error("Failed to fetch contract categories")
       const result = await response.json()
       return result.data || []
@@ -89,13 +90,13 @@ export function ManageContractCategoriesDialog({ isOpen, onOpenChange }: ManageC
 
       let res
       if (editingId) {
-        res = await fetch("/api/admin/hr/employment-categories", {
+        res = await apiFetch("/api/admin/hr/employment-categories", {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ id: editingId, ...payload }),
         })
       } else {
-        res = await fetch("/api/admin/hr/employment-categories", {
+        res = await apiFetch("/api/admin/hr/employment-categories", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -118,7 +119,7 @@ export function ManageContractCategoriesDialog({ isOpen, onOpenChange }: ManageC
 
   const handleToggleActive = async (cat: ContractCategory) => {
     try {
-      const res = await fetch("/api/admin/hr/employment-categories", {
+      const res = await apiFetch("/api/admin/hr/employment-categories", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

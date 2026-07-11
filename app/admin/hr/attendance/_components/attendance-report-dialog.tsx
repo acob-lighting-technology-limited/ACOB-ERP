@@ -7,9 +7,17 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { EmployeeRecipientPicker } from "@/components/admin/employee-recipient-picker"
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("attendance-report-dialog")
 
@@ -38,7 +46,7 @@ export function AttendanceReportDialog({ open, onOpenChange }: Props) {
     setLoading(true)
     void (async () => {
       try {
-        const res = await fetch("/api/admin/hr/attendance/report-config", { cache: "no-store" })
+        const res = await apiFetch("/api/admin/hr/attendance/report-config", { cache: "no-store" })
         const payload = (await res.json().catch(() => null)) as { data?: ConfigPayload; error?: string } | null
         if (!res.ok) throw new Error(payload?.error ?? "Failed to load report configuration")
         setRecipientUserIds(payload?.data?.recipientUserIds ?? [])
@@ -72,7 +80,7 @@ export function AttendanceReportDialog({ open, onOpenChange }: Props) {
     }
     setSaving(true)
     try {
-      const res = await fetch("/api/admin/hr/attendance/report-config", {
+      const res = await apiFetch("/api/admin/hr/attendance/report-config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ recipientUserIds, enabled, sendTimes }),
@@ -93,8 +101,8 @@ export function AttendanceReportDialog({ open, onOpenChange }: Props) {
         <DialogHeader>
           <DialogTitle>Attendance Reports</DialogTitle>
           <DialogDescription>
-            Configure who receives the daily attendance status report — a table of every employee&apos;s status for
-            the day plus a summary of counts.
+            Configure who receives the daily attendance status report — a table of every employee&apos;s status for the
+            day plus a summary of counts.
           </DialogDescription>
         </DialogHeader>
 

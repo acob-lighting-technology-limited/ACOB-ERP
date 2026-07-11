@@ -17,6 +17,7 @@ import { QUERY_KEYS } from "@/lib/query-keys"
 import { logger } from "@/lib/logger"
 import type { QueryClient } from "@tanstack/react-query"
 import { toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("finance-bill-dialog")
 
@@ -102,7 +103,7 @@ export function BillFormDialog({ open, onOpenChange, queryClient }: BillFormDial
 
     setSaving(true)
     try {
-      const res = await fetch("/api/admin/finance/bills", {
+      const res = await apiFetch("/api/admin/finance/bills", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

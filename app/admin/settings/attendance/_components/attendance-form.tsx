@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Loader2, Save } from "lucide-react"
 import { AttendancePolicy } from "@/lib/org-config"
+import { apiFetch } from "@/lib/api-client"
 
 interface AttendanceFormProps {
   initialPolicy: AttendancePolicy
@@ -40,7 +41,7 @@ export function AttendanceForm({ initialPolicy }: AttendanceFormProps) {
 
     startTransition(async () => {
       try {
-        const response = await fetch("/api/admin/settings/attendance", {
+        const response = await apiFetch("/api/admin/settings/attendance", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({

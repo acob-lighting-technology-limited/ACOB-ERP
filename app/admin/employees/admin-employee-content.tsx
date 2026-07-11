@@ -29,6 +29,7 @@ import { EmployeeListView } from "@/components/employees/EmployeeListView"
 import { getAssignableRolesForActor } from "@/lib/role-management"
 import { formValidation } from "@/lib/validation"
 import { toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("employees-admin-employee-content")
 
@@ -520,7 +521,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
 
       ;(updateData as Record<string, unknown>).attendance_exempt = editForm.attendance_exempt
 
-      const emailSyncResponse = await fetch(`/api/admin/hr/employees/${selectedEmployee.id}/email`, {
+      const emailSyncResponse = await apiFetch(`/api/admin/hr/employees/${selectedEmployee.id}/email`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ companyEmail, additionalEmail: additionalEmail || null }),
@@ -592,7 +593,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         return
       }
 
-      const response = await fetch("/api/admin/create-user", {
+      const response = await apiFetch("/api/admin/create-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(createUserForm),

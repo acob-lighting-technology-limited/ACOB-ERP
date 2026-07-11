@@ -14,6 +14,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FormFieldGroup } from "@/components/ui/patterns"
 import { toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 type LeaveTypeOption = {
   id: string
@@ -24,14 +25,14 @@ type LeaveTypeOption = {
 }
 
 async function fetchLeaveTypes(): Promise<LeaveTypeOption[]> {
-  const response = await fetch("/api/hr/leave/types")
+  const response = await apiFetch("/api/hr/leave/types")
   const payload = await response.json()
   if (!response.ok) throw new Error(payload.error || "Failed to load leave types")
   return payload.data || []
 }
 
 async function fetchRelievers(): Promise<{ value: string; label: string }[]> {
-  const response = await fetch("/api/hr/leave/relievers")
+  const response = await apiFetch("/api/hr/leave/relievers")
   const payload = await response.json()
   if (!response.ok) throw new Error(payload.error || "Failed to load relievers")
   return payload.data || []
@@ -88,7 +89,7 @@ export default function LeaveRequestPage() {
 
   const { mutate: submitRequest, isPending: loading } = useMutation({
     mutationFn: async (body: typeof formData) => {
-      const response = await fetch("/api/hr/leave/requests", {
+      const response = await apiFetch("/api/hr/leave/requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

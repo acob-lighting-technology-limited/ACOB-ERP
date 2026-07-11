@@ -12,6 +12,7 @@ import { Printer, CheckCircle } from "lucide-react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/layout/page-header"
 import { PageLoader } from "@/components/ui/query-states"
+import { apiFetch } from "@/lib/api-client"
 
 interface Bill {
   id: string
@@ -39,7 +40,7 @@ interface BillItem {
 type BillStatusVariant = "default" | "destructive" | "secondary" | "outline"
 
 async function fetchBill(id: string): Promise<Bill> {
-  const res = await fetch(`/api/admin/finance/bills/${id}`, { cache: "no-store" })
+  const res = await apiFetch(`/api/admin/finance/bills/${id}`, { cache: "no-store" })
   if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load bill")
   const json = await res.json()
   return json.data as Bill
@@ -57,7 +58,7 @@ export default function BillDetailPage() {
 
   async function markAsPaid() {
     try {
-      const res = await fetch(`/api/admin/finance/bills/${id}`, { method: "PATCH" })
+      const res = await apiFetch(`/api/admin/finance/bills/${id}`, { method: "PATCH" })
       if (!res.ok) throw new Error()
       toast.success("Marked as paid")
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminBillDetail(id) })

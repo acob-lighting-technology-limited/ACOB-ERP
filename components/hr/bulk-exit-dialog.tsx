@@ -21,6 +21,7 @@ import { AlertTriangle, Loader2, Mail, UserMinus } from "lucide-react"
 import { toast } from "sonner"
 import { toLocalISODate } from "@/lib/utils/date"
 import { useRouter } from "next/navigation"
+import { apiFetch } from "@/lib/api-client"
 
 interface SelectedEmployee {
   id: string
@@ -95,7 +96,7 @@ export function BulkExitDialog({ open, onOpenChange, employees, onSuccess }: Bul
         sendNotification,
       }
 
-      const res = await fetch("/api/v1/hr/employees/bulk-exit", {
+      const res = await apiFetch("/api/v1/hr/employees/bulk-exit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -148,7 +149,7 @@ export function BulkExitDialog({ open, onOpenChange, employees, onSuccess }: Bul
     if (!succeededIds.length) return
     setIsSendingNotification(true)
     try {
-      const res = await fetch("/api/v1/hr/employees/bulk-exit", {
+      const res = await apiFetch("/api/v1/hr/employees/bulk-exit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

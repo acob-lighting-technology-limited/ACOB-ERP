@@ -1,6 +1,7 @@
 "use client"
 
 import { saveAs } from "file-saver"
+import { apiFetch } from "@/lib/api-client"
 
 function readFilenameFromDisposition(disposition: string | null, fallback: string) {
   if (!disposition) return fallback
@@ -24,7 +25,7 @@ async function downloadStoredReportPdf(
   body: Record<string, unknown>,
   formatLabel = "PDF"
 ): Promise<void> {
-  const response = await fetch(path, {
+  const response = await apiFetch(path, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

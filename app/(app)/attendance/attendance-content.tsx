@@ -31,6 +31,7 @@ import {
   deriveUnifiedAttendanceStatus,
 } from "@/lib/hr/attendance-status"
 import type { UnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("dashboard-attendance-attendance-content")
 
@@ -164,7 +165,7 @@ export function AttendanceContent({
       const months = [getPrevMonth(ym, 2), getPrevMonth(ym, 1), ym]
       const results = await Promise.all(
         months.map((m) =>
-          fetch(`/api/hr/attendance/my-days?year_month=${m}`, { cache: "no-store" })
+          apiFetch(`/api/hr/attendance/my-days?year_month=${m}`, { cache: "no-store" })
             .then((r) => (r.ok ? r.json() : null))
             .then((d) => (d?.data as UnifiedDay[]) ?? [])
             .catch(() => [] as UnifiedDay[])
@@ -182,7 +183,7 @@ export function AttendanceContent({
 
   const fetchAppeals = useCallback(async () => {
     try {
-      const res = await fetch("/api/hr/attendance/appeals", { cache: "no-store" })
+      const res = await apiFetch("/api/hr/attendance/appeals", { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (res.ok) {
         setAppeals((payload?.data as AppealRecord[]) ?? [])
@@ -195,7 +196,7 @@ export function AttendanceContent({
   const handleCancelAppeal = useCallback(
     async (appealId: string) => {
       try {
-        const res = await fetch(`/api/hr/attendance/appeals?id=${appealId}`, {
+        const res = await apiFetch(`/api/hr/attendance/appeals?id=${appealId}`, {
           method: "DELETE",
         })
         const payload = await res.json().catch(() => null)

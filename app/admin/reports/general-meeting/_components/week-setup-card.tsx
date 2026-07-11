@@ -16,6 +16,7 @@ import { getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { normalizeDepartmentName } from "@/shared/departments"
 import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
+import { apiFetch } from "@/lib/api-client"
 
 type EmployeeOption = {
   id: string
@@ -70,7 +71,7 @@ export function WeekSetupCard() {
   const { data: employees = [] } = useQuery({
     queryKey: ["general-meeting-week-setup-employees"],
     queryFn: async (): Promise<EmployeeOption[]> => {
-      const res = await fetch("/api/admin/reports/week-setup/employees", { cache: "no-store" })
+      const res = await apiFetch("/api/admin/reports/week-setup/employees", { cache: "no-store" })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load employees")
       const json = await res.json()
       return json.data as EmployeeOption[]
@@ -103,7 +104,7 @@ export function WeekSetupCard() {
   const { data: lockState } = useQuery({
     queryKey: QUERY_KEYS.adminWeeklyReportLockState(weekNumber, yearNumber),
     queryFn: async () => {
-      const res = await fetch(`/api/admin/reports/weekly-lock-state?week=${weekNumber}&year=${yearNumber}`, {
+      const res = await apiFetch(`/api/admin/reports/weekly-lock-state?week=${weekNumber}&year=${yearNumber}`, {
         cache: "no-store",
       })
       if (!res.ok) throw new Error("Failed to resolve lock state")
@@ -122,7 +123,7 @@ export function WeekSetupCard() {
   const { data: weekSetupData } = useQuery({
     queryKey: ["general-meeting-week-setup", weekNumber, yearNumber],
     queryFn: async () => {
-      const res = await fetch(`/api/admin/reports/week-setup?week=${weekNumber}&year=${yearNumber}`, {
+      const res = await apiFetch(`/api/admin/reports/week-setup?week=${weekNumber}&year=${yearNumber}`, {
         cache: "no-store",
       })
       if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load week setup")
@@ -179,7 +180,7 @@ export function WeekSetupCard() {
     setSavingMeetingWindow(true)
     try {
       const [meetingDateResponse, kssResult] = await Promise.all([
-        fetch("/api/reports/meeting-date", {
+        apiFetch("/api/reports/meeting-date", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -190,7 +191,7 @@ export function WeekSetupCard() {
           }),
         }),
         weekSetupData?.rosterId
-          ? fetch("/api/reports/kss-roster", {
+          ? apiFetch("/api/reports/kss-roster", {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -201,7 +202,7 @@ export function WeekSetupCard() {
                 isActive: true,
               }),
             })
-          : fetch("/api/reports/kss-roster", {
+          : apiFetch("/api/reports/kss-roster", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -224,7 +225,7 @@ export function WeekSetupCard() {
         throw new Error(kssPayload.error || "Failed to save KSS setup")
       }
 
-      const windowRes = await fetch("/api/admin/reports/week-setup", {
+      const windowRes = await apiFetch("/api/admin/reports/week-setup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -259,7 +260,7 @@ export function WeekSetupCard() {
   const { data: yearRows = [], isLoading: yearConfigLoading } = useQuery<OfficeYearRow[]>({
     queryKey: ["office-year-config"],
     queryFn: async () => {
-      const res = await fetch("/api/reports/office-year-config")
+      const res = await apiFetch("/api/reports/office-year-config")
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Failed to load")
       return json.data
@@ -273,7 +274,7 @@ export function WeekSetupCard() {
 
   const saveYearMutation = useMutation({
     mutationFn: async ({ year, anchor_day }: { year: number; anchor_day: number }) => {
-      const res = await fetch("/api/reports/office-year-config", {
+      const res = await apiFetch("/api/reports/office-year-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ year, anchor_day }),
