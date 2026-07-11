@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { ProfileHero } from "@/components/profile/profile-hero"
 import { ProfileEditDialog } from "@/components/profile/profile-edit-dialog"
 import { ActivityTabs } from "@/components/profile/activity-tabs"
+import { NeedsAttention } from "@/components/profile/needs-attention"
 import {
   PersonalRecentActivityFeed,
   type PersonalRecentActivityItem,
@@ -75,6 +76,8 @@ export function ProfileContent({
   return (
     <div className="container mx-auto max-w-full space-y-6 p-4 md:p-6 lg:p-8">
       <ProfileHero profile={profile} onEdit={() => setIsEditOpen(true)} />
+
+      <NeedsAttention tasks={tasks} leave={leave} helpDesk={helpDesk} correspondence={correspondence} />
 
       {/* 2-column equal-width dashboard layout on desktop */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
