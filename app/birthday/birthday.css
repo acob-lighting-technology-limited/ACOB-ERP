@@ -4,7 +4,7 @@
 
 .birthday-page {
   position: relative;
-  min-height: 100vh;
+  height: 100vh;
   overflow: hidden;
   background:
     radial-gradient(circle at 12% 18%, color-mix(in oklab, var(--primary) 26%, transparent), transparent 28%),
@@ -34,7 +34,7 @@
   position: relative;
   z-index: 1;
   display: grid;
-  min-height: 100vh;
+  height: 100vh;
   grid-template-columns: minmax(0, 0.7fr) minmax(320px, 1.3fr);
   align-items: center;
   gap: 2rem;
@@ -127,6 +127,33 @@
   line-height: 1.6;
 }
 
+.birthday-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 36rem;
+  border: 1px solid color-mix(in oklab, var(--border) 82%, var(--primary) 18%);
+  border-radius: 1.25rem;
+  padding: 1rem;
+  background: color-mix(in oklab, var(--card) 82%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.birthday-picker__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.birthday-picker__controls > * {
+  flex: 1 1 12rem;
+}
+
+.birthday-picker__controls > button {
+  flex: 0 0 auto;
+}
+
 .birthday-meta-grid {
   display: grid;
   max-width: 36rem;
@@ -172,20 +199,27 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 100%;
+  height: 100%;
+  max-height: 80vh;
 }
 
 .birthday-grid {
   display: grid;
   width: 100%;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  height: 100%;
+  max-height: 100%;
+  /* --birthday-cols is set inline per render so the grid stays roughly square
+     (e.g. 4 people -> 2x2) instead of always stretching into one row of 4. */
+  grid-template-columns: repeat(var(--birthday-cols, 4), minmax(0, 1fr));
+  grid-auto-rows: 1fr;
   gap: 0.75rem;
+  justify-content: center;
 }
 
 .birthday-card-item {
   position: relative;
   width: 100%;
-  aspect-ratio: 4 / 5;
+  height: 100%;
   border-radius: 1.25rem;
   border: 2px solid color-mix(in oklab, var(--border) 60%, var(--primary) 40%);
   background: linear-gradient(
@@ -295,8 +329,27 @@
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
 }
 
+.birthday-setup-container {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  gap: 1.5rem;
+}
+
 @media (max-width: 1100px) {
+  .birthday-page {
+    height: auto;
+    min-height: 100vh;
+    overflow: auto;
+  }
+
   .birthday-hero {
+    height: auto;
+    min-height: 100vh;
     grid-template-columns: 1fr;
     padding: 1.5rem;
   }
@@ -307,10 +360,19 @@
 
   .birthday-hero__visual {
     order: 1;
+    height: auto;
+    max-height: none;
   }
 
   .birthday-grid {
+    grid-auto-rows: auto;
     max-width: 58rem;
+  }
+
+  .birthday-card-item {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 4 / 5;
   }
 }
 

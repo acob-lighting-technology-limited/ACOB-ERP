@@ -23,6 +23,7 @@ import {
   IdCard,
   Settings2,
   Tags,
+  Cake,
 } from "lucide-react"
 import type { UserRole, EmploymentStatus } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
@@ -43,6 +44,7 @@ import {
 import type { Database } from "@/types/database"
 import type { EmployeeAssignedItems, EmployeeProfile, EmployeeViewData } from "@/components/employees/types"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
+import { BirthdayManagerDialog } from "@/components/hr/birthday-manager-dialog"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
@@ -181,6 +183,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
 
   const [manageUsersOpen, setManageUsersOpen] = useState(false)
   const [categoriesDialogOpen, setCategoriesDialogOpen] = useState(false)
+  const [birthdayManagerOpen, setBirthdayManagerOpen] = useState(false)
 
   const [editForm, setEditForm] = useState({
     role: "employee" as UserRole,
@@ -697,6 +700,10 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       backLink={{ href: "/admin/hr", label: "Back to HR" }}
       actions={
         <div className="flex items-center gap-2">
+          <Button onClick={() => setBirthdayManagerOpen(true)} variant="outline" size="sm" className="h-8 gap-2">
+            <Cake className="h-4 w-4" />
+            <span className="hidden sm:inline">Birthday Manager</span>
+          </Button>
           {(canManageUsers || canReviewApplications) && (
             <>
               <Button onClick={() => setCategoriesDialogOpen(true)} variant="outline" size="sm" className="h-8 gap-2">
@@ -950,6 +957,8 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       />
 
       <ManageContractCategoriesDialog isOpen={categoriesDialogOpen} onOpenChange={setCategoriesDialogOpen} />
+
+      <BirthdayManagerDialog open={birthdayManagerOpen} onOpenChange={setBirthdayManagerOpen} />
 
       <EmployeeDeletionDialog
         isOpen={isDeleteDialogOpen}
