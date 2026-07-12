@@ -13,6 +13,7 @@ import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { checkIdempotency, getIdempotencyKey, storeIdempotencyKey } from "@/lib/idempotency"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { formatName } from "@/lib/utils"
 
 const log = logger("admin-create-user")
 
@@ -70,9 +71,9 @@ export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json()
     const {
-      firstName,
-      lastName,
-      otherNames,
+      firstName: rawFirstName,
+      lastName: rawLastName,
+      otherNames: rawOtherNames,
       email,
       department,
       designation,
@@ -86,6 +87,10 @@ export async function PATCH(request: NextRequest) {
       residentialAddress,
       officeLocation,
     } = body
+
+    const firstName = formatName(rawFirstName)
+    const lastName = formatName(rawLastName)
+    const otherNames = rawOtherNames ? formatName(rawOtherNames) : ""
     const resolvedEmploymentType = employmentType || "full_time"
     const resolvedDesignation = String(designation ?? body?.companyRole ?? "").trim()
     const adminRoutes = Array.isArray(body?.admin_routes)

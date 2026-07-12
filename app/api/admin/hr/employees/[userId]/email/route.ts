@@ -27,7 +27,7 @@ function isManageUsersRole(role: string | null | undefined): boolean {
   return role === "developer" || role === "super_admin" || role === "admin"
 }
 
-export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+export async function PATCH(request: NextRequest, props: { params: Promise<{ userId: string }> }) {
   const params = await props.params
   const rl = await rateLimit(`admin-hr-employees-email:${getClientId(request)}`, { limit: 30, windowSec: 60 })
   if (!rl.allowed)
@@ -50,7 +50,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const employeeId = String(params?.id || "").trim()
+    const employeeId = String(params?.userId || "").trim()
     if (!employeeId) {
       return NextResponse.json({ error: "Employee id is required" }, { status: 400 })
     }
@@ -158,7 +158,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
           additional_email: additionalEmail,
           auth_email: companyEmail,
         },
-        context: { actorId: user.id, source: "api", route: "/api/admin/hr/employees/[id]/email" },
+        context: { actorId: user.id, source: "api", route: "/api/admin/hr/employees/[userId]/email" },
       },
       { failOpen: true }
     )

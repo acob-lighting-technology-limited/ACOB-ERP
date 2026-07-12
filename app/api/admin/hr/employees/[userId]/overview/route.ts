@@ -28,7 +28,7 @@ type ProfileRow = {
   [key: string]: unknown
 }
 
-export async function GET(_: Request, props: { params: Promise<{ id: string }> }) {
+export async function GET(_: Request, props: { params: Promise<{ userId: string }> }) {
   const params = await props.params
   try {
     const supabase = await createClient()
@@ -45,7 +45,7 @@ export async function GET(_: Request, props: { params: Promise<{ id: string }> }
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const employeeId = String(params?.id || "").trim()
+    const employeeId = String(params?.userId || "").trim()
     if (!employeeId) {
       return NextResponse.json({ error: "Employee id is required" }, { status: 400 })
     }

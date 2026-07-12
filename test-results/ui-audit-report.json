@@ -1,7 +1,7 @@
 {
-  "generatedAt": "2026-07-08T04:59:17.855Z",
+  "generatedAt": "2026-07-10T09:26:45.522Z",
   "summary": {
-    "totalPages": 216,
+    "totalPages": 217,
     "missingLoading": 0,
     "headerViolations": 0,
     "tableViolations": 0,
@@ -9,7 +9,7 @@
     "modalViolations": 0,
     "adHocEmptyStatePages": 2,
     "adHocErrorStatePages": 0,
-    "adHocSectionPages": 3,
+    "adHocSectionPages": 2,
     "adHocFormFieldPages": 5
   },
   "violations": {
@@ -25,7 +25,6 @@
     "adHocErrorStatePages": [],
     "adHocSectionPages": [
       "app/birthday/page.tsx",
-      "app/birthday1/page.tsx",
       "app/kss/page.tsx"
     ],
     "adHocFormFieldPages": [

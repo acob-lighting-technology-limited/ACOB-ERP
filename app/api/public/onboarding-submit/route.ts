@@ -4,6 +4,7 @@ import { z } from "zod"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { checkRequestSize } from "@/lib/api/request-size"
 import { sendNotificationEmail } from "@/lib/notifications/email-gateway"
+import { formatName } from "@/lib/utils"
 
 const OnboardingSubmitSchema = z.object({
   first_name: z.string().trim().min(2),
@@ -95,9 +96,9 @@ export async function POST(req: Request) {
   }
 
   const payload = {
-    first_name: parsed.data.first_name,
-    last_name: parsed.data.last_name,
-    other_names: parsed.data.other_names || null,
+    first_name: formatName(parsed.data.first_name),
+    last_name: formatName(parsed.data.last_name),
+    other_names: parsed.data.other_names ? formatName(parsed.data.other_names) : null,
     gender: parsed.data.gender,
     date_of_birth: parsed.data.date_of_birth || null,
     department: parsed.data.department || null,
