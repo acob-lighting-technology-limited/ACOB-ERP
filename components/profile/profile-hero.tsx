@@ -6,7 +6,18 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Pencil, Mail, Phone, Cake, Home, Camera, X, Loader2 } from "lucide-react"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Pencil, Mail, Phone, Cake, Home, Camera, Trash2, Loader2 } from "lucide-react"
 import { formatName, cn } from "@/lib/utils"
 import { formatWATDate, formatBirthdayLabel } from "@/lib/utils/date"
 import { getRoleBadgeColor, getRoleDisplayName } from "@/lib/permissions"
@@ -79,6 +90,8 @@ export function ProfileHero({ profile, avatarUrl, onAvatarChange, onEdit }: Prof
 
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [isUploading, setIsUploading] = useState(false)
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false)
+  const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false)
 
   async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -113,10 +126,20 @@ export function ProfileHero({ profile, avatarUrl, onAvatarChange, onEdit }: Prof
       }
       onAvatarChange?.(null)
       toast.success("Profile photo removed")
+      setIsRemoveConfirmOpen(false)
+      setIsLightboxOpen(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to remove photo")
     } finally {
       setIsUploading(false)
+    }
+  }
+
+  function handleAvatarClick() {
+    if (avatarUrl) {
+      setIsLightboxOpen(true)
+    } else {
+      fileInputRef.current?.click()
     }
   }
 
@@ -154,12 +177,20 @@ export function ProfileHero({ profile, avatarUrl, onAvatarChange, onEdit }: Prof
         {/* Identity — avatar bleeds over banner */}
         <div className="-mt-10 flex items-end gap-4 sm:-mt-12">
           <div className="group relative shrink-0">
-            <Avatar className="border-background h-20 w-20 border-4 shadow-md sm:h-24 sm:w-24">
-              {avatarUrl && <AvatarImage src={avatarUrl} alt={fullName || "Profile photo"} />}
-              <AvatarFallback className="bg-primary text-primary-foreground text-xl font-bold sm:text-2xl">
-                {getInitials(profile.first_name, profile.last_name)}
-              </AvatarFallback>
-            </Avatar>
+            <button
+              type="button"
+              onClick={handleAvatarClick}
+              disabled={isUploading}
+              aria-label={avatarUrl ? "View profile photo" : "Add profile photo"}
+              className="block rounded-full"
+            >
+              <Avatar className="border-background h-20 w-20 border-4 shadow-md transition-transform group-hover:scale-105 sm:h-24 sm:w-24">
+                {avatarUrl && <AvatarImage src={avatarUrl} alt={fullName || "Profile photo"} />}
+                <AvatarFallback className="bg-primary text-primary-foreground text-xl font-bold sm:text-2xl">
+                  {getInitials(profile.first_name, profile.last_name)}
+                </AvatarFallback>
+              </Avatar>
+            </button>
 
             <input
               ref={fileInputRef}
@@ -169,29 +200,14 @@ export function ProfileHero({ profile, avatarUrl, onAvatarChange, onEdit }: Prof
               onChange={handleFileSelected}
             />
 
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isUploading}
-              aria-label="Change profile photo"
+            <div
               className={cn(
-                "bg-background/80 border-border/50 absolute inset-0 flex items-center justify-center rounded-full border opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100",
+                "bg-background/80 border-border/50 pointer-events-none absolute inset-0 flex items-center justify-center rounded-full border opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100",
                 isUploading && "opacity-100"
               )}
             >
               {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
-            </button>
-
-            {avatarUrl && !isUploading && (
-              <button
-                type="button"
-                onClick={handleRemovePhoto}
-                aria-label="Remove profile photo"
-                className="bg-background border-border/50 absolute -top-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border shadow-sm"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            )}
+            </div>
           </div>
 
           <div className="flex min-w-0 flex-1 flex-col justify-end pb-0.5">
@@ -290,6 +306,62 @@ export function ProfileHero({ profile, avatarUrl, onAvatarChange, onEdit }: Prof
           </div>
         </div>
       </CardContent>
+
+      <Dialog open={isLightboxOpen} onOpenChange={setIsLightboxOpen}>
+        <DialogContent className="max-w-md gap-4 p-4 sm:p-4">
+          <DialogTitle className="sr-only">Profile photo</DialogTitle>
+          <div className="bg-muted overflow-hidden rounded-lg">
+            {avatarUrl && (
+              // eslint-disable-next-line @next/next/no-img-element -- signed URL, not an optimizable static asset
+              <img src={avatarUrl} alt={fullName || "Profile photo"} className="aspect-square w-full object-cover" />
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1 gap-1.5"
+              disabled={isUploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Change Photo
+            </Button>
+            <Button
+              variant="outline"
+              className="text-destructive hover:text-destructive flex-1 gap-1.5"
+              disabled={isUploading}
+              onClick={() => setIsRemoveConfirmOpen(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isRemoveConfirmOpen} onOpenChange={setIsRemoveConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove profile photo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove your profile photo. You can upload a new one at any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isUploading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleRemovePhoto()
+              }}
+              disabled={isUploading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }
