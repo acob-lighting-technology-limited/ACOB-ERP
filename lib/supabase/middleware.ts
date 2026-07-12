@@ -351,9 +351,8 @@ export async function updateSession(request: NextRequest) {
   }
 
   // CSRF: validate Origin for state-changing requests.
-  // The Origin allow-list is the app's PRIMARY cross-origin defense. The
-  // double-submit token check further below is currently inert (no client sends
-  // x-csrf-token yet — see follow-up). Keep the Origin check strict.
+  // First of two layers — the double-submit token check below is the second,
+  // enforced fail-closed for cookie-authenticated mutations.
   const method = request.method.toUpperCase()
   if (!["GET", "HEAD", "OPTIONS"].includes(method)) {
     const origin = request.headers.get("origin")
@@ -384,34 +383,44 @@ export async function updateSession(request: NextRequest) {
     const isApiRoute = pathname.startsWith("/api/")
     const hasBearerAuth = request.headers.get("authorization")?.startsWith("Bearer ")
 
-    if (isApiRoute && !hasBearerAuth) {
+    // Double-submit token check — FAIL CLOSED for cookie-authenticated browser
+    // mutations. All client code routes mutations through apiFetch() (lib/
+    // api-client.ts), which echoes the csrf_token cookie as x-csrf-token.
+    //
+    // Scope mirrors the Origin fail-closed check above: only when `user` exists
+    // (a cookie session an attacker could ride). Anonymous ingress (device
+    // events, public onboarding, CBT kiosk) has no ambient credential to forge,
+    // and non-browser clients use bearer auth — both stay unaffected.
+    //
+    // /api/telemetry/errors is exempt: it is fired via navigator.sendBeacon,
+    // which cannot attach custom headers. It only ingests error reports.
+    if (isApiRoute && !hasBearerAuth && user && pathname !== "/api/telemetry/errors") {
       const cookieToken = request.cookies.get("csrf_token")?.value
       const headerToken = request.headers.get("x-csrf-token")
 
-      // Double-submit token check. Only enforced when a header is present because
-      // no client currently sends x-csrf-token — the Origin check above is the
-      // active defense. FOLLOW-UP: inject x-csrf-token into all mutations via a
-      // central fetch layer, then require both cookie+header here (fail closed).
-      if (cookieToken && headerToken) {
-        if (headerToken.length !== cookieToken.length || !timingSafeEqualText(headerToken, cookieToken)) {
-          return NextResponse.json({ error: "Invalid CSRF token" }, { status: 403 })
-        }
+      if (!cookieToken || !headerToken) {
+        return NextResponse.json({ error: "Missing CSRF token" }, { status: 403 })
+      }
+      if (headerToken.length !== cookieToken.length || !timingSafeEqualText(headerToken, cookieToken)) {
+        return NextResponse.json({ error: "Invalid CSRF token" }, { status: 403 })
       }
     }
   }
 
   if (method === "GET" && !pathname.startsWith("/api/") && !pathname.startsWith("/_next/")) {
+    // Sliding expiry: re-set the cookie on every page GET (keeping the existing
+    // value) so an active session never loses its token mid-flight. A short
+    // fixed TTL (previously 1h, set only once) meant an SPA tab idle past the
+    // TTL would fail its next mutation under the fail-closed check above.
     const existingToken = request.cookies.get("csrf_token")?.value
-    if (!existingToken) {
-      const token = randomHex(32)
-      supabaseResponse.cookies.set("csrf_token", token, {
-        httpOnly: false, // intentional: SPA reads this via document.cookie to set x-csrf-token header
-        sameSite: "strict",
-        secure: process.env.NODE_ENV === "production",
-        path: "/",
-        maxAge: 60 * 60,
-      })
-    }
+    const token = existingToken || randomHex(32)
+    supabaseResponse.cookies.set("csrf_token", token, {
+      httpOnly: false, // intentional: SPA reads this via document.cookie to set x-csrf-token header
+      sameSite: "strict",
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 7,
+    })
   }
 
   return supabaseResponse
