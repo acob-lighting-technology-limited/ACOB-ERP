@@ -1,79 +1,92 @@
 "use client"
 
 import Link from "next/link"
-import { AlertTriangle, CalendarClock, Clock, FileCode2, Ticket } from "lucide-react"
+import { AlertTriangle, CalendarClock, FileCode2, Ticket, Wallet } from "lucide-react"
 import { StatCard } from "@/components/ui/stat-card"
-import type { Task, LeaveItem, HelpDeskItem, CorrespondenceItem } from "@/app/(app)/profile/page"
-
-const OPEN_TASK_STATUSES = new Set(["pending", "in_progress"])
-const TERMINAL_HELP_DESK_STATUSES = new Set(["resolved", "closed", "cancelled", "rejected"])
-const TERMINAL_CORRESPONDENCE_STATUSES = new Set(["filed", "closed", "cancelled"])
-const DUE_SOON_WINDOW_DAYS = 3
-
-function isOverdue(task: Task, now: Date): boolean {
-  if (!task.due_date || !OPEN_TASK_STATUSES.has(task.status)) return false
-  return new Date(task.due_date).getTime() < now.getTime()
-}
-
-function isDueSoon(task: Task, now: Date): boolean {
-  if (!task.due_date || !OPEN_TASK_STATUSES.has(task.status)) return false
-  const dueAt = new Date(task.due_date).getTime()
-  const windowEnd = now.getTime() + DUE_SOON_WINDOW_DAYS * 24 * 60 * 60 * 1000
-  return dueAt >= now.getTime() && dueAt <= windowEnd
-}
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import type { Task, LeaveItem, HelpDeskItem, CorrespondenceItem, PaymentItem } from "@/app/(app)/profile/page"
+import { countOverdueTasks, isOpenCorrespondence, isOpenTicket, isPendingPayment } from "./work-items"
 
 interface NeedsAttentionProps {
   tasks: Task[]
   leave: LeaveItem[]
   helpDesk: HelpDeskItem[]
   correspondence: CorrespondenceItem[]
+  payments: PaymentItem[]
 }
 
-export function NeedsAttention({ tasks, leave, helpDesk, correspondence }: NeedsAttentionProps) {
+function AttentionTile({ href, hint, children }: { href: string; hint: string; children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link href={href}>{children}</Link>
+      </TooltipTrigger>
+      <TooltipContent>{hint}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+export function NeedsAttention({ tasks, leave, helpDesk, correspondence, payments }: NeedsAttentionProps) {
   const now = new Date()
 
-  const overdueTasks = tasks.filter((task) => isOverdue(task, now)).length
-  const dueSoonTasks = tasks.filter((task) => isDueSoon(task, now)).length
+  const overdueTasks = countOverdueTasks(tasks, now)
   const pendingLeave = leave.filter((item) => item.status === "pending").length
-  const openTickets = helpDesk.filter((item) => !TERMINAL_HELP_DESK_STATUSES.has(item.status)).length
-  const openCorrespondence = correspondence.filter((item) => !TERMINAL_CORRESPONDENCE_STATUSES.has(item.status)).length
+  const openTickets = helpDesk.filter(isOpenTicket).length
+  const openCorrespondence = correspondence.filter(isOpenCorrespondence).length
+  const duePayments = payments.filter(isPendingPayment).length
 
   return (
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-      <Link href="/tasks">
+      <AttentionTile href="/tasks" hint="Open tasks past their due date">
         <StatCard
           title="Overdue Tasks"
           value={overdueTasks}
           icon={AlertTriangle}
-          iconBgColor="bg-red-500/10"
-          iconColor="text-red-600"
+          iconBgColor={overdueTasks > 0 ? "bg-red-500/10" : "bg-muted"}
+          iconColor={overdueTasks > 0 ? "text-red-600" : "text-muted-foreground"}
+          description={overdueTasks > 0 ? "Needs immediate action" : "All caught up"}
         />
-      </Link>
-      <Link href="/tasks">
-        <StatCard
-          title="Due Soon"
-          value={dueSoonTasks}
-          icon={Clock}
-          iconBgColor="bg-amber-500/10"
-          iconColor="text-amber-600"
-          description="Next 3 days"
-        />
-      </Link>
-      <Link href="/leave">
+      </AttentionTile>
+      <AttentionTile href="/leave" hint="Your leave requests still awaiting a decision">
         <StatCard
           title="Pending Leave"
           value={pendingLeave}
           icon={CalendarClock}
-          iconBgColor="bg-blue-500/10"
-          iconColor="text-blue-600"
+          iconBgColor={pendingLeave > 0 ? "bg-blue-500/10" : "bg-muted"}
+          iconColor={pendingLeave > 0 ? "text-blue-600" : "text-muted-foreground"}
+          description={pendingLeave > 0 ? "Awaiting approval" : "None pending"}
         />
-      </Link>
-      <Link href="/help-desk">
-        <StatCard title="Open Tickets" value={openTickets} icon={Ticket} />
-      </Link>
-      <Link href="/correspondence">
-        <StatCard title="Open Correspondence" value={openCorrespondence} icon={FileCode2} />
-      </Link>
+      </AttentionTile>
+      <AttentionTile href="/payments" hint="Payments with status Due or Overdue">
+        <StatCard
+          title="Payments Due"
+          value={duePayments}
+          icon={Wallet}
+          iconBgColor={duePayments > 0 ? "bg-amber-500/10" : "bg-muted"}
+          iconColor={duePayments > 0 ? "text-amber-600" : "text-muted-foreground"}
+          description={duePayments > 0 ? "Due or overdue" : "Nothing due"}
+        />
+      </AttentionTile>
+      <AttentionTile href="/help-desk" hint="Help desk tickets not yet resolved, closed, or cancelled">
+        <StatCard
+          title="Open Tickets"
+          value={openTickets}
+          icon={Ticket}
+          iconBgColor={openTickets > 0 ? "bg-blue-500/10" : "bg-muted"}
+          iconColor={openTickets > 0 ? "text-blue-600" : "text-muted-foreground"}
+          description={openTickets > 0 ? "Awaiting resolution" : "No open tickets"}
+        />
+      </AttentionTile>
+      <AttentionTile href="/correspondence" hint="Correspondence not yet filed, closed, or cancelled">
+        <StatCard
+          title="Correspondence"
+          value={openCorrespondence}
+          icon={FileCode2}
+          iconBgColor={openCorrespondence > 0 ? "bg-blue-500/10" : "bg-muted"}
+          iconColor={openCorrespondence > 0 ? "text-blue-600" : "text-muted-foreground"}
+          description={openCorrespondence > 0 ? "Open items" : "Nothing open"}
+        />
+      </AttentionTile>
     </div>
   )
 }

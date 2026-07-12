@@ -505,8 +505,6 @@ export default async function ProfilePage() {
       avatarUrl={profileData.avatarUrl}
       tasks={profileData.tasks}
       assets={profileData.assets}
-      documentation={profileData.documentation}
-      feedback={profileData.feedback}
       correspondence={profileData.correspondence}
       helpDesk={profileData.helpDesk}
       payments={profileData.payments}

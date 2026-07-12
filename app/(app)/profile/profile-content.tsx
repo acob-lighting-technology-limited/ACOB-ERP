@@ -5,8 +5,8 @@ import { Card, CardContent } from "@/components/ui/card"
 import { toast } from "sonner"
 import { ProfileHero } from "@/components/profile/profile-hero"
 import { ProfileEditDialog } from "@/components/profile/profile-edit-dialog"
-import { ActivityTabs } from "@/components/profile/activity-tabs"
 import { NeedsAttention } from "@/components/profile/needs-attention"
+import { MyTasksCard, OpenItemsCard, AssetsCard } from "@/components/profile/work-lists"
 import {
   PersonalRecentActivityFeed,
   type PersonalRecentActivityItem,
@@ -15,8 +15,6 @@ import type {
   UserProfile,
   Task,
   Asset,
-  Documentation,
-  Feedback,
   CorrespondenceItem,
   HelpDeskItem,
   PaymentItem,
@@ -24,13 +22,13 @@ import type {
   AttendanceItem,
 } from "./page"
 
+const MAX_ACTIVITY_ENTRIES = 12
+
 interface ProfileContentProps {
   profile: UserProfile | null
   avatarUrl: string | null
   tasks: Task[]
   assets: Asset[]
-  documentation: Documentation[]
-  feedback: Feedback[]
   correspondence: CorrespondenceItem[]
   helpDesk: HelpDeskItem[]
   payments: PaymentItem[]
@@ -45,8 +43,6 @@ export function ProfileContent({
   avatarUrl: initialAvatarUrl,
   tasks,
   assets,
-  documentation,
-  feedback,
   correspondence,
   helpDesk,
   payments,
@@ -77,31 +73,34 @@ export function ProfileContent({
   }
 
   return (
-    <div className="container mx-auto max-w-full space-y-6 p-4 md:p-6 lg:p-8">
+    <div className="container mx-auto max-w-7xl space-y-6 p-4 md:p-6 lg:p-8">
       <ProfileHero
         profile={profile}
         avatarUrl={avatarUrl}
+        attendance={attendance}
         onAvatarChange={setAvatarUrl}
         onEdit={() => setIsEditOpen(true)}
       />
 
-      <NeedsAttention tasks={tasks} leave={leave} helpDesk={helpDesk} correspondence={correspondence} />
+      <NeedsAttention
+        tasks={tasks}
+        leave={leave}
+        helpDesk={helpDesk}
+        correspondence={correspondence}
+        payments={payments}
+      />
 
-      {/* 2-column equal-width dashboard layout on desktop */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <ActivityTabs
-          tasks={tasks}
-          assets={assets}
-          documentation={documentation}
-          feedback={feedback}
-          correspondence={correspondence}
-          helpDesk={helpDesk}
-          payments={payments}
-          leave={leave}
-          attendance={attendance}
-        />
+      {/* Work first (2/3), secondary context in the rail (1/3) */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <MyTasksCard tasks={tasks} />
+          <OpenItemsCard helpDesk={helpDesk} correspondence={correspondence} leave={leave} />
+        </div>
 
-        <PersonalRecentActivityFeed activity={recentActivity} />
+        <div className="space-y-6">
+          <AssetsCard assets={assets} />
+          <PersonalRecentActivityFeed activity={recentActivity.slice(0, MAX_ACTIVITY_ENTRIES)} className="h-[400px]" />
+        </div>
       </div>
 
       <ProfileEditDialog open={isEditOpen} onOpenChange={setIsEditOpen} profile={profile} />
