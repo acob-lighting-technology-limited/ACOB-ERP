@@ -3,6 +3,7 @@ import { z } from "zod"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
+import { freezeExemptionAtToday } from "@/lib/hr/exemptions"
 
 const BulkExemptionSchema = z.object({
   user_ids: z.array(z.string().uuid()).min(1),
@@ -83,6 +84,15 @@ export async function PATCH(request: NextRequest) {
       .in("department", depts)
     user_ids = (scopedProfiles ?? []).map((p) => p.id)
     if (user_ids.length === 0) return NextResponse.json({ error: "No accessible employees selected" }, { status: 403 })
+  }
+
+  // "Off" freezes each exemption at today rather than wiping history (see
+  // freezeExemptionAtToday). Past exempt days are preserved; nothing new going forward.
+  if (mode === "off") {
+    for (const userId of user_ids) {
+      await freezeExemptionAtToday(dataClient, userId, auth.userId)
+    }
+    return NextResponse.json({ message: "Exemptions stopped — history preserved up to today" })
   }
 
   for (const userId of user_ids) {

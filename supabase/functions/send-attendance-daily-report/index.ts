@@ -308,8 +308,8 @@ serve(async (req) => {
       today = customDate
     } else {
       const hour = Number(nowHHMM.split(":")[0])
-      if (hour < 4) {
-        // Between 12:00 AM and 3:59 AM Lagos time, report on the day that just ended (yesterday)
+      if (hour < 5) {
+        // Between 12:00 AM and 4:59 AM Lagos time, report on the day that just ended (yesterday)
         const yesterday = new Date()
         yesterday.setDate(yesterday.getDate() - 1)
         const dateParts = new Intl.DateTimeFormat("en-CA", {

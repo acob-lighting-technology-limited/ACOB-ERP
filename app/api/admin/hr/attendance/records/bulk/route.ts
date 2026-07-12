@@ -107,10 +107,20 @@ export async function POST(request: NextRequest) {
     // Days with no record → insert; days with a record → override (preserve punches).
     const toInsert: Record<string, unknown>[] = []
     const overrides: ExistingRow[] = []
+    const skipped: ExistingRow[] = []
     for (const userId of allowedIds) {
       for (const date of dates) {
         const existing = existingByKey.get(`${userId}::${date}`)
         if (existing) {
+          // OOS never overrides a fully-present day (clock-in AND clock-out): the person
+          // was demonstrably in the office, so they cannot be out of station that day. A
+          // day with a clock-in but NO clock-out is the "clocked in, then left for OOS
+          // and never clocked out" case, which IS a legitimate override. Waiver keeps
+          // overriding any day — its purpose is to forgive a late/complete clock-in.
+          if (status === "out_of_station" && existing.clock_in && existing.clock_out) {
+            skipped.push(existing)
+            continue
+          }
           overrides.push(existing)
           continue
         }
@@ -175,12 +185,26 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (toInsert.length === 0 && overrides.length === 0) {
+      return NextResponse.json({
+        message:
+          skipped.length > 0
+            ? `Nothing applied — ${skipped.length} day(s) were already fully present and kept as-is`
+            : "Nothing to apply",
+        created: 0,
+        overridden: 0,
+        overrode: 0,
+        skipped: skipped.length,
+      })
+    }
+
     if (toInsert.length === 0) {
       return NextResponse.json({
         message: `Override applied to ${overrides.length} record(s)`,
         created: 0,
         overridden: overridden.length,
         overrode: overrides.length,
+        skipped: skipped.length,
       })
     }
 
@@ -259,6 +283,7 @@ export async function POST(request: NextRequest) {
       created: totalCreated,
       overridden: overridden.length,
       overrode: overrides.length,
+      skipped: skipped.length,
     })
   } catch (error) {
     log.error({ err: String(error) }, "Error in POST /api/admin/hr/attendance/records/bulk")
@@ -343,10 +368,13 @@ export async function DELETE(request: NextRequest) {
       // targeting other records doesn't silently strip them. For all other statuses
       // (waiver, present, late, etc.) re-derive from the raw punches as intended.
       const preservedStatus = isPermissionAttendanceStatus(row.status) ? row.status : null
-      const revertedStatus = deriveUnifiedAttendanceStatus({
-        record: { clock_in: row.clock_in, clock_out: row.clock_out, waived: false, status: preservedStatus },
-        recordDate: row.date,
-      }, policy)
+      const revertedStatus = deriveUnifiedAttendanceStatus(
+        {
+          record: { clock_in: row.clock_in, clock_out: row.clock_out, waived: false, status: preservedStatus },
+          recordDate: row.date,
+        },
+        policy
+      )
       await dataClient
         .from("attendance_records")
         .update({ status: revertedStatus, waived: false, manual_comment: null })

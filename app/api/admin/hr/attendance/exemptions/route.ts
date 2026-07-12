@@ -5,6 +5,7 @@ import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
+import { freezeExemptionAtToday } from "@/lib/hr/exemptions"
 
 const ExemptionSchema = z.object({
   user_id: z.string().uuid(),
@@ -295,6 +296,25 @@ export async function PATCH(request: NextRequest) {
     }
   }
   const attendance_exempt = mode === "infinite"
+
+  // "Off" freezes the exemption at today instead of wiping history: an open infinite
+  // exemption becomes a closed [start..today] window and future windows are dropped, so
+  // past days stay exempt when re-derived. (Fixes the retroactive un-exempt bug.)
+  if (mode === "off") {
+    await freezeExemptionAtToday(dataClient, user_id, auth.user.id)
+    await writeAuditLog(
+      auth.supabase,
+      {
+        action: "update",
+        entityType: "attendance_exemption",
+        entityId: user_id,
+        newValues: { mode: "off", attendance_exempt: false },
+        context: { actorId: auth.user.id, source: "api", route: "/api/admin/hr/attendance/exemptions" },
+      },
+      { failOpen: true }
+    )
+    return NextResponse.json({ message: "Exemption stopped — history preserved up to today" })
+  }
 
   const { error } = await dataClient
     .from("profiles")
