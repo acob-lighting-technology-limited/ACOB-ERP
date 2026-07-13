@@ -302,56 +302,78 @@ serve(async (req) => {
       })
     }
 
-    let today = lagosNow().dateIso
-    const { hhmm: nowHHMM } = lagosNow()
-    if (customDate) {
-      today = customDate
-    } else {
-      const hour = Number(nowHHMM.split(":")[0])
-      if (hour < 5) {
-        // Between 12:00 AM and 4:59 AM Lagos time, report on the day that just ended (yesterday)
-        const yesterday = new Date()
-        yesterday.setDate(yesterday.getDate() - 1)
-        const dateParts = new Intl.DateTimeFormat("en-CA", {
-          timeZone: TIME_ZONE,
-          year: "numeric",
-          month: "2-digit",
-          day: "2-digit",
-        }).formatToParts(yesterday)
-        const get = (parts: Intl.DateTimeFormatPart[], type: string) => parts.find((p) => p.type === type)?.value ?? ""
-        today = `${get(dateParts, "year")}-${get(dateParts, "month")}-${get(dateParts, "day")}`
-      }
+    const { dateIso: calendarDate, hhmm: nowHHMM } = lagosNow()
+
+    // Add a whole number of days to a YYYY-MM-DD string, anchored at UTC midnight so no
+    // timezone drift can shift the result. Used to resolve "the previous calendar day".
+    const addDaysIso = (dateIso: string, delta: number): string => {
+      const d = new Date(`${dateIso}T00:00:00Z`)
+      d.setUTCDate(d.getUTCDate() + delta)
+      return d.toISOString().slice(0, 10)
+    }
+    const isWeekend = (dateIso: string): boolean => {
+      const dow = new Date(`${dateIso}T00:00:00Z`).getUTCDay()
+      return dow === 0 || dow === 6
     }
 
-    const targetDow = new Date(`${today}T00:00:00Z`).getUTCDay()
-
-    if (!isTest && (targetDow === 0 || targetDow === 6)) {
-      return new Response(JSON.stringify({ skipped: true, reason: "weekend" }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      })
-    }
+    // A send slot scheduled before 05:00 reports on the day that just ended (the previous
+    // calendar day); any later slot reports the current day. This is a property of the
+    // SLOT, not of the wall-clock instant the cron fires — so an early-morning slot that
+    // runs late (cron lag) or whose target lands on a weekend still resolves to the
+    // correct report date instead of leaking onto today. (This was the source of the
+    // "02:55 slot sent today's data after 05:00" bug.)
+    const reportDateForSlot = (t: string): string => (t < "05:00" ? addDaysIso(calendarDate, -1) : calendarDate)
 
     const sendTimes = Array.isArray(config.sendTimes) ? config.sendTimes : []
     const recipientUserIds = Array.isArray(config.recipientUserIds) ? config.recipientUserIds : []
+    const lastSentByTime = config.lastSentByTime ?? {}
 
+    let today: string
     let dueTime = "manual"
-    if (!isTest) {
+
+    if (customDate) {
+      // Explicit date override (manual/test sends, or an admin-forced re-run).
+      today = customDate
+      if (!isTest) {
+        if (isWeekend(today)) {
+          return new Response(JSON.stringify({ skipped: true, reason: "weekend" }), {
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          })
+        }
+        dueTime = "forced"
+      }
+    } else if (isTest) {
+      // Test send with no explicit date: mirror the automated "before 05:00 ⇒ yesterday" rule.
+      today = Number(nowHHMM.split(":")[0]) < 5 ? addDaysIso(calendarDate, -1) : calendarDate
+    } else {
       if (sendTimes.length === 0 || recipientUserIds.length === 0) {
         return new Response(JSON.stringify({ skipped: true, reason: "not_configured" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
       }
-    }
 
-    const lastSentByTime = config.lastSentByTime ?? {}
-    if (!isTest) {
-      const foundDueTime = sendTimes.find((t) => nowHHMM >= t && lastSentByTime[t] !== today)
-      if (!foundDueTime) {
+      // Pick the first configured slot that is past its scheduled time, whose resolved
+      // report date is a weekday, and that hasn't already been sent for that report date.
+      // Weekend slots are skipped individually so a valid later slot on the same run
+      // still fires.
+      let chosen: { time: string; reportDate: string } | null = null
+      for (const t of sendTimes) {
+        if (nowHHMM < t) continue
+        const reportDate = reportDateForSlot(t)
+        if (isWeekend(reportDate)) continue
+        if (lastSentByTime[t] === reportDate) continue
+        chosen = { time: t, reportDate }
+        break
+      }
+
+      if (!chosen) {
         return new Response(JSON.stringify({ skipped: true, reason: "no_slot_due" }), {
           headers: { ...corsHeaders, "Content-Type": "application/json" },
         })
       }
-      dueTime = foundDueTime
+
+      today = chosen.reportDate
+      dueTime = chosen.time
     }
 
     let recipientEmails: string[] = []
@@ -490,7 +512,7 @@ serve(async (req) => {
       }
     }
 
-    if (!isTest) {
+    if (!isTest && dueTime !== "forced") {
       await supabase
         .from("system_settings")
         .upsert(
