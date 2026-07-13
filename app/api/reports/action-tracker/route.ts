@@ -63,6 +63,18 @@ export async function POST(request: NextRequest) {
     }
 
     const officeWeek = getCurrentOfficeWeek()
+    const targetWeek = parsed.data.week_number ?? officeWeek.week
+    const targetYear = parsed.data.year ?? officeWeek.year
+
+    // Append manually-added items after any already synced from a report submission,
+    // so they don't jump ahead of the department's existing list.
+    const { count: existingCount } = await supabase
+      .from("action_items")
+      .select("id", { count: "exact", head: true })
+      .eq("department", parsed.data.department)
+      .eq("week_number", targetWeek)
+      .eq("year", targetYear)
+
     const { data: item, error } = await supabase
       .from("action_items")
       .insert({
@@ -70,9 +82,10 @@ export async function POST(request: NextRequest) {
         description: parsed.data.description || null,
         department: parsed.data.department,
         status: "not_started",
-        week_number: parsed.data.week_number ?? officeWeek.week,
-        year: parsed.data.year ?? officeWeek.year,
+        week_number: targetWeek,
+        year: targetYear,
         assigned_by: user.id,
+        position: existingCount ?? 0,
       })
       .select("*")
       .single()

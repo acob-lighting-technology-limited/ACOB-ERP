@@ -26,6 +26,7 @@ export type LegacyActionItemRow = {
   year: number | null
   original_week?: number | null
   created_at?: string | null
+  position?: number | null
 }
 
 export type ActionTrackerItem = {
@@ -41,6 +42,7 @@ export type ActionTrackerItem = {
   original_week?: number
   work_item_number?: string
   source: "tasks" | "action_items"
+  position: number
 }
 
 type FetchActionTrackerItemsParams = {
@@ -80,6 +82,7 @@ export function normalizeActionTrackerTaskRow(row: ActionTrackerTaskRow): Action
     year: Number(row.year || 0),
     work_item_number: row.work_item_number || undefined,
     source: "tasks",
+    position: 0,
   }
 }
 
@@ -97,6 +100,7 @@ export function normalizeLegacyActionItemRow(row: LegacyActionItemRow): ActionTr
     original_week: row.original_week ?? undefined,
     work_item_number: undefined,
     source: "action_items",
+    position: Number(row.position ?? 0),
   }
 }
 
@@ -106,10 +110,11 @@ export async function fetchActionTrackerItems(
 ): Promise<ActionTrackerItem[]> {
   let legacyQuery = supabase
     .from("action_items")
-    .select("id, title, department, description, status, week_number, year, original_week, created_at")
+    .select("id, title, department, description, status, week_number, year, original_week, created_at, position")
     .eq("week_number", params.week)
     .eq("year", params.year)
     .order("department", { ascending: true })
+    .order("position", { ascending: true })
     .order("created_at", { ascending: true })
 
   legacyQuery = applyDepartmentScope(legacyQuery, params)

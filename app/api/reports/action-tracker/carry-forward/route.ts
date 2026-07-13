@@ -82,7 +82,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ carried_count: 0, items: [] })
     }
 
-    const insertPayload = itemsToCarry.map((item) => ({
+    const insertPayload = itemsToCarry.map((item, index) => ({
       title: item.title,
       department: item.department,
       description: item.description || null,
@@ -91,6 +91,7 @@ export async function POST(request: NextRequest) {
       year: parsed.data.year,
       original_week: item.original_week || previous.week,
       assigned_by: user.id,
+      position: index,
     }))
 
     const { data: newItems, error: insertError } = await supabase.from("action_items").insert(insertPayload).select("*")
