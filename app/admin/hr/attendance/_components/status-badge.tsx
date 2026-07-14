@@ -1,14 +1,53 @@
 import { Badge } from "@/components/ui/badge"
-import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
+import {
+  ATTENDANCE_STATUS_COLORS,
+  ATTENDANCE_STATUS_LABELS,
+  getEarlyDepartureFacts,
+  type AttendanceLike,
+  type EarlyClosureInfo,
+} from "@/lib/hr/attendance-status"
 
-export function StatusBadge({ status, waived }: { status: string; waived?: boolean }) {
+/**
+ * Attendance status chip. When `record` is provided and the primary status is "Late"
+ * while the employee also left early, a secondary "Left Early" (or "LEWP" if approved)
+ * chip is shown alongside it — so a late + early-departure day surfaces both facts.
+ */
+export function StatusBadge({
+  status,
+  waived,
+  record,
+  earlyClosure,
+}: {
+  status: string
+  waived?: boolean
+  record?: AttendanceLike | null
+  earlyClosure?: EarlyClosureInfo
+}) {
   const s = waived ? "waiver" : status
-  return (
+
+  let secondary: { label: string; className: string } | null = null
+  if (record && s === "late") {
+    const facts = getEarlyDepartureFacts(record, earlyClosure)
+    if (facts.leftEarly) {
+      const key = facts.approved ? "early_departure_with_permission" : "early_departure"
+      secondary = { label: facts.approved ? "LEWP" : "Left Early", className: ATTENDANCE_STATUS_COLORS[key] }
+    }
+  }
+
+  const primary = (
     <Badge
       className={ATTENDANCE_STATUS_COLORS[s as keyof typeof ATTENDANCE_STATUS_COLORS] ?? "bg-gray-100 text-gray-800"}
     >
       {ATTENDANCE_STATUS_LABELS[s as keyof typeof ATTENDANCE_STATUS_LABELS] ?? s}
     </Badge>
+  )
+
+  if (!secondary) return primary
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {primary}
+      <Badge className={secondary.className}>{secondary.label}</Badge>
+    </span>
   )
 }
 

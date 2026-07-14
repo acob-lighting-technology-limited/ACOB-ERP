@@ -155,15 +155,19 @@ export function getEarlyDepartureFacts(
   }
 }
 
+type ManualPermissionValue = "lateness_with_permission" | "absent_with_permission" | "early_departure_with_permission"
+
 export interface ManualStatusEditOptions {
-  /** Fully present and on-time — no LWP/AWP override is applicable. */
+  /** Fully present and on-time — no LWP/AWP/LEWP override is applicable. */
   isOnTimePresent: boolean
   showLWP: boolean
   showAWP: boolean
+  /** Early departure with permission is applicable (on-time arrival, left early). */
+  showLEWP: boolean
   /** Status choices to offer in the manual single-day editor. */
-  options: Array<{ value: "lateness_with_permission" | "absent_with_permission"; label: string }>
+  options: Array<{ value: ManualPermissionValue; label: string }>
   /** Sensible default status given the punches present. */
-  initialStatus: "" | "lateness_with_permission" | "absent_with_permission"
+  initialStatus: "" | ManualPermissionValue
 }
 
 /**
@@ -186,19 +190,24 @@ export function getManualStatusEditOptions(
 
   const showAWP = !hasAnyPunch
   const showLWP = hasAnyPunch && !isOnTimePresent
+  // Left-early-with-permission applies when they arrived on time but left early.
+  const showLEWP = isEarlyOut && !isLatePunch
 
   const initialStatus: ManualStatusEditOptions["initialStatus"] = !hasAnyPunch
     ? "absent_with_permission"
-    : !isOnTimePresent
-      ? "lateness_with_permission"
-      : ""
+    : showLEWP
+      ? "early_departure_with_permission"
+      : !isOnTimePresent
+        ? "lateness_with_permission"
+        : ""
 
   const options: ManualStatusEditOptions["options"] = [
     ...(showLWP ? [{ value: "lateness_with_permission" as const, label: "LWP" }] : []),
+    ...(showLEWP ? [{ value: "early_departure_with_permission" as const, label: "LEWP" }] : []),
     ...(showAWP ? [{ value: "absent_with_permission" as const, label: "AWP" }] : []),
   ]
 
-  return { isOnTimePresent, showLWP, showAWP, options, initialStatus }
+  return { isOnTimePresent, showLWP, showAWP, showLEWP, options, initialStatus }
 }
 
 export function deriveUnifiedAttendanceStatus(

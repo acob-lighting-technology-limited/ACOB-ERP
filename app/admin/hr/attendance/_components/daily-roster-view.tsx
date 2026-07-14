@@ -283,7 +283,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
       label: "Status",
       sortable: true,
       accessor: (r) => r.status,
-      render: (r) => <StatusBadge status={r.status} />,
+      render: (r) => <StatusBadge status={r.status} record={r} />,
     },
     {
       key: "source",
