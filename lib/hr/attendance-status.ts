@@ -18,6 +18,9 @@ export type UnifiedAttendanceStatus =
   | "present"
   | "late"
   | "lateness_with_permission"
+  | "early_departure"
+  | "early_departure_with_permission"
+  | "early_closure"
   | "incomplete"
   | "absent"
   | "absent_with_permission"
@@ -31,6 +34,10 @@ export const ATTENDANCE_STATUS_COLORS: Record<UnifiedAttendanceStatus, string> =
   late: "bg-yellow-100 text-yellow-800",
   lateness_with_permission:
     "bg-gradient-to-r from-amber-100 to-green-100 text-green-800 border-amber-200 dark:from-amber-950/40 dark:to-green-950/40 dark:text-green-300",
+  early_departure: "bg-orange-100 text-orange-800",
+  early_departure_with_permission:
+    "bg-gradient-to-r from-orange-100 to-green-100 text-green-800 border-orange-200 dark:from-orange-950/40 dark:to-green-950/40 dark:text-green-300",
+  early_closure: "bg-blue-100 text-blue-800",
   incomplete: "bg-cyan-100 text-cyan-800",
   absent: "bg-red-100 text-red-800",
   absent_with_permission:
@@ -48,6 +55,9 @@ export const ATTENDANCE_STATUS_LABELS: Record<UnifiedAttendanceStatus, string> =
   present: "Present",
   late: "Late",
   lateness_with_permission: "LWP",
+  early_departure: "Left Early",
+  early_departure_with_permission: "LEWP",
+  early_closure: "Early Closure",
   incomplete: "Incomplete",
   absent: "Absent",
   absent_with_permission: "AWP",
@@ -66,6 +76,7 @@ export const DB_WRITABLE_STATUSES = [
   "waiver",
   "lateness_with_permission",
   "absent_with_permission",
+  "early_departure_with_permission",
   "out_of_station",
 ] as const
 export type DbAttendanceStatus = (typeof DB_WRITABLE_STATUSES)[number]
@@ -86,6 +97,7 @@ export const MANUAL_ATTENDANCE_STATUS_OPTIONS: Array<{ value: DbAttendanceStatus
   { value: "waiver", label: "Waiver" },
   { value: "lateness_with_permission", label: "LWP" },
   { value: "absent_with_permission", label: "AWP" },
+  { value: "early_departure_with_permission", label: "LEWP" },
   { value: "out_of_station", label: "OOS" },
   { value: "absent", label: "Absent" },
 ]
@@ -115,6 +127,32 @@ export function isEarlyDeparture(clockOut: string, endTime: string = "17:00"): b
   const [eh, em] = endTime.split(":").map(Number)
   if (!Number.isFinite(h) || !Number.isFinite(m) || !Number.isFinite(eh) || !Number.isFinite(em)) return false
   return h * 60 + m < eh * 60 + em
+}
+
+/** Day-level early office-closure context (org-wide), if the date is a closure day. */
+export type EarlyClosureInfo = { closeTime: string } | null | undefined
+
+/**
+ * Early-departure facts for a completed day, independent of the primary status label.
+ * Used to render the secondary "Left Early" chip when the primary status is "Late"
+ * (late + left-early both show). `approved` = the early-out was granted permission
+ * (LEWP); it forgives the early-out hours but never the lateness.
+ */
+export function getEarlyDepartureFacts(
+  rec: AttendanceLike | null | undefined,
+  earlyClosure: EarlyClosureInfo,
+  policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY
+): { leftEarly: boolean; approved: boolean; onClosureDay: boolean } {
+  const onClosureDay = Boolean(earlyClosure?.closeTime)
+  if (!rec?.clock_in || !rec?.clock_out || rec.clock_out <= rec.clock_in) {
+    return { leftEarly: false, approved: false, onClosureDay }
+  }
+  const effectiveEnd = earlyClosure?.closeTime ?? policy.endTime
+  return {
+    leftEarly: isEarlyDeparture(rec.clock_out, effectiveEnd),
+    approved: normalizeStoredAttendanceStatus(rec.status) === "early_departure_with_permission",
+    onClosureDay,
+  }
 }
 
 export interface ManualStatusEditOptions {
@@ -170,6 +208,8 @@ export function deriveUnifiedAttendanceStatus(
     isOnLeave?: boolean
     isExempted?: boolean
     recordDate?: string
+    /** Org-wide early-closure context for this date, if any. */
+    earlyClosure?: EarlyClosureInfo
   },
   policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY
 ): UnifiedAttendanceStatus {
@@ -179,6 +219,8 @@ export function deriveUnifiedAttendanceStatus(
   const rec = input.record
   if (!rec) return "absent"
   const explicitStatus = normalizeStoredAttendanceStatus(rec.status)
+  // Whole-day permission overrides (LWP/AWP/OOS) — LEWP is handled below because it
+  // must not rescue a late arrival, only the early departure.
   if (explicitStatus && isPermissionAttendanceStatus(explicitStatus)) return explicitStatus
   if (rec.waived) return "waiver"
   if (explicitStatus === "waiver") return "waiver"
@@ -196,7 +238,19 @@ export function deriveUnifiedAttendanceStatus(
   if (!rec.clock_in) return "incomplete"
   // Same-second double-fire — treat as incomplete
   if (rec.clock_out && rec.clock_out <= rec.clock_in) return "incomplete"
-  // Clocked out before configured end_time → late
-  if (rec.clock_out && isEarlyDeparture(rec.clock_out, policy.endTime)) return "late"
-  return isLateWithPolicy(rec.clock_in, policy.lateCutoff) ? "late" : "early"
+
+  // Both punches present. Late arrival always wins the primary label; the early
+  // departure surfaces via a secondary chip (see getEarlyDepartureFacts).
+  if (isLateWithPolicy(rec.clock_in, policy.lateCutoff)) return "late"
+
+  const closeTime = input.earlyClosure?.closeTime ?? null
+  const effectiveEnd = closeTime ?? policy.endTime
+  const leftEarly = rec.clock_out ? isEarlyDeparture(rec.clock_out, effectiveEnd) : false
+
+  // On time. Approved early-out (LEWP) shows as such; an unapproved early-out is
+  // "Left Early"; leaving at/after an early-closure time is "Early Closure".
+  if (explicitStatus === "early_departure_with_permission") return "early_departure_with_permission"
+  if (leftEarly) return "early_departure"
+  if (closeTime) return "early_closure"
+  return "early"
 }

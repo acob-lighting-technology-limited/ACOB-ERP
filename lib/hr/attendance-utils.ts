@@ -62,9 +62,9 @@ export function overtimeHoursFor(
   return (outMin - endMin) / 60
 }
 
-/** Returns the number of hourly early departure steps. */
-export function getEarlyOutSteps(clockOut: string, policy: AttendancePolicy): number {
-  const [eh, em] = policy.endTime.split(":").map(Number)
+/** Returns the number of hourly early-departure steps, measured against endTime. */
+export function getEarlyOutSteps(clockOut: string, endTime: string): number {
+  const [eh, em] = endTime.split(":").map(Number)
   const [ch, cm] = clockOut.split(":").map(Number)
   if (isNaN(eh) || isNaN(em) || isNaN(ch) || isNaN(cm)) return 0
   const endMin = eh * 60 + em
@@ -76,11 +76,7 @@ export function getEarlyOutSteps(clockOut: string, policy: AttendancePolicy): nu
 /** Loads the active attendance policy from system_settings or returns the default. */
 export async function loadAttendancePolicy(supabase: any): Promise<AttendancePolicy> {
   try {
-    const { data } = await supabase
-      .from("system_settings")
-      .select("value")
-      .eq("key", "attendance_policy")
-      .maybeSingle()
+    const { data } = await supabase.from("system_settings").select("value").eq("key", "attendance_policy").maybeSingle()
     return { ...DEFAULT_ATTENDANCE_POLICY, ...(data?.value ?? {}) }
   } catch {
     return DEFAULT_ATTENDANCE_POLICY
@@ -119,16 +115,21 @@ export function getWorkdaysInMonth(yearMonth: string): string[] {
 
 /**
  * Fractional day credit for attendance rate calculation.
- * Early: 1.0.
+ * Early / Early Closure: 1.0 (full day; office closed early counts as a full day).
  * Covered (waiver/exempted/on_leave/holiday/OOS/AWP/LWP): 1.0.
- * Present/Late/Incomplete: Step-based deduction out of totalCredits.
+ * Present/Late/Incomplete/Left Early: step-based deduction out of totalCredits.
  * Absent: 0.0.
+ *
+ * `options.earlyCloseTime` measures early-departure against an org-wide early-closure
+ * time instead of the policy end time. `options.earlyOutApproved` (or the LEWP status)
+ * forgives the early-departure hours — never the late-arrival hours.
  */
 export function dayCredit(
   status: string,
   clockIn?: string | null,
   clockOut?: string | null,
-  policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY
+  policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY,
+  options?: { earlyCloseTime?: string | null; earlyOutApproved?: boolean }
 ): number {
   if (
     status === "waiver" ||
@@ -137,15 +138,25 @@ export function dayCredit(
     status === "holiday" ||
     status === "out_of_station" ||
     status === "absent_with_permission" ||
-    status === "lateness_with_permission"
+    status === "lateness_with_permission" ||
+    status === "early_closure"
   ) {
     return 1.0
   }
-  if (status === "half_day") return dayCredit("present", clockIn, clockOut, policy)
+  if (status === "half_day") return dayCredit("present", clockIn, clockOut, policy, options)
   if (status === "early") return 1.0
 
-  if (status === "present" || status === "late" || status === "incomplete") {
+  if (
+    status === "present" ||
+    status === "late" ||
+    status === "incomplete" ||
+    status === "early_departure" ||
+    status === "early_departure_with_permission"
+  ) {
     const totalCredits = policy.totalCredits ?? 10
+    const effectiveEnd = options?.earlyCloseTime || policy.endTime
+    // LEWP always forgives the early-out; an explicit flag does too.
+    const forgiveEarlyOut = Boolean(options?.earlyOutApproved) || status === "early_departure_with_permission"
     let credits = totalCredits
 
     if (clockIn && clockOut) {
@@ -153,8 +164,8 @@ export function dayCredit(
         return 0.0
       }
       const lateSteps = getLateSteps(clockIn, policy)
-      const earlyOutSteps = getEarlyOutSteps(clockOut, policy)
-      
+      const earlyOutSteps = forgiveEarlyOut ? 0 : getEarlyOutSteps(clockOut, effectiveEnd)
+
       const totalDeduction = Math.min(totalCredits - 1, lateSteps + earlyOutSteps)
       credits -= totalDeduction
     } else {
@@ -163,7 +174,7 @@ export function dayCredit(
         const lateSteps = getLateSteps(clockIn, policy)
         credits -= lateSteps
       } else if (clockOut) {
-        const earlyOutSteps = getEarlyOutSteps(clockOut, policy)
+        const earlyOutSteps = forgiveEarlyOut ? 0 : getEarlyOutSteps(clockOut, effectiveEnd)
         credits -= earlyOutSteps
       }
       credits -= policy.incompletePenalty

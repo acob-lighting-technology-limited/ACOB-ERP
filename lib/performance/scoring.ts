@@ -1,8 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { toLocalISODate } from "@/lib/utils/date"
-import { isLateWithPolicy, isEarlyDeparture } from "@/lib/hr/attendance-status"
+import { deriveUnifiedAttendanceStatus, normalizeStoredAttendanceStatus } from "@/lib/hr/attendance-status"
 import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
-import { getLateSteps } from "@/lib/hr/attendance-utils"
+import { dayCredit, getLateSteps } from "@/lib/hr/attendance-utils"
 
 type GoalScoreBreakdown = {
   goal_id: string
@@ -244,19 +244,6 @@ export async function computeIndividualPerformanceScore(
     late_days: 0,
   }
 
-  // Attendance credit: full credit for early/wfh/remote/permission statuses, partial for late, zero for absent.
-  const ATTENDANCE_CREDIT: Record<string, number> = {
-    early: 1.0,
-    wfh: 1.0,
-    remote: 1.0,
-    late: 0.5,
-    half_day: 0.5,
-    lateness_with_permission: 1.0,
-    absent_with_permission: 1.0,
-    out_of_station: 1.0,
-    absent: 0,
-  }
-
   let leaveRequestQuery = supabase
     .from("leave_requests")
     .select("start_date, end_date")
@@ -280,13 +267,27 @@ export async function computeIndividualPerformanceScore(
 
   let holidayQuery = supabase.from("holiday_calendar").select("holiday_date")
 
+  let closureQuery = supabase.from("attendance_early_closures").select("closure_date, close_time")
+
   if (cycle) {
     exemptionQuery = exemptionQuery.lte("start_date", cycle.end_date).gte("end_date", cycle.start_date)
     holidayQuery = holidayQuery.gte("holiday_date", cycle.start_date).lte("holiday_date", cycle.end_date)
+    closureQuery = closureQuery.gte("closure_date", cycle.start_date).lte("closure_date", cycle.end_date)
   }
 
-  const [{ data: approvedLeaves }, { data: attendance }, { data: exemptionPeriods }, { data: holidayRows }] =
-    await Promise.all([leaveRequestQuery, attendanceQuery, exemptionQuery, holidayQuery])
+  const [
+    { data: approvedLeaves },
+    { data: attendance },
+    { data: exemptionPeriods },
+    { data: holidayRows },
+    { data: closureRows },
+  ] = await Promise.all([leaveRequestQuery, attendanceQuery, exemptionQuery, holidayQuery, closureQuery])
+
+  // date → early-closure time (org-wide). Missing table/permission is non-fatal.
+  const closureByDate = new Map<string, string>()
+  for (const row of (closureRows as Array<{ closure_date: string; close_time: string }> | null) || []) {
+    if (row.closure_date && row.close_time) closureByDate.set(row.closure_date, String(row.close_time).slice(0, 5))
+  }
 
   const leaveDateSet = new Set<string>()
   if (approvedLeaves) {
@@ -343,10 +344,6 @@ export async function computeIndividualPerformanceScore(
     let presentDays = 0
     let scorableDays = 0
 
-    const cutoffMinutes = 8 * 60 + 20
-    const firstPenaltyHourMinutes = 9 * 60
-    const penaltyPerStepNgn = 1000
-
     for (const day of workdays) {
       if (holidayDateSet.has(day)) continue
       if (leaveDateSet.has(day)) continue
@@ -364,36 +361,32 @@ export async function computeIndividualPerformanceScore(
         continue
       }
 
-      const storedStatus = (row as { status?: string | null }).status
-      const status =
-        storedStatus === "lateness_with_permission" ||
-        storedStatus === "absent_with_permission" ||
-        storedStatus === "out_of_station"
-          ? storedStatus
-          : row.waived
-            ? "waiver"
-            : !row.clock_in && !row.clock_out
-              ? "absent"
-              : row.clock_in && row.clock_out
-                ? isLateWithPolicy(row.clock_in, policy.lateCutoff) || isEarlyDeparture(row.clock_out, policy.endTime)
-                  ? "late"
-                  : "early"
-                : "incomplete"
-      const baseCredit = ATTENDANCE_CREDIT[status] ?? 0
+      const earlyClose = closureByDate.get(day)
+      const status = deriveUnifiedAttendanceStatus(
+        { record: row, recordDate: day, earlyClosure: earlyClose ? { closeTime: earlyClose } : null },
+        policy
+      )
 
-      let timelinessFactor = 1
+      // Hourly credit model (10 credits/day; late & early-out each dock ~1/hr).
+      // LEWP forgives the early-out hours only — never the late arrival.
+      const earlyOutApproved =
+        normalizeStoredAttendanceStatus((row as { status?: string | null }).status) ===
+        "early_departure_with_permission"
+      creditSum += dayCredit(status, row.clock_in, row.clock_out, policy, {
+        earlyCloseTime: earlyClose ?? null,
+        earlyOutApproved,
+      })
+
       const clockInRaw = String((row as { clock_in?: string | null }).clock_in || "")
-      if (clockInRaw && (status === "early" || status === "late")) {
+      if (clockInRaw && status !== "absent" && status !== "incomplete") {
         const lateSteps = getLateSteps(clockInRaw, policy)
         if (lateSteps > 0) {
           lateDays += 1
           latePenaltyStepsTotal += lateSteps
-          timelinessFactor = Math.max(0, 1 - lateSteps * 0.1)
         }
       }
 
-      if (status === "early") presentDays++
-      creditSum += baseCredit * timelinessFactor
+      if (status === "early" || status === "early_closure") presentDays++
     }
 
     attendanceBreakdown.present = presentDays
