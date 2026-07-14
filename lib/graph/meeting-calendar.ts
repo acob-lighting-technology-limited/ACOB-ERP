@@ -1,4 +1,4 @@
-import { graphGet } from "@/lib/graph/client"
+import { graphGet, graphGetRedirectUrl } from "@/lib/graph/client"
 
 /**
  * Calendar-backed meeting discovery for the artifact-automation config UI.
@@ -107,4 +107,38 @@ export async function resolveOnlineMeetingId(organizerEmail: string, joinWebUrl:
 
   const payload = await graphGet<{ value?: Array<{ id?: string }> }>(endpoint)
   return payload.value?.[0]?.id || null
+}
+
+/** Resolve an organizer email/UPN to their Azure AD object id (GUID). */
+export async function resolveGraphUserId(organizerEmail: string): Promise<string | null> {
+  const email = organizerEmail.trim()
+  if (!email) return null
+  const user = await graphGet<{ id?: string }>(`/users/${encodeURIComponent(email)}?$select=id`)
+  return user.id || null
+}
+
+export type MeetingRecordingRef = { id: string; createdDateTime?: string }
+
+/** List the recordings available for an online meeting (newest first). */
+export async function listMeetingRecordings(userId: string, meetingId: string): Promise<MeetingRecordingRef[]> {
+  const payload = await graphGet<{ value?: MeetingRecordingRef[] }>(
+    `/users/${encodeURIComponent(userId)}/onlineMeetings/${encodeURIComponent(meetingId)}/recordings`
+  )
+  const list = payload.value ?? []
+  return list.sort((a, b) => (b.createdDateTime || "").localeCompare(a.createdDateTime || ""))
+}
+
+/**
+ * Get a pre-authenticated, no-login direct-download URL for a recording, by
+ * capturing the redirect Graph issues from the recording's /content endpoint.
+ * The URL is short-lived, so it must be generated at click time.
+ */
+export async function getRecordingDownloadUrl(
+  userId: string,
+  meetingId: string,
+  recordingId: string
+): Promise<string | null> {
+  return graphGetRedirectUrl(
+    `/users/${encodeURIComponent(userId)}/onlineMeetings/${encodeURIComponent(meetingId)}/recordings/${encodeURIComponent(recordingId)}/content`
+  )
 }

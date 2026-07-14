@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { CalendarClock, Loader2, Mail, MailX, Pencil, Plus, RefreshCw, Send, Trash2, Users } from "lucide-react"
+import { CalendarClock, Loader2, Mail, MailX, Pencil, Plus, RefreshCw, Send, Trash2, Users, Video } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -71,6 +71,29 @@ function MeetingSendPanel({ source, occurrences }: { source: SourceRow; occurren
   const [incAttendance, setIncAttendance] = useState(true)
   const [incTranscript, setIncTranscript] = useState(true)
   const [sending, setSending] = useState(false)
+  const [downloadingRecording, setDownloadingRecording] = useState(false)
+
+  // Recording is fetched on demand (no stored copy): confirm one exists, then open
+  // the download endpoint, which 302-redirects to a fresh Microsoft download URL.
+  const downloadRecording = async () => {
+    setDownloadingRecording(true)
+    const toastId = toast.loading("Preparing recording…")
+    try {
+      const res = await apiFetch(`/api/reports/meetings/recording?source_id=${encodeURIComponent(source.id)}`)
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(payload?.error || "No recording available")
+      window.open(
+        `/api/reports/meetings/recording?source_id=${encodeURIComponent(source.id)}&download=1`,
+        "_blank",
+        "noopener"
+      )
+      toast.success("Recording download started", { id: toastId })
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "No recording available", { id: toastId })
+    } finally {
+      setDownloadingRecording(false)
+    }
+  }
 
   const send = async () => {
     if (!incAttendance && !incTranscript) {
@@ -147,6 +170,14 @@ function MeetingSendPanel({ source, occurrences }: { source: SourceRow; occurren
         <Button size="sm" onClick={send} disabled={sending}>
           {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
           Send
+        </Button>
+        <Button size="sm" variant="outline" onClick={downloadRecording} disabled={downloadingRecording}>
+          {downloadingRecording ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <Video className="mr-2 h-4 w-4" />
+          )}
+          Recording
         </Button>
       </div>
     </div>

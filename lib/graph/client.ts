@@ -71,6 +71,30 @@ async function getGraphToken(): Promise<string> {
   return data.access_token
 }
 
+/**
+ * GET a Graph endpoint that 302-redirects to a pre-authenticated content URL
+ * (e.g. an onlineMeeting recording's /content), returning that URL without
+ * following it. Lets the caller hand the browser a direct, no-login download
+ * link instead of streaming bytes through our server. Returns null if Graph
+ * responded with content directly rather than a redirect.
+ */
+export async function graphGetRedirectUrl(endpoint: string): Promise<string | null> {
+  const token = await getGraphToken()
+  const response = await fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    redirect: "manual",
+  })
+  if (response.status >= 300 && response.status < 400) {
+    return response.headers.get("location")
+  }
+  if (!response.ok) {
+    const detail = await response.text()
+    log.error({ status: response.status, endpoint }, "Graph redirect GET failed")
+    throw new Error(`Graph API error (${response.status}): ${detail}`)
+  }
+  return null
+}
+
 /** GET a Graph v1.0 endpoint and parse JSON, with one transient retry. */
 export async function graphGet<T>(endpoint: string): Promise<T> {
   const token = await getGraphToken()
