@@ -27,6 +27,11 @@ import {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
 const BUCKET = "meeting_documents"
+// Max time to hold a freshly-imported artifact waiting for its sibling (attendance
+// ↔ transcript) so the two land in one email. After this, send whatever is ready —
+// a transcript may never arrive (unrecorded meetings), and attendance must not be
+// trapped behind it.
+const ARTIFACT_HOLD_MS = 2 * 60 * 60 * 1000
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 /** Parse a WebVTT transcript into speaker turns, merging consecutive same-speaker cues. */
@@ -35,7 +40,7 @@ function parseVtt(vtt: string): Array<{ speaker: string; text: string }> {
   const blocks = vtt.replace(/\r/g, "").split(/\n\n+/)
   for (const block of blocks) {
     const lines = block.split("\n")
-    const cueLines = lines.filter((l) => l.includes("-->") ? false : !/^WEBVTT/i.test(l) && l.trim() !== "")
+    const cueLines = lines.filter((l) => (l.includes("-->") ? false : !/^WEBVTT/i.test(l) && l.trim() !== ""))
     // Drop a lone numeric/uuid cue identifier line that precedes the timestamp.
     const textLines = cueLines.filter((l, i) => !(i === 0 && !/<v\s/i.test(l) && /^[\w-]+$/.test(l.trim())))
     const raw = textLines.join(" ").trim()
@@ -210,6 +215,45 @@ async function notifyRecipients(supabase: Supa, recipients: string[], label: str
   }
 }
 
+/** Human-readable description of which artifact types an email actually carries. */
+function artifactTypesLabel(types: ArtifactType[]): string {
+  const hasAttendance = types.includes("attendance")
+  const hasTranscript = types.includes("transcript")
+  if (hasAttendance && hasTranscript) return "attendance & transcript"
+  if (hasAttendance) return "attendance"
+  return "transcript"
+}
+
+/** Download the current stored document(s) for an occurrence, as email attachments. */
+async function loadOccurrenceAttachments(
+  supabase: Supa,
+  sourceLabel: string,
+  week: number,
+  year: number,
+  types: ArtifactType[]
+): Promise<Array<{ filename: string; content: string }>> {
+  const attachments: Array<{ filename: string; content: string }> = []
+  for (const type of types) {
+    const { data } = await supabase
+      .from("meeting_week_documents")
+      .select("file_name, file_path")
+      .eq("document_type", type)
+      .eq("is_current", true)
+      .eq("source_label", sourceLabel)
+      .eq("meeting_week", week)
+      .eq("meeting_year", year)
+      .order("version_no", { ascending: false })
+      .limit(1)
+    const doc = data?.[0]
+    if (!doc) continue
+    const { data: blob, error } = await supabase.storage.from(BUCKET).download(doc.file_path)
+    if (error || !blob) continue
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    attachments.push({ filename: doc.file_name, content: encodeBase64(bytes) })
+  }
+  return attachments
+}
+
 async function processSource(
   supabase: Supa,
   source: SourceRow
@@ -340,41 +384,105 @@ async function processSource(
     }
 
     // ── Email (best-effort) + in-app notification parity ───────────────────────
+    // Attendance and transcript become available from Graph at different times, so
+    // hold a freshly-imported artifact until its sibling arrives (one combined
+    // email) — but only up to ARTIFACT_HOLD_MS, after which send whatever is ready.
     let emailed = false
-    if (newArtifacts.length > 0 && source.email_enabled && source.recipients.length > 0) {
+    if (source.email_enabled && source.recipients.length > 0) {
       try {
-        const results: Array<{ to: string; success: boolean; emailId?: string; error?: string }> = []
-        for (const [index, to] of source.recipients.entries()) {
-          try {
-            const data = await sendEmail({
-              to,
-              from: EDGE_SENDERS.meeting,
-              subject: `${source.label} — attendance & transcript`,
-              html: buildArtifactEmailHtml({
-                meetingLabel: source.label,
-                files: newArtifacts.map((a) => a.filename),
-                intro: `New attendance and transcript for the <strong>${source.label}</strong> are attached.`,
-              }),
-              attachments: newArtifacts.map((a) => ({ filename: a.filename, content: a.base64 })),
-              traceLabel: `meeting-artifacts:${index + 1}/${source.recipients.length}:${to}`,
-            })
-            results.push({ to, success: true, emailId: data.id })
-          } catch (err) {
-            const errMsg = err instanceof Error ? err.message : String(err)
-            console.error(`[sync-meeting-artifacts] Failed to send to ${to}:`, errMsg)
-            results.push({ to, success: false, error: errMsg })
+        // Every successfully-stored artifact for this source, so we can tell which
+        // occurrences already have both types and which are still un-emailed.
+        const { data: storedRows } = await supabase
+          .from("meeting_artifact_ledger")
+          .select("artifact_type, meeting_week, meeting_year, emailed_at, processed_at")
+          .eq("source_id", source.id)
+          .not("document_id", "is", null)
+
+        const occKey = (week: number, year: number) => `${year}-W${week}`
+        const typesPresent = new Map<string, Set<ArtifactType>>()
+        const pendingByOcc = new Map<string, { week: number; year: number; types: Set<ArtifactType>; oldest: number }>()
+
+        for (const row of (storedRows ?? []) as Array<{
+          artifact_type: ArtifactType
+          meeting_week: number | null
+          meeting_year: number | null
+          emailed_at: string | null
+          processed_at: string
+        }>) {
+          if (row.meeting_week == null || row.meeting_year == null) continue
+          const key = occKey(row.meeting_week, row.meeting_year)
+          if (!typesPresent.has(key)) typesPresent.set(key, new Set())
+          typesPresent.get(key)!.add(row.artifact_type)
+          if (!row.emailed_at) {
+            const bucket = pendingByOcc.get(key) ?? {
+              week: row.meeting_week,
+              year: row.meeting_year,
+              types: new Set<ArtifactType>(),
+              oldest: Infinity,
+            }
+            bucket.types.add(row.artifact_type)
+            bucket.oldest = Math.min(bucket.oldest, new Date(row.processed_at).getTime())
+            pendingByOcc.set(key, bucket)
           }
         }
-        emailed = results.some((r) => r.success)
-        await supabase
-          .from("meeting_artifact_ledger")
-          .update({ emailed_at: new Date().toISOString() })
-          .eq("source_id", source.id)
-          .is("emailed_at", null)
-        await notifyRecipients(supabase, source.recipients, source.label)
+
+        for (const [key, occ] of pendingByOcc) {
+          const present = typesPresent.get(key) ?? new Set<ArtifactType>()
+          const hasBoth = present.has("attendance") && present.has("transcript")
+          const aged = Date.now() - occ.oldest >= ARTIFACT_HOLD_MS
+          // Wait for the sibling artifact unless the hold window has elapsed.
+          if (!hasBoth && !aged) continue
+
+          const typesToSend = (["attendance", "transcript"] as ArtifactType[]).filter((t) => occ.types.has(t))
+          const attachments = await loadOccurrenceAttachments(supabase, source.label, occ.week, occ.year, typesToSend)
+          if (attachments.length === 0) continue
+
+          const label = artifactTypesLabel(typesToSend)
+          const results: Array<{ to: string; success: boolean; emailId?: string; error?: string }> = []
+          for (const [index, to] of source.recipients.entries()) {
+            try {
+              const data = await sendEmail({
+                to,
+                from: EDGE_SENDERS.meeting,
+                subject: `${source.label} — ${label}`,
+                html: buildArtifactEmailHtml({
+                  meetingLabel: source.label,
+                  files: attachments.map((a) => a.filename),
+                  intro: `The ${label} for the <strong>${source.label}</strong> ${
+                    attachments.length > 1 ? "are" : "is"
+                  } attached.`,
+                }),
+                attachments,
+                traceLabel: `meeting-artifacts:${occ.year}W${occ.week}:${index + 1}/${source.recipients.length}:${to}`,
+              })
+              results.push({ to, success: true, emailId: data.id })
+            } catch (err) {
+              const errMsg = err instanceof Error ? err.message : String(err)
+              console.error(`[sync-meeting-artifacts] Failed to send to ${to}:`, errMsg)
+              results.push({ to, success: false, error: errMsg })
+            }
+          }
+
+          if (results.some((r) => r.success)) {
+            emailed = true
+            // Mark only the types actually sent for this occurrence as emailed.
+            await supabase
+              .from("meeting_artifact_ledger")
+              .update({ emailed_at: new Date().toISOString() })
+              .eq("source_id", source.id)
+              .eq("meeting_week", occ.week)
+              .eq("meeting_year", occ.year)
+              .is("emailed_at", null)
+              .in("artifact_type", typesToSend)
+            await notifyRecipients(supabase, source.recipients, source.label)
+          }
+        }
       } catch (mailErr) {
         console.error(`[sync-meeting-artifacts] email failed: ${String(mailErr)}`)
       }
+    }
+    if (newArtifacts.length > 0) {
+      console.log(`[sync-meeting-artifacts] ${source.label}: imported ${newArtifacts.length} new artifact(s)`)
     }
 
     await supabase
@@ -448,7 +556,7 @@ async function sendStoredArtifacts(
       const data = await sendEmail({
         to,
         from: EDGE_SENDERS.meeting,
-        subject: `${source.label} — attendance & transcript`,
+        subject: `${source.label} — ${artifactTypesLabel(types)}`,
         html: buildArtifactEmailHtml({
           meetingLabel: source.label,
           files: attachments.map((a) => a.filename),
