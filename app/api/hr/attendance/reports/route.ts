@@ -222,7 +222,11 @@ export async function GET(request: NextRequest) {
           continue
         }
 
-        const derived = deriveUnifiedAttendanceStatus({ record: rec, recordDate: workday }, policy)
+        const earlyClose = ctx.earlyCloseTime(workday)
+        const derived = deriveUnifiedAttendanceStatus(
+          { record: rec, recordDate: workday, earlyClosure: earlyClose ? { closeTime: earlyClose } : null },
+          policy
+        )
 
         if (derived === "waiver") {
           waived_days++
@@ -252,24 +256,29 @@ export async function GET(request: NextRequest) {
           present_days++
           attendance_credits += 1.0
           total_hours += Number(rec.total_hours ?? 0)
-        } else if (derived === "early") {
-          early_days++
+        } else if (
+          derived === "early" ||
+          derived === "late" ||
+          derived === "incomplete" ||
+          derived === "early_departure" ||
+          derived === "early_departure_with_permission" ||
+          derived === "early_closure"
+        ) {
           present_days++
-          attendance_credits += dayCredit("early", rec.clock_in, rec.clock_out, policy)
+          // Bucket for the summary counters: Early Closure counts as a full present
+          // day; Left Early (± permission) is a docked present day, grouped with late.
+          if (derived === "early" || derived === "early_closure") early_days++
+          else if (derived === "incomplete") incomplete_days++
+          else late_days++
+
+          const earlyOutApproved = rec.status === "early_departure_with_permission"
+          const credit = dayCredit(derived, rec.clock_in, rec.clock_out, policy, {
+            earlyCloseTime: earlyClose ?? null,
+            earlyOutApproved,
+          })
+          attendance_credits += credit
           total_hours += Number(rec.total_hours ?? 0)
-          total_missed_hours += (totalCredits - dayCredit("early", rec.clock_in, rec.clock_out, policy) * totalCredits)
-        } else if (derived === "late") {
-          late_days++
-          present_days++
-          attendance_credits += dayCredit("late", rec.clock_in, rec.clock_out, policy)
-          total_hours += Number(rec.total_hours ?? 0)
-          total_missed_hours += (totalCredits - dayCredit("late", rec.clock_in, rec.clock_out, policy) * totalCredits)
-        } else if (derived === "incomplete") {
-          incomplete_days++
-          present_days++
-          attendance_credits += dayCredit("incomplete", rec.clock_in, rec.clock_out, policy)
-          total_hours += Number(rec.total_hours ?? 0)
-          total_missed_hours += (totalCredits - dayCredit("incomplete", rec.clock_in, rec.clock_out, policy) * totalCredits)
+          total_missed_hours += totalCredits - credit * totalCredits
         } else {
           absent_days++
           total_missed_hours += totalCredits

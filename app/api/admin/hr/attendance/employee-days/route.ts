@@ -160,13 +160,18 @@ export async function GET(request: NextRequest) {
     .filter((d) => d <= today)
     .map((date) => {
       const rec = recordsByDate.get(date) || null
-      const status = deriveUnifiedAttendanceStatus({
-        record: rec,
-        isHoliday: ctx.isHoliday(date),
-        isOnLeave: ctx.isOnLeave(userId, date),
-        isExempted: exemptHint || Boolean(profile?.attendance_exempt) || ctx.isExempt(userId, date),
-        recordDate: date,
-      }, policy)
+      const closeTime = ctx.earlyCloseTime(date)
+      const status = deriveUnifiedAttendanceStatus(
+        {
+          record: rec,
+          isHoliday: ctx.isHoliday(date),
+          isOnLeave: ctx.isOnLeave(userId, date),
+          isExempted: exemptHint || Boolean(profile?.attendance_exempt) || ctx.isExempt(userId, date),
+          recordDate: date,
+          earlyClosure: closeTime ? { closeTime } : null,
+        },
+        policy
+      )
       return { date, record: rec, status, manual_by: manualByDate(date) }
     })
 

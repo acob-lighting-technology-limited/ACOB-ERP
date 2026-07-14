@@ -179,6 +179,7 @@ export async function GET(request: NextRequest) {
       const p = profileMap.get(r.user_id)
       const name = p?.full_name?.trim() || [p?.first_name, p?.last_name].filter(Boolean).join(" ") || "Unknown"
 
+      const closeTime = ctx.earlyCloseTime(r.date)
       const derivedStatus = deriveUnifiedAttendanceStatus(
         {
           record: r,
@@ -186,6 +187,7 @@ export async function GET(request: NextRequest) {
           isOnLeave: ctx.isOnLeave(r.user_id, r.date),
           isExempted: Boolean(p?.attendance_exempt) || ctx.isExempt(r.user_id, r.date),
           recordDate: r.date,
+          earlyClosure: closeTime ? { closeTime } : null,
         },
         policy
       )
