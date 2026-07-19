@@ -14,6 +14,8 @@ export function buildArtifactEmailHtml(params: {
   meetingLabel: string
   files: string[]
   intro?: string
+  /** When set, a "Download recording" button linking into the ERP is shown. */
+  recordingUrl?: string
 }): string {
   const label = escapeHtml(params.meetingLabel)
   const intro =
@@ -28,6 +30,17 @@ export function buildArtifactEmailHtml(params: {
         "</td></tr>"
     )
     .join("")
+
+  // The recording is large, so it's never attached — this links into the ERP,
+  // which streams the download after the viewer signs in.
+  const recordingBlock = params.recordingUrl
+    ? '<div style="text-align:center;margin:24px 0;">' +
+      `<a href="${escapeHtml(params.recordingUrl)}" ` +
+      'style="display:inline-block;background:#16a34a;color:#ffffff;text-decoration:none;padding:12px 26px;border-radius:6px;font-size:14px;font-weight:600;">' +
+      "▶ Download meeting recording</a>" +
+      '<div style="font-size:12px;color:#6b7280;margin-top:8px;">Opens in the ERP — sign in to start the download.</div>' +
+      "</div>"
+    : ""
 
   return (
     "<!DOCTYPE html>" +
@@ -57,6 +70,7 @@ export function buildArtifactEmailHtml(params: {
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">' +
     fileRows +
     "</table></div>" +
+    recordingBlock +
     '<p class="text" style="color:#6b7280;font-size:13px;">These documents are also stored in the ERP under Reports &rsaquo; General Meeting &rsaquo; Meeting Records.</p>' +
     "</div>" +
     // Footer — same dark-mode lock as the header

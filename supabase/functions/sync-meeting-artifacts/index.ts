@@ -19,6 +19,7 @@ import {
   isGraphConfigured,
   listAttendanceRecords,
   listAttendanceReports,
+  listRecordings,
   listTranscripts,
   resolveOnlineMeetingId,
   resolveUserId,
@@ -26,6 +27,7 @@ import {
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+const ERP_BASE_URL = (Deno.env.get("SITE_URL") || "https://erp.acoblighting.com").replace(/\/$/, "")
 const BUCKET = "meeting_documents"
 // Max time to hold a freshly-imported artifact waiting for its sibling (attendance
 // ↔ transcript) so the two land in one email. After this, send whatever is ready —
@@ -269,6 +271,19 @@ async function processSource(
     const meetingId = await resolveOnlineMeetingId(userId, source.join_web_url)
     if (!meetingId) throw new Error("online meeting could not be resolved from join URL")
 
+    // If a recording exists, the email gets a "Download recording" link into the ERP
+    // (the video is too large to attach). Best-effort: a missing recording permission
+    // or no recording must not break the artifact sync.
+    let recordingUrl: string | undefined
+    try {
+      const recordings = await listRecordings(userId, meetingId)
+      if (recordings.length > 0) {
+        recordingUrl = `${ERP_BASE_URL}/api/reports/meetings/recording?source_id=${encodeURIComponent(source.id)}&download=1`
+      }
+    } catch (recErr) {
+      console.error(`[sync-meeting-artifacts] recording check failed for ${source.label}: ${String(recErr)}`)
+    }
+
     // ── Attendance reports (one per occurrence) ────────────────────────────────
     const reports = await listAttendanceReports(userId, meetingId)
     for (const report of reports) {
@@ -451,6 +466,7 @@ async function processSource(
                   intro: `The ${label} for the <strong>${source.label}</strong> ${
                     attachments.length > 1 ? "are" : "is"
                   } attached.`,
+                  recordingUrl,
                 }),
                 attachments,
                 traceLabel: `meeting-artifacts:${occ.year}W${occ.week}:${index + 1}/${source.recipients.length}:${to}`,
@@ -515,7 +531,7 @@ async function sendStoredArtifacts(
 ): Promise<{ sent: boolean; files?: string[]; to?: string[]; reason?: string }> {
   const { data: source } = await supabase
     .from("meeting_artifact_sources")
-    .select("id, label, recipients")
+    .select("id, label, recipients, organizer_email, join_web_url")
     .eq("id", params.sourceId)
     .maybeSingle()
   if (!source) return { sent: false, reason: "source not found" }
@@ -550,6 +566,20 @@ async function sendStoredArtifacts(
   }
   if (attachments.length === 0) return { sent: false, reason: "no matching documents found" }
 
+  // Add the "Download recording" link when a recording exists (best-effort).
+  let recordingUrl: string | undefined
+  if (source.organizer_email && source.join_web_url) {
+    try {
+      const userId = await resolveUserId(source.organizer_email)
+      const meetingId = userId ? await resolveOnlineMeetingId(userId, source.join_web_url) : null
+      if (userId && meetingId && (await listRecordings(userId, meetingId)).length > 0) {
+        recordingUrl = `${ERP_BASE_URL}/api/reports/meetings/recording?source_id=${encodeURIComponent(source.id)}&download=1`
+      }
+    } catch (recErr) {
+      console.error(`[sync-meeting-artifacts] manual recording check failed: ${String(recErr)}`)
+    }
+  }
+
   const results: Array<{ to: string; success: boolean; emailId?: string; error?: string }> = []
   for (const [index, to] of recipients.entries()) {
     try {
@@ -560,6 +590,7 @@ async function sendStoredArtifacts(
         html: buildArtifactEmailHtml({
           meetingLabel: source.label,
           files: attachments.map((a) => a.filename),
+          recordingUrl,
         }),
         attachments,
         traceLabel: `meeting-artifacts-manual:${index + 1}/${recipients.length}:${to}`,

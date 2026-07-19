@@ -106,6 +106,19 @@ export async function listAttendanceRecords(
   return payload.value || []
 }
 
+export type RecordingRef = {
+  id: string
+  createdDateTime?: string | null
+}
+
+/** List recordings for an online meeting. Requires OnlineMeetingRecording.Read.All. */
+export async function listRecordings(userId: string, meetingId: string): Promise<RecordingRef[]> {
+  const payload = await graphGet<{ value?: RecordingRef[] }>(
+    `/users/${encodeURIComponent(userId)}/onlineMeetings/${meetingId}/recordings`
+  )
+  return payload.value || []
+}
+
 export async function listTranscripts(userId: string, meetingId: string): Promise<TranscriptRef[]> {
   const payload = await graphGet<{ value?: TranscriptRef[] }>(
     `/users/${encodeURIComponent(userId)}/onlineMeetings/${meetingId}/transcripts`
