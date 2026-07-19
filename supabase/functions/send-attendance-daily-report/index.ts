@@ -19,6 +19,9 @@ const STATUS_LABELS: Record<string, string> = {
   present: "Present",
   late: "Late",
   lateness_with_permission: "LWP",
+  early_departure: "Left Early",
+  early_departure_with_permission: "LEWP",
+  early_closure: "Early Closure",
   incomplete: "Incomplete",
   absent: "Absent",
   absent_with_permission: "AWP",
@@ -34,6 +37,9 @@ const STATUS_COLORS: Record<string, string> = {
   present: "#2563eb",
   late: "#ca8a04",
   lateness_with_permission: "#16a34a",
+  early_departure: "#ea580c",
+  early_departure_with_permission: "#16a34a",
+  early_closure: "#0284c7",
   incomplete: "#0891b2",
   absent: "#dc2626",
   absent_with_permission: "#16a34a",
@@ -53,6 +59,7 @@ const DB_WRITABLE_STATUSES = new Set([
   "waiver",
   "lateness_with_permission",
   "absent_with_permission",
+  "early_departure_with_permission",
   "out_of_station",
 ])
 const PERMISSION_STATUSES = new Set(["lateness_with_permission", "absent_with_permission", "out_of_station"])
@@ -123,6 +130,8 @@ function deriveStatus(
     isHoliday: boolean
     isOnLeave: boolean
     isExempted: boolean
+    /** Org-wide early-closure time (HH:MM) for the report date, if any. */
+    earlyCloseTime?: string | null
   },
   policy: { endTime: string; lateCutoff: string }
 ): string {
@@ -141,6 +150,8 @@ function deriveStatus(
         : rawStatus && DB_WRITABLE_STATUSES.has(rawStatus)
           ? rawStatus
           : null
+  // Whole-day permission overrides (LWP/AWP/OOS). LEWP is handled below so it never
+  // rescues a late arrival — only the early departure.
   if (explicitStatus && PERMISSION_STATUSES.has(explicitStatus)) return explicitStatus
   if (rec.waived) return "waiver"
   if (explicitStatus === "waiver") return "waiver"
@@ -153,8 +164,18 @@ function deriveStatus(
   }
   if (!rec.clock_in) return "incomplete"
   if (rec.clock_out && rec.clock_out <= rec.clock_in) return "incomplete"
-  if (rec.clock_out && isEarlyDeparture(rec.clock_out, policy.endTime)) return "late"
-  return isLateWithPolicy(rec.clock_in, policy.lateCutoff) ? "late" : "early"
+
+  // Both punches present. Late arrival wins the primary label; the early departure
+  // is surfaced separately (the email shows the primary status only).
+  if (isLateWithPolicy(rec.clock_in, policy.lateCutoff)) return "late"
+
+  const closeTime = input.earlyCloseTime ?? null
+  const effectiveEnd = closeTime ?? policy.endTime
+  const leftEarly = rec.clock_out ? isEarlyDeparture(rec.clock_out, effectiveEnd) : false
+  if (explicitStatus === "early_departure_with_permission") return "early_departure_with_permission"
+  if (leftEarly) return "early_departure"
+  if (closeTime) return "early_closure"
+  return "early"
 }
 
 function escapeHtml(value: string): string {
@@ -433,28 +454,33 @@ serve(async (req) => {
     }>
     const userIds = activeProfiles.map((p) => p.id)
 
-    const [{ data: records }, { data: holidays }, { data: leaves }, { data: exemptPeriods }] = await Promise.all([
-      supabase
-        .from("attendance_records")
-        .select("user_id, status, total_hours, clock_in, clock_out, waived")
-        .eq("date", today)
-        .in("user_id", userIds.length > 0 ? userIds : ["00000000-0000-0000-0000-000000000000"]),
-      supabase.from("holiday_calendar").select("holiday_date").eq("holiday_date", today),
-      supabase
-        .from("leave_requests")
-        .select("user_id")
-        .eq("status", "approved")
-        .lte("start_date", today)
-        .gte("end_date", today)
-        .in("user_id", userIds.length > 0 ? userIds : ["00000000-0000-0000-0000-000000000000"]),
-      supabase
-        .from("attendance_exempt_periods")
-        .select("user_id")
-        .lte("start_date", today)
-        .gte("end_date", today)
-        .in("user_id", userIds.length > 0 ? userIds : ["00000000-0000-0000-0000-000000000000"]),
-    ])
+    const [{ data: records }, { data: holidays }, { data: leaves }, { data: exemptPeriods }, { data: closures }] =
+      await Promise.all([
+        supabase
+          .from("attendance_records")
+          .select("user_id, status, total_hours, clock_in, clock_out, waived")
+          .eq("date", today)
+          .in("user_id", userIds.length > 0 ? userIds : ["00000000-0000-0000-0000-000000000000"]),
+        supabase.from("holiday_calendar").select("holiday_date").eq("holiday_date", today),
+        supabase
+          .from("leave_requests")
+          .select("user_id")
+          .eq("status", "approved")
+          .lte("start_date", today)
+          .gte("end_date", today)
+          .in("user_id", userIds.length > 0 ? userIds : ["00000000-0000-0000-0000-000000000000"]),
+        supabase
+          .from("attendance_exempt_periods")
+          .select("user_id")
+          .lte("start_date", today)
+          .gte("end_date", today)
+          .in("user_id", userIds.length > 0 ? userIds : ["00000000-0000-0000-0000-000000000000"]),
+        supabase.from("attendance_early_closures").select("close_time").eq("closure_date", today).maybeSingle(),
+      ])
 
+    const earlyCloseTime = (closures as { close_time?: string | null } | null)?.close_time
+      ? String((closures as { close_time: string }).close_time).slice(0, 5)
+      : null
     const isHolidayToday = (holidays ?? []).length > 0
     const onLeaveSet = new Set((leaves ?? []).map((r: { user_id: string }) => r.user_id))
     const exemptSet = new Set((exemptPeriods ?? []).map((r: { user_id: string }) => r.user_id))
@@ -470,6 +496,7 @@ serve(async (req) => {
           isHoliday: isHolidayToday,
           isOnLeave: onLeaveSet.has(profile.id),
           isExempted: Boolean(profile.attendance_exempt) || exemptSet.has(profile.id),
+          earlyCloseTime,
         },
         policy
       )
