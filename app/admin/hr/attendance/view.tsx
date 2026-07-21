@@ -110,6 +110,8 @@ type DayStatus =
   | "on_leave"
   | "holiday"
   | "weekend"
+  | "early_closure"
+  | "late_resumption"
 
 interface CalendarDay {
   date: string
@@ -118,6 +120,8 @@ interface CalendarDay {
   isOnLeave: boolean
   status: DayStatus
   manualBy: string | null
+  earlyClosureTime?: string | null
+  lateResumptionTime?: string | null
 }
 
 /**
@@ -242,7 +246,12 @@ function formatHours(hours: number | null) {
   return `${hours.toFixed(1)}h`
 }
 
-function getHourBreakdown(record: DayRecord | null, status?: string) {
+function getHourBreakdown(
+  record: DayRecord | null,
+  status?: string,
+  lateResumptionTime?: string | null,
+  earlyClosureTime?: string | null
+) {
   const covered =
     status === "waiver" ||
     status === "on_leave" ||
@@ -273,9 +282,48 @@ function getHourBreakdown(record: DayRecord | null, status?: string) {
   const workStart = 8 * 60
   const workEnd = 17 * 60
   const workMinutes = Math.max(0, Math.min(outMin, workEnd) - Math.max(inMin, workStart))
-  const work = workMinutes / 60
-  const overtime = Math.max(0, total - work)
-  const missed = Math.max(0, 9 - work)
+
+  // Subtract 1 hour from work hours only if total time in office >= 5 hours
+  const hasLunch = total >= 5
+  const work = Math.max(0, workMinutes / 60 - (hasLunch ? 1.0 : 0.0))
+  const overtime = Math.max(0, total - workMinutes / 60)
+
+  // 1. Calculate Lateness Hours
+  let lateness = 0
+  const graceMin = 8 * 60 + 20 // 08:20 AM
+  const nineMin = 9 * 60 // 09:00 AM
+
+  // If clock-in is after 4:00 PM (16:00), they are considered absent (8.5 hrs missed)
+  if (inMin > 16 * 60) {
+    return { total, work, overtime, missed: 8.5 }
+  }
+
+  if (lateResumptionTime) {
+    const [rh, rm] = lateResumptionTime.split(":").map(Number)
+    if (!isNaN(rh) && !isNaN(rm)) {
+      const resumptionMin = rh * 60 + rm
+      if (inMin > resumptionMin) {
+        lateness = Math.ceil((inMin - resumptionMin) / 60)
+      }
+    }
+  } else {
+    if (inMin > graceMin) {
+      if (inMin <= nineMin) {
+        lateness = 0.5
+      } else {
+        lateness = Math.ceil((inMin - nineMin) / 60)
+      }
+    }
+  }
+
+  // 2. Calculate Early Departure Hours (capped at 5:00 PM or early closure close time)
+  let earlyDeparture = 0
+  const effectiveEnd = earlyClosureTime ? (parseTimeToMinutes(earlyClosureTime) ?? workEnd) : workEnd
+  if (outMin < effectiveEnd) {
+    earlyDeparture = Math.ceil((effectiveEnd - outMin) / 60)
+  }
+
+  const missed = lateness + earlyDeparture
   return { total, work, overtime, missed }
 }
 
@@ -314,8 +362,10 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           dayName: formatDayShort(row.date),
           record: row.record,
           isOnLeave: row.status === "on_leave",
-          status: row.status,
+          status: row.status as DayStatus,
           manualBy: row.manual_by ?? row.record?.editor_first_name ?? null,
+          earlyClosureTime: (row as any).early_closure_time ?? null,
+          lateResumptionTime: (row as any).late_resumption_time ?? null,
         }))
 
         setDays(calDays)
@@ -481,7 +531,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           <span></span>
         </div>
         {visibleDays.map((day) => {
-          const hours = getHourBreakdown(day.record, day.status)
+          const hours = getHourBreakdown(day.record, day.status, day.lateResumptionTime, day.earlyClosureTime)
           return (
             <div
               key={day.date}
@@ -489,7 +539,12 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
             >
               <span className="text-xs font-medium">{day.dayName}</span>
               <div>
-                <StatusBadge status={day.status} waived={day.record?.waived} />
+                <StatusBadge
+                  status={day.status}
+                  waived={day.record?.waived}
+                  record={day.record}
+                  earlyClosure={day.earlyClosureTime ? { closeTime: day.earlyClosureTime } : null}
+                />
               </div>
               <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
                 {day.record?.clock_in ? (

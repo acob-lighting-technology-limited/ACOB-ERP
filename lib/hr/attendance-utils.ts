@@ -17,30 +17,98 @@ export function isLate(clockIn: string | null | undefined): boolean {
  * Total hours missed during the standard work window (8:00am–5:00pm).
  * Returns late arrival hours + early departure hours as a decimal.
  */
-export function missedHours(clockIn: string | null | undefined, clockOut: string | null | undefined): number {
-  if (!clockIn || !clockOut) return 0
+export function missedHours(
+  clockIn: string | null | undefined,
+  clockOut: string | null | undefined,
+  lateResumptionTime?: string | null,
+  earlyClosureTime?: string | null
+): number {
+  if (!clockIn || !clockOut) return 8.5
   const [ih, im] = clockIn.split(":").map(Number)
   const [oh, om] = clockOut.split(":").map(Number)
-  if (isNaN(ih) || isNaN(im) || isNaN(oh) || isNaN(om)) return 0
+  if (isNaN(ih) || isNaN(im) || isNaN(oh) || isNaN(om)) return 8.5
   const inMin = ih * 60 + im
   const outMin = oh * 60 + om
-  const workMinutes = Math.max(0, Math.min(outMin, 17 * 60) - Math.max(inMin, 8 * 60))
-  return Math.max(0, 9 - workMinutes / 60)
+
+  // 1. Check for 4:00 PM cutoff (16:00 PM = 960 minutes)
+  if (inMin > 16 * 60) {
+    return 8.5
+  }
+
+  // 2. Calculate Lateness Hours
+  let lateness = 0
+  if (lateResumptionTime) {
+    // Late Resumption: no grace period, starts at resumption time
+    const [rh, rm] = lateResumptionTime.split(":").map(Number)
+    if (!isNaN(rh) && !isNaN(rm)) {
+      const resumptionMin = rh * 60 + rm
+      if (inMin > resumptionMin) {
+        lateness = Math.ceil((inMin - resumptionMin) / 60)
+      }
+    }
+  } else {
+    // Standard Day: 8:20 AM grace. 8:20–9:00 = 0.5 hrs deducted.
+    // After 9:00 AM: progressive 1 hr per hour (or part thereof).
+    const graceMin = 8 * 60 + 20 // 08:20 AM
+    const nineMin = 9 * 60 // 09:00 AM
+    if (inMin > graceMin) {
+      if (inMin <= nineMin) {
+        lateness = 0.5 // 8:20–9:00 window = 0.5 hr
+      } else {
+        lateness = 0.5 + Math.ceil((inMin - nineMin) / 60) // 0.5 base + 1hr per hour past 9:00
+      }
+    }
+  }
+
+  // 3. Calculate Early Departure Hours (capped at 5:00 PM or early closure close time)
+  let earlyDeparture = 0
+  const endMin = 17 * 60 // 05:00 PM
+  let effectiveEnd = endMin
+  if (earlyClosureTime) {
+    const [eh, em] = earlyClosureTime.split(":").map(Number)
+    if (!isNaN(eh) && !isNaN(em)) {
+      effectiveEnd = eh * 60 + em
+    }
+  }
+  if (outMin < effectiveEnd) {
+    earlyDeparture = Math.ceil((effectiveEnd - outMin) / 60)
+  }
+
+  return lateness + earlyDeparture
 }
 
 /** Returns the number of hourly late steps starting from the grace cutoff. */
-export function getLateSteps(clockIn: string, policy: AttendancePolicy): number {
-  const [sh, sm] = policy.startTime.split(":").map(Number)
+export function getLateSteps(clockIn: string, policy: AttendancePolicy, lateResumptionTime?: string | null): number {
   const [ch, cm] = clockIn.split(":").map(Number)
-  const [lh, lm] = policy.lateCutoff.split(":").map(Number)
-  if (isNaN(sh) || isNaN(sm) || isNaN(ch) || isNaN(cm) || isNaN(lh) || isNaN(lm)) return 0
-  const startMin = sh * 60 + sm
+  if (isNaN(ch) || isNaN(cm)) return 0
   const clockInMin = ch * 60 + cm
-  const cutoffMin = lh * 60 + lm
-  if (clockInMin <= cutoffMin) return 0
-  const penaltyStartMin = startMin + 60 // e.g. 09:00 AM (1 hour after 08:00 AM)
-  if (clockInMin <= penaltyStartMin) return 1
-  return 1 + Math.ceil((clockInMin - penaltyStartMin) / 60)
+
+  // 4:00 PM cutoff
+  if (clockInMin > 16 * 60) {
+    return 17 // 8.5 hours * 2 steps/hour = 17 steps (max capped below)
+  }
+
+  let lateness = 0
+  if (lateResumptionTime) {
+    const [rh, rm] = lateResumptionTime.split(":").map(Number)
+    if (!isNaN(rh) && !isNaN(rm)) {
+      const resumptionMin = rh * 60 + rm
+      if (clockInMin > resumptionMin) {
+        lateness = Math.ceil((clockInMin - resumptionMin) / 60)
+      }
+    }
+  } else {
+    const graceMin = 8 * 60 + 20
+    const nineMin = 9 * 60
+    if (clockInMin > graceMin) {
+      if (clockInMin <= nineMin) {
+        lateness = 0.5 // 8:20–9:00 window = 0.5 hr
+      } else {
+        lateness = 0.5 + Math.ceil((clockInMin - nineMin) / 60) // 0.5 base + 1hr per hour past 9:00
+      }
+    }
+  }
+  return lateness * 2
 }
 
 /** Parses a "HH:MM" time string into minutes since midnight, or null if invalid. */
@@ -116,7 +184,7 @@ export function getWorkdaysInMonth(yearMonth: string): string[] {
 /**
  * Fractional day credit for attendance rate calculation.
  * Early / Early Closure: 1.0 (full day; office closed early counts as a full day).
- * Covered (waiver/exempted/on_leave/holiday/OOS/AWP/LWP): 1.0.
+ * Covered (waiver/exempted/on_leave/holiday/OOS/AWP/LWP/late_resumption): 1.0.
  * Present/Late/Incomplete/Left Early: step-based deduction out of totalCredits.
  * Absent: 0.0.
  *
@@ -129,7 +197,7 @@ export function dayCredit(
   clockIn?: string | null,
   clockOut?: string | null,
   policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY,
-  options?: { earlyCloseTime?: string | null; earlyOutApproved?: boolean }
+  options?: { earlyCloseTime?: string | null; earlyOutApproved?: boolean; lateResumptionTime?: string | null }
 ): number {
   if (
     status === "waiver" ||
@@ -139,7 +207,8 @@ export function dayCredit(
     status === "out_of_station" ||
     status === "absent_with_permission" ||
     status === "lateness_with_permission" ||
-    status === "early_closure"
+    status === "early_closure" ||
+    status === "late_resumption"
   ) {
     return 1.0
   }
@@ -163,7 +232,7 @@ export function dayCredit(
       if (clockOut < policy.lateCutoff) {
         return 0.0
       }
-      const lateSteps = getLateSteps(clockIn, policy)
+      const lateSteps = getLateSteps(clockIn, policy, options?.lateResumptionTime)
       const earlyOutSteps = forgiveEarlyOut ? 0 : getEarlyOutSteps(clockOut, effectiveEnd)
 
       const totalDeduction = Math.min(totalCredits - 1, lateSteps + earlyOutSteps)
@@ -171,7 +240,7 @@ export function dayCredit(
     } else {
       // Incomplete: missing one punch
       if (clockIn) {
-        const lateSteps = getLateSteps(clockIn, policy)
+        const lateSteps = getLateSteps(clockIn, policy, options?.lateResumptionTime)
         credits -= lateSteps
       } else if (clockOut) {
         const earlyOutSteps = forgiveEarlyOut ? 0 : getEarlyOutSteps(clockOut, effectiveEnd)

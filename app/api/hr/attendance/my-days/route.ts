@@ -1,8 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
-import { getWorkdaysInMonth, monthBounds, toLocalISODate, toLocalYearMonth, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
+import {
+  getWorkdaysInMonth,
+  monthBounds,
+  toLocalISODate,
+  toLocalYearMonth,
+  loadAttendancePolicy,
+} from "@/lib/hr/attendance-utils"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import { loadDayContext } from "@/lib/hr/attendance-day-context"
 
 type AttendanceRow = {
   id: string
@@ -15,23 +22,6 @@ type AttendanceRow = {
   waived: boolean
   created_at?: string | null
   updated_at?: string | null
-}
-
-type HolidayRow = { holiday_date: string }
-
-function expandIsoDateRange(startDate: string, endDate: string): string[] {
-  const [sy, sm, sd] = startDate.split("-").map(Number)
-  const [ey, em, ed] = endDate.split("-").map(Number)
-  const start = new Date(Date.UTC(sy, sm - 1, sd))
-  const end = new Date(Date.UTC(ey, em - 1, ed))
-  const days: string[] = []
-  for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
-    const y = d.getUTCFullYear()
-    const m = String(d.getUTCMonth() + 1).padStart(2, "0")
-    const day = String(d.getUTCDate()).padStart(2, "0")
-    days.push(`${y}-${m}-${day}`)
-  }
-  return days
 }
 
 export async function GET(request: NextRequest) {
@@ -61,41 +51,8 @@ export async function GET(request: NextRequest) {
     .returns<AttendanceRow[]>()
   if (recordsError) return NextResponse.json({ error: recordsError.message }, { status: 500 })
 
-  const { data: leaves, error: leavesError } = await dataClient
-    .from("leave_requests")
-    .select("start_date, end_date")
-    .eq("user_id", userId)
-    .eq("status", "approved")
-    .lte("start_date", monthEnd)
-    .gte("end_date", monthStart)
-  if (leavesError) return NextResponse.json({ error: leavesError.message }, { status: 500 })
+  const ctx = await loadDayContext(dataClient, { userIds: [userId], start: monthStart, end: monthEnd })
 
-  const { data: periods, error: periodsError } = await dataClient
-    .from("attendance_exempt_periods")
-    .select("start_date, end_date")
-    .eq("user_id", userId)
-    .lte("start_date", monthEnd)
-    .gte("end_date", monthStart)
-  if (periodsError) return NextResponse.json({ error: periodsError.message }, { status: 500 })
-
-  const { data: holidays, error: holidaysError } = await dataClient
-    .from("holiday_calendar")
-    .select("holiday_date")
-    .eq("location", "all")
-    .gte("holiday_date", monthStart)
-    .lte("holiday_date", monthEnd)
-    .returns<HolidayRow[]>()
-  if (holidaysError) return NextResponse.json({ error: holidaysError.message }, { status: 500 })
-
-  const leaveDates = new Set<string>()
-  for (const lr of leaves || []) {
-    for (const date of expandIsoDateRange(lr.start_date, lr.end_date)) leaveDates.add(date)
-  }
-  const exemptDates = new Set<string>()
-  for (const p of periods || []) {
-    for (const date of expandIsoDateRange(p.start_date, p.end_date)) exemptDates.add(date)
-  }
-  const holidayDates = new Set<string>((holidays || []).map((h) => h.holiday_date))
   const recordsByDate = new Map<string, AttendanceRow>()
   for (const record of records || []) {
     const existing = recordsByDate.get(record.date)
@@ -109,13 +66,20 @@ export async function GET(request: NextRequest) {
     .filter((d) => d <= today)
     .map((date) => {
       const rec = recordsByDate.get(date) || null
-      const status = deriveUnifiedAttendanceStatus({
-        record: rec,
-        isHoliday: holidayDates.has(date),
-        isOnLeave: leaveDates.has(date),
-        isExempted: Boolean(profile?.attendance_exempt) || exemptDates.has(date),
-        recordDate: date,
-      }, policy)
+      const closeTime = ctx.earlyCloseTime(date)
+      const lateRes = ctx.lateResumptionTime(date)
+      const status = deriveUnifiedAttendanceStatus(
+        {
+          record: rec,
+          isHoliday: ctx.isHoliday(date),
+          isOnLeave: ctx.isOnLeave(userId, date),
+          isExempted: Boolean(profile?.attendance_exempt) || ctx.isExempt(userId, date),
+          recordDate: date,
+          earlyClosure: closeTime ? { closeTime } : null,
+          lateResumption: lateRes ? { resumptionTime: lateRes } : null,
+        },
+        policy
+      )
       return { date, record: rec, status }
     })
 

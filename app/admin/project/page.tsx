@@ -6,7 +6,7 @@ import { ProjectAdminContent } from "./_components/project-admin-content"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Manage Projects | ACOB ERP",
+  title: "Manage Projects | Matrix",
   description: "Create, update, and track all company projects and their tasks.",
 }
 

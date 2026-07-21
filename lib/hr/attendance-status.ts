@@ -21,6 +21,7 @@ export type UnifiedAttendanceStatus =
   | "early_departure"
   | "early_departure_with_permission"
   | "early_closure"
+  | "late_resumption"
   | "incomplete"
   | "absent"
   | "absent_with_permission"
@@ -38,6 +39,7 @@ export const ATTENDANCE_STATUS_COLORS: Record<UnifiedAttendanceStatus, string> =
   early_departure_with_permission:
     "bg-gradient-to-r from-orange-100 to-green-100 text-green-800 border-orange-200 dark:from-orange-950/40 dark:to-green-950/40 dark:text-green-300",
   early_closure: "bg-blue-100 text-blue-800",
+  late_resumption: "bg-sky-100 text-sky-800",
   incomplete: "bg-cyan-100 text-cyan-800",
   absent: "bg-red-100 text-red-800",
   absent_with_permission:
@@ -58,6 +60,7 @@ export const ATTENDANCE_STATUS_LABELS: Record<UnifiedAttendanceStatus, string> =
   early_departure: "Left Early",
   early_departure_with_permission: "LEWP",
   early_closure: "Early Closure",
+  late_resumption: "Late Resumption",
   incomplete: "Incomplete",
   absent: "Absent",
   absent_with_permission: "AWP",
@@ -219,6 +222,8 @@ export function deriveUnifiedAttendanceStatus(
     recordDate?: string
     /** Org-wide early-closure context for this date, if any. */
     earlyClosure?: EarlyClosureInfo
+    /** Org-wide late-resumption context for this date, if any. */
+    lateResumption?: { resumptionTime: string } | null
   },
   policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY
 ): UnifiedAttendanceStatus {
@@ -238,11 +243,19 @@ export function deriveUnifiedAttendanceStatus(
   const today = toLocalISODate()
   const isPastDate = Boolean(input.recordDate && input.recordDate < today)
 
+  const effectiveGraceCutoff = input.lateResumption?.resumptionTime ?? policy.lateCutoff
+
   // clock_in present, no clock_out:
   // - past day  → incomplete (no second punch on a finished day)
   // - today (still in progress) → optimistic early/late based on policy grace cutoff
   if (rec.clock_in && !rec.clock_out) {
-    return isPastDate ? "incomplete" : isLateWithPolicy(rec.clock_in, policy.lateCutoff) ? "late" : "early"
+    return isPastDate
+      ? "incomplete"
+      : isLateWithPolicy(rec.clock_in, effectiveGraceCutoff)
+        ? "late"
+        : input.lateResumption
+          ? "late_resumption"
+          : "early"
   }
   if (!rec.clock_in) return "incomplete"
   // Same-second double-fire — treat as incomplete
@@ -250,7 +263,7 @@ export function deriveUnifiedAttendanceStatus(
 
   // Both punches present. Late arrival always wins the primary label; the early
   // departure surfaces via a secondary chip (see getEarlyDepartureFacts).
-  if (isLateWithPolicy(rec.clock_in, policy.lateCutoff)) return "late"
+  if (isLateWithPolicy(rec.clock_in, effectiveGraceCutoff)) return "late"
 
   const closeTime = input.earlyClosure?.closeTime ?? null
   const effectiveEnd = closeTime ?? policy.endTime
@@ -261,5 +274,6 @@ export function deriveUnifiedAttendanceStatus(
   if (explicitStatus === "early_departure_with_permission") return "early_departure_with_permission"
   if (leftEarly) return "early_departure"
   if (closeTime) return "early_closure"
+  if (input.lateResumption) return "late_resumption"
   return "early"
 }

@@ -1,6 +1,6 @@
 # Page Templates
 
-This directory contains template files for creating new pages in the ACOB ERP application. Use these templates as starting points to ensure consistency across the application.
+This directory contains template files for creating new pages in the Matrix application. Use these templates as starting points to ensure consistency across the application.
 
 ## Available Templates
 

@@ -20,7 +20,7 @@ interface MailRecipientProfile {
 }
 
 function buildEmailHtml(payload: HelpDeskMailPayload) {
-  const ctaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "https://erp.acoblighting.com"}${payload.ctaPath || "/help-desk"}`
+  const ctaUrl = `${process.env.NEXT_PUBLIC_SITE_URL || "https://matrix.acoblighting.com"}${payload.ctaPath || "/help-desk"}`
 
   return (
     "<!DOCTYPE html>" +
@@ -43,7 +43,7 @@ function buildEmailHtml(payload: HelpDeskMailPayload) {
     '<div class="email-shell">' +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">' +
     '<tr><td align="center" bgcolor="#000000" style="padding:20px 0;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;">' +
-    '<img src="https://erp.acoblighting.com/images/acob-logo-dark.png" height="65" alt="ACOB Lighting">' +
+    '<img src="https://matrix.acoblighting.com/images/acob-logo-dark.png" height="65" alt="ACOB Lighting">' +
     "</td></tr></table>" +
     '<div class="wrapper">' +
     `<div class="title">${payload.title}</div>` +

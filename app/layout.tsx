@@ -18,8 +18,8 @@ import { SeasonalFaviconSwitcher } from "@/components/seasonal-favicon-switcher"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "ACOB Lighting Technology Limited Signature Creator",
-  description: "Create professional email signatures for ACOB Lighting Technology Limited",
+  title: "Matrix",
+  description: "Matrix — the internal workspace platform for ACOB Lighting Technology Limited",
 }
 
 export const viewport: Viewport = {
@@ -67,7 +67,7 @@ export default function RootLayout({
                 <NProgressHandler />
                 <ClientErrorMonitor />
                 <HeaderWrapperWithData />
-                {/* Intentionally public routes outside (app): /kss, /employee/new, /maintenance */}
+                {/* Intentionally public routes outside (app): /employee/new, /maintenance */}
                 {children}
                 <Toaster />
               </SidebarProvider>

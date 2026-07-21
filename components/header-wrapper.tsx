@@ -27,10 +27,6 @@ export function HeaderWrapper({ user, canAccessAdmin = false }: HeaderWrapperPro
     return null
   }
 
-  if (pathname?.startsWith("/kss")) {
-    return null
-  }
-
   if (pathname?.startsWith("/birthday")) {
     return null
   }

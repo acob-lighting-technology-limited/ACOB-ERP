@@ -206,6 +206,22 @@ export function HRAdminDashboard({
             </CardContent>
           </Card>
 
+          {/* Payroll */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Payroll
+              </CardTitle>
+              <CardDescription>Manage payroll periods and calculate payslips</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <Link href={`${basePath}/payroll`}>
+                <Button className="w-full">Open Payroll Panel</Button>
+              </Link>
+            </CardContent>
+          </Card>
+
           {/* PMS */}
           <Card>
             <CardHeader>

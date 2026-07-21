@@ -60,6 +60,8 @@ interface AttendanceRecord {
   clock_out_source?: string | null
   waived?: boolean
   manual_comment?: string | null
+  early_closure_time?: string | null
+  late_resumption_time?: string | null
 }
 
 interface DailyRosterViewProps {
@@ -283,7 +285,13 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
       label: "Status",
       sortable: true,
       accessor: (r) => r.status,
-      render: (r) => <StatusBadge status={r.status} record={r} />,
+      render: (r) => (
+        <StatusBadge
+          status={r.status}
+          record={r}
+          earlyClosure={r.early_closure_time ? { closeTime: r.early_closure_time } : null}
+        />
+      ),
     },
     {
       key: "source",

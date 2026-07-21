@@ -80,7 +80,12 @@ function minutesToHours(minutes: number): number {
   return minutes / 60
 }
 
-function calculateHourBreakdown(clockIn: string | null | undefined, clockOut: string | null | undefined) {
+function calculateHourBreakdown(
+  clockIn: string | null | undefined,
+  clockOut: string | null | undefined,
+  lateResumptionTime?: string | null,
+  earlyClosureTime?: string | null
+) {
   const inMinutes = parseClockToMinutes(clockIn)
   const outMinutes = parseClockToMinutes(clockOut)
   if (inMinutes === null || outMinutes === null || outMinutes <= inMinutes) {
@@ -88,20 +93,64 @@ function calculateHourBreakdown(clockIn: string | null | undefined, clockOut: st
   }
 
   const totalMinutes = outMinutes - inMinutes
+  const totalHours = minutesToHours(totalMinutes)
+
   const workStart = 8 * 60
   const workEnd = 17 * 60
   const overlapStart = Math.max(inMinutes, workStart)
   const overlapEnd = Math.min(outMinutes, workEnd)
-  const workMinutes = Math.max(0, overlapEnd - overlapStart)
-  const overtimeMinutes = Math.max(0, totalMinutes - workMinutes)
-  const lateMinutes = Math.max(0, inMinutes - workStart)
-  const earlyMinutes = Math.max(0, workEnd - outMinutes)
+
+  const rawWorkMinutes = Math.max(0, overlapEnd - overlapStart)
+  // Subtract 1 hour (60 minutes) only if total time in office >= 5 hours
+  const breakMinutes = totalHours >= 5 ? 60 : 0
+  const workMinutes = Math.max(0, rawWorkMinutes - breakMinutes)
+  const overtimeMinutes = Math.max(0, totalMinutes - rawWorkMinutes)
+
+  // 1. Calculate Lateness Hours
+  let lateness = 0
+  const graceMin = 8 * 60 + 20 // 08:20 AM
+  const nineMin = 9 * 60 // 09:00 AM
+
+  // If clock-in is after 4:00 PM (16:00), they are considered absent (8.5 hrs missed)
+  if (inMinutes > 16 * 60) {
+    return {
+      total: totalHours,
+      work: minutesToHours(workMinutes),
+      overtime: minutesToHours(overtimeMinutes),
+      missed: 8.5,
+    }
+  }
+
+  if (lateResumptionTime) {
+    const [rh, rm] = lateResumptionTime.split(":").map(Number)
+    if (!isNaN(rh) && !isNaN(rm)) {
+      const resumptionMin = rh * 60 + rm
+      if (inMinutes > resumptionMin) {
+        lateness = Math.ceil((inMinutes - resumptionMin) / 60)
+      }
+    }
+  } else {
+    if (inMinutes > graceMin) {
+      if (inMinutes <= nineMin) {
+        lateness = 0.5
+      } else {
+        lateness = Math.ceil((inMinutes - nineMin) / 60)
+      }
+    }
+  }
+
+  // 2. Calculate Early Departure Hours (capped at 5:00 PM or early closure close time)
+  let earlyDeparture = 0
+  const effectiveEnd = earlyClosureTime ? (parseClockToMinutes(earlyClosureTime) ?? workEnd) : workEnd
+  if (outMinutes < effectiveEnd) {
+    earlyDeparture = Math.ceil((effectiveEnd - outMinutes) / 60)
+  }
 
   return {
-    total: minutesToHours(totalMinutes),
+    total: totalHours,
     work: minutesToHours(workMinutes),
     overtime: minutesToHours(overtimeMinutes),
-    missed: minutesToHours(lateMinutes + earlyMinutes),
+    missed: lateness + earlyDeparture,
   }
 }
 
@@ -258,7 +307,12 @@ export function AttendanceContent({
           (unified.status as AttendanceRow["normalizedStatus"]) || normalizeStatus(existing, workday)
         const breakdown = isCoveredStatus(normalizedStatus)
           ? { total: null, work: null, overtime: null, missed: null }
-          : calculateHourBreakdown(existing.clock_in, existing.clock_out)
+          : calculateHourBreakdown(
+              existing.clock_in,
+              existing.clock_out,
+              (unified as any).late_resumption_time,
+              (unified as any).early_closure_time
+            )
 
         return {
           ...existing,

@@ -108,7 +108,9 @@ async function processHikvisionEvent(event: ParsedEvent) {
       const cappedOut = "23:59:59"
       const clockInTs = new Date(`${prevDate}T${prev.clock_in}Z`).getTime()
       const cappedOutTs = new Date(`${prevDate}T${cappedOut}Z`).getTime()
-      const totalHours = Math.max(0, (cappedOutTs - clockInTs) / (1000 * 60 * 60))
+      const rawHours = Math.max(0, (cappedOutTs - clockInTs) / (1000 * 60 * 60))
+      const breakDuration = rawHours >= 5 ? 60 : 0
+      const totalHours = rawHours - breakDuration / 60
 
       const status = deriveUnifiedAttendanceStatus(
         {
@@ -123,6 +125,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
         .update({
           clock_out: cappedOut,
           total_hours: totalHours,
+          break_duration: breakDuration,
           status,
           source: "hikvision",
           clock_out_source: "hikvision",
@@ -251,7 +254,9 @@ async function processHikvisionEvent(event: ParsedEvent) {
 
     const clockIn = new Date(`${date}T${existing.clock_in}Z`)
     const clockOut = new Date(`${date}T${time}Z`)
-    const totalHours = Math.max(0, (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60))
+    const rawHours = Math.max(0, (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60))
+    const breakDuration = rawHours >= 5 ? 60 : 0
+    const totalHours = rawHours - breakDuration / 60
 
     const status = deriveUnifiedAttendanceStatus(
       {
@@ -266,6 +271,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
       .update({
         clock_out: time,
         total_hours: totalHours,
+        break_duration: breakDuration,
         status,
         source: "hikvision",
         clock_out_source: "hikvision",

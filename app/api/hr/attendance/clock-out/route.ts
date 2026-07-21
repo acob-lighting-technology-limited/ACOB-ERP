@@ -53,13 +53,16 @@ export async function PATCH(_request: NextRequest) {
     const clockIn = new Date(`${today}T${record.clock_in}`)
     const clockOut = new Date(`${today}T${clockOutTime}`)
     const totalHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
-    const breakDuration = record.break_duration || 0
+    const breakDuration = totalHours >= 5 ? 60 : 0
     const workHours = totalHours - breakDuration / 60
 
-    const status = deriveUnifiedAttendanceStatus({
-      record: { clock_in: record.clock_in, clock_out: clockOutTime, waived: false },
-      recordDate: today,
-    }, policy)
+    const status = deriveUnifiedAttendanceStatus(
+      {
+        record: { clock_in: record.clock_in, clock_out: clockOutTime, waived: false },
+        recordDate: today,
+      },
+      policy
+    )
 
     // Update attendance record
     const { data: updatedRecord, error } = await supabase
@@ -67,6 +70,7 @@ export async function PATCH(_request: NextRequest) {
       .update({
         clock_out: clockOutTime,
         total_hours: workHours,
+        break_duration: breakDuration,
         status,
         source: "manual",
         clock_out_source: "manual",

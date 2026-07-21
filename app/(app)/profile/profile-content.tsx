@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import { ProfileHero } from "@/components/profile/profile-hero"
 import { ProfileEditDialog } from "@/components/profile/profile-edit-dialog"
 import { NeedsAttention } from "@/components/profile/needs-attention"
-import { MyTasksCard, OpenItemsCard, AssetsCard } from "@/components/profile/work-lists"
+import { MyTasksCard, OpenItemsCard, AssetsCard, LunchHistoryCard } from "@/components/profile/work-lists"
 import {
   PersonalRecentActivityFeed,
   type PersonalRecentActivityItem,
@@ -20,6 +20,7 @@ import type {
   PaymentItem,
   LeaveItem,
   AttendanceItem,
+  LunchLogItem,
 } from "./page"
 
 const MAX_ACTIVITY_ENTRIES = 12
@@ -34,6 +35,7 @@ interface ProfileContentProps {
   payments: PaymentItem[]
   leave: LeaveItem[]
   attendance: AttendanceItem[]
+  lunchLogs: LunchLogItem[]
   recentActivity: PersonalRecentActivityItem[]
   initialError?: string | null
 }
@@ -48,6 +50,7 @@ export function ProfileContent({
   payments,
   leave,
   attendance,
+  lunchLogs,
   recentActivity,
   initialError,
 }: ProfileContentProps) {
@@ -98,6 +101,7 @@ export function ProfileContent({
         </div>
 
         <div className="space-y-6">
+          <LunchHistoryCard lunchLogs={lunchLogs} />
           <AssetsCard assets={assets} />
           <PersonalRecentActivityFeed activity={recentActivity.slice(0, MAX_ACTIVITY_ENTRIES)} className="h-[400px]" />
         </div>

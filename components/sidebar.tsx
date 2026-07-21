@@ -131,6 +131,7 @@ const hrNavigation: NavItemDef[] = [
   { name: "Leave", href: "/leave", icon: Calendar },
   { name: "Attendance", href: "/attendance", icon: Clock },
   { name: "Shared Resources", href: "/resources", icon: Car },
+  { name: "Payroll", href: "/payroll", icon: FileText },
   {
     name: "PMS",
     href: "/pms",

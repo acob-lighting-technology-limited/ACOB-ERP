@@ -187,7 +187,7 @@ async function realignCorrespondenceCounter(params: {
   if (counterError) throw counterError
 
   const currentLast = Number(counterRow?.last_number || 0)
-  
+
   let alignedLast: number
   if (isInternal) {
     const maxFromReferences = (references || []).reduce((maxValue, row) => {
@@ -338,6 +338,11 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("correspondence_records")
       .select("*", { count: "exact" })
+      // Order the register by assignment time, not creation time: reference numbers
+      // are minted at approval, so approved_at DESC keeps every dept/year sequence in
+      // clean numeric order (055 above 054). Un-numbered drafts have a null approved_at
+      // and pin to the top (Postgres sorts NULLs first under DESC). created_at breaks ties.
+      .order("approved_at", { ascending: false, nullsFirst: true })
       .order("created_at", { ascending: false })
 
     if ((!isGlobalAdmin && !department) || scopeMine) {
@@ -387,7 +392,10 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Fetch chronological sequences for each pair
+    // Fetch reference-assignment sequences for each pair.
+    // Reference numbers are assigned at approval time (the counter increments in
+    // approval order), so rank by approved_at to mirror how numbers were actually
+    // handed out. created_at/id are deterministic tiebreakers.
     const sequenceMaps = new Map<string, Map<string, number>>()
     for (const [key, { departmentCode, year }] of deptYearPairs.entries()) {
       const startOfYear = `${year}-01-01T00:00:00.000Z`
@@ -398,9 +406,13 @@ export async function GET(request: NextRequest) {
         .select("id")
         .eq("department_code", departmentCode)
         .eq("letter_type", "external")
+        .not("reference_number", "is", null)
+        .like("reference_number", `ACOB/${departmentCode}/%/${year}/%`)
         .gte("created_at", startOfYear)
         .lte("created_at", endOfYear)
+        .order("approved_at", { ascending: true, nullsFirst: false })
         .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
 
       const map = new Map<string, number>()
       if (seqData) {

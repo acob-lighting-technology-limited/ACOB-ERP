@@ -299,7 +299,7 @@ export default function LoginPage() {
                 {step === "credentials" ? "Welcome back" : "Check your email"}
               </CardTitle>
               <CardDescription className="text-sm">
-                {step === "credentials" ? "Sign in to your ACOB workspace." : `We sent a 6-digit code to ${email}`}
+                {step === "credentials" ? "Sign in to Matrix." : `We sent a 6-digit code to ${email}`}
               </CardDescription>
             </CardHeader>
             <CardContent className="pb-8">
@@ -520,7 +520,7 @@ export default function LoginPage() {
             <div className="space-y-8">
               <Image src={logoSrc} alt="ACOB Lighting" width={260} height={66} className="h-14 w-auto" />
               <div className="space-y-3">
-                <h2 className="text-2xl font-semibold tracking-tight">ACOB Internal Workspace</h2>
+                <h2 className="text-2xl font-semibold tracking-tight">Matrix</h2>
                 <p className="text-muted-foreground text-sm leading-6">
                   Secure access for authorized employees across operations, reporting, and administrative workflows.
                 </p>

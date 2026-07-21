@@ -301,8 +301,7 @@ export async function updateSession(request: NextRequest) {
     !pathname.startsWith("/employee/new") &&
     !pathname.startsWith("/api/public") &&
     !pathname.startsWith("/api/devices") &&
-    !pathname.startsWith("/api/ingest/network-activity") &&
-    !pathname.startsWith("/kss")
+    !pathname.startsWith("/api/ingest/network-activity")
   ) {
     const url = request.nextUrl.clone()
     url.pathname = "/auth/login"
@@ -358,7 +357,7 @@ export async function updateSession(request: NextRequest) {
     const origin = request.headers.get("origin")
     const host = request.headers.get("host")
     // Exact-match allow-list. A prefix match (previous `origin.startsWith(o)`)
-    // let hostile origins like `https://erp.acoblighting.com.attacker.tld` pass.
+    // let hostile origins like `https://matrix.acoblighting.com.attacker.tld` pass.
     const allowedOrigins = [process.env.NEXT_PUBLIC_SITE_URL, `https://${host}`, `http://${host}`]
       .filter(Boolean)
       .map((o) => o!.replace(/\/+$/, ""))

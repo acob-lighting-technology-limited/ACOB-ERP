@@ -139,6 +139,14 @@ export interface AttendanceItem {
   created_at: string
 }
 
+export interface LunchLogItem {
+  id: string
+  date: string
+  cost: number
+  company_subsidy: number
+  employee_deduction: number
+}
+
 type ProfileRow = UserProfile & {
   department_id?: string | null
 }
@@ -438,6 +446,14 @@ async function getProfileData() {
     .returns<AttendanceItem[]>()
   if (attendanceError) loadErrors.push("attendance")
 
+  const { data: lunchLogsData } = await dataClient
+    .from("attendance_lunch_log")
+    .select("id, date, cost, company_subsidy, employee_deduction")
+    .eq("user_id", userId)
+    .order("date", { ascending: false })
+    .limit(30)
+    .returns<LunchLogItem[]>()
+
   const loadError = loadErrors.length > 0 ? "Some profile sections failed to load. Please refresh." : null
 
   const { data: rawActivity } = await dataClient
@@ -484,6 +500,7 @@ async function getProfileData() {
     payments: paymentsData || [],
     leave: leaveData,
     attendance: attendanceData || [],
+    lunchLogs: lunchLogsData || [],
     recentActivity,
     loadError,
   }
@@ -510,6 +527,7 @@ export default async function ProfilePage() {
       payments={profileData.payments}
       leave={profileData.leave}
       attendance={profileData.attendance}
+      lunchLogs={profileData.lunchLogs || []}
       recentActivity={profileData.recentActivity}
       initialError={profileData.loadError}
     />

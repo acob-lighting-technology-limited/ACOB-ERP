@@ -21,7 +21,10 @@ function expandDateRange(start: string, end: string): string[] {
   const last = new Date(`${end}T00:00:00Z`)
   let guard = 0
   while (cursor.getTime() <= last.getTime() && guard < 366) {
-    dates.push(cursor.toISOString().slice(0, 10))
+    const y = cursor.getUTCFullYear()
+    const m = String(cursor.getUTCMonth() + 1).padStart(2, "0")
+    const d = String(cursor.getUTCDate()).padStart(2, "0")
+    dates.push(`${y}-${m}-${d}`)
     cursor.setUTCDate(cursor.getUTCDate() + 1)
     guard++
   }

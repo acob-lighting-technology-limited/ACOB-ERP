@@ -6,8 +6,9 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { PromptDialog } from "@/components/ui/prompt-dialog"
-import { CheckCircle, Clock, FileText, ListFilter, ShieldCheck, Download } from "lucide-react"
+import { Building2, CheckCircle, Clock, FileText, ListFilter, ShieldCheck, Download } from "lucide-react"
 import type { CorrespondenceRecord, CorrespondenceStatus } from "@/types/correspondence"
+import { getCanonicalDepartmentOrder } from "@/shared/departments"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
@@ -48,12 +49,14 @@ export function AdminReferenceGeneratorContent({
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false)
   const [tabCounts, setTabCounts] = useState({ all: initialRecords.length, external: 0, internal: 0 })
   const [globalCounts, setGlobalCounts] = useState({ total: 0, underReview: 0, approved: 0, rejected: 0 })
+  const [departmentFilter, setDepartmentFilter] = useState("")
   const recordsUrl = useCallback(
     (params: URLSearchParams) => {
       if (lockedDepartment) params.set("department", lockedDepartment)
+      else if (departmentFilter) params.set("department", departmentFilter)
       return `/api/correspondence/records?${params.toString()}`
     },
-    [lockedDepartment]
+    [lockedDepartment, departmentFilter]
   )
 
   const [decisionPrompt, setDecisionPrompt] = useState<{
@@ -378,6 +381,22 @@ export function AdminReferenceGeneratorContent({
       mode: "custom",
       filterFn: (row, selected) => selected.includes(String(new Date(row.created_at || "").getFullYear())),
     },
+    // Department filter is server-side (see onFilterChange → departmentFilter).
+    // Hidden when the page is already locked to a single department.
+    ...(lockedDepartment
+      ? []
+      : [
+          {
+            key: "department",
+            label: "Department",
+            icon: <Building2 className="h-4 w-4" />,
+            multi: false,
+            mode: "custom" as const,
+            // Server does the actual filtering; keep client-side rows intact.
+            filterFn: () => true,
+            options: getCanonicalDepartmentOrder().map((name) => ({ value: name, label: name })),
+          } satisfies DataTableFilter<CorrespondenceRecord>,
+        ]),
   ]
 
   return (
@@ -453,6 +472,13 @@ export function AdminReferenceGeneratorContent({
         currentPage={page - 1}
         onPageChange={(p) => setPage(p + 1)}
         onSearchChange={setSearchQuery}
+        onFilterChange={(f) => {
+          const dept = f.department?.[0] ?? ""
+          if (dept !== departmentFilter) {
+            setDepartmentFilter(dept)
+            setPage(1)
+          }
+        }}
         rowActions={[
           {
             label: "Approve",

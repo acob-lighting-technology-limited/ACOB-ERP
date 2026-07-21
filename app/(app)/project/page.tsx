@@ -4,7 +4,7 @@ import { ProjectContent } from "./project-content"
 import type { Metadata } from "next"
 
 export const metadata: Metadata = {
-  title: "Projects Dashboard | ACOB ERP",
+  title: "Projects Dashboard | Matrix",
   description: "View and track ongoing electrification project deployment tasks and milestones.",
 }
 

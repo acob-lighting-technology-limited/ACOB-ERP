@@ -4,10 +4,20 @@ import Link from "next/link"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { EmptyState } from "@/components/ui/patterns"
-import { ArrowRight, CalendarClock, CheckCircle2, ClipboardList, FileCode2, Inbox, Package, Ticket } from "lucide-react"
+import {
+  ArrowRight,
+  CalendarClock,
+  CheckCircle2,
+  ClipboardList,
+  FileCode2,
+  Inbox,
+  Package,
+  Ticket,
+  Utensils,
+} from "lucide-react"
 import { formatWATDate } from "@/lib/utils/date"
 import { cn } from "@/lib/utils"
-import type { Task, Asset, LeaveItem, HelpDeskItem, CorrespondenceItem } from "@/app/(app)/profile/page"
+import type { Task, Asset, LeaveItem, HelpDeskItem, CorrespondenceItem, LunchLogItem } from "@/app/(app)/profile/page"
 import { getTaskUrgency, isOpenCorrespondence, isOpenTicket, sortTasksByUrgency } from "./work-items"
 
 const MAX_TASKS = 6
@@ -269,6 +279,65 @@ export function AssetsCard({ assets }: { assets: Asset[] }) {
             title="No assets assigned"
             description="Company assets assigned to you will appear here."
             icon={Package}
+            className="border-0 py-2"
+          />
+        </div>
+      )}
+    </ListCard>
+  )
+}
+
+/* ------------------------------ My Lunch History ----------------------------- */
+
+export function LunchHistoryCard({ lunchLogs }: { lunchLogs: LunchLogItem[] }) {
+  const currentMonthName = new Date().toLocaleString("en-US", { month: "long" })
+  const thisMonthLogs = lunchLogs.filter((log) => {
+    const logDate = new Date(log.date)
+    const now = new Date()
+    return logDate.getMonth() === now.getMonth() && logDate.getFullYear() === now.getFullYear()
+  })
+
+  const totalDeduction = thisMonthLogs.reduce((sum, log) => sum + Number(log.employee_deduction), 0)
+
+  return (
+    <ListCard
+      title="Lunch History"
+      icon={Utensils}
+      count={thisMonthLogs.length}
+      viewAllHref="/payroll"
+      viewAllLabel={`${currentMonthName} Logs`}
+    >
+      <div className="bg-muted/30 flex items-center justify-between border-t border-b px-4 py-3 text-sm">
+        <span className="text-muted-foreground font-medium">Monthly Surcharge:</span>
+        <span className="font-bold text-red-600">
+          ₦{totalDeduction.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+        </span>
+      </div>
+      {thisMonthLogs.length > 0 ? (
+        <ul className="max-h-[220px] divide-y overflow-y-auto">
+          {thisMonthLogs.slice(0, 5).map((log) => (
+            <li key={log.id} className="flex items-center justify-between px-4 py-2.5 text-xs">
+              <div>
+                <p className="text-foreground font-semibold">
+                  {new Date(log.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
+                </p>
+                <p className="text-muted-foreground text-[10px]">Meal price: ₦{Number(log.cost).toLocaleString()}</p>
+              </div>
+              <div className="text-right">
+                <span className="font-mono font-medium text-red-500">
+                  -₦{Number(log.employee_deduction).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                </span>
+                <p className="text-[10px] text-emerald-600">50% Subsidized</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <div className="border-t px-6 py-8 text-center">
+          <EmptyState
+            title="No lunch entries"
+            description="Your lunch registers for this month will appear here."
+            icon={Utensils}
             className="border-0 py-2"
           />
         </div>

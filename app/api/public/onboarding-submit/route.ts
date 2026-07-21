@@ -220,7 +220,7 @@ async function notifyAdminsOfSubmission(supabase: any, parsed: any, personalEmai
           <p>Please log in to the admin console to review and approve the candidate.</p>
           
           <div style="margin-top: 25px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
-            <a href="${process.env.NEXT_PUBLIC_PORTAL_URL || "https://acob-erp.vercel.app"}/admin/hr/employees" 
+            <a href="${process.env.NEXT_PUBLIC_PORTAL_URL || "https://matrix.acoblighting.com"}/admin/hr/employees"
                style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px;">
               Review Application
             </a>

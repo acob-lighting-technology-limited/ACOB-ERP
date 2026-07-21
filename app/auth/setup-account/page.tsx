@@ -94,7 +94,7 @@ function SetupAccountContent() {
     setIsLoading(true)
 
     try {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://erp.acoblighting.com"
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://matrix.acoblighting.com"
       // Use the callback route for proper PKCE code exchange, then redirect to setup-account
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${appUrl}/auth/callback?next=/auth/setup-account`,
@@ -455,7 +455,7 @@ function SetupAccountContent() {
             <div className="space-y-8">
               <Image src={logoSrc} alt="ACOB Lighting" width={260} height={66} className="h-14 w-auto" />
               <div className="space-y-3">
-                <h2 className="text-2xl font-semibold tracking-tight">ACOB Internal Workspace</h2>
+                <h2 className="text-2xl font-semibold tracking-tight">Matrix</h2>
                 <p className="text-muted-foreground text-sm leading-6">
                   Secure onboarding for authorized employees to access operations, reporting, and administrative tools.
                 </p>

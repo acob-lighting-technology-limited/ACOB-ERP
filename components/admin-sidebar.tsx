@@ -269,6 +269,8 @@ const adminNavigation: NavItem[] = [
       { name: "Departments", href: "/admin/hr/departments" },
       { name: "Attendance", href: "/admin/hr/attendance" },
       { name: "Leave", href: "/admin/hr/leave" },
+      { name: "Payroll", href: "/admin/hr/payroll" },
+      { name: "Lunch Register", href: "/admin/hr/lunch" },
       { name: "Fleet", href: "/admin/hr/fleet" },
       { name: "Resources", href: "/admin/hr/resources" },
       {

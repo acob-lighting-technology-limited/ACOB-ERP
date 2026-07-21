@@ -38,7 +38,7 @@ function getCanonicalAppUrl(request: NextRequest): string {
   const envAppUrl = String(process.env.NEXT_PUBLIC_APP_URL || "").trim()
   const envSiteUrl = String(process.env.NEXT_PUBLIC_SITE_URL || "").trim()
 
-  const candidates = [requestOrigin, envAppUrl, envSiteUrl, requestUrlOrigin, "https://erp.acoblighting.com"]
+  const candidates = [requestOrigin, envAppUrl, envSiteUrl, requestUrlOrigin, "https://matrix.acoblighting.com"]
     .map((value) => value.replace(/\/+$/, ""))
     .filter(Boolean)
 
@@ -47,7 +47,7 @@ function getCanonicalAppUrl(request: NextRequest): string {
     return candidate
   }
 
-  return "https://erp.acoblighting.com"
+  return "https://matrix.acoblighting.com"
 }
 
 export async function GET(request: NextRequest) {

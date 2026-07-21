@@ -161,6 +161,7 @@ export async function GET(request: NextRequest) {
     .map((date) => {
       const rec = recordsByDate.get(date) || null
       const closeTime = ctx.earlyCloseTime(date)
+      const lateRes = ctx.lateResumptionTime(date)
       const status = deriveUnifiedAttendanceStatus(
         {
           record: rec,
@@ -169,10 +170,18 @@ export async function GET(request: NextRequest) {
           isExempted: exemptHint || Boolean(profile?.attendance_exempt) || ctx.isExempt(userId, date),
           recordDate: date,
           earlyClosure: closeTime ? { closeTime } : null,
+          lateResumption: lateRes ? { resumptionTime: lateRes } : null,
         },
         policy
       )
-      return { date, record: rec, status, manual_by: manualByDate(date) }
+      return {
+        date,
+        record: rec,
+        status,
+        manual_by: manualByDate(date),
+        early_closure_time: closeTime,
+        late_resumption_time: lateRes,
+      }
     })
 
   return NextResponse.json({ data: rows })

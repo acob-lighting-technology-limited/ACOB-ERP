@@ -116,9 +116,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (clockIn && clockOut) {
       const inMs = new Date(`${record.date}T${clockIn}Z`).getTime()
       const outMs = new Date(`${record.date}T${clockOut}Z`).getTime()
-      updates.total_hours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
+      const rawHours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
+      const breakDuration = rawHours >= 5 ? 60 : 0
+      updates.total_hours = rawHours - breakDuration / 60
+      updates.break_duration = breakDuration
     } else {
       updates.total_hours = null
+      updates.break_duration = null
     }
 
     updates.status = nextStatus

@@ -84,7 +84,7 @@ export default function SetPasswordPage() {
       if (error) throw error
 
       setIsSuccess(true)
-      toast.success("Password set successfully! Welcome to ACOB ERP.")
+      toast.success("Password set successfully! Welcome to Matrix.")
 
       // Redirect to dashboard after 2 seconds
       setTimeout(() => {
@@ -118,7 +118,7 @@ export default function SetPasswordPage() {
               <CardDescription className="text-sm">
                 {isSuccess
                   ? "Redirecting to your dashboard..."
-                  : "Create a secure password to activate your ACOB account"}
+                  : "Create a secure password to activate your Matrix account"}
               </CardDescription>
             </CardHeader>
             <CardContent className="pb-8">

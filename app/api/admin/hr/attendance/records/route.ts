@@ -192,6 +192,7 @@ export async function GET(request: NextRequest) {
         policy
       )
 
+      const lateRes = ctx.lateResumptionTime(r.date)
       const editorUserId = editorIdByRecordId.get(r.id)
       const editorProfile = editorUserId ? editorProfileMap.get(editorUserId) : null
       const editorFirstName = editorProfile?.first_name || editorProfile?.full_name?.split(" ")[0] || null
@@ -221,6 +222,8 @@ export async function GET(request: NextRequest) {
         longitude: r.longitude ?? null,
         site_id: r.site_id ?? null,
         editor_first_name: editorFirstName,
+        early_closure_time: closeTime,
+        late_resumption_time: lateRes,
       }
     })
 
@@ -268,6 +271,9 @@ export async function GET(request: NextRequest) {
         const onLeaveSet = new Set((dayLeaveRows as { user_id: string }[]).map((r) => r.user_id))
         const exemptPeriodSet = new Set((dayExemptRows as { user_id: string }[]).map((r) => r.user_id))
 
+        const closeTime = ctx.earlyCloseTime(day)
+        const lateRes = ctx.lateResumptionTime(day)
+
         for (const p of missing) {
           const name = p.full_name?.trim() || [p.first_name, p.last_name].filter(Boolean).join(" ") || "Unknown"
           const derivedStatus = deriveUnifiedAttendanceStatus(
@@ -277,6 +283,8 @@ export async function GET(request: NextRequest) {
               isOnLeave: onLeaveSet.has(p.id),
               isExempted: Boolean(p.attendance_exempt) || exemptPeriodSet.has(p.id),
               recordDate: day,
+              earlyClosure: closeTime ? { closeTime } : null,
+              lateResumption: lateRes ? { resumptionTime: lateRes } : null,
             },
             policy
           )
@@ -305,6 +313,8 @@ export async function GET(request: NextRequest) {
             longitude: null,
             site_id: null,
             editor_first_name: null,
+            early_closure_time: closeTime,
+            late_resumption_time: lateRes,
           })
         }
       }
@@ -414,7 +424,10 @@ export async function POST(request: NextRequest) {
     if (clock_in && clock_out) {
       const inMs = new Date(`${date}T${clock_in}Z`).getTime()
       const outMs = new Date(`${date}T${clock_out}Z`).getTime()
-      insert.total_hours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
+      const rawHours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
+      const breakDuration = rawHours >= 5 ? 60 : 0
+      insert.total_hours = rawHours - breakDuration / 60
+      insert.break_duration = breakDuration
     }
 
     const { data: created, error } = await dataClient.from("attendance_records").insert(insert).select().single()

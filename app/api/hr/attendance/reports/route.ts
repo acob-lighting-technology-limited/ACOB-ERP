@@ -223,8 +223,14 @@ export async function GET(request: NextRequest) {
         }
 
         const earlyClose = ctx.earlyCloseTime(workday)
+        const lateRes = ctx.lateResumptionTime(workday)
         const derived = deriveUnifiedAttendanceStatus(
-          { record: rec, recordDate: workday, earlyClosure: earlyClose ? { closeTime: earlyClose } : null },
+          {
+            record: rec,
+            recordDate: workday,
+            earlyClosure: earlyClose ? { closeTime: earlyClose } : null,
+            lateResumption: lateRes ? { resumptionTime: lateRes } : null,
+          },
           policy
         )
 
@@ -262,12 +268,13 @@ export async function GET(request: NextRequest) {
           derived === "incomplete" ||
           derived === "early_departure" ||
           derived === "early_departure_with_permission" ||
-          derived === "early_closure"
+          derived === "early_closure" ||
+          derived === "late_resumption"
         ) {
           present_days++
-          // Bucket for the summary counters: Early Closure counts as a full present
+          // Bucket for the summary counters: Early Closure / Late Resumption counts as a full present
           // day; Left Early (± permission) is a docked present day, grouped with late.
-          if (derived === "early" || derived === "early_closure") early_days++
+          if (derived === "early" || derived === "early_closure" || derived === "late_resumption") early_days++
           else if (derived === "incomplete") incomplete_days++
           else late_days++
 
@@ -275,6 +282,7 @@ export async function GET(request: NextRequest) {
           const credit = dayCredit(derived, rec.clock_in, rec.clock_out, policy, {
             earlyCloseTime: earlyClose ?? null,
             earlyOutApproved,
+            lateResumptionTime: lateRes ?? null,
           })
           attendance_credits += credit
           total_hours += Number(rec.total_hours ?? 0)

@@ -17,7 +17,7 @@ import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Trash2, CalendarDays, ShieldOff, MapPin, CheckCircle2, Plane, Pencil, Clock } from "lucide-react"
+import { Trash2, CalendarDays, ShieldOff, MapPin, CheckCircle2, Plane, Pencil, Clock, Sunrise } from "lucide-react"
 import { toast } from "sonner"
 import { toLocalISODate } from "@/lib/hr/attendance-utils"
 import { formatWATDate } from "@/lib/utils/date"
@@ -1198,6 +1198,199 @@ function EarlyClosureTab({ onChanged }: { onChanged: () => void }) {
 }
 
 // ────────────────────────────────────────────────────────────
+// Tab: Late Resumption (org-wide late-start days)
+// ────────────────────────────────────────────────────────────
+
+interface LateResumption {
+  resumption_date: string
+  resumption_time: string
+  name?: string | null
+}
+
+function LateResumptionTab({ onChanged }: { onChanged: () => void }) {
+  const [date, setDate] = useState("")
+  const [endDate, setEndDate] = useState("")
+  const [isRange, setIsRange] = useState(false)
+  const [resumptionTime, setResumptionTime] = useState("10:00")
+  const [name, setName] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [all, setAll] = useState<LateResumption[] | null>(null)
+  const [listSearch, setListSearch] = useState("")
+  const [confirm, setConfirm] = useState<LateResumption | null>(null)
+  const [busyDate, setBusyDate] = useState<string | null>(null)
+
+  const loadAll = useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/admin/hr/attendance/late-resumptions", { cache: "no-store" })
+      const payload = (await res.json().catch(() => null)) as { data?: LateResumption[] } | null
+      setAll(res.ok ? (payload?.data ?? []) : [])
+    } catch {
+      setAll([])
+    }
+  }, [])
+
+  useEffect(() => {
+    void loadAll()
+  }, [loadAll])
+
+  async function add() {
+    if (!date || !resumptionTime) {
+      toast.error("Pick a date and resumption time")
+      return
+    }
+    setSaving(true)
+    const res = await apiFetch("/api/admin/hr/attendance/late-resumptions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        resumption_date: date,
+        resumption_date_end: isRange && endDate ? endDate : undefined,
+        resumption_time: resumptionTime,
+        name: name.trim() || undefined,
+      }),
+    })
+    const payload = (await res.json().catch(() => null)) as { error?: string; message?: string } | null
+    if (!res.ok) {
+      toast.error(payload?.error || "Failed to add late resumption")
+    } else {
+      toast.success(payload?.message || "Late resumption added")
+      setDate("")
+      setEndDate("")
+      setName("")
+      void loadAll()
+      onChanged()
+    }
+    setSaving(false)
+  }
+
+  async function remove(resumptionDate: string) {
+    setBusyDate(resumptionDate)
+    try {
+      const res = await apiFetch(
+        `/api/admin/hr/attendance/late-resumptions?resumption_date=${encodeURIComponent(resumptionDate)}`,
+        { method: "DELETE" }
+      )
+      const payload = (await res.json().catch(() => null)) as { error?: string } | null
+      if (!res.ok) {
+        toast.error(payload?.error || "Failed to remove late resumption")
+        return
+      }
+      toast.success("Late resumption removed")
+      void loadAll()
+      onChanged()
+    } finally {
+      setBusyDate(null)
+    }
+  }
+
+  const listQuery = listSearch.trim().toLowerCase()
+  const visible = (all ?? []).filter((r) => `${r.name ?? ""} ${r.resumption_date}`.toLowerCase().includes(listQuery))
+
+  return (
+    <div className="space-y-4 pt-2">
+      <p className="text-muted-foreground text-sm">
+        Mark a day the whole office started late. Staff who clocked in <strong>at or before</strong> the resumption time
+        are not penalised; anyone who arrived after it is measured from the late resumption time instead of the normal
+        8:20 AM grace.
+      </p>
+      <div className="flex items-center gap-3">
+        <Switch
+          id="mgr-resumption-range"
+          checked={isRange}
+          onCheckedChange={(c) => {
+            setIsRange(c)
+            if (!c) setEndDate("")
+          }}
+        />
+        <Label htmlFor="mgr-resumption-range">Date range (multiple days)</Label>
+      </div>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-1">
+          <Label>{isRange ? "Start Date" : "Date"}</Label>
+          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+        </div>
+        {isRange ? (
+          <div className="space-y-1">
+            <Label>
+              End Date <span className="text-destructive">*</span>
+            </Label>
+            <Input type="date" min={date || undefined} value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+          </div>
+        ) : (
+          <div className="space-y-1">
+            <Label>
+              Resumption Time <span className="text-destructive">*</span>
+            </Label>
+            <Input type="time" value={resumptionTime} onChange={(e) => setResumptionTime(e.target.value)} />
+          </div>
+        )}
+      </div>
+      {isRange && (
+        <div className="space-y-1">
+          <Label>
+            Resumption Time <span className="text-destructive">*</span>
+          </Label>
+          <Input type="time" value={resumptionTime} onChange={(e) => setResumptionTime(e.target.value)} />
+        </div>
+      )}
+      <div className="space-y-1">
+        <Label>Reason / Note</Label>
+        <Input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="e.g. Heavy rainfall, road flooding"
+        />
+      </div>
+      <Button
+        type="button"
+        className="w-full"
+        disabled={!date || !resumptionTime || saving || (isRange && (!endDate || endDate < date))}
+        onClick={() => void add()}
+      >
+        {saving ? "Saving…" : isRange ? "Add Late Resumptions" : "Add Late Resumption"}
+      </Button>
+
+      <EntriesPanel
+        title="All late resumptions"
+        loading={all === null}
+        count={visible.length}
+        emptyText="No late resumptions configured"
+        search={listSearch}
+        onSearchChange={setListSearch}
+        searchPlaceholder="Search late resumptions…"
+      >
+        {visible.map((r) => (
+          <EntryRow
+            key={r.resumption_date}
+            primary={`${formatDay(r.resumption_date)} • resumes ${r.resumption_time.slice(0, 5)}`}
+            badge="Late Resumption"
+            comment={r.name}
+            onDelete={() => setConfirm(r)}
+            busy={busyDate === r.resumption_date}
+          />
+        ))}
+      </EntriesPanel>
+
+      <ConfirmDialog
+        open={confirm !== null}
+        onOpenChange={(o) => !o && setConfirm(null)}
+        title="Remove late resumption?"
+        description={
+          confirm
+            ? `This removes the late resumption on ${formatDay(confirm.resumption_date)} for everyone.`
+            : undefined
+        }
+        confirmLabel="Remove"
+        onConfirm={() => {
+          if (confirm) void remove(confirm.resumption_date)
+          setConfirm(null)
+        }}
+        busy={confirm ? busyDate === confirm.resumption_date : false}
+      />
+    </div>
+  )
+}
+// ────────────────────────────────────────────────────────────
 // Tab: Manual day-records (OOS / Waiver)
 // ────────────────────────────────────────────────────────────
 
@@ -2205,11 +2398,13 @@ export function AttendanceManagerDialog({
       <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Attendance Manager</DialogTitle>
-          <DialogDescription>Manage exemptions, holidays, OOS, waivers, and manual leave records.</DialogDescription>
+          <DialogDescription>
+            Manage exemptions, holidays, early closures, late resumptions, OOS, waivers, and leave records.
+          </DialogDescription>
         </DialogHeader>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-6">
+          <TabsList className="grid w-full grid-cols-7">
             <TabsTrigger value="exemption" className="text-xs">
               <ShieldOff className="mr-1 h-3.5 w-3.5 shrink-0" />
               Exempt
@@ -2221,6 +2416,10 @@ export function AttendanceManagerDialog({
             <TabsTrigger value="closure" className="text-xs">
               <Clock className="mr-1 h-3.5 w-3.5 shrink-0" />
               Closure
+            </TabsTrigger>
+            <TabsTrigger value="resumption" className="text-xs">
+              <Sunrise className="mr-1 h-3.5 w-3.5 shrink-0" />
+              Resumption
             </TabsTrigger>
             <TabsTrigger value="oos" className="text-xs">
               <MapPin className="mr-1 h-3.5 w-3.5 shrink-0" />
@@ -2246,6 +2445,10 @@ export function AttendanceManagerDialog({
 
           <TabsContent value="closure">
             <EarlyClosureTab onChanged={onReportChanged} />
+          </TabsContent>
+
+          <TabsContent value="resumption">
+            <LateResumptionTab onChanged={onReportChanged} />
           </TabsContent>
 
           <TabsContent value="oos">
