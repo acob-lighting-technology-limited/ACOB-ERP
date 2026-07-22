@@ -14,6 +14,7 @@ import {
   toIsoDateString,
 } from "../_shared/meeting-date.ts"
 import {
+  type AttendanceRecord,
   buildAttendanceCsv,
   getTranscriptVtt,
   isGraphConfigured,
@@ -284,26 +285,59 @@ async function processSource(
       console.error(`[sync-meeting-artifacts] recording check failed for ${source.label}: ${String(recErr)}`)
     }
 
-    // ── Attendance reports (one per occurrence) ────────────────────────────────
+    // ── Attendance reports (merged per office week) ─────────────────────────────
+    // Teams generates a separate report per meeting *session*, so one week can have
+    // several (e.g. a 1-person early-join plus the real meeting). Group all reports
+    // by office week and merge their participants, so the stored sheet reflects
+    // everyone who attended rather than whichever session synced last.
     const reports = await listAttendanceReports(userId, meetingId)
+    const reportsByWeek = new Map<string, { week: number; year: number; dateIso: string; reports: typeof reports }>()
     for (const report of reports) {
-      const { data: seen } = await supabase
+      const dateIso = toIsoDateString(
+        report.meetingEndDateTime || report.meetingStartDateTime || new Date().toISOString()
+      )
+      const { week, year } = getOfficeWeekFromDate(new Date(dateIso))
+      const key = `${year}-W${week}`
+      const bucket = reportsByWeek.get(key) ?? { week, year, dateIso, reports: [] as typeof reports }
+      if (dateIso > bucket.dateIso) bucket.dateIso = dateIso
+      bucket.reports.push(report)
+      reportsByWeek.set(key, bucket)
+    }
+
+    for (const [, grp] of reportsByWeek) {
+      const reportIds = grp.reports.map((r) => r.id)
+      const { data: seenRows } = await supabase
         .from("meeting_artifact_ledger")
-        .select("id")
+        .select("artifact_graph_id")
         .eq("artifact_type", "attendance")
-        .eq("artifact_graph_id", report.id)
-        .maybeSingle()
-      if (seen) continue
+        .in("artifact_graph_id", reportIds)
+      const seenIds = new Set((seenRows ?? []).map((r: { artifact_graph_id: string }) => r.artifact_graph_id))
+      // Every session for this week already merged — nothing new to do.
+      if (reportIds.every((id) => seenIds.has(id))) continue
 
       try {
-        const dateIso = toIsoDateString(
-          report.meetingEndDateTime || report.meetingStartDateTime || new Date().toISOString()
-        )
-        const { week, year } = getOfficeWeekFromDate(new Date(dateIso))
-        const records = await listAttendanceRecords(userId, meetingId, report.id)
-        const csv = buildAttendanceCsv(records)
+        // Union participants across the week's sessions: dedupe by email keeping the
+        // longest attendance; records without an email are all kept.
+        const byEmail = new Map<string, { rec: AttendanceRecord; secs: number }>()
+        const noEmail: AttendanceRecord[] = []
+        for (const report of grp.reports) {
+          const records = await listAttendanceRecords(userId, meetingId, report.id)
+          for (const rec of records) {
+            const email = (rec.emailAddress || "").trim().toLowerCase()
+            const secs = rec.totalAttendanceInSeconds || 0
+            if (!email) {
+              noEmail.push(rec)
+              continue
+            }
+            const existing = byEmail.get(email)
+            if (!existing || secs > existing.secs) byEmail.set(email, { rec, secs })
+          }
+        }
+        const merged = [...[...byEmail.values()].map((v) => v.rec), ...noEmail]
+
+        const csv = buildAttendanceCsv(merged)
         const bytes = new TextEncoder().encode(csv)
-        const fileName = `ACOB Attendance - ${formatMeetingDateLabel(dateIso)} - W${week}.csv`
+        const fileName = `ACOB Attendance - ${formatMeetingDateLabel(grp.dateIso)} - W${grp.week}.csv`
 
         const documentId = await storeArtifact(supabase, {
           source,
@@ -311,35 +345,47 @@ async function processSource(
           bytes,
           fileName,
           mimeType: "text/csv",
-          week,
-          year,
+          week: grp.week,
+          year: grp.year,
         })
 
-        await supabase.from("meeting_artifact_ledger").insert({
-          source_id: source.id,
-          graph_online_meeting_id: meetingId,
-          artifact_type: "attendance",
-          artifact_graph_id: report.id,
-          meeting_week: week,
-          meeting_year: year,
-          document_id: documentId,
-        })
+        // Ledger every session id in the week, all pointing at the merged doc.
+        for (const id of reportIds) {
+          if (seenIds.has(id)) continue
+          await supabase
+            .from("meeting_artifact_ledger")
+            .insert({
+              source_id: source.id,
+              graph_online_meeting_id: meetingId,
+              artifact_type: "attendance",
+              artifact_graph_id: id,
+              meeting_week: grp.week,
+              meeting_year: grp.year,
+              document_id: documentId,
+            })
+            .then(undefined, () => {})
+        }
 
         newArtifacts.push({ type: "attendance", filename: fileName, base64: encodeBase64(bytes) })
         imported += 1
       } catch (artifactErr) {
-        console.error(`[sync-meeting-artifacts] attendance ${report.id} failed: ${String(artifactErr)}`)
-        // Record a stub so a permanently-broken artifact is not retried forever.
-        await supabase
-          .from("meeting_artifact_ledger")
-          .insert({
-            source_id: source.id,
-            graph_online_meeting_id: meetingId,
-            artifact_type: "attendance",
-            artifact_graph_id: report.id,
-            document_id: null,
-          })
-          .then(undefined, () => {})
+        console.error(
+          `[sync-meeting-artifacts] attendance week ${grp.year}-W${grp.week} failed: ${String(artifactErr)}`
+        )
+        // Stub the unseen sessions so a permanently-broken week isn't retried forever.
+        for (const id of reportIds) {
+          if (seenIds.has(id)) continue
+          await supabase
+            .from("meeting_artifact_ledger")
+            .insert({
+              source_id: source.id,
+              graph_online_meeting_id: meetingId,
+              artifact_type: "attendance",
+              artifact_graph_id: id,
+              document_id: null,
+            })
+            .then(undefined, () => {})
+        }
       }
     }
 
