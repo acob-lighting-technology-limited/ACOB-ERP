@@ -7,13 +7,16 @@ import {
   resolveGraphUserId,
   resolveOnlineMeetingId,
   listMeetingRecordings,
-  getRecordingDownloadUrl,
+  fetchRecordingContent,
 } from "@/lib/graph/meeting-calendar"
 import { logger } from "@/lib/logger"
 
 const log = logger("api-meeting-recording")
 
 export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
+// Recordings can be large; allow a long streaming window.
+export const maxDuration = 300
 
 /**
  * Meeting recording access (Way 1 — on-demand, no stored copy):
@@ -72,14 +75,33 @@ export async function GET(request: NextRequest) {
     }
 
     const recordingId = recordingIdParam || recordings[0].id
-    const url = await getRecordingDownloadUrl(userId, meetingId, recordingId)
-    if (!url) {
+    const upstream = await fetchRecordingContent(userId, meetingId, recordingId)
+    if (!upstream.ok || !upstream.body) {
+      const detail = await upstream.text().catch(() => "")
+      log.error({ status: upstream.status, sourceId }, "Recording content fetch failed")
+      const denied = upstream.status === 401 || upstream.status === 403
       return NextResponse.json(
-        { error: "Recording download URL is unavailable (Graph did not return a direct link)" },
-        { status: 502 }
+        {
+          error: denied
+            ? "Access denied by Microsoft Graph — the OnlineMeetingRecording.Read.All permission may not be granted."
+            : `Could not fetch the recording (${upstream.status})${detail ? `: ${detail.slice(0, 200)}` : ""}`,
+        },
+        { status: denied ? 403 : 502 }
       )
     }
-    return NextResponse.redirect(url, 302)
+
+    const contentType = upstream.headers.get("content-type") || "video/mp4"
+    const contentLength = upstream.headers.get("content-length")
+    const dateLabel = recordings[0].createdDateTime?.slice(0, 10) || "recording"
+    const safeLabel = source.label.replace(/[^a-zA-Z0-9._-]+/g, "_")
+    const filename = `${safeLabel}-recording-${dateLabel}.mp4`
+    const headers: Record<string, string> = {
+      "Content-Type": contentType,
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Cache-Control": "no-store",
+    }
+    if (contentLength) headers["Content-Length"] = contentLength
+    return new NextResponse(upstream.body, { headers })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     log.error({ err: message, sourceId }, "Failed to fetch meeting recording")

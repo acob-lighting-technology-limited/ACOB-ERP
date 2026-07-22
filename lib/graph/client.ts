@@ -72,6 +72,18 @@ async function getGraphToken(): Promise<string> {
 }
 
 /**
+ * GET a Graph content endpoint (e.g. a recording's /content) and return the raw
+ * Response so the caller can stream the body through. Follows redirects, so it
+ * works whether Graph 302s to storage or returns the bytes directly.
+ */
+export async function graphFetchContent(endpoint: string): Promise<Response> {
+  const token = await getGraphToken()
+  return fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+}
+
+/**
  * GET a Graph endpoint that 302-redirects to a pre-authenticated content URL
  * (e.g. an onlineMeeting recording's /content), returning that URL without
  * following it. Lets the caller hand the browser a direct, no-login download

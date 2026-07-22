@@ -1,4 +1,4 @@
-import { graphGet, graphGetRedirectUrl } from "@/lib/graph/client"
+import { graphGet, graphFetchContent } from "@/lib/graph/client"
 
 /**
  * Calendar-backed meeting discovery for the artifact-automation config UI.
@@ -129,16 +129,12 @@ export async function listMeetingRecordings(userId: string, meetingId: string): 
 }
 
 /**
- * Get a pre-authenticated, no-login direct-download URL for a recording, by
- * capturing the redirect Graph issues from the recording's /content endpoint.
- * The URL is short-lived, so it must be generated at click time.
+ * Fetch a recording's content as a raw Response so the caller can stream it to the
+ * browser. Graph returns the video bytes directly (200), so we proxy the stream
+ * rather than redirect.
  */
-export async function getRecordingDownloadUrl(
-  userId: string,
-  meetingId: string,
-  recordingId: string
-): Promise<string | null> {
-  return graphGetRedirectUrl(
+export async function fetchRecordingContent(userId: string, meetingId: string, recordingId: string): Promise<Response> {
+  return graphFetchContent(
     `/users/${encodeURIComponent(userId)}/onlineMeetings/${encodeURIComponent(meetingId)}/recordings/${encodeURIComponent(recordingId)}/content`
   )
 }
