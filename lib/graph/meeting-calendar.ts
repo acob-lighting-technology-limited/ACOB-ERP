@@ -133,8 +133,14 @@ export async function listMeetingRecordings(userId: string, meetingId: string): 
  * browser. Graph returns the video bytes directly (200), so we proxy the stream
  * rather than redirect.
  */
-export async function fetchRecordingContent(userId: string, meetingId: string, recordingId: string): Promise<Response> {
+export async function fetchRecordingContent(
+  userId: string,
+  meetingId: string,
+  recordingId: string,
+  range?: string | null
+): Promise<Response> {
   return graphFetchContent(
-    `/users/${encodeURIComponent(userId)}/onlineMeetings/${encodeURIComponent(meetingId)}/recordings/${encodeURIComponent(recordingId)}/content`
+    `/users/${encodeURIComponent(userId)}/onlineMeetings/${encodeURIComponent(meetingId)}/recordings/${encodeURIComponent(recordingId)}/content`,
+    range
   )
 }

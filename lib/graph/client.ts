@@ -76,11 +76,13 @@ async function getGraphToken(): Promise<string> {
  * Response so the caller can stream the body through. Follows redirects, so it
  * works whether Graph 302s to storage or returns the bytes directly.
  */
-export async function graphFetchContent(endpoint: string): Promise<Response> {
+export async function graphFetchContent(endpoint: string, range?: string | null): Promise<Response> {
   const token = await getGraphToken()
-  return fetch(`https://graph.microsoft.com/v1.0${endpoint}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  })
+  const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
+  // Forwarding the client's Range enables resumable, seekable downloads (Graph
+  // answers with 206 + Content-Range).
+  if (range) headers["Range"] = range
+  return fetch(`https://graph.microsoft.com/v1.0${endpoint}`, { headers })
 }
 
 /**

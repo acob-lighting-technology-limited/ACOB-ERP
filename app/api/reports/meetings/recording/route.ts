@@ -75,7 +75,11 @@ export async function GET(request: NextRequest) {
     }
 
     const recordingId = recordingIdParam || recordings[0].id
-    const upstream = await fetchRecordingContent(userId, meetingId, recordingId)
+    // Forward the client's Range so downloads can resume. When the client sends no
+    // Range, still request "bytes=0-" so Graph replies 206 with the total size —
+    // that's what lets the browser show a real file size instead of "Unknown".
+    const clientRange = request.headers.get("range")
+    const upstream = await fetchRecordingContent(userId, meetingId, recordingId, clientRange || "bytes=0-")
     if (!upstream.ok || !upstream.body) {
       const detail = await upstream.text().catch(() => "")
       log.error({ status: upstream.status, sourceId }, "Recording content fetch failed")
@@ -90,18 +94,26 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const contentType = upstream.headers.get("content-type") || "video/mp4"
-    const contentLength = upstream.headers.get("content-length")
     const dateLabel = recordings[0].createdDateTime?.slice(0, 10) || "recording"
     const safeLabel = source.label.replace(/[^a-zA-Z0-9._-]+/g, "_")
     const filename = `${safeLabel}-recording-${dateLabel}.mp4`
     const headers: Record<string, string> = {
-      "Content-Type": contentType,
+      "Content-Type": upstream.headers.get("content-type") || "video/mp4",
       "Content-Disposition": `attachment; filename="${filename}"`,
+      "Accept-Ranges": "bytes",
       "Cache-Control": "no-store",
     }
+    const contentLength = upstream.headers.get("content-length")
+    const contentRange = upstream.headers.get("content-range")
     if (contentLength) headers["Content-Length"] = contentLength
-    return new NextResponse(upstream.body, { headers })
+    // Only surface a partial (206) response when the CLIENT actually asked for a
+    // range. When we forced "bytes=0-" ourselves, return a normal 200 full-file
+    // download that still carries the real Content-Length.
+    if (clientRange && contentRange) {
+      headers["Content-Range"] = contentRange
+      return new NextResponse(upstream.body, { status: 206, headers })
+    }
+    return new NextResponse(upstream.body, { status: 200, headers })
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     log.error({ err: message, sourceId }, "Failed to fetch meeting recording")
