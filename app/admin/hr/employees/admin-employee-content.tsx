@@ -24,6 +24,7 @@ import {
   Settings2,
   Tags,
   Cake,
+  MoreVertical,
 } from "lucide-react"
 import type { UserRole, EmploymentStatus } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
@@ -45,6 +46,7 @@ import type { Database } from "@/types/database"
 import type { EmployeeAssignedItems, EmployeeProfile, EmployeeViewData } from "@/components/employees/types"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { BirthdayManagerDialog } from "@/components/hr/birthday-manager-dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
@@ -647,13 +649,14 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         label: "Status",
         options: [
           { value: "active", label: "Active" },
+          { value: "contract", label: "Contract" },
           { value: "suspended", label: "Suspended" },
           { value: "on_leave", label: "On Leave" },
           { value: "exited", label: "Exited" },
         ],
         placeholder: "Active Statuses",
         // Hide exited employees by default; user can opt to include them.
-        defaultValues: ["active", "suspended", "on_leave"],
+        defaultValues: ["active", "contract", "suspended", "on_leave"],
       },
       {
         key: "employment_type",
@@ -664,6 +667,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           { value: "contract", label: "Contract" },
         ],
         placeholder: "All Types",
+        defaultValues: ["full_time"],
         mode: "custom",
         filterFn: (employee, selected) => selected.includes(employee.employment_type || "full_time"),
       },
@@ -700,22 +704,31 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       backLink={{ href: "/admin/hr", label: "Back to HR" }}
       actions={
         <div className="flex items-center gap-2">
-          <Button onClick={() => setBirthdayManagerOpen(true)} variant="outline" size="sm" className="h-8 gap-2">
-            <Cake className="h-4 w-4" />
-            <span className="hidden sm:inline">Birthday Manager</span>
-          </Button>
           {(canManageUsers || canReviewApplications) && (
-            <>
-              <Button onClick={() => setCategoriesDialogOpen(true)} variant="outline" size="sm" className="h-8 gap-2">
-                <Tags className="h-4 w-4" />
-                <span className="hidden sm:inline">Manage Categories</span>
-              </Button>
-              <Button onClick={() => setManageUsersOpen(true)} variant="default" size="sm" className="h-8 gap-2">
-                <Settings2 className="h-4 w-4" />
-                <span className="hidden sm:inline">Manage Users</span>
-              </Button>
-            </>
+            <Button onClick={() => setManageUsersOpen(true)} variant="default" size="sm" className="h-8 gap-2">
+              <Settings2 className="h-4 w-4" />
+              <span className="hidden sm:inline">Manage Users</span>
+            </Button>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setBirthdayManagerOpen(true)}>
+                <Cake className="mr-2 h-4 w-4" />
+                Birthday Manager
+              </DropdownMenuItem>
+              {(canManageUsers || canReviewApplications) && (
+                <DropdownMenuItem onClick={() => setCategoriesDialogOpen(true)}>
+                  <Tags className="mr-2 h-4 w-4" />
+                  Manage Categories
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="outline"
             size="sm"
