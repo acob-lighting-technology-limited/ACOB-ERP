@@ -80,3 +80,6 @@ supabase/.branches/
 .env.local
 
 .mcp.json
+
+# Launch video media (kept local, not deployed via git)
+launch-video/
