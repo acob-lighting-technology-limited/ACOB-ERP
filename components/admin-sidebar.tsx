@@ -153,6 +153,7 @@ function buildDeptNavigation(deptId: string): NavItem[] {
       roles: [],
       children: [
         { name: "Payments", href: `${base}/finance/payments` },
+        { name: "Requisitions", href: `${base}/finance/requisitions` },
         { name: "Bills", href: `${base}/finance/bills` },
         { name: "Invoices", href: `${base}/finance/invoices` },
         { name: "Reports", href: `${base}/finance/reports` },
@@ -267,10 +268,10 @@ const adminNavigation: NavItem[] = [
     children: [
       { name: "Employees", href: "/admin/hr/employees" },
       { name: "Departments", href: "/admin/hr/departments" },
-      { name: "Attendance", href: "/admin/hr/attendance" },
+      { name: "Attendance", href: "/admin/hr/employees/attendance" },
       { name: "Leave", href: "/admin/hr/leave" },
-      { name: "Payroll", href: "/admin/hr/payroll" },
-      { name: "Lunch Register", href: "/admin/hr/lunch" },
+      { name: "Payroll", href: "/admin/hr/employees/payroll" },
+      { name: "Lunch Register", href: "/admin/hr/employees/lunch" },
       { name: "Fleet", href: "/admin/hr/fleet" },
       { name: "Resources", href: "/admin/hr/resources" },
       {
@@ -301,6 +302,7 @@ const adminNavigation: NavItem[] = [
     icon: CreditCard,
     roles: ["developer", "super_admin", "admin"],
     children: [
+      { name: "Requisitions", href: "/admin/finance/requisitions" },
       { name: "Payments", href: "/admin/finance/payments" },
       { name: "Bills", href: "/admin/finance/bills" },
       { name: "Invoices", href: "/admin/finance/invoices" },
