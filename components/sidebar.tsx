@@ -14,6 +14,7 @@ import {
   Clock,
   CreditCard,
   FileCode2,
+  FileCheck2,
   FileBarChart,
   FileText,
   LayoutDashboard,
@@ -100,6 +101,7 @@ const navigation: NavItemDef[] = [
   },
   { name: "Assets", href: "/assets", icon: Package },
   { name: "Payments", href: "/payments", icon: CreditCard },
+  { name: "Requisitions", href: "/requisition", icon: FileCheck2 },
   {
     name: "Documentation",
     href: "/documentation",
