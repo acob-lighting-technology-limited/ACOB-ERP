@@ -70,6 +70,16 @@ const securityHeaders = [
 const nextConfig = {
   transpilePackages: ["xlsx", "jspdf", "jspdf-autotable", "docx", "file-saver"],
 
+  images: {
+    // Local logo assets are cache-busted with a "?v=N" query string that
+    // increments over time (see lib/seasonal-branding.ts) — Next.js 16
+    // requires explicit opt-in for local images served with a query
+    // string. `search` must match exactly (no wildcards), so it's
+    // omitted here to allow any version; pathname stays scoped to
+    // local /images/** assets only.
+    localPatterns: [{ pathname: "/images/**" }],
+  },
+
   // ---------------------------------------------------------------------------
   // Turbopack (dev only — `next dev --turbopack`). Production build still uses
   // webpack via `next build --webpack`, so the `webpack()` config below remains
