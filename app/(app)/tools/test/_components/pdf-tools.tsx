@@ -1064,7 +1064,7 @@ export function PdfTools() {
               want them merged.
             </p>
             <p>
-              <strong>Split</strong>: Splits a PDF by extracting specified pages/ranges (e.g., "1-3, 5, 8").
+              <strong>Split</strong>: Splits a PDF by extracting specified pages/ranges (e.g., &quot;1-3, 5, 8&quot;).
             </p>
             <p>
               <strong>Compress</strong>: Reduces PDF size by compressing images inside. If Ghostscript is installed on

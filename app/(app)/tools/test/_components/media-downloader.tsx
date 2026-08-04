@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { motion, AnimatePresence } from "framer-motion"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -66,54 +66,57 @@ export function MediaDownloader() {
   const [batchDownloading, setBatchDownloading] = useState(false)
   const debounceTimer = useRef<NodeJS.Timeout | null>(null)
 
-  const handleFetchInfo = async (urlToFetch?: string) => {
-    const urlToUse = urlToFetch || url
-    if (!urlToUse.trim()) {
-      toast.error("Please enter a URL")
-      setError("Please enter a URL")
-      return
-    }
-
-    setLoading(true)
-    setError("")
-    setInfo(null)
-    const toastId = toast.loading(`Analyzing ${mediaType}...`)
-
-    try {
-      const endpoint = mediaType === "video" ? "/api/info" : "/api/song/info"
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ url: urlToUse }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        if (data.drmProtected) {
-          setError(data.error)
-          toast.error(data.error, {
-            id: toastId,
-            description: data.suggestions?.[0] || "Unsupported platform",
-            duration: 6000,
-          })
-          return
-        }
-        throw new Error(data.error || "Failed to fetch metadata")
+  const handleFetchInfo = useCallback(
+    async (urlToFetch?: string) => {
+      const urlToUse = urlToFetch || url
+      if (!urlToUse.trim()) {
+        toast.error("Please enter a URL")
+        setError("Please enter a URL")
+        return
       }
 
-      setInfo(data)
-      toast.success("Loaded successfully!", { id: toastId })
-    } catch (err: any) {
-      const errorMsg = err.message || "Failed to fetch information"
-      setError(errorMsg)
-      toast.error(errorMsg, { id: toastId })
-    } finally {
-      setLoading(false)
-    }
-  }
+      setLoading(true)
+      setError("")
+      setInfo(null)
+      const toastId = toast.loading(`Analyzing ${mediaType}...`)
+
+      try {
+        const endpoint = mediaType === "video" ? "/api/info" : "/api/song/info"
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ url: urlToUse }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+          if (data.drmProtected) {
+            setError(data.error)
+            toast.error(data.error, {
+              id: toastId,
+              description: data.suggestions?.[0] || "Unsupported platform",
+              duration: 6000,
+            })
+            return
+          }
+          throw new Error(data.error || "Failed to fetch metadata")
+        }
+
+        setInfo(data)
+        toast.success("Loaded successfully!", { id: toastId })
+      } catch (err: any) {
+        const errorMsg = err.message || "Failed to fetch information"
+        setError(errorMsg)
+        toast.error(errorMsg, { id: toastId })
+      } finally {
+        setLoading(false)
+      }
+    },
+    [mediaType, url]
+  )
 
   useEffect(() => {
     if (mode !== "single" || !url.trim()) return
@@ -134,7 +137,7 @@ export function MediaDownloader() {
         clearTimeout(debounceTimer.current)
       }
     }
-  }, [url, mode, mediaType])
+  }, [url, mode, mediaType, handleFetchInfo])
 
   const handleDownload = async (formatId?: string, trackUrl?: string) => {
     const urlToDownload = trackUrl || url
@@ -397,6 +400,7 @@ export function MediaDownloader() {
                   <div className="flex flex-col sm:flex-row">
                     {info.thumbnail && (
                       <div className="bg-muted relative h-32 w-full sm:h-auto sm:w-48">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img src={info.thumbnail} alt={info.title} className="h-full w-full object-cover" />
                       </div>
                     )}
