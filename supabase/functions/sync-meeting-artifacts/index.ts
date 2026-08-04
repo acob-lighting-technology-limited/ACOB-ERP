@@ -396,7 +396,15 @@ async function processSource(
     }
 
     // ── Transcripts ────────────────────────────────────────────────────────────
-    const transcripts = await listTranscripts(userId, meetingId)
+    // Listing itself can fail tenant-wide (e.g. Graph transcript API access disabled),
+    // which must not take down the rest of the run — attendance still has to reach the
+    // hold-expiry fallback and get emailed on its own below.
+    let transcripts: Awaited<ReturnType<typeof listTranscripts>> = []
+    try {
+      transcripts = await listTranscripts(userId, meetingId)
+    } catch (listErr) {
+      console.error(`[sync-meeting-artifacts] listTranscripts failed for ${source.label}: ${String(listErr)}`)
+    }
     for (const transcript of transcripts) {
       const { data: seen } = await supabase
         .from("meeting_artifact_ledger")
