@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { formatName } from "@/lib/utils"
 import { formatWATDate } from "@/lib/utils/date"
@@ -30,8 +29,8 @@ import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-tabl
 import { StatCard } from "@/components/ui/stat-card"
 import { Badge } from "@/components/ui/badge"
 import type { Task } from "@/types/task"
+import { apiFetch } from "@/lib/api-client"
 import {
-  enrichTaskWithUsers,
   filterByDepartments,
   buildDepartmentLeadMap,
   validateTaskForm,
@@ -149,7 +148,6 @@ export function AdminTasksContent({
   const [taskForm, setTaskForm] = useState<TaskFormState>(INITIAL_TASK_FORM)
   const consumedInitialGoalIdRef = useRef("")
 
-  const supabase = createClient()
   const scopedDepartments = userProfile.is_global_task_assigner
     ? []
     : (userProfile.managed_departments ?? userProfile.lead_departments ?? [])
@@ -165,36 +163,17 @@ export function AdminTasksContent({
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const tasksQuery = supabase
-        .from("tasks")
-        .select("*")
-        .neq("category", "weekly_action")
-        .order("created_at", { ascending: false })
-      const { data: tasksData, error: tasksError } = await tasksQuery
-      if (tasksError) throw tasksError
-      let result = await Promise.all(
-        (tasksData || [])
-          .filter((task) => String(task.source_type || "") !== "action_item")
-          .map((task) => enrichTaskWithUsers(supabase, task))
-      )
-      const goalIds = Array.from(new Set(result.map((task) => task.goal_id).filter(Boolean))) as string[]
-      if (goalIds.length > 0) {
-        const { data: goals } = await supabase.from("goals_objectives").select("id, title").in("id", goalIds)
-        const goalMap = new Map(
-          ((goals as Array<{ id: string; title: string }> | null) || []).map((g) => [g.id, g.title])
-        )
-        result = result.map((task) => ({
-          ...task,
-          goal_title: task.goal_id ? goalMap.get(task.goal_id) || null : null,
-        }))
-      }
+      const res = await apiFetch("/api/admin/tasks/management", { cache: "no-store" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load tasks")
+      const json = await res.json()
+      let result = (json.data || []) as Task[]
       if (userProfile?.is_department_lead && !userProfile.is_global_task_assigner && scopedDepartments.length > 0) {
         result = result.filter((task) => {
           if (task.assignment_type === "individual" && task.assigned_to === userProfile.id) return true
           return filterByDepartments([task], scopedDepartments).length > 0
         })
       }
-      setTasks(result as Task[])
+      setTasks(result)
     } catch (error: unknown) {
       log.error("Error loading data:", error)
       toast.error("Failed to reload tasks")
@@ -232,13 +211,12 @@ export function AdminTasksContent({
     if (isSaving) return
     setIsSaving(true)
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) {
+      const currentUserRes = await apiFetch("/api/admin/current-user", { cache: "no-store" })
+      if (!currentUserRes.ok) {
         setIsSaving(false)
         return
       }
+      const { userId } = (await currentUserRes.json()) as { userId: string }
 
       const activeTaskForm = nextTaskForm ?? taskForm
       const validationError = validateTaskForm(activeTaskForm)
@@ -260,7 +238,7 @@ export function AdminTasksContent({
             : activeTaskForm.department || null,
         assignment_type: activeTaskForm.assignment_type,
         assigned_to: activeTaskForm.assignment_type === "individual" ? activeTaskForm.assigned_to : null,
-        assigned_by: user.id,
+        assigned_by: userId,
         goal_id: activeTaskForm.goal_id,
         task_start_date: null,
         task_end_date: null,
@@ -268,17 +246,17 @@ export function AdminTasksContent({
       }
 
       if (selectedTask) {
-        const response = await fetch(`/api/tasks/${selectedTask.id}`, {
+        const response = await apiFetch(`/api/tasks/${selectedTask.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(taskData),
         })
         const payload = (await response.json().catch(() => null)) as { error?: string } | null
         if (!response.ok) throw new Error(payload?.error || "Failed to update task")
-        await sendUpdateNotifications(activeTaskForm, selectedTask, user.id)
+        await sendUpdateNotifications(activeTaskForm, selectedTask, userId)
         toast.success(`${selectedTask.work_item_number || "Task"} updated`)
       } else {
-        const response = await fetch("/api/tasks", {
+        const response = await apiFetch("/api/tasks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(taskData),
@@ -286,7 +264,7 @@ export function AdminTasksContent({
         const payload = (await response.json().catch(() => null)) as { error?: string; data?: Task } | null
         if (!response.ok || !payload?.data) throw new Error(payload?.error || "Failed to create task")
         const newTask = payload.data
-        await sendCreateNotifications(activeTaskForm, newTask, user.id)
+        await sendCreateNotifications(activeTaskForm, newTask, userId)
         toast.success(`${newTask.work_item_number || "Task"} created`)
       }
 
@@ -304,7 +282,7 @@ export function AdminTasksContent({
     if (!taskToDelete || isDeleting) return
     setIsDeleting(true)
     try {
-      const response = await fetch(`/api/tasks/${taskToDelete.id}`, { method: "DELETE" })
+      const response = await apiFetch(`/api/tasks/${taskToDelete.id}`, { method: "DELETE" })
       if (!response.ok) throw new Error("Failed to delete task")
       toast.success(`${taskToDelete.work_item_number || "Task"} deleted`)
       setIsDeleteDialogOpen(false)

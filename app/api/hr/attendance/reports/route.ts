@@ -3,8 +3,18 @@ import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
 import { normalizeDepartmentName } from "@/shared/departments"
-import { missedHours, dayCredit, toLocalISODate, toLocalYearMonth, getWorkdaysInMonth } from "@/lib/hr/attendance-utils"
+import {
+  missedHours,
+  dayCredit,
+  toLocalISODate,
+  toLocalYearMonth,
+  monthBounds,
+  getWorkdaysInRange,
+  timeToMinutes,
+  overtimeHoursFor,
+} from "@/lib/hr/attendance-utils"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
 import { logger } from "@/lib/logger"
 
@@ -55,6 +65,14 @@ export async function GET(request: NextRequest) {
     const requestedUserId = String(params.get("user_id") || "").trim()
 
     const dataClient = getServiceRoleClientOrFallback(supabase)
+
+    // Load attendance policy configuration
+    const { data: settingRow } = await dataClient
+      .from("system_settings")
+      .select("value")
+      .eq("key", "attendance_policy")
+      .maybeSingle()
+    const policy = (settingRow?.value as AttendancePolicy) || DEFAULT_ATTENDANCE_POLICY
 
     const scopedDepartmentSet =
       routeAccess.dataScope === "all"
@@ -108,12 +126,12 @@ export async function GET(request: NextRequest) {
 
     const allowedProfileIds = allowedProfiles.map((p) => p.id)
 
-    // Workdays in the selected period up to today
+    // Workdays in the selected period (month or quarter range) up to today
     const todayIso = toLocalISODate()
-    const ym = startDate?.slice(0, 7) ?? toLocalYearMonth()
-    const periodWorkdays = getWorkdaysInMonth(ym).filter(
-      (d) => (!startDate || d >= startDate) && (!endDate || d <= endDate) && d <= todayIso
-    )
+    const defaultBounds = monthBounds(toLocalYearMonth())
+    const rangeStart = startDate ?? defaultBounds.start
+    const rangeEnd = endDate ?? defaultBounds.end
+    const periodWorkdays = getWorkdaysInRange(rangeStart, rangeEnd).filter((d) => d <= todayIso)
 
     if (periodWorkdays.length === 0) {
       return NextResponse.json({ data: [], departments: [] })
@@ -130,6 +148,20 @@ export async function GET(request: NextRequest) {
     const { data: attendanceRows, error: attendanceError } = await attendanceQuery.returns<AttendanceRow[]>()
     if (attendanceError) {
       return NextResponse.json({ error: attendanceError.message }, { status: 500 })
+    }
+
+    // Appeals filed for days within the selected range, per employee
+    const { data: appealRows } = await dataClient
+      .from("attendance_appeals")
+      .select("user_id")
+      .in("user_id", allowedProfileIds)
+      .gte("appeal_date", rangeStart)
+      .lte("appeal_date", rangeEnd)
+      .returns<{ user_id: string }[]>()
+
+    const appealCountByEmployee = new Map<string, number>()
+    for (const row of appealRows ?? []) {
+      appealCountByEmployee.set(row.user_id, (appealCountByEmployee.get(row.user_id) ?? 0) + 1)
     }
 
     // Org holidays, approved leave, and exemption periods covering the range —
@@ -151,7 +183,8 @@ export async function GET(request: NextRequest) {
     // Calculate workday-based summaries — missing days count as absent
     const summaries = allowedProfiles.map((profile) => {
       const empRecords = recordsByEmployee.get(profile.id) ?? new Map<string, AttendanceRow>()
-      let present_days = 0,
+      let early_days = 0,
+        present_days = 0,
         late_days = 0,
         incomplete_days = 0,
         absent_days = 0,
@@ -164,7 +197,10 @@ export async function GET(request: NextRequest) {
         waived_days = 0,
         leave_days = 0,
         holiday_days = 0,
-        attendance_credits = 0
+        attendance_credits = 0,
+        overtime_hours = 0,
+        clock_in_minutes_sum = 0,
+        clock_in_days = 0
       let available_days = 0
 
       for (const workday of periodWorkdays) {
@@ -186,7 +222,17 @@ export async function GET(request: NextRequest) {
           continue
         }
 
-        const derived = deriveUnifiedAttendanceStatus({ record: rec, recordDate: workday })
+        const earlyClose = ctx.earlyCloseTime(workday)
+        const lateRes = ctx.lateResumptionTime(workday)
+        const derived = deriveUnifiedAttendanceStatus(
+          {
+            record: rec,
+            recordDate: workday,
+            earlyClosure: earlyClose ? { closeTime: earlyClose } : null,
+            lateResumption: lateRes ? { resumptionTime: lateRes } : null,
+          },
+          policy
+        )
 
         if (derived === "waiver") {
           waived_days++
@@ -200,9 +246,11 @@ export async function GET(request: NextRequest) {
         // Now we are at scorable/available days!
         available_days++
 
+        const totalCredits = policy.totalCredits ?? 10
+
         if (!rec) {
           absent_days++
-          total_missed_hours += 9
+          total_missed_hours += totalCredits
           continue
         }
 
@@ -211,19 +259,45 @@ export async function GET(request: NextRequest) {
           attendance_credits += 1.0
         } else if (derived === "lateness_with_permission") {
           lateness_with_permission_days++
+          present_days++
           attendance_credits += 1.0
           total_hours += Number(rec.total_hours ?? 0)
-        } else if (derived === "present" || derived === "late") {
-          derived === "late" ? late_days++ : present_days++
-          attendance_credits += dayCredit(derived, rec.clock_in, rec.clock_out)
+        } else if (
+          derived === "early" ||
+          derived === "late" ||
+          derived === "incomplete" ||
+          derived === "early_departure" ||
+          derived === "early_departure_with_permission" ||
+          derived === "early_closure" ||
+          derived === "late_resumption"
+        ) {
+          present_days++
+          // Bucket for the summary counters: Early Closure / Late Resumption counts as a full present
+          // day; Left Early (± permission) is a docked present day, grouped with late.
+          if (derived === "early" || derived === "early_closure" || derived === "late_resumption") early_days++
+          else if (derived === "incomplete") incomplete_days++
+          else late_days++
+
+          const earlyOutApproved = rec.status === "early_departure_with_permission"
+          const credit = dayCredit(derived, rec.clock_in, rec.clock_out, policy, {
+            earlyCloseTime: earlyClose ?? null,
+            earlyOutApproved,
+            lateResumptionTime: lateRes ?? null,
+          })
+          attendance_credits += credit
           total_hours += Number(rec.total_hours ?? 0)
-          total_missed_hours += missedHours(rec.clock_in, rec.clock_out)
-        } else if (derived === "incomplete") {
-          incomplete_days++
+          total_missed_hours += totalCredits - credit * totalCredits
         } else {
           absent_days++
-          total_missed_hours += 9
+          total_missed_hours += totalCredits
         }
+
+        const clockInMin = timeToMinutes(rec.clock_in)
+        if (clockInMin !== null) {
+          clock_in_minutes_sum += clockInMin
+          clock_in_days++
+        }
+        overtime_hours += overtimeHoursFor(rec.clock_out, policy)
       }
 
       const total_working_days = available_days
@@ -237,6 +311,7 @@ export async function GET(request: NextRequest) {
         user_name: name,
         department: String(profile.department || "N/A"),
         total_days: total_working_days,
+        early_days,
         present_days,
         late_days,
         incomplete_days,
@@ -253,6 +328,9 @@ export async function GET(request: NextRequest) {
         total_missed_hours: Math.round(total_missed_hours * 10) / 10,
         attendance_rate,
         attendance_exempt: Boolean(profile.attendance_exempt),
+        overtime_hours: Math.round(overtime_hours * 10) / 10,
+        avg_clock_in_minutes: clock_in_days > 0 ? Math.round(clock_in_minutes_sum / clock_in_days) : null,
+        appeal_count: appealCountByEmployee.get(profile.id) ?? 0,
       }
     })
 

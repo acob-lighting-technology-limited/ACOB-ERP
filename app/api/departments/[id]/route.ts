@@ -26,6 +26,7 @@ const UpdateDepartmentSchema = z.object({
     .optional()
     .nullable(),
   is_executive_dept: z.boolean().optional(),
+  is_active: z.boolean().optional(),
 })
 
 // Helper function to create Supabase client
@@ -124,7 +125,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
     }
 
-    const { name, description, department_head_id, department_code, is_executive_dept } = parsed.data
+    const { name, description, department_head_id, department_code, is_executive_dept, is_active } = parsed.data
 
     // If this dept is being marked as the executive dept, clear the flag from all others first
     if (is_executive_dept === true) {
@@ -143,6 +144,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
         department_head_id,
         department_code: department_code ?? null,
         ...(is_executive_dept !== undefined ? { is_executive_dept } : {}),
+        ...(is_active !== undefined ? { is_active } : {}),
       })
       .eq("id", params.id)
       .select()
@@ -156,7 +158,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
         action: "update",
         entityType: "department",
         entityId: params.id,
-        newValues: { name, description, department_head_id, department_code, is_executive_dept },
+        newValues: { name, description, department_head_id, department_code, is_executive_dept, is_active },
         context: { actorId: user.id, source: "api", route: `/api/departments/${params.id}` },
       },
       { failOpen: true }

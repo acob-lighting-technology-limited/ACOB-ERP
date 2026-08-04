@@ -21,6 +21,7 @@ import { fetchWeeklyReportLockState } from "@/lib/weekly-report-lock"
 import { type ActionItem } from "@/lib/export-utils"
 import { logger } from "@/lib/logger"
 import { fetchActionTrackerMetadata, fetchActionTrackerTasks, type ActionTask } from "./_lib/queries"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("dashboard-reports-action-tracker")
 
@@ -99,6 +100,8 @@ export default function ActionTrackerPortal() {
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false)
   const [exportScope, setExportScope] = useState<ExportScope>({ label: "All Departments", items: [] })
   const [viewingDepartment, setViewingDepartment] = useState<DepartmentActionRow | null>(null)
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedDepartmentRows, setProcessedDepartmentRows] = useState<DepartmentActionRow[]>([])
 
   const { data: metaData } = useQuery({
     queryKey: QUERY_KEYS.actionTrackerMetadata(),
@@ -137,7 +140,12 @@ export default function ActionTrackerPortal() {
       year: task.year,
     }))
 
-  const actionItemsForExport = useMemo(() => toActionItems(tasks), [tasks])
+  // Built from the currently visible (search/filter/sort) rows, falling back to all tasks
+  // before the table has reported its processed rows.
+  const actionItemsForExport = useMemo(
+    () => toActionItems(processedDepartmentRows.length ? processedDepartmentRows.flatMap((row) => row.tasks) : tasks),
+    [tasks, processedDepartmentRows]
+  )
 
   const tasksQueryKey = QUERY_KEYS.actionTrackerTasks({ week, year, deptFilter })
 
@@ -155,7 +163,7 @@ export default function ActionTrackerPortal() {
     })
 
     try {
-      const response = await fetch(`/api/reports/action-tracker/${taskId}`, {
+      const response = await apiFetch(`/api/reports/action-tracker/${taskId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
@@ -173,7 +181,7 @@ export default function ActionTrackerPortal() {
   const handleCarryForward = async () => {
     setIsCarryForwarding(true)
     try {
-      const response = await fetch("/api/reports/action-tracker/carry-forward", {
+      const response = await apiFetch("/api/reports/action-tracker/carry-forward", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ week_number: week, year }),
@@ -357,6 +365,7 @@ export default function ActionTrackerPortal() {
       <DataTable<DepartmentActionRow>
         data={departmentRows}
         columns={columns}
+        onProcessedDataChange={setProcessedDepartmentRows}
         filters={filters}
         getRowId={(row) => row.id}
         pagination={{ pageSize: 50 }}

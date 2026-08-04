@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -24,8 +25,11 @@ import { format } from "date-fns"
 import { cn, formatName } from "@/lib/utils"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { toLocalISODate } from "@/lib/utils/date"
+import { useDepartments } from "@/hooks/use-departments"
+import { OFFICE_LOCATIONS } from "@/lib/office-locations"
 
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("hr-employees-pending-applications-modal")
 
@@ -43,6 +47,9 @@ interface PendingUser {
   office_location?: string
   created_at: string
   status: string
+  employment_type?: string
+  contract_category_id?: string
+  contract_categories?: { name: string; code: string } | null
 }
 
 interface PendingApplicationsModalProps {
@@ -79,7 +86,7 @@ interface ApprovalEmailWarning {
 }
 
 async function fetchPendingApplications(): Promise<PendingUser[]> {
-  const response = await fetch("/api/admin/pending-users", { cache: "no-store" })
+  const response = await apiFetch("/api/admin/pending-users", { cache: "no-store" })
   const payload = (await response.json().catch(() => null)) as { data?: PendingUser[]; error?: string } | null
   if (!response.ok) throw new Error(payload?.error || "Failed to load applications")
   return payload?.data || []
@@ -90,10 +97,24 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
   const [selectedUser, setSelectedUser] = useState<PendingUser | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [pendingReject, setPendingReject] = useState(false)
-  const [employeeId, setEmployeeId] = useState("")
-  const [hireDate, setHireDate] = useState(toLocalISODate())
+  const [employmentType, setEmploymentType] = useState<"full_time" | "part_time" | "contract">("full_time")
+  const [contractCategoryCode, setContractCategoryCode] = useState("")
   const [pendingEmailDispatch, setPendingEmailDispatch] = useState<PendingEmailDispatch | null>(null)
   const [isSendingEmails, setIsSendingEmails] = useState(false)
+
+  // Edit fields states
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [otherNames, setOtherNames] = useState("")
+  const [department, setDepartment] = useState("")
+  const [designation, setDesignation] = useState("")
+  const [companyEmail, setCompanyEmail] = useState("")
+  const [personalEmailState, setPersonalEmailState] = useState("")
+  const [phoneNumber, setPhoneNumber] = useState("")
+  const [residentialAddress, setResidentialAddress] = useState("")
+  const [officeLocation, setOfficeLocation] = useState("")
+
+  const { departments: DEPARTMENTS = [] } = useDepartments()
 
   const [supabase] = useState(() => createClient())
   const queryClient = useQueryClient()
@@ -104,15 +125,40 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
     enabled: isOpen,
   })
 
-  const { data: approvalEmailPreview, isLoading: isLoadingApprovalPreview } = useQuery<ApprovalEmailPreview>({
-    queryKey: ["pending-approval-email-preview", selectedUser?.id, employeeId],
+  const [hireDate, setHireDate] = useState(toLocalISODate())
+
+  const { data: contractCategories = [] } = useQuery<any[]>({
+    queryKey: ["contract-categories"],
     queryFn: async () => {
-      if (!selectedUser?.id || !employeeId) {
+      const { data, error } = await supabase
+        .from("contract_categories")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+      if (error) throw error
+      return data || []
+    },
+    enabled: isOpen,
+  })
+
+  const { data: approvalEmailPreview, isLoading: isLoadingApprovalPreview } = useQuery<ApprovalEmailPreview>({
+    queryKey: ["pending-approval-email-preview", selectedUser?.id, employmentType, contractCategoryCode],
+    queryFn: async () => {
+      if (!selectedUser?.id) {
         throw new Error("Missing approval preview context")
       }
 
-      const response = await fetch(
-        `/api/admin/pending-users/${selectedUser.id}/approval-preview?employeeId=${encodeURIComponent(employeeId)}`
+      // Construct a valid dummy ID for the preview API route matching regex
+      const currentYear = new Date().getFullYear()
+      const dummyId =
+        employmentType === "full_time"
+          ? `ACOB/${currentYear}/999`
+          : employmentType === "part_time"
+            ? `ACOB/PT/${currentYear}/999`
+            : `ACOB/${contractCategoryCode || "SIWES"}/${currentYear}/999`
+
+      const response = await apiFetch(
+        `/api/admin/pending-users/${selectedUser.id}/approval-preview?employeeId=${encodeURIComponent(dummyId)}`
       )
       const result = await response.json()
 
@@ -122,45 +168,24 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
 
       return result as ApprovalEmailPreview
     },
-    enabled: isOpen && !!selectedUser?.id && !!employeeId,
+    enabled: isOpen && !!selectedUser?.id,
   })
 
-  const fetchSuggestedId = useCallback(async () => {
-    try {
-      const { data: lastProfile } = await supabase
-        .from("profiles")
-        .select("employee_number")
-        .not("employee_number", "is", null)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single()
-
-      let nextIdNumber = 1
-      const currentYear = new Date().getFullYear()
-
-      if (lastProfile && lastProfile.employee_number) {
-        const parts = lastProfile.employee_number.split("/")
-        if (parts.length === 3) {
-          const lastNum = parseInt(parts[2], 10)
-          if (!isNaN(lastNum)) {
-            nextIdNumber = lastNum + 1
-          }
-        }
-      }
-      setEmployeeId(`ACOB/${currentYear}/${nextIdNumber.toString().padStart(3, "0")}`)
-    } catch (err) {
-      log.error("Error suggesting ID:", err)
-      setEmployeeId(`ACOB/${new Date().getFullYear()}/001`)
-    }
-  }, [supabase])
-
-  const handleUserSelect = useCallback(
-    (user: PendingUser) => {
-      setSelectedUser(user)
-      void fetchSuggestedId()
-    },
-    [fetchSuggestedId]
-  )
+  const handleUserSelect = useCallback((user: PendingUser) => {
+    setSelectedUser(user)
+    setEmploymentType((user.employment_type as any) || "full_time")
+    setContractCategoryCode(user.contract_categories?.code || "")
+    setFirstName(user.first_name || "")
+    setLastName(user.last_name || "")
+    setOtherNames(user.other_names || "")
+    setDepartment(user.department || "")
+    setDesignation(user.designation || "")
+    setCompanyEmail(user.company_email || "")
+    setPersonalEmailState(user.personal_email || "")
+    setPhoneNumber(user.phone_number || "")
+    setResidentialAddress(user.residential_address || "")
+    setOfficeLocation(user.office_location || "")
+  }, [])
 
   // Auto-select first user when data loads
   useEffect(() => {
@@ -172,24 +197,38 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
   const handleApprove = async () => {
     if (!selectedUser) return
 
-    // Validate ID format before sending
-    const empNumPattern = /^ACOB\/[0-9]{4}\/[0-9]{3}$/
-    if (employeeId && !empNumPattern.test(employeeId)) {
-      toast.error("Employee ID MUST be in format: ACOB/YEAR/NUMBER (e.g., ACOB/2026/001)")
-      return
-    }
-
     setIsProcessing(true)
 
     try {
-      const response = await fetch("/api/admin/approve-user", {
+      // 1. Update the record in pending_users with the edited details
+      const { error: updateError } = await supabase
+        .from("pending_users")
+        .update({
+          first_name: formatName(firstName),
+          last_name: formatName(lastName),
+          other_names: otherNames ? formatName(otherNames) : null,
+          department: department,
+          designation: designation,
+          company_email: companyEmail,
+          personal_email: personalEmailState,
+          phone_number: phoneNumber,
+          residential_address: residentialAddress,
+          office_location: officeLocation || null,
+        })
+        .eq("id", selectedUser.id)
+
+      if (updateError) throw updateError
+
+      // 2. Call the approve-user API route
+      const response = await apiFetch("/api/admin/approve-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           pendingUserId: selectedUser.id,
-          employeeId: employeeId,
           hireDate: hireDate,
           sendEmails: false,
+          employmentType: employmentType,
+          contractCategoryCode: contractCategoryCode || null,
         }),
       })
 
@@ -207,7 +246,6 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
         handleUserSelect(remaining[0])
       } else {
         setSelectedUser(null)
-        setEmployeeId("")
       }
       onEmployeeCreated()
 
@@ -232,7 +270,7 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
 
     setIsProcessing(true)
     try {
-      const response = await fetch("/api/admin/reject-user", {
+      const response = await apiFetch("/api/admin/reject-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pendingUserId: selectedUser.id }),
@@ -247,7 +285,6 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
         handleUserSelect(remaining[0])
       } else {
         setSelectedUser(null)
-        setEmployeeId("")
       }
     } catch (error: unknown) {
       log.error("Rejection error:", error)
@@ -257,14 +294,12 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
     }
   }
 
-  const DetailRow = ({ label, value }: { label: string; value: string | null | undefined }) => (
+  const DetailRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div className="border-border hover:bg-muted/50 grid grid-cols-4 border-b transition-colors">
       <div className="border-border bg-muted/40 flex items-center border-r p-3">
         <span className="text-muted-foreground text-xs font-bold uppercase">{label}</span>
       </div>
-      <div className="bg-background col-span-3 flex items-center p-3">
-        <span className="text-foreground text-sm font-medium">{value || "—"}</span>
-      </div>
+      <div className="bg-background col-span-3 flex items-center p-3">{value}</div>
     </div>
   )
 
@@ -361,18 +396,49 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                             className="bg-primary/5 border-primary/20 focus-visible:ring-primary h-9 w-40 font-mono text-xs font-bold"
                           />
                         </div>
-                        <div className="flex flex-col items-end">
-                          <span className="text-muted-foreground mb-1 text-[10px] font-bold uppercase">Assign ID</span>
-                          <div className="relative w-44">
-                            <Hash className="text-primary absolute top-2.5 left-2.5 h-3.5 w-3.5" />
-                            <Input
-                              value={employeeId}
-                              onChange={(e) => setEmployeeId(e.target.value)}
-                              className="bg-primary/5 border-primary/20 focus-visible:ring-primary h-9 pl-8 font-mono text-xs font-bold"
-                              placeholder="ACOB/2026/001"
-                            />
-                          </div>
+                        <div className="flex flex-col items-start gap-1">
+                          <span className="text-muted-foreground text-[10px] font-bold uppercase">Employment Type</span>
+                          <Select
+                            value={employmentType}
+                            onValueChange={(value: any) => {
+                              setEmploymentType(value)
+                              if (value !== "contract") {
+                                setContractCategoryCode("")
+                              } else if (contractCategories.length > 0) {
+                                setContractCategoryCode(contractCategories[0].code)
+                              }
+                            }}
+                          >
+                            <SelectTrigger className="bg-primary/5 border-primary/20 h-9 w-32 text-xs font-bold">
+                              <SelectValue placeholder="Type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="full_time">Full Time</SelectItem>
+                              <SelectItem value="part_time">Part Time</SelectItem>
+                              <SelectItem value="contract">Contract</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
+                        {employmentType === "contract" && (
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="text-muted-foreground text-[10px] font-bold uppercase">Category</span>
+                            <Select
+                              value={contractCategoryCode}
+                              onValueChange={(value) => setContractCategoryCode(value)}
+                            >
+                              <SelectTrigger className="bg-primary/5 border-primary/20 h-9 w-32 text-xs font-bold">
+                                <SelectValue placeholder="Category" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {contractCategories.map((cat) => (
+                                  <SelectItem key={cat.id} value={cat.code}>
+                                    {cat.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
                         <Badge variant="outline" className="mb-1 self-end py-0.5 text-[10px] font-bold">
                           PENDING APPROVAL
                         </Badge>
@@ -381,19 +447,108 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
 
                     {/* Table Grid with full borders */}
                     <div className="border-border overflow-hidden rounded-lg border shadow-sm">
-                      <DetailRow label="First Name" value={formatName(selectedUser.first_name)} />
-                      <DetailRow label="Last Name" value={formatName(selectedUser.last_name)} />
-                      <DetailRow label="Other Names" value={formatName(selectedUser.other_names)} />
+                      <DetailRow
+                        label="First Name"
+                        value={
+                          <Input
+                            value={firstName}
+                            onChange={(e) => setFirstName(e.target.value)}
+                            className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                          />
+                        }
+                      />
+                      <DetailRow
+                        label="Last Name"
+                        value={
+                          <Input
+                            value={lastName}
+                            onChange={(e) => setLastName(e.target.value)}
+                            className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                          />
+                        }
+                      />
+                      <DetailRow
+                        label="Other Names"
+                        value={
+                          <Input
+                            value={otherNames}
+                            onChange={(e) => setOtherNames(e.target.value)}
+                            className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                            placeholder="Optional other names"
+                          />
+                        }
+                      />
                       <div className="border-border grid grid-cols-1 border-b">
                         <div className="bg-muted/20 text-muted-foreground border-border border-b p-2 text-[10px] font-bold uppercase">
                           Organizational Data
                         </div>
                         <div className="grid grid-cols-1">
-                          <DetailRow label="Department" value={selectedUser.department} />
-                          <DetailRow label="Designation" value={selectedUser.designation} />
-                          <DetailRow label="System Email" value={selectedUser.company_email} />
-                          <DetailRow label="Assigned ID" value={employeeId} />
-                          <DetailRow label="Office Location" value={selectedUser.office_location || "N/A"} />
+                          <DetailRow
+                            label="Department"
+                            value={
+                              <Select value={department} onValueChange={setDepartment}>
+                                <SelectTrigger className="h-8 w-full border-0 bg-transparent text-left font-medium shadow-none focus:ring-0">
+                                  <SelectValue placeholder="Select Department" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {DEPARTMENTS.map((dept) => (
+                                    <SelectItem key={dept} value={dept}>
+                                      {dept}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            }
+                          />
+                          <DetailRow
+                            label="Designation"
+                            value={
+                              <Input
+                                value={designation}
+                                onChange={(e) => setDesignation(e.target.value)}
+                                className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                              />
+                            }
+                          />
+                          <DetailRow
+                            label="System Email"
+                            value={
+                              <Input
+                                value={companyEmail}
+                                onChange={(e) => setCompanyEmail(e.target.value)}
+                                className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                              />
+                            }
+                          />
+                          <DetailRow
+                            label="Expected Company ID"
+                            value={
+                              <span className="text-foreground pl-3 text-sm font-medium">
+                                {employmentType === "full_time"
+                                  ? `ACOB/${new Date().getFullYear()}/... (Auto-generated)`
+                                  : employmentType === "part_time"
+                                    ? `ACOB/PT/${new Date().getFullYear()}/... (Auto-generated)`
+                                    : `ACOB/${contractCategoryCode || "SIWES"}/${new Date().getFullYear()}/... (Auto-generated)`}
+                              </span>
+                            }
+                          />
+                          <DetailRow
+                            label="Office Location"
+                            value={
+                              <Select value={officeLocation} onValueChange={setOfficeLocation}>
+                                <SelectTrigger className="h-8 w-full border-0 bg-transparent text-left font-medium shadow-none focus:ring-0">
+                                  <SelectValue placeholder="Select Location" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {OFFICE_LOCATIONS.map((loc: string) => (
+                                    <SelectItem key={loc} value={loc}>
+                                      {loc}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            }
+                          />
                         </div>
                       </div>
                       <div className="grid grid-cols-1">
@@ -401,12 +556,43 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                           Personal & Contact
                         </div>
                         <div className="grid grid-cols-1">
-                          <DetailRow label="Phone Number" value={selectedUser.phone_number} />
-                          <DetailRow label="Personal Email" value={selectedUser.personal_email} />
-                          <DetailRow label="Address" value={selectedUser.residential_address} />
+                          <DetailRow
+                            label="Phone Number"
+                            value={
+                              <Input
+                                value={phoneNumber}
+                                onChange={(e) => setPhoneNumber(e.target.value)}
+                                className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                              />
+                            }
+                          />
+                          <DetailRow
+                            label="Personal Email"
+                            value={
+                              <Input
+                                value={personalEmailState}
+                                onChange={(e) => setPersonalEmailState(e.target.value)}
+                                className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                              />
+                            }
+                          />
+                          <DetailRow
+                            label="Address"
+                            value={
+                              <Input
+                                value={residentialAddress}
+                                onChange={(e) => setResidentialAddress(e.target.value)}
+                                className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                              />
+                            }
+                          />
                           <DetailRow
                             label="Application Date"
-                            value={format(new Date(selectedUser.created_at), "PPPP")}
+                            value={
+                              <span className="text-foreground pl-3 text-sm font-medium">
+                                {format(new Date(selectedUser.created_at), "PPPP")}
+                              </span>
+                            }
                           />
                         </div>
                       </div>
@@ -592,7 +778,7 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                 if (!pendingEmailDispatch) return
                 setIsSendingEmails(true)
                 try {
-                  const res = await fetch("/api/admin/send-onboarding-emails", {
+                  const res = await apiFetch("/api/admin/send-onboarding-emails", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(pendingEmailDispatch),

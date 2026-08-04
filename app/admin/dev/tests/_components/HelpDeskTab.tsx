@@ -12,6 +12,7 @@ import { Loader2, PlayCircle, Ticket } from "lucide-react"
 import { HelpDeskRouteDiagnosticsPanel } from "./HelpDeskRouteDiagnosticsPanel"
 import { ResultCard } from "./StepList"
 import type { TestResult } from "./shared-types"
+import { apiFetch } from "@/lib/api-client"
 
 interface HelpDeskTabProps {
   employees: { value: string; label: string }[]
@@ -35,7 +36,7 @@ export function HelpDeskTab({ employees, departments }: HelpDeskTabProps) {
     setRunning(true)
     setResult(null)
     try {
-      const res = await fetch("/api/dev/flow-tests", {
+      const res = await apiFetch("/api/dev/flow-tests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -12,6 +12,7 @@ import { Loader2, PlayCircle, FlaskConical } from "lucide-react"
 import { RouteDiagnosticsPanel } from "./RouteDiagnosticsPanel"
 import { ResultCard } from "./StepList"
 import type { TestResult } from "./shared-types"
+import { apiFetch } from "@/lib/api-client"
 
 interface LeaveTabProps {
   employees: { value: string; label: string }[]
@@ -38,7 +39,7 @@ export function LeaveTab({ employees, leaveTypes }: LeaveTabProps) {
     setRunning(true)
     setResult(null)
     try {
-      const res = await fetch("/api/dev/leave-flow-test", {
+      const res = await apiFetch("/api/dev/leave-flow-test", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

@@ -92,7 +92,7 @@ export class AttendanceService extends BaseService {
         employee_id: employeeId,
         date: today,
         clock_in: time,
-        status: "present",
+        status: "early",
       })
       .select()
       .single()

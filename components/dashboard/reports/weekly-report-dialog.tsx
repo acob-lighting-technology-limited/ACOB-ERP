@@ -12,6 +12,7 @@ import { getCurrentOfficeWeek } from "@/lib/meeting-week"
 import { fetchWeeklyReportLockState, type WeeklyReportLockState } from "@/lib/weekly-report-lock"
 import { sanitizeReportText } from "@/lib/export-utils"
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("dashboard-weekly-report-dialog")
 
@@ -146,7 +147,7 @@ export function WeeklyReportDialog({ isOpen, onClose, onSuccess, initialData }: 
     }
     setSaving(true)
     try {
-      const response = await fetch("/api/reports/weekly-reports", {
+      const response = await apiFetch("/api/reports/weekly-reports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

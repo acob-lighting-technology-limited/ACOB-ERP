@@ -43,6 +43,7 @@ export type AdminRouteKeyV2 =
   | "purchasing.main"
   | "reports.weekly"
   | "reports.other"
+  | "security.networkActivity"
   | "settings.main"
   | "tasks.main"
   | "tools.main"
@@ -77,6 +78,7 @@ export const GRANTABLE_ADMIN_ROUTES: AdminRouteKeyV2[] = [
   "tools.main",
   "settings.main",
   "auditlogs.main",
+  "security.networkActivity",
 ]
 
 export interface AccessContextV2 {
@@ -154,6 +156,7 @@ export function resolveAdminRouteKeyV2(pathname: string): AdminRouteKeyV2 {
   if (pathname.startsWith("/admin/job-descriptions")) return "jobdescriptions.main"
   if (pathname.startsWith("/admin/notifications")) return "notifications.main"
   if (pathname.startsWith("/admin/purchasing")) return "purchasing.main"
+  if (pathname.startsWith("/admin/security/network-activity")) return "security.networkActivity"
   if (pathname.startsWith("/admin/reports")) {
     if (pathname.includes("/weekly-reports")) return "reports.weekly"
     return "reports.other"
@@ -170,6 +173,8 @@ export function getRoutePolicyV2(route: AdminRouteKeyV2): RoutePolicyV2 {
     case "auditlogs.main":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: null }
     case "settings.main":
+      return { visibility: "none", mutations: "none", adminOnly: true, domain: null }
+    case "security.networkActivity":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: null }
     case "communications.meetings":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: "communications" }

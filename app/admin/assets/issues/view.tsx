@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { formatName } from "@/lib/utils"
 import { formatWATDate } from "@/lib/utils/date"
@@ -24,7 +23,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { StatCard } from "@/components/ui/stat-card"
 import { logger } from "@/lib/logger"
-import { normalizeDepartmentName } from "@/shared/departments"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("assets-issues")
 
@@ -65,87 +64,13 @@ interface AssetIssue {
   }
 }
 
-async function fetchAssetIssues(lockedDepartment?: string): Promise<AssetIssue[]> {
-  const supabase = createClient()
-  const { data: issuesData, error: issuesError } = await supabase
-    .from("asset_issues")
-    .select("*")
-    .order("created_at", { ascending: false })
-  if (issuesError) throw new Error(issuesError.message)
-
-  const issuesWithDetails = await Promise.all(
-    (issuesData || []).map(async (issue) => {
-      const { data: assetData } = await supabase
-        .from("assets")
-        .select("unique_code, asset_type, status, assignment_type, department, office_location")
-        .eq("id", issue.asset_id)
-        .single()
-
-      let assignmentData = null
-      if (assetData) {
-        const { data: assignment } = await supabase
-          .from("asset_assignments")
-          .select("assigned_to, department, office_location")
-          .eq("asset_id", issue.asset_id)
-          .eq("is_current", true)
-          .maybeSingle()
-
-        if (assignment) {
-          if (assignment.assigned_to) {
-            const { data: userData } = await supabase
-              .from("profiles")
-              .select("first_name, last_name, department")
-              .eq("id", assignment.assigned_to)
-              .single()
-            assignmentData = {
-              type: "individual",
-              user: userData,
-              department: assignment.department,
-              office_location: assignment.office_location,
-            }
-          } else if (assignment.department) {
-            assignmentData = { type: "department", department: assignment.department }
-          } else if (assignment.office_location) {
-            assignmentData = { type: "office", office_location: assignment.office_location }
-          }
-        }
-      }
-
-      const { data: creatorData } = await supabase
-        .from("profiles")
-        .select("first_name, last_name")
-        .eq("id", issue.created_by)
-        .single()
-
-      let resolverData = null
-      if (issue.resolved_by) {
-        const { data } = await supabase
-          .from("profiles")
-          .select("first_name, last_name")
-          .eq("id", issue.resolved_by)
-          .single()
-        resolverData = data
-      }
-
-      return {
-        ...issue,
-        asset: { ...assetData, current_assignment: assignmentData },
-        creator: creatorData,
-        resolver: resolverData,
-      }
-    })
-  )
-
-  const issues = issuesWithDetails as AssetIssue[]
-  if (!lockedDepartment) return issues
-
-  const locked = normalizeDepartmentName(lockedDepartment)
-  return issues.filter((issue) => {
-    const assetDepartment = normalizeDepartmentName(issue.asset?.department || "")
-    const assignmentDepartment = normalizeDepartmentName(issue.asset?.current_assignment?.department || "")
-    const assignedUserDepartment = normalizeDepartmentName(issue.asset?.current_assignment?.user?.department || "")
-    return [assetDepartment, assignmentDepartment, assignedUserDepartment].includes(locked)
-  })
+async function fetchAssetIssues(): Promise<AssetIssue[]> {
+  // Department scoping is resolved server-side (shared between /admin/assets/issues
+  // and /dept/[id]/assets/issues via getScopedDepartments) — no client-side lock.
+  const res = await apiFetch("/api/admin/assets/issues", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load asset issues")
+  const json = await res.json()
+  return (json.data || []) as AssetIssue[]
 }
 
 function assignedTo(issue: AssetIssue) {
@@ -223,17 +148,17 @@ export function AssetIssuesPage({
     error,
   } = useQuery({
     queryKey: [...QUERY_KEYS.adminAssetIssues(), lockedDepartment ?? "all"],
-    queryFn: () => fetchAssetIssues(lockedDepartment),
+    queryFn: () => fetchAssetIssues(),
   })
 
   async function handleToggleResolved(issue: AssetIssue) {
     try {
-      const supabase = createClient()
-      const { error: updateError } = await supabase
-        .from("asset_issues")
-        .update({ resolved: !issue.resolved })
-        .eq("id", issue.id)
-      if (updateError) throw updateError
+      const res = await apiFetch(`/api/admin/assets/${issue.asset_id}/issues/${issue.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resolved: !issue.resolved }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to update issue")
       toast.success(issue.resolved ? "Issue marked as unresolved" : "Issue marked as resolved")
       void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminAssetIssues() })
     } catch (err: unknown) {
@@ -242,11 +167,10 @@ export function AssetIssuesPage({
     }
   }
 
-  async function handleDeleteIssue(issueId: string) {
+  async function handleDeleteIssue(issue: AssetIssue) {
     try {
-      const supabase = createClient()
-      const { error: deleteError } = await supabase.from("asset_issues").delete().eq("id", issueId)
-      if (deleteError) throw deleteError
+      const res = await apiFetch(`/api/admin/assets/${issue.asset_id}/issues/${issue.id}`, { method: "DELETE" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to delete issue")
       toast.success("Issue deleted")
       void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminAssetIssues() })
     } catch (err: unknown) {
@@ -481,10 +405,11 @@ export function AssetIssuesPage({
               variant="destructive"
               loading={isDeletingIssue}
               onClick={async () => {
-                if (pendingDeleteId) {
+                const pendingIssue = issues.find((item) => item.id === pendingDeleteId)
+                if (pendingIssue) {
                   setIsDeletingIssue(true)
                   try {
-                    await handleDeleteIssue(pendingDeleteId)
+                    await handleDeleteIssue(pendingIssue)
                     setPendingDeleteId(null)
                   } finally {
                     setIsDeletingIssue(false)

@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { resolvePendingAppealOnManualStatus } from "@/lib/hr/attendance-appeals"
+import { notifyAttendanceInApp } from "@/lib/hr/attendance-notify"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import {
   DB_WRITABLE_STATUSES,
@@ -12,6 +13,7 @@ import {
   isPermissionAttendanceStatus,
 } from "@/lib/hr/attendance-status"
 import { requireApiAdminScope } from "@/lib/admin/api-scope"
+import { loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 
 const log = logger("admin-hr-attendance-record-patch")
 
@@ -39,6 +41,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const auth = await requireApiAdminScope()
     if (!auth.ok) return auth.response
     const { supabase } = auth
+    const policy = await loadAttendancePolicy(supabase)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -80,10 +83,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       explicitStatus ??
       (parsed.data.waived === true
         ? "waiver"
-        : deriveUnifiedAttendanceStatus({
-            record: { clock_in: clockIn, clock_out: clockOut, waived: false, status: record.status },
-            recordDate: record.date,
-          }))
+        : deriveUnifiedAttendanceStatus(
+            {
+              record: { clock_in: clockIn, clock_out: clockOut, waived: false, status: record.status },
+              recordDate: record.date,
+            },
+            policy
+          ))
     const isCoveredWithoutTimes =
       nextStatus === "waiver" || nextStatus === "absent_with_permission" || nextStatus === "out_of_station"
     const isLWP = nextStatus === "lateness_with_permission"
@@ -110,9 +116,13 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (clockIn && clockOut) {
       const inMs = new Date(`${record.date}T${clockIn}Z`).getTime()
       const outMs = new Date(`${record.date}T${clockOut}Z`).getTime()
-      updates.total_hours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
+      const rawHours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
+      const breakDuration = rawHours >= 5 ? 60 : 0
+      updates.total_hours = rawHours - breakDuration / 60
+      updates.break_duration = breakDuration
     } else {
       updates.total_hours = null
+      updates.break_duration = null
     }
 
     updates.status = nextStatus
@@ -169,6 +179,15 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       attendanceRecordId: id,
       comment: parsed.data.manual_comment,
       actorId: user.id,
+    })
+    await notifyAttendanceInApp(dataClient, {
+      affectedUserId: record.user_id,
+      actorId: user.id,
+      date: record.date,
+      fromStatus: record.status,
+      toStatus: nextStatus,
+      action: "updated",
+      entityId: id,
     })
 
     return NextResponse.json({ data: updated, message: "Record updated" })

@@ -14,7 +14,7 @@ import { Lock, CheckCircle, Eye, EyeOff } from "lucide-react"
 import Image from "next/image"
 import { useTheme } from "next-themes"
 import { getSeasonalLogoPaths } from "@/lib/seasonal-branding"
-import { FormPageSkeleton } from "@/components/skeletons"
+import { AuthPageSkeleton } from "@/components/skeletons"
 
 export default function SetPasswordPage() {
   const [password, setPassword] = useState("")
@@ -84,7 +84,7 @@ export default function SetPasswordPage() {
       if (error) throw error
 
       setIsSuccess(true)
-      toast.success("Password set successfully! Welcome to ACOB ERP.")
+      toast.success("Password set successfully! Welcome to Matrix.")
 
       // Redirect to dashboard after 2 seconds
       setTimeout(() => {
@@ -100,7 +100,7 @@ export default function SetPasswordPage() {
   }
 
   if (isChecking) {
-    return <FormPageSkeleton sections={2} fieldsPerSection={3} showSidebar={false} />
+    return <AuthPageSkeleton />
   }
 
   return (
@@ -118,7 +118,7 @@ export default function SetPasswordPage() {
               <CardDescription className="text-sm">
                 {isSuccess
                   ? "Redirecting to your dashboard..."
-                  : "Create a secure password to activate your ACOB account"}
+                  : "Create a secure password to activate your Matrix account"}
               </CardDescription>
             </CardHeader>
             <CardContent className="pb-8">

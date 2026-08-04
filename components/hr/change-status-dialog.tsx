@@ -28,6 +28,7 @@ import type { EmploymentStatus } from "@/types/database"
 import { EmployeeStatusBadge } from "./employee-status-badge"
 import { createClient } from "@/lib/supabase/client"
 import { toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 interface ChangeStatusDialogProps {
   open: boolean
@@ -92,7 +93,7 @@ const suspensionReasonOptions = [
 ]
 
 async function fetchEmployeeStatusBlockers(employeeId: string): Promise<ExitBlockers | null> {
-  const response = await fetch(`/api/v1/hr/employees/${employeeId}/status`, { method: "GET" })
+  const response = await apiFetch(`/api/v1/hr/employees/${employeeId}/status`, { method: "GET" })
   if (!response.ok) throw new Error("Failed to load offboarding blockers")
   const result = await response.json()
   return result.blockers || null
@@ -190,7 +191,7 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
     setConfirmOpen(false)
     setIsLoading(true)
     try {
-      const response = await fetch(`/api/v1/hr/employees/${employee.id}/status`, {
+      const response = await apiFetch(`/api/v1/hr/employees/${employee.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -511,7 +512,7 @@ export function ChangeStatusContent({ employee, onSuccess, onCancel }: ChangeSta
                 if (!exitedEmployeeId) return
                 setIsSendingNotification(true)
                 try {
-                  const res = await fetch(`/api/v1/hr/employees/${exitedEmployeeId}/exit-notification`, {
+                  const res = await apiFetch(`/api/v1/hr/employees/${exitedEmployeeId}/exit-notification`, {
                     method: "POST",
                   })
                   if (res.ok) {

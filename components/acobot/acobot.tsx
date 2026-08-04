@@ -6,6 +6,7 @@ import { useChat } from "ai/react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Bot, Send, Square, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { apiFetch } from "@/lib/api-client"
 import { AcobotMessage } from "./acobot-message"
 import { SuggestedPrompts } from "./suggested-prompts"
 
@@ -28,6 +29,10 @@ export function AcoBot({ userName }: AcoBotProps) {
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, stop, error, setInput } = useChat({
     api: "/api/acobot",
+    // Route through apiFetch so the x-csrf-token header is attached — the
+    // middleware fails closed on CSRF for authenticated API routes, and
+    // useChat's bare fetch would otherwise be rejected with 403.
+    fetch: apiFetch,
     // Send the page the user is on so ACOBot can answer with route context.
     body: { currentPath: pathname },
   })
@@ -152,7 +157,7 @@ export function AcoBot({ userName }: AcoBotProps) {
 
               {error && (
                 <div className="border-destructive/30 bg-destructive/10 text-destructive rounded-xl border px-3 py-2 text-center text-xs">
-                  Something went wrong. Please try again.
+                  {error.message || "Something went wrong. Please try again."}
                 </div>
               )}
 

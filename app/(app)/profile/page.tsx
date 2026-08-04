@@ -4,6 +4,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { ProfileContent } from "./profile-content"
 import { buildRecentActivity, normalizeToken } from "@/components/admin/dashboard-helpers"
 import type { PersonalRecentActivityItem } from "@/components/profile/personal-recent-activity-feed"
+import { getAvatarSignedUrl } from "@/lib/profile-photos"
 
 export interface UserProfile {
   id: string
@@ -26,6 +27,7 @@ export interface UserProfile {
   updated_at: string
   additional_email?: string | null
   birthday?: string | null
+  avatar_path?: string | null
 }
 
 export interface Task {
@@ -137,6 +139,14 @@ export interface AttendanceItem {
   created_at: string
 }
 
+export interface LunchLogItem {
+  id: string
+  date: string
+  cost: number
+  company_subsidy: number
+  employee_deduction: number
+}
+
 type ProfileRow = UserProfile & {
   department_id?: string | null
 }
@@ -203,6 +213,7 @@ async function getProfileData() {
   if (profileError || !profileData) {
     return {
       profile: null,
+      avatarUrl: null,
       tasks: [],
       assets: [],
       documentation: [],
@@ -435,6 +446,14 @@ async function getProfileData() {
     .returns<AttendanceItem[]>()
   if (attendanceError) loadErrors.push("attendance")
 
+  const { data: lunchLogsData } = await dataClient
+    .from("attendance_lunch_log")
+    .select("id, date, cost, company_subsidy, employee_deduction")
+    .eq("user_id", userId)
+    .order("date", { ascending: false })
+    .limit(30)
+    .returns<LunchLogItem[]>()
+
   const loadError = loadErrors.length > 0 ? "Some profile sections failed to load. Please refresh." : null
 
   const { data: rawActivity } = await dataClient
@@ -467,8 +486,11 @@ async function getProfileData() {
 
   const recentActivity = buildRecentActivity(filteredRawActivity, actorMap) as PersonalRecentActivityItem[]
 
+  const avatarUrl = await getAvatarSignedUrl(dataClient, profileData.avatar_path)
+
   return {
     profile: profileData,
+    avatarUrl,
     tasks: allTasks,
     assets: allAssets,
     documentation: (docsData || []) as Documentation[],
@@ -478,6 +500,7 @@ async function getProfileData() {
     payments: paymentsData || [],
     leave: leaveData,
     attendance: attendanceData || [],
+    lunchLogs: lunchLogsData || [],
     recentActivity,
     loadError,
   }
@@ -496,15 +519,15 @@ export default async function ProfilePage() {
   return (
     <ProfileContent
       profile={profileData.profile}
+      avatarUrl={profileData.avatarUrl}
       tasks={profileData.tasks}
       assets={profileData.assets}
-      documentation={profileData.documentation}
-      feedback={profileData.feedback}
       correspondence={profileData.correspondence}
       helpDesk={profileData.helpDesk}
       payments={profileData.payments}
       leave={profileData.leave}
       attendance={profileData.attendance}
+      lunchLogs={profileData.lunchLogs || []}
       recentActivity={profileData.recentActivity}
       initialError={profileData.loadError}
     />

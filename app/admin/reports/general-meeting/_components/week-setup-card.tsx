@@ -11,20 +11,18 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { createClient } from "@/lib/supabase/client"
 import { getCurrentOfficeWeek } from "@/lib/meeting-week"
-import { fetchWeeklyReportLockState, getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
+import { getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { normalizeDepartmentName } from "@/shared/departments"
+import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
+import { apiFetch } from "@/lib/api-client"
 
 type EmployeeOption = {
   id: string
   full_name: string
   department: string
-}
-
-type AuthUser = {
-  id: string
+  employment_status?: string | null
 }
 
 type OfficeYearRow = { year: number; anchor_day: number; is_locked: boolean }
@@ -46,7 +44,6 @@ function getInitialOfficeWeek() {
 export function WeekSetupCard() {
   const [initialWeek] = useState(getInitialOfficeWeek)
   const currentOfficeWeek = getCurrentOfficeWeek()
-  const [supabase] = useState(() => createClient())
   const queryClient = useQueryClient()
   const currentYear = new Date().getFullYear()
 
@@ -62,7 +59,6 @@ export function WeekSetupCard() {
   const [kssPresenterIdInput, setKssPresenterIdInput] = useState("none")
   const [kssPresenterNameInput, setKssPresenterNameInput] = useState("")
   const [savingMeetingWindow, setSavingMeetingWindow] = useState(false)
-  const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [showWeekSetup, setShowWeekSetup] = useState(false)
   const [showYearConfig, setShowYearConfig] = useState(false)
 
@@ -72,41 +68,13 @@ export function WeekSetupCard() {
     [currentOfficeWeek.year]
   )
 
-  useEffect(() => {
-    let cancelled = false
-
-    void supabase.auth.getUser().then(({ data }) => {
-      if (!cancelled) {
-        setAuthUser(data.user ? { id: data.user.id } : null)
-      }
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [supabase])
-
   const { data: employees = [] } = useQuery({
     queryKey: ["general-meeting-week-setup-employees"],
     queryFn: async (): Promise<EmployeeOption[]> => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, department, employment_status")
-        .not("department", "is", null)
-        .or("employment_status.neq.exited,employment_status.is.null")
-        .order("full_name", { ascending: true })
-
-      if (error) throw new Error(error.message)
-
-      return (data || [])
-        .filter((row): row is { id: string; full_name: string; department: string; employment_status: string | null } =>
-          Boolean(row?.id && row?.full_name && row?.department)
-        )
-        .map((row) => ({
-          id: row.id,
-          full_name: row.full_name,
-          department: normalizeDepartmentName(row.department),
-        }))
+      const res = await apiFetch("/api/admin/reports/week-setup/employees", { cache: "no-store" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load employees")
+      const json = await res.json()
+      return json.data as EmployeeOption[]
     },
   })
 
@@ -124,15 +92,24 @@ export function WeekSetupCard() {
     () =>
       employees
         .filter(
-          (employee) => normalizeDepartmentName(employee.department) === normalizeDepartmentName(kssDepartmentInput)
+          (employee) =>
+            normalizeDepartmentName(employee.department) === normalizeDepartmentName(kssDepartmentInput) &&
+            (isAssignableEmploymentStatus(employee.employment_status, { allowLegacyNullStatus: false }) ||
+              employee.id === kssPresenterIdInput)
         )
         .sort((a, b) => a.full_name.localeCompare(b.full_name)),
-    [employees, kssDepartmentInput]
+    [employees, kssDepartmentInput, kssPresenterIdInput]
   )
 
   const { data: lockState } = useQuery({
     queryKey: QUERY_KEYS.adminWeeklyReportLockState(weekNumber, yearNumber),
-    queryFn: () => fetchWeeklyReportLockState(supabase, weekNumber, yearNumber),
+    queryFn: async () => {
+      const res = await apiFetch(`/api/admin/reports/weekly-lock-state?week=${weekNumber}&year=${yearNumber}`, {
+        cache: "no-store",
+      })
+      if (!res.ok) throw new Error("Failed to resolve lock state")
+      return res.json()
+    },
   })
   const computedDeadlineLabel = useMemo(() => {
     if (!lockState?.meetingDate) return null
@@ -146,41 +123,11 @@ export function WeekSetupCard() {
   const { data: weekSetupData } = useQuery({
     queryKey: ["general-meeting-week-setup", weekNumber, yearNumber],
     queryFn: async () => {
-      const [meetingWindowResult, rosterResult] = await Promise.all([
-        supabase
-          .from("weekly_report_meeting_windows")
-          .select("meeting_time")
-          .eq("week_number", weekNumber)
-          .eq("year", yearNumber)
-          .maybeSingle(),
-        supabase
-          .from("kss_weekly_roster")
-          .select("id, department, presenter_id, presenter_name")
-          .eq("meeting_week", weekNumber)
-          .eq("meeting_year", yearNumber)
-          .maybeSingle(),
-      ])
-
-      if (meetingWindowResult.error) throw new Error(meetingWindowResult.error.message)
-      if (rosterResult.error) throw new Error(rosterResult.error.message)
-
-      return {
-        rosterId: typeof rosterResult.data?.id === "string" ? rosterResult.data.id : null,
-        meetingTime:
-          typeof meetingWindowResult.data?.meeting_time === "string" ? meetingWindowResult.data.meeting_time : "08:30",
-        kssDepartment:
-          typeof rosterResult.data?.department === "string" && rosterResult.data.department.trim()
-            ? normalizeDepartmentName(rosterResult.data.department)
-            : "none",
-        kssPresenterId:
-          typeof rosterResult.data?.presenter_id === "string" && rosterResult.data.presenter_id
-            ? rosterResult.data.presenter_id
-            : "none",
-        kssPresenterName:
-          typeof rosterResult.data?.presenter_name === "string" && rosterResult.data.presenter_name.trim()
-            ? rosterResult.data.presenter_name.trim()
-            : "",
-      }
+      const res = await apiFetch(`/api/admin/reports/week-setup?week=${weekNumber}&year=${yearNumber}`, {
+        cache: "no-store",
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load week setup")
+      return res.json()
     },
   })
 
@@ -233,7 +180,7 @@ export function WeekSetupCard() {
     setSavingMeetingWindow(true)
     try {
       const [meetingDateResponse, kssResult] = await Promise.all([
-        fetch("/api/reports/meeting-date", {
+        apiFetch("/api/reports/meeting-date", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -244,7 +191,7 @@ export function WeekSetupCard() {
           }),
         }),
         weekSetupData?.rosterId
-          ? fetch("/api/reports/kss-roster", {
+          ? apiFetch("/api/reports/kss-roster", {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -255,7 +202,7 @@ export function WeekSetupCard() {
                 isActive: true,
               }),
             })
-          : fetch("/api/reports/kss-roster", {
+          : apiFetch("/api/reports/kss-roster", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
@@ -278,35 +225,28 @@ export function WeekSetupCard() {
         throw new Error(kssPayload.error || "Failed to save KSS setup")
       }
 
-      if (authUser?.id) {
-        const { error: graceError } = await supabase.from("weekly_report_meeting_windows").upsert(
-          {
-            week_number: weekNumber,
-            year: yearNumber,
-            meeting_date: meetingDateInput,
-            meeting_time: meetingTimeInput,
-            grace_hours: meetingGraceHours,
-            updated_by: authUser.id,
-            created_by: authUser.id,
-          },
-          { onConflict: "week_number,year" }
-        )
-
-        if (graceError) throw new Error(graceError.message)
-      } else {
-        const { error: graceError } = await supabase
-          .from("weekly_report_meeting_windows")
-          .update({ grace_hours: meetingGraceHours, meeting_time: meetingTimeInput })
-          .eq("week_number", weekNumber)
-          .eq("year", yearNumber)
-
-        if (graceError) throw new Error(graceError.message)
+      const windowRes = await apiFetch("/api/admin/reports/week-setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          weekNumber,
+          yearNumber,
+          meetingDate: meetingDateInput,
+          meetingTime: meetingTimeInput,
+          graceHours: meetingGraceHours,
+        }),
+      })
+      if (!windowRes.ok) {
+        throw new Error((await windowRes.json().catch(() => null))?.error || "Failed to save meeting window")
       }
 
       toast.success("Week setup saved")
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminWeeklyReportLockState(weekNumber, yearNumber) }),
         queryClient.invalidateQueries({ queryKey: ["general-meeting-week-setup", weekNumber, yearNumber] }),
+        queryClient.invalidateQueries({ queryKey: ["kss-roster-table"] }),
+        queryClient.invalidateQueries({ queryKey: ["kss-documents-table"] }),
+        queryClient.invalidateQueries({ queryKey: ["kss-selected-week-lock", weekNumber, yearNumber] }),
       ])
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Failed to save week setup")
@@ -320,7 +260,7 @@ export function WeekSetupCard() {
   const { data: yearRows = [], isLoading: yearConfigLoading } = useQuery<OfficeYearRow[]>({
     queryKey: ["office-year-config"],
     queryFn: async () => {
-      const res = await fetch("/api/reports/office-year-config")
+      const res = await apiFetch("/api/reports/office-year-config")
       const json = await res.json()
       if (!res.ok) throw new Error(json.error || "Failed to load")
       return json.data
@@ -334,7 +274,7 @@ export function WeekSetupCard() {
 
   const saveYearMutation = useMutation({
     mutationFn: async ({ year, anchor_day }: { year: number; anchor_day: number }) => {
-      const res = await fetch("/api/reports/office-year-config", {
+      const res = await apiFetch("/api/reports/office-year-config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ year, anchor_day }),

@@ -20,6 +20,7 @@ import { UserHelpDeskTicketCommentDialog } from "@/components/help-desk/user-tic
 import { PriorityBadge, TicketStatusBadge } from "@/components/dashboard/help-desk/ticket-badges"
 import { formatName } from "@/lib/utils"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 type ErrorPayload = {
   error?: string
@@ -129,7 +130,7 @@ export function HelpDeskContent({
       status: "pending_approval",
     }),
     queryFn: async () => {
-      const res = await fetch(pendingApprovalsPath, { cache: "no-store" })
+      const res = await apiFetch(pendingApprovalsPath, { cache: "no-store" })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(buildFetchDebugLabel("Pending approvals load", res.status, json))
       return json.data || []
@@ -315,8 +316,8 @@ export function HelpDeskContent({
 
   async function refreshTickets() {
     const [mineRes, deptRes] = await Promise.all([
-      fetch("/api/help-desk/tickets?scope=mine", { cache: "no-store" }),
-      fetch("/api/help-desk/tickets?scope=service_department", { cache: "no-store" }),
+      apiFetch("/api/help-desk/tickets?scope=mine", { cache: "no-store" }),
+      apiFetch("/api/help-desk/tickets?scope=service_department", { cache: "no-store" }),
     ])
     const mineJson = await mineRes.json().catch(() => ({}))
     const deptJson = await deptRes.json().catch(() => ({}))
@@ -357,7 +358,7 @@ export function HelpDeskContent({
 
     setIsSaving(true)
     try {
-      const res = await fetch("/api/help-desk/tickets", {
+      const res = await apiFetch("/api/help-desk/tickets", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
@@ -387,7 +388,7 @@ export function HelpDeskContent({
 
   async function setStatus(ticketId: string, status: string) {
     try {
-      const res = await fetch(`/api/help-desk/tickets/${ticketId}`, {
+      const res = await apiFetch(`/api/help-desk/tickets/${ticketId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status }),
@@ -407,7 +408,7 @@ export function HelpDeskContent({
 
   async function rateTicket(ticketId: string, rating: number) {
     try {
-      const res = await fetch(`/api/help-desk/tickets/${ticketId}`, {
+      const res = await apiFetch(`/api/help-desk/tickets/${ticketId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ csat_rating: rating }),
@@ -429,7 +430,7 @@ export function HelpDeskContent({
     setDetailsLoading(true)
     setDetailsError(null)
     try {
-      const res = await fetch(`/api/help-desk/tickets/${ticketId}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/help-desk/tickets/${ticketId}`, { cache: "no-store" })
       const json = await res.json().catch(() => null)
       if (!res.ok) {
         const message = (json as ErrorPayload | null)?.error || "Failed to load ticket details"
@@ -472,7 +473,7 @@ export function HelpDeskContent({
     setSelectedTicketStatus(status)
     setIsDetailSaving(true)
     try {
-      const res = await fetch(`/api/help-desk/tickets/${selectedTicketId}`, {
+      const res = await apiFetch(`/api/help-desk/tickets/${selectedTicketId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status, status_note: detailComment.trim() || null }),
@@ -495,7 +496,7 @@ export function HelpDeskContent({
     setCommentFeedback(null)
     setCommentFeedbackTone(null)
     try {
-      const res = await fetch(`/api/help-desk/tickets/${selectedTicketId}/comments`, {
+      const res = await apiFetch(`/api/help-desk/tickets/${selectedTicketId}/comments`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ comment: detailComment.trim() }),
@@ -534,7 +535,7 @@ export function HelpDeskContent({
   async function decideApproval(ticketId: string, decision: "approved" | "rejected", comments?: string) {
     setProcessingApprovalId(ticketId)
     try {
-      const response = await fetch(`/api/help-desk/tickets/${ticketId}/approvals`, {
+      const response = await apiFetch(`/api/help-desk/tickets/${ticketId}/approvals`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision, comments: comments || null }),

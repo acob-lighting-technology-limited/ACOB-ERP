@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { ClipboardList, FileText, ChevronRight, Presentation, Users } from "lucide-react"
+import { ClipboardList, FileText, ChevronRight, Presentation, Users, UserCheck } from "lucide-react"
 import { PageWrapper, PageHeader } from "@/components/layout"
 import { PageSection } from "@/components/ui/patterns"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -40,6 +40,14 @@ export default function AdminGeneralMeetingReportsPage() {
       icon: Users,
       color: "text-amber-600 dark:text-amber-400",
       bgColor: "bg-amber-100 dark:bg-amber-900/30",
+    },
+    {
+      title: "Records",
+      description: "Teams attendance reports and transcripts, auto-synced per meeting. Manage sync from here.",
+      href: "/admin/reports/general-meeting/records",
+      icon: UserCheck,
+      color: "text-emerald-600 dark:text-emerald-400",
+      bgColor: "bg-emerald-100 dark:bg-emerald-900/30",
     },
   ]
 

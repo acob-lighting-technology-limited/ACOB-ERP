@@ -27,15 +27,16 @@ export function HeaderWrapper({ user, canAccessAdmin = false }: HeaderWrapperPro
     return null
   }
 
-  if (pathname?.startsWith("/kss")) {
-    return null
-  }
-
   if (pathname?.startsWith("/birthday")) {
     return null
   }
 
   if (pathname?.startsWith("/cbt")) {
+    return null
+  }
+
+  // Public launch / landing page has its own full-screen design
+  if (pathname?.startsWith("/launch")) {
     return null
   }
 

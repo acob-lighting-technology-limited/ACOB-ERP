@@ -3,7 +3,6 @@
 import { useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/client"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
@@ -25,9 +24,9 @@ import { AlertTriangle, Building, Mail, Pencil, Plus, Users } from "lucide-react
 import { toast } from "sonner"
 import { StatCard } from "@/components/ui/stat-card"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { logger } from "@/lib/logger"
 import { formatWATDate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("hr-departments")
 
@@ -62,67 +61,11 @@ export interface DepartmentsData {
 }
 
 async function fetchDepartmentsData(): Promise<DepartmentsData> {
-  const supabase = createClient()
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-
-  let canManageDepartments = false
-  let scopeMode: "global" | "lead" = "global"
-  if (user) {
-    const [{ data: profile }, scopeResponse] = await Promise.all([
-      supabase.from("profiles").select("role").eq("id", user.id).single(),
-      fetch("/api/admin/scope-mode", { cache: "no-store" }).catch(() => null),
-    ])
-    canManageDepartments = ["developer", "super_admin", "admin"].includes(profile?.role || "")
-    if (scopeResponse?.ok) {
-      const scopePayload = (await scopeResponse.json().catch(() => null)) as { mode?: "global" | "lead" } | null
-      scopeMode = scopePayload?.mode === "lead" ? "lead" : "global"
-      if (scopeMode === "lead") {
-        canManageDepartments = false
-      }
-    }
-  }
-
-  const departmentResponse = await fetch("/api/departments", { cache: "no-store" })
-  const departmentPayload = (await departmentResponse.json().catch(() => null)) as {
-    data?: Department[]
-    error?: string
-  } | null
-  if (!departmentResponse.ok) {
-    throw new Error(departmentPayload?.error || "Failed to load departments")
-  }
-  const departments = departmentPayload?.data || []
-
-  const { data: profiles } = await supabase
-    .from("profiles")
-    .select("id, first_name, last_name, company_email, additional_email, designation, employment_status, department")
-
-  const employeesByDepartment: Record<string, DepartmentEmployee[]> = {}
-  for (const profile of ((profiles || []) as DepartmentEmployee[]).filter((employee) =>
-    isAssignableEmploymentStatus(employee.employment_status, { allowLegacyNullStatus: false })
-  )) {
-    const departmentName = profile.department || "Unassigned"
-    if (!employeesByDepartment[departmentName]) employeesByDepartment[departmentName] = []
-    employeesByDepartment[departmentName].push(profile)
-  }
-
-  const scopedDepartmentNames = new Set(departments.map((department) => department.name))
-  const filteredEmployeesByDepartment = Object.fromEntries(
-    Object.entries(employeesByDepartment).filter(([departmentName]) => scopedDepartmentNames.has(departmentName))
-  )
-
-  const departmentsWithCounts = departments.map((department) => ({
-    ...department,
-    employee_count: filteredEmployeesByDepartment[department.name]?.length || 0,
-  }))
-
-  return {
-    departments: departmentsWithCounts,
-    departmentEmployees: filteredEmployeesByDepartment,
-    canManageDepartments,
-  }
+  // Admin/dept scope is resolved server-side (requireApiAdminScope +
+  // getScopedDepartments) — no client-side scope-mode round trip needed.
+  const res = await apiFetch("/api/admin/hr/departments", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load departments")
+  return res.json()
 }
 
 function employeeName(employee: DepartmentEmployee) {
@@ -182,7 +125,7 @@ export function DepartmentsPage({
   async function cascadeRename(oldName: string, newName: string) {
     if (!oldName || !newName || oldName === newName) return
     try {
-      const res = await fetch("/api/admin/hr/rename-cascade", {
+      const res = await apiFetch("/api/admin/hr/rename-cascade", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ field: "department", oldName, newName }),
@@ -205,41 +148,42 @@ export function DepartmentsPage({
         return
       }
 
-      const supabase = createClient()
-
       if (editingDepartment) {
         const oldName = editingDepartment.name?.trim() || ""
         const newName = formData.name.trim()
-        const { error: updateError, data: updatedRows } = await supabase
-          .from("departments")
-          .update({
+        const res = await apiFetch(`/api/departments/${editingDepartment.id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             name: newName,
             description: formData.description || null,
             department_code: formData.department_code.trim().toUpperCase() || null,
             is_executive_dept: formData.is_executive_dept,
             is_active: formData.is_active,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", editingDepartment.id)
-          .select()
-
-        if (updateError) throw updateError
-        if (!updatedRows || updatedRows.length === 0) {
-          throw new Error("Update was blocked by a database policy. Check your department permissions.")
+          }),
+        })
+        if (!res.ok) {
+          throw new Error(
+            (await res.json().catch(() => null))?.error ||
+              "Update was blocked by a database policy. Check your department permissions."
+          )
         }
 
         toast.success("Department updated successfully")
         await cascadeRename(oldName, newName)
       } else {
-        const { error: createError } = await supabase.from("departments").insert({
-          name: formData.name,
-          description: formData.description || null,
-          department_code: formData.department_code.trim().toUpperCase() || null,
-          is_executive_dept: formData.is_executive_dept,
-          is_active: formData.is_active,
+        const res = await apiFetch("/api/departments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: formData.name,
+            description: formData.description || null,
+            department_code: formData.department_code.trim().toUpperCase() || null,
+            is_executive_dept: formData.is_executive_dept,
+            is_active: formData.is_active,
+          }),
         })
-
-        if (createError) throw createError
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to create department")
         toast.success("Department created successfully")
       }
 
@@ -274,12 +218,11 @@ export function DepartmentsPage({
     setIsDialogOpen(true)
 
     if (code) {
-      const supabase = createClient()
-      const { count } = await supabase
-        .from("correspondence_records")
-        .select("id", { count: "exact", head: true })
-        .eq("department_code", code)
-      setExistingReferenceCount(count ?? 0)
+      const res = await apiFetch(`/api/admin/hr/departments/reference-count?code=${encodeURIComponent(code)}`, {
+        cache: "no-store",
+      })
+      const json = await res.json().catch(() => null)
+      setExistingReferenceCount(json?.count ?? 0)
     }
   }
 

@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/dialog"
 import { MapPin, Plus, Pencil, Locate } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-client"
 
 interface Site {
   id: string
@@ -49,7 +50,7 @@ const defaultForm: SiteForm = {
 }
 
 async function fetchSites(includeInactive: boolean): Promise<Site[]> {
-  const res = await fetch(`/api/admin/hr/site-locations?include_inactive=${includeInactive}`)
+  const res = await apiFetch(`/api/admin/hr/site-locations?include_inactive=${includeInactive}`)
   if (!res.ok) throw new Error("Failed to load sites")
   const data = await res.json()
   return (data.data || []) as Site[]
@@ -80,7 +81,7 @@ export default function SiteLocationsPage() {
       }
       const url = editSite ? `/api/admin/hr/site-locations/${editSite.id}` : "/api/admin/hr/site-locations"
       const method = editSite ? "PATCH" : "POST"
-      const res = await fetch(url, {
+      const res = await apiFetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -101,7 +102,7 @@ export default function SiteLocationsPage() {
 
   const toggleActiveMutation = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
-      const res = await fetch(`/api/admin/hr/site-locations/${id}`, {
+      const res = await apiFetch(`/api/admin/hr/site-locations/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_active }),

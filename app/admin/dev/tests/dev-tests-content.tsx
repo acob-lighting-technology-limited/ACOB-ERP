@@ -3,9 +3,7 @@
 import { useEffect, useState, useCallback } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { FlaskConical, Route, Ticket, ClipboardList, Package, Activity } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import { PageHeader, PageWrapper } from "@/components/layout"
-import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { logger } from "@/lib/logger"
 import { LeaveTab } from "./_components/LeaveTab"
 import { HelpDeskTab } from "./_components/HelpDeskTab"
@@ -15,52 +13,20 @@ import { RouteHealthPanel } from "./_components/RouteHealthPanel"
 
 const log = logger("dev-tests")
 
-type ProfileRow = {
-  id: string
-  full_name?: string | null
-  first_name?: string | null
-  last_name?: string | null
-  company_email?: string | null
-  employment_status?: string | null
-}
-
-type LeaveTypeRow = {
-  id: string
-  name: string
-}
-
-type DepartmentRow = {
-  name: string
-}
-
 // ── Root Content Component ────────────────────────────────────────────────────
 export function DevTestsContent() {
-  const supabase = createClient()
   const [employees, setEmployees] = useState<{ value: string; label: string }[]>([])
   const [leaveTypes, setLeaveTypes] = useState<{ value: string; label: string }[]>([])
   const [departments, setDepartments] = useState<string[]>([])
 
   const load = useCallback(async () => {
-    const [profilesRes, typesRes, deptRes] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("id, full_name, first_name, last_name, company_email, employment_status")
-        .order("first_name"),
-      supabase.from("leave_types").select("id, name").order("name"),
-      supabase.from("departments").select("name").order("name"),
-    ])
-
-    setEmployees(
-      ((profilesRes.data || []) as ProfileRow[])
-        .filter((profile) => isAssignableEmploymentStatus(profile.employment_status, { allowLegacyNullStatus: false }))
-        .map((p) => ({
-          value: p.id,
-          label: p.full_name?.trim() || `${p.first_name || ""} ${p.last_name || ""}`.trim() || p.company_email || p.id,
-        }))
-    )
-    setLeaveTypes(((typesRes.data || []) as LeaveTypeRow[]).map((t) => ({ value: t.id, label: t.name })))
-    setDepartments(((deptRes.data || []) as DepartmentRow[]).map((d) => d.name).filter(Boolean))
-  }, [supabase])
+    const res = await fetch("/api/admin/dev/tests/form-data", { cache: "no-store" })
+    if (!res.ok) throw new Error("Failed to load form data")
+    const json = await res.json()
+    setEmployees(json.employees || [])
+    setLeaveTypes(json.leaveTypes || [])
+    setDepartments(json.departments || [])
+  }, [])
 
   useEffect(() => {
     load().catch((err) => log.error({ err: String(err) }, "load failed"))

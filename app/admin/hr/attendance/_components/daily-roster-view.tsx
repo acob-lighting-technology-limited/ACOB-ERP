@@ -21,6 +21,7 @@ import { toast } from "sonner"
 import { toLocalISODate, isLate } from "@/lib/hr/attendance-utils"
 import { MANUAL_ATTENDANCE_STATUS_OPTIONS, isEarlyDeparture } from "@/lib/hr/attendance-status"
 import { StatusBadge, formatTime, labelSource } from "./status-badge"
+import { apiFetch } from "@/lib/api-client"
 
 function parseTimeToMinutes(value: string | null | undefined): number | null {
   if (!value) return null
@@ -59,6 +60,8 @@ interface AttendanceRecord {
   clock_out_source?: string | null
   waived?: boolean
   manual_comment?: string | null
+  early_closure_time?: string | null
+  late_resumption_time?: string | null
 }
 
 interface DailyRosterViewProps {
@@ -79,7 +82,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
     try {
       const params = new URLSearchParams({ start_date: rosterDate, end_date: rosterDate, include_all: "1" })
       if (lockedDepartment) params.set("department", lockedDepartment)
-      const res = await fetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load roster")
       setRecords(payload.records || [])
@@ -139,7 +142,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           clock_in: null,
           clock_out: null,
         }
-        res = await fetch(`/api/admin/hr/attendance/records`, {
+        res = await apiFetch(`/api/admin/hr/attendance/records`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -150,7 +153,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           manual_comment: editForm.manual_comment,
           status: editForm.status,
         }
-        res = await fetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
+        res = await apiFetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -170,15 +173,13 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
 
   const stats = useMemo(
     () => ({
-      present: records.filter((r) => r.status === "present").length,
+      early: records.filter((r) => r.status === "early").length,
+      present: records.filter((r) =>
+        ["early", "present", "late", "incomplete", "lateness_with_permission"].includes(r.status ?? "")
+      ).length,
       late: records.filter((r) => r.status === "late").length,
-      lwp: records.filter((r) => r.status === "lateness_with_permission").length,
-      awp: records.filter((r) => r.status === "absent_with_permission").length,
-      oos: records.filter((r) => r.status === "out_of_station").length,
       incomplete: records.filter((r) => r.status === "incomplete").length,
       absent: records.filter((r) => r.status === "absent").length,
-      exempted: records.filter((r) => r.status === "exempted").length,
-      waiver: records.filter((r) => r.status === "waiver").length,
     }),
     [records]
   )
@@ -284,7 +285,13 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
       label: "Status",
       sortable: true,
       accessor: (r) => r.status,
-      render: (r) => <StatusBadge status={r.status} />,
+      render: (r) => (
+        <StatusBadge
+          status={r.status}
+          record={r}
+          earlyClosure={r.early_closure_time ? { closeTime: r.early_closure_time } : null}
+        />
+      ),
     },
     {
       key: "source",
@@ -315,6 +322,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
       key: "status",
       label: "Status",
       options: [
+        { value: "early", label: "Early" },
         { value: "present", label: "Present" },
         { value: "late", label: "Late" },
         { value: "lateness_with_permission", label: "LWP" },
@@ -400,10 +408,17 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
         </Button>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <StatCard
           title="Present"
           value={stats.present}
+          icon={Users}
+          iconBgColor="bg-blue-500/10"
+          iconColor="text-blue-500"
+        />
+        <StatCard
+          title="Early"
+          value={stats.early}
           icon={Users}
           iconBgColor="bg-green-500/10"
           iconColor="text-green-500"
@@ -414,21 +429,6 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           icon={Clock}
           iconBgColor="bg-yellow-500/10"
           iconColor="text-yellow-500"
-        />
-        <StatCard
-          title="LWP"
-          value={stats.lwp}
-          icon={Clock}
-          iconBgColor="bg-orange-500/10"
-          iconColor="text-orange-500"
-        />
-        <StatCard title="AWP" value={stats.awp} icon={Users} iconBgColor="bg-teal-500/10" iconColor="text-teal-500" />
-        <StatCard
-          title="OOS"
-          value={stats.oos}
-          icon={Users}
-          iconBgColor="bg-indigo-500/10"
-          iconColor="text-indigo-500"
         />
         <StatCard
           title="Incomplete"
@@ -443,20 +443,6 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           icon={AlertCircle}
           iconBgColor="bg-red-500/10"
           iconColor="text-red-500"
-        />
-        <StatCard
-          title="Exempted"
-          value={stats.exempted}
-          icon={Users}
-          iconBgColor="bg-violet-500/10"
-          iconColor="text-violet-500"
-        />
-        <StatCard
-          title="Waiver"
-          value={stats.waiver}
-          icon={Users}
-          iconBgColor="bg-blue-500/10"
-          iconColor="text-blue-500"
         />
       </div>
 

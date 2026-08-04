@@ -3,11 +3,9 @@
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
-import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { toast } from "sonner"
 import { MessageSquare, AlertCircle, Clock, XCircle, Eye, ShieldCheck, Mail } from "lucide-react"
-import { writeAuditLogClient } from "@/lib/audit/client"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
@@ -17,6 +15,7 @@ import { FeedbackDetailDialog } from "@/components/feedback/feedback-detail-dial
 import type { FeedbackRecord } from "@/components/feedback/types"
 import { cn, formatName } from "@/lib/utils"
 import { formatWATDate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 interface AdminFeedbackContentProps {
   initialFeedback: FeedbackRecord[]
@@ -56,16 +55,10 @@ const STATUS_COLOR_MAP: Record<string, string> = {
 }
 
 async function fetchFilterData(): Promise<FilterData> {
-  const supabase = createClient()
-  const { data: employeeData } = await supabase
-    .from("profiles")
-    .select("id, first_name, last_name, department")
-    .order("last_name", { ascending: true })
-
-  const employees = (employeeData || []) as { id: string; first_name: string; last_name: string; department: string }[]
-  const departments = Array.from(new Set(employees.map((e) => e.department).filter(Boolean))).sort() as string[]
-
-  return { employees, departments }
+  const res = await apiFetch("/api/admin/feedback/filters", { cache: "no-store" })
+  if (!res.ok) return { employees: [], departments: [] }
+  const json = await res.json()
+  return { employees: json.employees || [], departments: json.departments || [] }
 }
 
 export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFeedbackContentProps) {
@@ -82,30 +75,15 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
 
   const handleUpdateStatus = async (newStatus: string) => {
     if (!selectedFeedback) return
-    const supabase = createClient()
     setIsUpdating(true)
 
     try {
-      const { error } = await supabase
-        .from("feedback")
-        .update({ status: newStatus, updated_at: new Date().toISOString() })
-        .eq("id", selectedFeedback.id)
-
-      if (error) throw error
-
-      await writeAuditLogClient(
-        supabase,
-        {
-          action: "update",
-          entityType: "feedback",
-          entityId: selectedFeedback.id,
-          oldValues: { status: selectedFeedback.status },
-          newValues: { status: newStatus },
-          metadata: { event: "feedback_status_updated" },
-          context: { source: "ui", route: "/admin/feedback" },
-        },
-        { failOpen: true }
-      )
+      const res = await apiFetch("/api/admin/feedback/status", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: selectedFeedback.id, status: newStatus, oldStatus: selectedFeedback.status }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to update status")
 
       toast.success("Status updated successfully!")
       setFeedback((prev) => prev.map((f) => (f.id === selectedFeedback.id ? { ...f, status: newStatus } : f)))

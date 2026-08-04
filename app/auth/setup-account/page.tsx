@@ -17,9 +17,10 @@ import { getSeasonalLogoPaths } from "@/lib/seasonal-branding"
 import { formValidation } from "@/lib/validation"
 import { useSearchParams, useRouter } from "next/navigation"
 import { toast } from "sonner"
-import { FormPageSkeleton } from "@/components/skeletons"
+import { AuthPageSkeleton } from "@/components/skeletons"
 
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("auth-setup-account")
 
@@ -93,7 +94,7 @@ function SetupAccountContent() {
     setIsLoading(true)
 
     try {
-      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://erp.acoblighting.com"
+      const appUrl = process.env.NEXT_PUBLIC_APP_URL || "https://matrix.acoblighting.com"
       // Use the callback route for proper PKCE code exchange, then redirect to setup-account
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${appUrl}/auth/callback?next=/auth/setup-account`,
@@ -207,7 +208,7 @@ function SetupAccountContent() {
         if (error) throw error
       } else {
         // Custom Initial Setup Flow
-        const response = await fetch("/api/auth/setup-password", {
+        const response = await apiFetch("/api/auth/setup-password", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token, password }),
@@ -454,7 +455,7 @@ function SetupAccountContent() {
             <div className="space-y-8">
               <Image src={logoSrc} alt="ACOB Lighting" width={260} height={66} className="h-14 w-auto" />
               <div className="space-y-3">
-                <h2 className="text-2xl font-semibold tracking-tight">ACOB Internal Workspace</h2>
+                <h2 className="text-2xl font-semibold tracking-tight">Matrix</h2>
                 <p className="text-muted-foreground text-sm leading-6">
                   Secure onboarding for authorized employees to access operations, reporting, and administrative tools.
                 </p>
@@ -475,7 +476,7 @@ function SetupAccountContent() {
 
 export default function SetupAccountPage() {
   return (
-    <Suspense fallback={<FormPageSkeleton sections={2} fieldsPerSection={4} showSidebar={true} />}>
+    <Suspense fallback={<AuthPageSkeleton />}>
       <SetupAccountContent />
     </Suspense>
   )

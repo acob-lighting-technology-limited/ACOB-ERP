@@ -145,25 +145,36 @@ async function realignCorrespondenceCounter(params: {
 }): Promise<void> {
   const departmentCode = params.departmentCode.trim().toUpperCase()
   const recipientCode = params.recipientCode.trim().toUpperCase()
-  const categoryCode = await resolveCategoryCodeForReference(params.dataClient, params.categoryInput)
   const isInternal = (params.letterType || "external").toLowerCase() === "internal"
-  const seg1 = isInternal ? recipientCode : departmentCode
-  const seg2 = isInternal ? departmentCode : recipientCode
-  const counterKey = `outgoing:${seg1}:${seg2}:${categoryCode || ""}`
-  const prefix = categoryCode
-    ? `ACOB/${seg1}/${seg2}/${categoryCode}/${params.referenceYear}/`
-    : `ACOB/${seg1}/${seg2}/${params.referenceYear}/`
+
+  let counterKey: string
+  let queryPattern: string
+
+  if (isInternal) {
+    counterKey = `outgoing:${recipientCode}:${departmentCode}`
+    queryPattern = `ACOB/${recipientCode}/${departmentCode}/${params.referenceYear}/%`
+  } else {
+    counterKey = `outgoing:external:${departmentCode}`
+    queryPattern = `ACOB/${departmentCode}/%/${params.referenceYear}/%`
+  }
 
   const { data: references, error: refsError } = await params.dataClient
     .from("correspondence_records")
     .select("reference_number")
-    .ilike("reference_number", `${prefix}%`)
+    .ilike("reference_number", queryPattern)
     .returns<ReferenceRow[]>()
   if (refsError) throw refsError
 
   const maxFromReferences = (references || []).reduce((maxValue, row) => {
     const reference = row.reference_number || ""
-    return Math.max(maxValue, extractTrailingRefNumber(reference, prefix))
+    const match = reference.match(/\/([0-9]+)$/)
+    if (match) {
+      const numeric = parseInt(match[1], 10)
+      if (Number.isFinite(numeric)) {
+        return Math.max(maxValue, numeric)
+      }
+    }
+    return maxValue
   }, 0)
 
   const { data: counterRow, error: counterError } = await params.dataClient
@@ -176,7 +187,24 @@ async function realignCorrespondenceCounter(params: {
   if (counterError) throw counterError
 
   const currentLast = Number(counterRow?.last_number || 0)
-  const alignedLast = Math.max(currentLast, maxFromReferences)
+
+  let alignedLast: number
+  if (isInternal) {
+    const maxFromReferences = (references || []).reduce((maxValue, row) => {
+      const reference = row.reference_number || ""
+      const match = reference.match(/\/([0-9]+)$/)
+      if (match) {
+        const numeric = parseInt(match[1], 10)
+        if (Number.isFinite(numeric)) {
+          return Math.max(maxValue, numeric)
+        }
+      }
+      return maxValue
+    }, 0)
+    alignedLast = Math.max(currentLast, maxFromReferences)
+  } else {
+    alignedLast = Math.max(currentLast, references?.length || 0)
+  }
 
   const { error: upsertError } = await params.dataClient.from("correspondence_counters").upsert(
     {
@@ -310,6 +338,11 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("correspondence_records")
       .select("*", { count: "exact" })
+      // Order the register by assignment time, not creation time: reference numbers
+      // are minted at approval, so approved_at DESC keeps every dept/year sequence in
+      // clean numeric order (055 above 054). Un-numbered drafts have a null approved_at
+      // and pin to the top (Postgres sorts NULLs first under DESC). created_at breaks ties.
+      .order("approved_at", { ascending: false, nullsFirst: true })
       .order("created_at", { ascending: false })
 
     if ((!isGlobalAdmin && !department) || scopeMine) {
@@ -345,12 +378,74 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query.range(from, to)
     if (error) throw error
 
+    const records = (data || []) as CreatedCorrespondenceRecord[]
+
+    // Find unique department + year pairs for external records
+    const deptYearPairs = new Map<string, { departmentCode: string; year: number }>()
+    for (const r of records) {
+      if (r.letter_type === "external" && r.department_code && r.created_at) {
+        const year = new Date(r.created_at).getFullYear()
+        const key = `${r.department_code}:${year}`
+        if (!deptYearPairs.has(key)) {
+          deptYearPairs.set(key, { departmentCode: r.department_code, year })
+        }
+      }
+    }
+
+    // Fetch reference-assignment sequences for each pair.
+    // Reference numbers are assigned at approval time (the counter increments in
+    // approval order), so rank by approved_at to mirror how numbers were actually
+    // handed out. created_at/id are deterministic tiebreakers.
+    const sequenceMaps = new Map<string, Map<string, number>>()
+    for (const [key, { departmentCode, year }] of deptYearPairs.entries()) {
+      const startOfYear = `${year}-01-01T00:00:00.000Z`
+      const endOfYear = `${year}-12-31T23:59:59.999Z`
+
+      const { data: seqData } = await supabase
+        .from("correspondence_records")
+        .select("id")
+        .eq("department_code", departmentCode)
+        .eq("letter_type", "external")
+        .not("reference_number", "is", null)
+        .like("reference_number", `ACOB/${departmentCode}/%/${year}/%`)
+        .gte("created_at", startOfYear)
+        .lte("created_at", endOfYear)
+        .order("approved_at", { ascending: true, nullsFirst: false })
+        .order("created_at", { ascending: true })
+        .order("id", { ascending: true })
+
+      const map = new Map<string, number>()
+      if (seqData) {
+        seqData.forEach((row, index) => {
+          map.set(String(row.id), index + 1)
+        })
+      }
+      sequenceMaps.set(key, map)
+    }
+
+    // Enrich the records with simulated_sequence
+    const enrichedData = records.map((r) => {
+      let simulated_sequence: number | null = null
+      if (r.letter_type === "external" && r.department_code && r.created_at) {
+        const year = new Date(r.created_at).getFullYear()
+        const key = `${r.department_code}:${year}`
+        const map = sequenceMaps.get(key)
+        if (map) {
+          simulated_sequence = map.get(String(r.id)) ?? null
+        }
+      }
+      return {
+        ...r,
+        simulated_sequence,
+      }
+    })
+
     return NextResponse.json({
-      data: (data || []) as CorrespondenceListRecord[],
+      data: enrichedData as any[],
       total: count || 0,
       page: paginationParsed.data.page,
       limit: paginationParsed.data.limit,
-      pagination: paginatedResponse((data || []) as CorrespondenceListRecord[], count || 0, pagination).pagination,
+      pagination: paginatedResponse(enrichedData as any[], count || 0, pagination).pagination,
     })
   } catch (error) {
     log.error({ err: String(error) }, "Error in GET /api/correspondence/records:")

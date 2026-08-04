@@ -48,7 +48,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
     return NextResponse.json({ error: "Missing employeeId" }, { status: 400 })
   }
 
-  const empNumPattern = /^ACOB\/[0-9]{4}\/[0-9]{3}$/
+  const empNumPattern = /^ACOB\/([A-Z0-9-]+\/)?[0-9]{4}\/[0-9]{3}$/
   if (!empNumPattern.test(employeeId)) {
     return NextResponse.json(
       { error: "Employee number must be in format: ACOB/YEAR/NUMBER (e.g., ACOB/2026/058)" },
@@ -106,7 +106,7 @@ export async function GET(req: Request, props: { params: Promise<{ id: string }>
         caller.email ||
         "Admin & HR Lead",
       designation: callerProfile?.designation || null,
-      department: callerProfile?.department || "Admin & HR Department",
+      department: callerProfile?.department || "Admin & HR",
     },
   })
 

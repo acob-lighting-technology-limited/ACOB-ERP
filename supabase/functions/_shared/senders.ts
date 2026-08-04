@@ -23,10 +23,10 @@ export const EDGE_SENDERS = {
   /** Birthday greetings (company identity). */
   birthday: edgeSender(`${ORG_CODE} Lighting Technology Limited`),
   /** Admin & HR department mail. */
-  hr: edgeSender(`${ORG_CODE} Admin & HR Department`),
+  hr: edgeSender(`${ORG_CODE} Admin & HR`),
 } as const
 
-/** Dynamic department sender, e.g. "ACOB Admin & HR Department". */
+/** Dynamic department sender, e.g. "ACOB Finance Department". */
 export function edgeDepartmentSender(departmentLabel: string): string {
   return edgeSender(`${ORG_CODE} ${departmentLabel} Department`)
 }

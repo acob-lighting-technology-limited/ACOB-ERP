@@ -21,6 +21,7 @@ import {
 import { BookingReviewDialog } from "./_components/booking-review-dialog"
 import { ResourceDialog } from "./_components/resource-dialog"
 import type { FleetAttachment, FleetBooking, FleetResource } from "./_components/fleet-types"
+import { apiFetch } from "@/lib/api-client"
 
 function formatDateTime(value: string) {
   const parsed = new Date(value)
@@ -29,14 +30,14 @@ function formatDateTime(value: string) {
 }
 
 async function fetchFleetResources(): Promise<FleetResource[]> {
-  const response = await fetch("/api/admin/hr/fleet/resources")
+  const response = await apiFetch("/api/admin/hr/fleet/resources")
   const payload = await response.json()
   if (!response.ok) throw new Error(payload.error || "Failed to load resources")
   return payload.data || []
 }
 
 async function fetchFleetBookings(): Promise<FleetBooking[]> {
-  const response = await fetch(`/api/admin/hr/fleet/bookings`)
+  const response = await apiFetch(`/api/admin/hr/fleet/bookings`)
   const payload = await response.json()
   if (!response.ok) throw new Error(payload.error || "Failed to load bookings")
   return payload.data || []
@@ -68,7 +69,7 @@ export default function AdminFleetPage() {
     let isMounted = true
     async function verifyAccess() {
       try {
-        const response = await fetch("/api/admin/hr/fleet/bookings?status=pending", { cache: "no-store" })
+        const response = await apiFetch("/api/admin/hr/fleet/bookings?status=pending", { cache: "no-store" })
         if (!response.ok && (response.status === 401 || response.status === 403)) {
           router.replace("/admin/hr")
           return
@@ -97,7 +98,7 @@ export default function AdminFleetPage() {
   async function createResource() {
     setSavingResource(true)
     try {
-      const response = await fetch("/api/admin/hr/fleet/resources", {
+      const response = await apiFetch("/api/admin/hr/fleet/resources", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -124,7 +125,7 @@ export default function AdminFleetPage() {
 
   async function toggleResource(resource: FleetResource) {
     try {
-      const response = await fetch("/api/admin/hr/fleet/resources", {
+      const response = await apiFetch("/api/admin/hr/fleet/resources", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: resource.id, is_active: !resource.is_active }),
@@ -145,7 +146,7 @@ export default function AdminFleetPage() {
     setAttachments([])
 
     try {
-      const response = await fetch(`/api/fleet/bookings/${booking.id}/attachments`)
+      const response = await apiFetch(`/api/fleet/bookings/${booking.id}/attachments`)
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || "Failed to load attachments")
       setAttachments(payload.data || [])
@@ -158,7 +159,7 @@ export default function AdminFleetPage() {
     if (!selectedBooking) return
     setReviewing(true)
     try {
-      const response = await fetch(`/api/admin/hr/fleet/bookings/${selectedBooking.id}/review`, {
+      const response = await apiFetch(`/api/admin/hr/fleet/bookings/${selectedBooking.id}/review`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action, admin_note: adminNote }),

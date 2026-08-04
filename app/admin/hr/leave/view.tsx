@@ -12,9 +12,9 @@ import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/component
 import { StatCard } from "@/components/ui/stat-card"
 import { PromptDialog } from "@/components/ui/prompt-dialog"
 import { LeaveDetailDialog } from "./_components/leave-detail-dialog"
-import { createClient } from "@/lib/supabase/client"
 import { formatName } from "@/lib/utils"
 import { formatWATDateTime } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 export interface LeaveItem {
   id: string
@@ -221,15 +221,15 @@ async function fetchLeaveApprovalData(apiBasePath: string): Promise<{
   allRequests: LeaveItem[]
   reviewHistory: LeaveActionHistoryItem[]
 }> {
-  const myQueueRes = await fetch(`${apiBasePath}/queue`)
+  const myQueueRes = await apiFetch(`${apiBasePath}/queue`)
   if (!myQueueRes.ok) throw new Error("Failed to load leave queue")
   const myQueuePayload = await myQueueRes.json()
 
   let allQueuePayload: { data?: LeaveItem[] } = { data: [] }
   let requestPayload: { data?: LeaveItem[] } = { data: [] }
   const [allQueueRes, requestsRes] = await Promise.allSettled([
-    fetch(`${apiBasePath}/queue?all=true`),
-    fetch(`${apiBasePath}/requests?all=true&limit=100`),
+    apiFetch(`${apiBasePath}/queue?all=true`),
+    apiFetch(`${apiBasePath}/requests?all=true&limit=100`),
   ])
   if (allQueueRes.status === "rejected") {
     throw new Error(`Queue fetch rejected: ${allQueueRes.reason}`)
@@ -284,12 +284,12 @@ export function LeaveApprovePage({
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
 
   useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        setCurrentUserId(data.user.id)
-      }
-    })
+    apiFetch("/api/admin/current-user", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (json?.userId) setCurrentUserId(json.userId)
+      })
+      .catch(() => {})
   }, [])
 
   const { data, isLoading, error, refetch } = useQuery({
@@ -309,7 +309,7 @@ export function LeaveApprovePage({
       comments: string
       overrideEvidence: boolean
     }) => {
-      const response = await fetch(`${normalizedApiBasePath}/approve`, {
+      const response = await apiFetch(`${normalizedApiBasePath}/approve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ leave_request_id: id, action, comments, override_evidence: overrideEvidence }),

@@ -23,6 +23,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StatCard } from "@/components/ui/stat-card"
 import { Textarea } from "@/components/ui/textarea"
+import { apiFetch } from "@/lib/api-client"
 
 type ReviewCycle = {
   id: string
@@ -172,8 +173,8 @@ export default function AdminPmsCbtQuestionPage() {
 
     try {
       const [cyclesResponse, questionsResponse] = await Promise.all([
-        fetch("/api/hr/performance/cycles", { cache: "no-store" }),
-        fetch("/api/hr/performance/cbt/questions", { cache: "no-store" }),
+        apiFetch("/api/hr/performance/cycles", { cache: "no-store" }),
+        apiFetch("/api/hr/performance/cbt/questions", { cache: "no-store" }),
       ])
 
       const cyclesPayload = (await cyclesResponse.json().catch(() => null)) as {
@@ -394,7 +395,7 @@ export default function AdminPmsCbtQuestionPage() {
       const method = editingQuestion ? "PATCH" : "POST"
       const payload = editingQuestion ? form : form
 
-      const response = await fetch(endpoint, {
+      const response = await apiFetch(endpoint, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -421,7 +422,7 @@ export default function AdminPmsCbtQuestionPage() {
     setDeletingId(questionId)
 
     try {
-      const response = await fetch(`/api/hr/performance/cbt/questions/${encodeURIComponent(questionId)}`, {
+      const response = await apiFetch(`/api/hr/performance/cbt/questions/${encodeURIComponent(questionId)}`, {
         method: "DELETE",
       })
       const responsePayload = (await response.json().catch(() => null)) as { error?: string } | null

@@ -14,6 +14,7 @@ import {
   Clock,
   CreditCard,
   FileCode2,
+  FileCheck2,
   FileBarChart,
   FileText,
   LayoutDashboard,
@@ -21,9 +22,11 @@ import {
   Package,
   Settings,
   ShieldCheck,
+  Ticket,
   User,
   Users,
   Wrench,
+  FolderKanban,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn, formatName, getInitials } from "@/lib/utils"
@@ -75,8 +78,9 @@ type NavItemDef = { name: string; href: string; icon: React.ElementType; childre
 const navigation: NavItemDef[] = [
   { name: "Home", href: "/profile", icon: LayoutDashboard },
   { name: "Directory", href: "/directory", icon: Users },
+  { name: "Projects", href: "/project", icon: FolderKanban },
   { name: "Tasks", href: "/tasks", icon: ClipboardList },
-  { name: "Help Desk", href: "/help-desk", icon: ClipboardList },
+  { name: "Help Desk", href: "/help-desk", icon: Ticket },
   {
     name: "Reports",
     href: "/reports",
@@ -97,6 +101,7 @@ const navigation: NavItemDef[] = [
   },
   { name: "Assets", href: "/assets", icon: Package },
   { name: "Payments", href: "/payments", icon: CreditCard },
+  { name: "Requisitions", href: "/requisition", icon: FileCheck2 },
   {
     name: "Documentation",
     href: "/documentation",
@@ -128,6 +133,7 @@ const hrNavigation: NavItemDef[] = [
   { name: "Leave", href: "/leave", icon: Calendar },
   { name: "Attendance", href: "/attendance", icon: Clock },
   { name: "Shared Resources", href: "/resources", icon: Car },
+  { name: "Payroll", href: "/payroll", icon: FileText },
   {
     name: "PMS",
     href: "/pms",

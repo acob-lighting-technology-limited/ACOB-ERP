@@ -12,6 +12,7 @@ import {
   LayoutDashboard,
   Package,
   ClipboardList,
+  Ticket,
   FileText,
   ScrollText,
   LogOut,
@@ -30,6 +31,7 @@ import {
   User,
   Building2,
   Bot,
+  FolderKanban,
 } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
@@ -151,6 +153,7 @@ function buildDeptNavigation(deptId: string): NavItem[] {
       roles: [],
       children: [
         { name: "Payments", href: `${base}/finance/payments` },
+        { name: "Requisitions", href: `${base}/finance/requisitions` },
         { name: "Bills", href: `${base}/finance/bills` },
         { name: "Invoices", href: `${base}/finance/invoices` },
         { name: "Reports", href: `${base}/finance/reports` },
@@ -167,7 +170,7 @@ function buildDeptNavigation(deptId: string): NavItem[] {
       section: "operations",
       name: "Help Desk",
       href: `${base}/help-desk`,
-      icon: ClipboardList,
+      icon: Ticket,
       roles: [],
     },
     {
@@ -265,8 +268,10 @@ const adminNavigation: NavItem[] = [
     children: [
       { name: "Employees", href: "/admin/hr/employees" },
       { name: "Departments", href: "/admin/hr/departments" },
-      { name: "Attendance", href: "/admin/hr/attendance" },
+      { name: "Attendance", href: "/admin/hr/employees/attendance" },
       { name: "Leave", href: "/admin/hr/leave" },
+      { name: "Payroll", href: "/admin/hr/employees/payroll" },
+      { name: "Lunch Register", href: "/admin/hr/employees/lunch" },
       { name: "Fleet", href: "/admin/hr/fleet" },
       { name: "Resources", href: "/admin/hr/resources" },
       {
@@ -297,6 +302,7 @@ const adminNavigation: NavItem[] = [
     icon: CreditCard,
     roles: ["developer", "super_admin", "admin"],
     children: [
+      { name: "Requisitions", href: "/admin/finance/requisitions" },
       { name: "Payments", href: "/admin/finance/payments" },
       { name: "Bills", href: "/admin/finance/bills" },
       { name: "Invoices", href: "/admin/finance/invoices" },
@@ -305,6 +311,13 @@ const adminNavigation: NavItem[] = [
       { name: "Receipts", href: "/admin/purchasing/receipts" },
       { name: "Suppliers", href: "/admin/purchasing/suppliers" },
     ],
+  },
+  {
+    section: "management",
+    name: "Projects",
+    href: "/admin/project",
+    icon: FolderKanban,
+    roles: ["developer", "super_admin", "admin"],
   },
   {
     section: "management",
@@ -317,7 +330,7 @@ const adminNavigation: NavItem[] = [
     section: "operations",
     name: "Help Desk",
     href: "/admin/help-desk",
-    icon: ClipboardList,
+    icon: Ticket,
     roles: ["developer", "super_admin", "admin"],
   },
   {
@@ -335,6 +348,7 @@ const adminNavigation: NavItem[] = [
           { name: "KSS", href: "/admin/reports/general-meeting/kss" },
           { name: "Minutes of Meeting", href: "/admin/reports/general-meeting/minutes-of-meeting" },
           { name: "Weekly Reports", href: "/admin/reports/general-meeting/weekly-reports" },
+          { name: "Records", href: "/admin/reports/general-meeting/records" },
         ],
       },
     ],
@@ -411,6 +425,13 @@ const adminNavigation: NavItem[] = [
     ],
   },
   {
+    section: "security",
+    name: "Security",
+    href: "/admin/security/network-activity",
+    icon: ShieldCheck,
+    roles: ["developer", "super_admin", "admin"],
+  },
+  {
     section: "dev",
     name: "Login Logs",
     href: "/admin/dev/login-logs",
@@ -451,6 +472,7 @@ const adminSections = [
   { key: "management", label: "Management" },
   { key: "operations", label: "Operations" },
   { key: "compliance", label: "Compliance" },
+  { key: "security", label: "Security" },
   { key: "dev", label: "DEV" },
 ]
 

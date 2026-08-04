@@ -4,7 +4,6 @@ import { useMemo, useState } from "react"
 import { formatWATDate } from "@/lib/utils/date"
 import { useQuery } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { createClient } from "@/lib/supabase/client"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
@@ -40,28 +39,13 @@ interface JobDescriptionsData {
 }
 
 async function fetchJobDescriptionsData(): Promise<JobDescriptionsData> {
-  const supabase = createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) return { profiles: [], userProfile: null }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, is_department_lead, lead_departments")
-    .eq("id", user.id)
-    .single()
-
-  let query = supabase.from("profiles").select("*").order("last_name", { ascending: true })
-
-  if (profile?.is_department_lead && profile.lead_departments) {
-    query = query.in("department", profile.lead_departments)
+  const res = await fetch("/api/admin/job-descriptions", { cache: "no-store" })
+  if (!res.ok) {
+    if (res.status === 401 || res.status === 403) return { profiles: [], userProfile: null }
+    throw new Error((await res.json().catch(() => null))?.error || "Failed to load job descriptions")
   }
-
-  const { data, error } = await query
-  if (error) throw new Error(error.message)
-
-  return { profiles: data || [], userProfile: profile }
+  const json = await res.json()
+  return { profiles: json.profiles || [], userProfile: json.userProfile ?? null }
 }
 
 export default function AdminJobDescriptionsPage() {

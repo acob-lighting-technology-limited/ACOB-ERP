@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button"
 import { DataTable } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
+import { apiFetch } from "@/lib/api-client"
 
 type ImpersonationRow = {
   id: string
@@ -33,7 +34,7 @@ type ImpersonationResponse = {
 }
 
 async function fetchTargets(): Promise<ImpersonationRow[]> {
-  const response = await fetch("/api/admin/dev/impersonation", {
+  const response = await apiFetch("/api/admin/dev/impersonation", {
     method: "GET",
     credentials: "include",
     cache: "no-store",
@@ -46,7 +47,7 @@ async function fetchTargets(): Promise<ImpersonationRow[]> {
 }
 
 async function startImpersonation(targetUserId: string): Promise<string> {
-  const response = await fetch("/api/admin/dev/impersonation", {
+  const response = await apiFetch("/api/admin/dev/impersonation", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",

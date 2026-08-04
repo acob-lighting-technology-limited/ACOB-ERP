@@ -14,6 +14,7 @@ import { getCurrentOfficeWeek } from "@/lib/meeting-week"
 import { fetchWeeklyReportLockState, type WeeklyReportLockState } from "@/lib/weekly-report-lock"
 import { sanitizeReportText } from "@/lib/export-utils"
 import { useAdminScopeOptional } from "@/components/admin-scope-context"
+import { apiFetch } from "@/lib/api-client"
 
 interface WeeklyReport {
   id: string
@@ -124,7 +125,7 @@ export function WeeklyReportAdminDialog({
           setDepartments(managedDepartments)
           return
         }
-        const response = await fetch("/api/departments", { cache: "no-store" })
+        const response = await apiFetch("/api/departments", { cache: "no-store" })
         const payload = (await response.json().catch(() => null)) as {
           data?: Array<{ name?: string | null }>
           error?: string
@@ -281,7 +282,7 @@ export function WeeklyReportAdminDialog({
         challenges: autoNumberReportText(formData.challenges),
       }
 
-      const response = await fetch("/api/reports/weekly-reports", {
+      const response = await apiFetch("/api/reports/weekly-reports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(safeFormData),

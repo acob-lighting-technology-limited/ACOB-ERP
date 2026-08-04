@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
-import { toLocalYearMonth, monthBounds } from "@/lib/hr/attendance-utils"
+import { toLocalYearMonth, monthBounds, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 
@@ -75,6 +75,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const supabase = await createClient()
+    const policy = await loadAttendancePolicy(supabase)
     const {
       data: { user },
     } = await supabase.auth.getUser()
@@ -145,7 +146,7 @@ export async function POST(request: NextRequest) {
     const currentStatus = deriveUnifiedAttendanceStatus({
       record: attendanceRecord ?? null,
       recordDate: appealDate,
-    })
+    }, policy)
 
     // Validate it's an appealable status
     if (!isAppealableStatus(currentStatus)) {

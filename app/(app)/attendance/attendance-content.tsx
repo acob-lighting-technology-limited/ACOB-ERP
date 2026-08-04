@@ -29,8 +29,10 @@ import {
   ATTENDANCE_STATUS_COLORS,
   ATTENDANCE_STATUS_LABELS,
   deriveUnifiedAttendanceStatus,
+  normalizeStoredAttendanceStatus,
 } from "@/lib/hr/attendance-status"
 import type { UnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("dashboard-attendance-attendance-content")
 
@@ -79,7 +81,12 @@ function minutesToHours(minutes: number): number {
   return minutes / 60
 }
 
-function calculateHourBreakdown(clockIn: string | null | undefined, clockOut: string | null | undefined) {
+function calculateHourBreakdown(
+  clockIn: string | null | undefined,
+  clockOut: string | null | undefined,
+  lateResumptionTime?: string | null,
+  earlyClosureTime?: string | null
+) {
   const inMinutes = parseClockToMinutes(clockIn)
   const outMinutes = parseClockToMinutes(clockOut)
   if (inMinutes === null || outMinutes === null || outMinutes <= inMinutes) {
@@ -87,20 +94,64 @@ function calculateHourBreakdown(clockIn: string | null | undefined, clockOut: st
   }
 
   const totalMinutes = outMinutes - inMinutes
+  const totalHours = minutesToHours(totalMinutes)
+
   const workStart = 8 * 60
   const workEnd = 17 * 60
   const overlapStart = Math.max(inMinutes, workStart)
   const overlapEnd = Math.min(outMinutes, workEnd)
-  const workMinutes = Math.max(0, overlapEnd - overlapStart)
-  const overtimeMinutes = Math.max(0, totalMinutes - workMinutes)
-  const lateMinutes = Math.max(0, inMinutes - workStart)
-  const earlyMinutes = Math.max(0, workEnd - outMinutes)
+
+  const rawWorkMinutes = Math.max(0, overlapEnd - overlapStart)
+  // Subtract 1 hour (60 minutes) only if total time in office >= 5 hours
+  const breakMinutes = totalHours >= 5 ? 60 : 0
+  const workMinutes = Math.max(0, rawWorkMinutes - breakMinutes)
+  const overtimeMinutes = Math.max(0, totalMinutes - rawWorkMinutes)
+
+  // 1. Calculate Lateness Hours
+  let lateness = 0
+  const graceMin = 8 * 60 + 20 // 08:20 AM
+  const nineMin = 9 * 60 // 09:00 AM
+
+  // If clock-in is after 4:00 PM (16:00), they are considered absent (8.5 hrs missed)
+  if (inMinutes > 16 * 60) {
+    return {
+      total: totalHours,
+      work: minutesToHours(workMinutes),
+      overtime: minutesToHours(overtimeMinutes),
+      missed: 8.5,
+    }
+  }
+
+  if (lateResumptionTime) {
+    const [rh, rm] = lateResumptionTime.split(":").map(Number)
+    if (!isNaN(rh) && !isNaN(rm)) {
+      const resumptionMin = rh * 60 + rm
+      if (inMinutes > resumptionMin) {
+        lateness = Math.ceil((inMinutes - resumptionMin) / 60)
+      }
+    }
+  } else {
+    if (inMinutes > graceMin) {
+      if (inMinutes <= nineMin) {
+        lateness = 0.5
+      } else {
+        lateness = Math.ceil((inMinutes - nineMin) / 60)
+      }
+    }
+  }
+
+  // 2. Calculate Early Departure Hours (capped at 5:00 PM or early closure close time)
+  let earlyDeparture = 0
+  const effectiveEnd = earlyClosureTime ? (parseClockToMinutes(earlyClosureTime) ?? workEnd) : workEnd
+  if (outMinutes < effectiveEnd) {
+    earlyDeparture = Math.ceil((effectiveEnd - outMinutes) / 60)
+  }
 
   return {
-    total: minutesToHours(totalMinutes),
+    total: totalHours,
     work: minutesToHours(workMinutes),
     overtime: minutesToHours(overtimeMinutes),
-    missed: minutesToHours(lateMinutes + earlyMinutes),
+    missed: lateness + earlyDeparture,
   }
 }
 
@@ -164,7 +215,7 @@ export function AttendanceContent({
       const months = [getPrevMonth(ym, 2), getPrevMonth(ym, 1), ym]
       const results = await Promise.all(
         months.map((m) =>
-          fetch(`/api/hr/attendance/my-days?year_month=${m}`, { cache: "no-store" })
+          apiFetch(`/api/hr/attendance/my-days?year_month=${m}`, { cache: "no-store" })
             .then((r) => (r.ok ? r.json() : null))
             .then((d) => (d?.data as UnifiedDay[]) ?? [])
             .catch(() => [] as UnifiedDay[])
@@ -182,7 +233,7 @@ export function AttendanceContent({
 
   const fetchAppeals = useCallback(async () => {
     try {
-      const res = await fetch("/api/hr/attendance/appeals", { cache: "no-store" })
+      const res = await apiFetch("/api/hr/attendance/appeals", { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (res.ok) {
         setAppeals((payload?.data as AppealRecord[]) ?? [])
@@ -195,7 +246,7 @@ export function AttendanceContent({
   const handleCancelAppeal = useCallback(
     async (appealId: string) => {
       try {
-        const res = await fetch(`/api/hr/attendance/appeals?id=${appealId}`, {
+        const res = await apiFetch(`/api/hr/attendance/appeals?id=${appealId}`, {
           method: "DELETE",
         })
         const payload = await res.json().catch(() => null)
@@ -257,7 +308,12 @@ export function AttendanceContent({
           (unified.status as AttendanceRow["normalizedStatus"]) || normalizeStatus(existing, workday)
         const breakdown = isCoveredStatus(normalizedStatus)
           ? { total: null, work: null, overtime: null, missed: null }
-          : calculateHourBreakdown(existing.clock_in, existing.clock_out)
+          : calculateHourBreakdown(
+              existing.clock_in,
+              existing.clock_out,
+              (unified as any).late_resumption_time,
+              (unified as any).early_closure_time
+            )
 
         return {
           ...existing,
@@ -835,9 +891,15 @@ function normalizeStatus(record: AttendanceRecord | null, recordDate?: string): 
 }
 
 function StatusBadge({ status }: { status: AttendanceRow["normalizedStatus"] }) {
+  const norm = normalizeStoredAttendanceStatus(status) || status
   return (
-    <Badge className={ATTENDANCE_STATUS_COLORS[status] ?? "bg-gray-100 text-gray-800"}>
-      {ATTENDANCE_STATUS_LABELS[status] ?? status}
+    <Badge
+      className={
+        ATTENDANCE_STATUS_COLORS[norm as keyof typeof ATTENDANCE_STATUS_COLORS] ??
+        "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
+      }
+    >
+      {ATTENDANCE_STATUS_LABELS[norm as keyof typeof ATTENDANCE_STATUS_LABELS] ?? norm}
     </Badge>
   )
 }

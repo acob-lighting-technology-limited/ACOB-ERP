@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
 import type { UnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import { apiFetch } from "@/lib/api-client"
 
 export interface AppealRow {
   id: string
@@ -62,7 +63,7 @@ export function AppealReviewDialog({ appeal, open, onClose, onSuccess }: AppealR
     const setter = action === "approve" ? setApprovingLoad : setRejectingLoad
     setter(true)
     try {
-      const res = await fetch("/api/admin/hr/attendance/appeals", {
+      const res = await apiFetch("/api/admin/hr/attendance/appeals", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

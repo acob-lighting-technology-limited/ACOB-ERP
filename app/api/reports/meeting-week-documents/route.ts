@@ -16,7 +16,7 @@ const BUCKET = "meeting_documents"
 
 type ReportsClient = Awaited<ReturnType<typeof createClient>>
 
-type DocumentType = "knowledge_sharing_session" | "minutes"
+type DocumentType = "knowledge_sharing_session" | "minutes" | "attendance" | "transcript"
 
 const KSS_ALLOWED = new Set([
   "application/pdf",
@@ -74,7 +74,14 @@ function hasGlobalReportsWriteAccess(scope: NonNullable<Awaited<ReturnType<typeo
 }
 
 function parseDocumentType(value: unknown): DocumentType | null {
-  if (value === "knowledge_sharing_session" || value === "minutes") return value
+  if (
+    value === "knowledge_sharing_session" ||
+    value === "minutes" ||
+    value === "attendance" ||
+    value === "transcript"
+  ) {
+    return value
+  }
   return null
 }
 
@@ -236,7 +243,7 @@ export async function GET(request: Request) {
     let query = supabase
       .from("meeting_week_documents")
       .select(
-        "id, meeting_week, meeting_year, document_type, department, presenter_id, presenter_name, notes, file_name, file_path, mime_type, file_size, version_no, is_current, replaced_by, uploaded_by, created_at, updated_at"
+        "id, meeting_week, meeting_year, document_type, department, presenter_id, presenter_name, notes, source_label, file_name, file_path, mime_type, file_size, version_no, is_current, replaced_by, uploaded_by, created_at, updated_at"
       )
       .order("meeting_year", { ascending: false })
       .order("meeting_week", { ascending: false })
@@ -516,7 +523,7 @@ export async function POST(request: Request) {
         uploaded_by: user.id,
       })
       .select(
-        "id, meeting_week, meeting_year, document_type, department, presenter_id, presenter_name, notes, file_name, file_path, mime_type, file_size, version_no, is_current, replaced_by, uploaded_by, created_at, updated_at"
+        "id, meeting_week, meeting_year, document_type, department, presenter_id, presenter_name, notes, source_label, file_name, file_path, mime_type, file_size, version_no, is_current, replaced_by, uploaded_by, created_at, updated_at"
       )
       .single()
 

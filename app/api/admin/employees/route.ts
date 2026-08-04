@@ -30,7 +30,7 @@ export async function GET() {
   const supabase = await createServerClient()
   const dataClient = getServiceRoleClientOrFallback(supabase)
 
-  let query = dataClient.from("profiles").select("*").order("last_name", { ascending: true })
+  let query = dataClient.from("profiles").select("*, contract_categories(*)").order("last_name", { ascending: true })
 
   const scopedDepts =
     routeAccess.dataScope === "all" ? null : routeAccess.dataScope === "none" ? [] : routeAccess.dataScope

@@ -281,7 +281,7 @@ export type Database = {
     }
     Enums: {
       user_role: "visitor" | "employee" | "admin" | "super_admin" | "developer"
-      employment_status: "active" | "suspended" | "exited" | "on_leave"
+      employment_status: "active" | "suspended" | "exited" | "on_leave" | "contract"
     }
   }
 }
@@ -334,8 +334,29 @@ export interface Profile {
   status_changed_by?: string
   separation_date?: string
   separation_reason?: string
+  employment_type?: "full_time" | "part_time" | "contract"
+  contract_category_id?: string | null
   created_at: string
   updated_at: string
+}
+
+export interface ContractCategory {
+  id: string
+  name: string
+  code: string
+  is_active: boolean
+  sort_order: number
+  created_at: string
+}
+
+export interface EmployeeNumberHistory {
+  id: string
+  profile_id: string
+  old_number: string
+  old_employment_type: string
+  reason?: string | null
+  changed_by?: string | null
+  changed_at: string
 }
 
 // Updated DepartmentPayment interface with new fields

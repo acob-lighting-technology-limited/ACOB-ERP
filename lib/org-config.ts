@@ -57,16 +57,21 @@ export const ORG_EMAIL_SENDERS = {
   /** Generic system notifications / approvals (env-overridable). */
   notification: ORG_NOTIFICATION_SENDER,
   /** Admin & HR department mail — leave, exit notices, HR communications. */
-  hr: orgSender(`${ORG_CODE} Admin & HR Department`),
+  hr: orgSender(`${ORG_CODE} Admin & HR`),
   /** Help desk tickets. */
   helpDesk: orgSender(`${ORG_CODE} Help Desk`),
   /** Correspondence module. */
   correspondence: orgSender(`${ORG_CODE} Correspondence System`),
 } as const
 
-/** Dynamic department sender, e.g. "ACOB Admin & HR Department" (label resolved at runtime). */
+/** Dynamic department sender, e.g. "ACOB Finance Department" (label resolved at runtime). */
 export function orgDepartmentSender(departmentLabel: string): string {
   return orgSender(`${ORG_CODE} ${departmentLabel} Department`)
+}
+
+/** Dynamic department sender without the "Department" suffix, e.g. "ACOB Admin & HR". */
+export function orgDepartmentSenderBare(departmentLabel: string): string {
+  return orgSender(`${ORG_CODE} ${departmentLabel}`)
 }
 
 // ---------------------------------------------------------------------------
@@ -105,4 +110,27 @@ export const HELP_DESK_SLA: Record<"urgent" | "high" | "medium" | "low", SlaBudg
     unit: "business_days",
     value: Number(process.env.SLA_LOW_DAYS ?? 7),
   },
+}
+
+// ---------------------------------------------------------------------------
+// Attendance and Timeliness policy
+// ---------------------------------------------------------------------------
+
+export interface AttendancePolicy {
+  startTime: string // e.g. "08:00"
+  endTime: string // e.g. "17:00"
+  lateCutoff: string // e.g. "08:20"
+  incompletePenalty: number // e.g. 1.0 (credits)
+  totalCredits: number // e.g. 10
+  /** When true, manual alterations and appeal decisions email the employee + Admin & HR lead. */
+  emailNotificationsEnabled: boolean
+}
+
+export const DEFAULT_ATTENDANCE_POLICY: AttendancePolicy = {
+  startTime: "08:00",
+  endTime: "17:00",
+  lateCutoff: "08:20",
+  incompletePenalty: 1.0,
+  totalCredits: 10,
+  emailNotificationsEnabled: true,
 }

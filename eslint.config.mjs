@@ -44,5 +44,40 @@ export default defineConfig([
       ],
     },
   },
+  // ---------------------------------------------------------------------------
+  // AGENTS.md enforcement: admin & dept client components must NOT query
+  // Supabase directly from the browser — it bypasses middleware scope injection
+  // (no x-admin-scope / x-dept-scope header). They must call a scoped /api route.
+  // ---------------------------------------------------------------------------
+  {
+    files: ["app/admin/**/*.{ts,tsx}", "app/dept/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@/lib/supabase/client",
+              message:
+                "Admin/dept client components must not query Supabase directly (bypasses middleware scope injection). Fetch a scoped /api route that calls getRequestScope() instead — see AGENTS.md 'Admin Route Scoping Standard'.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // Temporary allowlist — pre-existing violators pending migration to scoped API
+  // routes (Phase 3b). Remove each entry as its module is migrated; delete this
+  // block once empty. DO NOT add new files here.
+  {
+    files: [
+      "app/admin/employees/admin-employee-content.tsx",
+      "app/admin/hr/employees/admin-employee-content.tsx",
+      "app/admin/hr/employees/pending-applications-modal.tsx",
+    ],
+    rules: {
+      "no-restricted-imports": "off",
+    },
+  },
   globalIgnores(["scripts/**"]),
 ])

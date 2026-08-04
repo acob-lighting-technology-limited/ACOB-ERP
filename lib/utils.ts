@@ -12,9 +12,9 @@ export function cn(...inputs: ClassValue[]) {
 export function formatName(name?: string | null): string {
   if (!name) return ""
   return name
-    .split(" ")
-    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(" ")
+    .trim()
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase())
 }
 
 /**

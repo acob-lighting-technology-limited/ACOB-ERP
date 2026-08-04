@@ -45,11 +45,13 @@ import { QUERY_KEYS } from "@/lib/query-keys"
 import { toLocalISODate } from "@/lib/utils/date"
 import { useDepartments } from "@/hooks/use-departments"
 import { getRoleDisplayName } from "@/lib/permissions"
+import { OFFICE_LOCATIONS } from "@/lib/office-locations"
 import { getAssignableRolesForActor } from "@/lib/role-management"
 import { formValidation } from "@/lib/validation"
 import { logger } from "@/lib/logger"
 import type { UserRole } from "@/types/database"
 import type { Employee, UserProfile } from "@/app/admin/hr/employees/admin-employee-content"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("manage-users-dialog")
 
@@ -80,6 +82,9 @@ interface PendingUser {
   office_location?: string
   created_at: string
   status: string
+  employment_type?: string
+  contract_category_id?: string
+  contract_categories?: { name: string; code: string } | null
 }
 
 interface ApprovalEmailPreview {
@@ -96,7 +101,7 @@ interface PendingEmailDispatch {
 }
 
 async function fetchPendingApplications(): Promise<PendingUser[]> {
-  const res = await fetch("/api/admin/pending-users", { cache: "no-store" })
+  const res = await apiFetch("/api/admin/pending-users", { cache: "no-store" })
   const payload = (await res.json().catch(() => null)) as { data?: PendingUser[]; error?: string } | null
   if (!res.ok) throw new Error(payload?.error || "Failed to load applications")
   return payload?.data || []
@@ -105,16 +110,22 @@ async function fetchPendingApplications(): Promise<PendingUser[]> {
 // ─── Create user schema ────────────────────────────────────────────────────────
 
 const createSchema = z.object({
-  firstName: z.string().min(1, "Required"),
-  lastName: z.string().min(1, "Required"),
-  otherNames: z.string(),
-  email: z.string().min(1).email("Invalid email"),
-  department: z.string().min(1, "Required"),
-  companyRole: z.string(),
-  phoneNumber: z.string(),
+  firstName: z.string().min(2, "First name must be at least 2 characters"),
+  lastName: z.string().min(2, "Last name must be at least 2 characters"),
+  otherNames: z.string().optional(),
+  email: z.string().min(1, "Email is required").email("Invalid email address"),
+  department: z.string().min(1, "Department is required"),
+  companyRole: z.string().min(2, "Designation is required"),
+  phoneNumber: z.string().regex(/^0[789][01]\d{8}$/, "Must be a valid Nigerian phone number (e.g., 08012345678)"),
   role: z.string(),
   admin_routes: z.array(z.string()),
-  employeeNumber: z.string(),
+  employmentType: z.enum(["full_time", "part_time", "contract"]),
+  contractCategoryCode: z.string().optional(),
+  gender: z.enum(["male", "female"], { message: "Gender is required" }),
+  dateOfBirth: z.string().optional(),
+  additionalPhone: z.string().optional(),
+  residentialAddress: z.string().min(5, "Address must be at least 5 characters"),
+  officeLocation: z.string().optional(),
 })
 type CreateFormValues = z.infer<typeof createSchema>
 
@@ -166,7 +177,13 @@ export function ManageUsersDialog({
       phoneNumber: "",
       role: "employee",
       admin_routes: [],
-      employeeNumber: "",
+      employmentType: "full_time",
+      contractCategoryCode: "",
+      gender: "male",
+      dateOfBirth: "",
+      additionalPhone: "",
+      residentialAddress: "",
+      officeLocation: "",
     },
   })
   const {
@@ -177,21 +194,46 @@ export function ManageUsersDialog({
     reset: resetCreate,
   } = rhf
   const roleValue = watch("role")
+  const employmentTypeValue = watch("employmentType")
+  const contractCategoryCodeValue = watch("contractCategoryCode")
+  const selectedGender = watch("gender")
+
+  const { data: contractCategories = [] } = useQuery<any[]>({
+    queryKey: ["contract-categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("contract_categories")
+        .select("*")
+        .eq("is_active", true)
+        .order("sort_order", { ascending: true })
+      if (error) throw error
+      return data || []
+    },
+    enabled: open,
+  })
+
+  const getPreviewId = () => {
+    const currentYear = new Date().getFullYear()
+    if (employmentTypeValue === "full_time") {
+      return `ACOB/${currentYear}/...`
+    } else if (employmentTypeValue === "part_time") {
+      return `ACOB/PT/${currentYear}/...`
+    } else {
+      const catCode = contractCategoryCodeValue || "CATEGORY"
+      return `ACOB/${catCode}/${currentYear}/...`
+    }
+  }
 
   const handleCreateUser = async () => {
     if (isCreating || !canManageUsers) return
     const v = rhf.getValues()
-    if (!v.firstName.trim() || !v.lastName.trim() || !v.email.trim() || !v.department) {
-      toast.error("Required fields are missing")
-      return
-    }
     if (!formValidation.isCompanyEmail(v.email)) {
       toast.error("Invalid email domain")
       return
     }
     setIsCreating(true)
     try {
-      const res = await fetch("/api/admin/create-user", {
+      const res = await apiFetch("/api/admin/create-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -204,7 +246,13 @@ export function ManageUsersDialog({
           phoneNumber: v.phoneNumber,
           role: v.role,
           admin_routes: v.admin_routes,
-          employeeNumber: v.employeeNumber,
+          employmentType: v.employmentType,
+          contractCategoryCode: v.contractCategoryCode || null,
+          gender: v.gender,
+          dateOfBirth: v.dateOfBirth || null,
+          additionalPhone: v.additionalPhone || null,
+          residentialAddress: v.residentialAddress,
+          officeLocation: v.officeLocation || null,
         }),
       })
       const data = await res.json()
@@ -223,10 +271,23 @@ export function ManageUsersDialog({
   const [selectedUser, setSelectedUser] = useState<PendingUser | null>(null)
   const [isProcessing, setIsProcessing] = useState(false)
   const [pendingReject, setPendingReject] = useState(false)
-  const [employeeId, setEmployeeId] = useState("")
+  const [employmentType, setEmploymentType] = useState<"full_time" | "part_time" | "contract">("full_time")
+  const [contractCategoryCode, setContractCategoryCode] = useState("")
   const [hireDate, setHireDate] = useState(today)
   const [pendingEmailDispatch, setPendingEmailDispatch] = useState<PendingEmailDispatch | null>(null)
   const [isSendingEmails, setIsSendingEmails] = useState(false)
+
+  // Edit fields states for Review Applications
+  const [firstName, setFirstName] = useState("")
+  const [lastName, setLastName] = useState("")
+  const [otherNames, setOtherNames] = useState("")
+  const [department, setDepartment] = useState("")
+  const [designation, setDesignation] = useState("")
+  const [companyEmail, setCompanyEmail] = useState("")
+  const [personalEmailState, setPersonalEmailState] = useState("")
+  const [phoneNumber, setPhoneNumber] = useState("")
+  const [residentialAddress, setResidentialAddress] = useState("")
+  const [officeLocation, setOfficeLocation] = useState("")
 
   const { data: pendingUsers = [], isLoading: isLoadingPending } = useQuery({
     queryKey: QUERY_KEYS.pendingApplications(),
@@ -235,50 +296,42 @@ export function ManageUsersDialog({
   })
 
   const { data: approvalEmailPreview, isLoading: isLoadingApprovalPreview } = useQuery<ApprovalEmailPreview>({
-    queryKey: ["pending-approval-email-preview", selectedUser?.id, employeeId],
+    queryKey: ["pending-approval-email-preview", selectedUser?.id, employmentType, contractCategoryCode],
     queryFn: async () => {
-      if (!selectedUser?.id || !employeeId) throw new Error("Missing context")
-      const res = await fetch(
-        `/api/admin/pending-users/${selectedUser.id}/approval-preview?employeeId=${encodeURIComponent(employeeId)}`
+      if (!selectedUser?.id) throw new Error("Missing context")
+      const currentYear = new Date().getFullYear()
+      const dummyId =
+        employmentType === "full_time"
+          ? `ACOB/${currentYear}/999`
+          : employmentType === "part_time"
+            ? `ACOB/PT/${currentYear}/999`
+            : `ACOB/${contractCategoryCode || "SIWES"}/${currentYear}/999`
+
+      const res = await apiFetch(
+        `/api/admin/pending-users/${selectedUser.id}/approval-preview?employeeId=${encodeURIComponent(dummyId)}`
       )
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || "Failed to load preview")
       return result as ApprovalEmailPreview
     },
-    enabled: open && activeTab === "applications" && !!selectedUser?.id && !!employeeId,
+    enabled: open && activeTab === "applications" && !!selectedUser?.id,
   })
 
-  const fetchSuggestedId = useCallback(async () => {
-    try {
-      const { data: last } = await supabase
-        .from("profiles")
-        .select("employee_number")
-        .not("employee_number", "is", null)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single()
-      let nextNum = 1
-      const year = new Date().getFullYear()
-      if (last?.employee_number) {
-        const parts = last.employee_number.split("/")
-        if (parts.length === 3) {
-          const n = parseInt(parts[2], 10)
-          if (!isNaN(n)) nextNum = n + 1
-        }
-      }
-      setEmployeeId(`ACOB/${year}/${nextNum.toString().padStart(3, "0")}`)
-    } catch {
-      setEmployeeId(`ACOB/${new Date().getFullYear()}/001`)
-    }
-  }, [supabase])
-
-  const handleUserSelect = useCallback(
-    (user: PendingUser) => {
-      setSelectedUser(user)
-      void fetchSuggestedId()
-    },
-    [fetchSuggestedId]
-  )
+  const handleUserSelect = useCallback((user: PendingUser) => {
+    setSelectedUser(user)
+    setEmploymentType((user.employment_type as any) || "full_time")
+    setContractCategoryCode(user.contract_categories?.code || "")
+    setFirstName(user.first_name || "")
+    setLastName(user.last_name || "")
+    setOtherNames(user.other_names || "")
+    setDepartment(user.department || "")
+    setDesignation(user.designation || "")
+    setCompanyEmail(user.company_email || "")
+    setPersonalEmailState(user.personal_email || "")
+    setPhoneNumber(user.phone_number || "")
+    setResidentialAddress(user.residential_address || "")
+    setOfficeLocation(user.office_location || "")
+  }, [])
 
   useEffect(() => {
     if (pendingUsers.length > 0 && !selectedUser) handleUserSelect(pendingUsers[0])
@@ -286,16 +339,38 @@ export function ManageUsersDialog({
 
   const handleApprove = async () => {
     if (!selectedUser) return
-    if (employeeId && !/^ACOB\/[0-9]{4}\/[0-9]{3}$/.test(employeeId)) {
-      toast.error("Employee ID must be in format: ACOB/YEAR/NUMBER")
-      return
-    }
     setIsProcessing(true)
     try {
-      const res = await fetch("/api/admin/approve-user", {
+      // 1. Update the record in pending_users with the edited details
+      const { error: updateError } = await supabase
+        .from("pending_users")
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+          other_names: otherNames || null,
+          department: department,
+          designation: designation,
+          company_email: companyEmail,
+          personal_email: personalEmailState,
+          phone_number: phoneNumber,
+          residential_address: residentialAddress,
+          office_location: officeLocation || null,
+        })
+        .eq("id", selectedUser.id)
+
+      if (updateError) throw updateError
+
+      // 2. Call the approve-user API route
+      const res = await apiFetch("/api/admin/approve-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pendingUserId: selectedUser.id, employeeId, hireDate, sendEmails: false }),
+        body: JSON.stringify({
+          pendingUserId: selectedUser.id,
+          hireDate,
+          sendEmails: false,
+          employmentType,
+          contractCategoryCode: employmentType === "contract" ? contractCategoryCode : null,
+        }),
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || "Failed to approve")
@@ -305,7 +380,6 @@ export function ManageUsersDialog({
       if (remaining.length > 0) handleUserSelect(remaining[0])
       else {
         setSelectedUser(null)
-        setEmployeeId("")
       }
       onSuccess()
       if (result.profileId && result.pendingEmailPreview) {
@@ -315,9 +389,9 @@ export function ManageUsersDialog({
           internal: result.pendingEmailPreview.internal as PendingEmailDispatch["internal"],
         })
       }
-    } catch (err) {
+    } catch (err: any) {
       log.error({ err }, "Approval error")
-      toast.error(err instanceof Error ? err.message : "Failed to approve")
+      toast.error(err.message || "Failed to approve")
     } finally {
       setIsProcessing(false)
     }
@@ -327,7 +401,7 @@ export function ManageUsersDialog({
     if (!selectedUser) return
     setIsProcessing(true)
     try {
-      const res = await fetch("/api/admin/reject-user", {
+      const res = await apiFetch("/api/admin/reject-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pendingUserId: selectedUser.id }),
@@ -340,7 +414,6 @@ export function ManageUsersDialog({
       if (remaining.length > 0) handleUserSelect(remaining[0])
       else {
         setSelectedUser(null)
-        setEmployeeId("")
       }
     } catch (err) {
       log.error({ err }, "Rejection error")
@@ -412,7 +485,7 @@ export function ManageUsersDialog({
         })),
         sendNotification,
       }
-      const res = await fetch("/api/v1/hr/employees/bulk-exit", {
+      const res = await apiFetch("/api/v1/hr/employees/bulk-exit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -455,7 +528,7 @@ export function ManageUsersDialog({
     if (!succeededExitIds.length) return
     setIsSendingExitNotif(true)
     try {
-      const res = await fetch("/api/v1/hr/employees/bulk-exit", {
+      const res = await apiFetch("/api/v1/hr/employees/bulk-exit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -477,14 +550,12 @@ export function ManageUsersDialog({
   }
 
   // ── Shared detail row ────────────────────────────────────────────────────────
-  const DetailRow = ({ label, value }: { label: string; value?: string | null }) => (
+  const DetailRow = ({ label, value }: { label: string; value: React.ReactNode }) => (
     <div className="border-border hover:bg-muted/50 grid grid-cols-4 border-b transition-colors">
       <div className="border-border bg-muted/40 flex items-center border-r p-3">
         <span className="text-muted-foreground text-xs font-bold uppercase">{label}</span>
       </div>
-      <div className="bg-background col-span-3 flex items-center p-3">
-        <span className="text-foreground text-sm font-medium">{value || "—"}</span>
-      </div>
+      <div className="bg-background col-span-3 flex items-center p-3">{value}</div>
     </div>
   )
 
@@ -560,18 +631,87 @@ export function ManageUsersDialog({
                       className="mt-1.5"
                     />
                   </div>
-                  <div>
-                    <Label htmlFor="cu_empnum">
-                      Employee Number <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      id="cu_empnum"
-                      value={watch("employeeNumber")}
-                      onChange={(e) => setValue("employeeNumber", e.target.value.toUpperCase())}
-                      placeholder="ACOB/2026/058"
-                      className="mt-1.5 font-mono"
-                    />
-                    <p className="text-muted-foreground mt-1 text-xs">Format: ACOB/YEAR/NUMBER</p>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <Label htmlFor="cu_gender">
+                        Gender <span className="text-destructive">*</span>
+                      </Label>
+                      <Select
+                        value={selectedGender}
+                        onValueChange={(value) => setValue("gender", value as "male" | "female")}
+                      >
+                        <SelectTrigger id="cu_gender" className="mt-1.5">
+                          <SelectValue placeholder="Select Gender" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="male">Male</SelectItem>
+                          <SelectItem value="female">Female</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      {errors.gender && <p className="text-destructive mt-1 text-xs">{errors.gender.message}</p>}
+                    </div>
+                    <div>
+                      <Label htmlFor="cu_dob">Date of Birth</Label>
+                      <Input id="cu_dob" type="date" {...register("dateOfBirth")} className="mt-1.5" />
+                      {errors.dateOfBirth && (
+                        <p className="text-destructive mt-1 text-xs">{errors.dateOfBirth.message}</p>
+                      )}
+                    </div>
+                  </div>
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <Label htmlFor="cu_employment_type">Employment Type</Label>
+                      <Select
+                        value={employmentTypeValue}
+                        onValueChange={(value) => {
+                          setValue("employmentType", value as any)
+                          if (value !== "contract") {
+                            setValue("contractCategoryCode", "")
+                          } else if (contractCategories.length > 0) {
+                            setValue("contractCategoryCode", contractCategories[0].code)
+                          }
+                        }}
+                      >
+                        <SelectTrigger id="cu_employment_type" className="mt-1.5">
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="full_time">Full Time</SelectItem>
+                          <SelectItem value="part_time">Part Time</SelectItem>
+                          <SelectItem value="contract">Contract</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {employmentTypeValue === "contract" && (
+                      <div>
+                        <Label htmlFor="cu_contract_category">Contract Category</Label>
+                        <Select
+                          value={contractCategoryCodeValue}
+                          onValueChange={(value) => setValue("contractCategoryCode", value)}
+                        >
+                          <SelectTrigger id="cu_contract_category" className="mt-1.5">
+                            <SelectValue placeholder="Select category" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {contractCategories.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.code}>
+                                {cat.name} ({cat.code})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="bg-muted/30 rounded-lg border p-3">
+                    <span className="text-muted-foreground text-xs font-semibold uppercase">Assigned ID Preview</span>
+                    <p className="text-primary mt-1 font-mono text-sm font-bold">{getPreviewId()}</p>
+                    <p className="text-muted-foreground mt-0.5 text-xs">
+                      The exact number will be generated automatically.
+                    </p>
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
@@ -588,15 +728,72 @@ export function ManageUsersDialog({
                       {errors.email && <p className="text-destructive mt-1 text-xs">{errors.email.message}</p>}
                     </div>
                     <div>
-                      <Label htmlFor="cu_phone">Phone Number</Label>
+                      <Label htmlFor="cu_phone">
+                        Phone Number <span className="text-destructive">*</span>
+                      </Label>
                       <Input
                         id="cu_phone"
                         type="tel"
                         {...register("phoneNumber")}
-                        placeholder="+234 800 000 0000"
+                        placeholder="e.g., 08012345678"
                         className="mt-1.5"
                       />
+                      {errors.phoneNumber && (
+                        <p className="text-destructive mt-1 text-xs">{errors.phoneNumber.message}</p>
+                      )}
                     </div>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div>
+                      <Label htmlFor="cu_additional_phone">Additional Phone (Optional)</Label>
+                      <Input
+                        id="cu_additional_phone"
+                        type="tel"
+                        {...register("additionalPhone")}
+                        placeholder="e.g., 08012345678"
+                        className="mt-1.5"
+                      />
+                      {errors.additionalPhone && (
+                        <p className="text-destructive mt-1 text-xs">{errors.additionalPhone.message}</p>
+                      )}
+                    </div>
+                    <div>
+                      <Label htmlFor="cu_address">
+                        Residential Address <span className="text-destructive">*</span>
+                      </Label>
+                      <Input
+                        id="cu_address"
+                        {...register("residentialAddress")}
+                        placeholder="Full home address"
+                        className="mt-1.5"
+                      />
+                      {errors.residentialAddress && (
+                        <p className="text-destructive mt-1 text-xs">{errors.residentialAddress.message}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="cu_office_location">Office Location (Optional)</Label>
+                    <Select
+                      value={watch("officeLocation")}
+                      onValueChange={(value) => setValue("officeLocation", value)}
+                    >
+                      <SelectTrigger id="cu_office_location" className="mt-1.5">
+                        <SelectValue placeholder="Select Office Location" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {OFFICE_LOCATIONS.map((loc) => (
+                          <SelectItem key={loc} value={loc}>
+                            {loc}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    {errors.officeLocation && (
+                      <p className="text-destructive mt-1 text-xs">{errors.officeLocation.message}</p>
+                    )}
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
@@ -654,13 +851,18 @@ export function ManageUsersDialog({
                     </div>
                   )}
                   <div>
-                    <Label htmlFor="cu_desig">Designation</Label>
+                    <Label htmlFor="cu_desig">
+                      Designation <span className="text-destructive">*</span>
+                    </Label>
                     <Input
                       id="cu_desig"
                       {...register("companyRole")}
                       placeholder="e.g., Senior Developer"
                       className="mt-1.5"
                     />
+                    {errors.companyRole && (
+                      <p className="text-destructive mt-1 text-xs">{errors.companyRole.message}</p>
+                    )}
                   </div>
                 </div>
               </ScrollArea>
@@ -668,17 +870,7 @@ export function ManageUsersDialog({
                 <Button variant="outline" onClick={() => resetCreate()} disabled={isCreating}>
                   Reset
                 </Button>
-                <Button
-                  onClick={handleCreateUser}
-                  disabled={
-                    isCreating ||
-                    !watch("firstName").trim() ||
-                    !watch("lastName").trim() ||
-                    !watch("email").trim() ||
-                    !watch("department")
-                  }
-                  className="gap-2"
-                >
+                <Button onClick={rhf.handleSubmit(() => handleCreateUser())} disabled={isCreating} className="gap-2">
                   {isCreating ? (
                     "Creating…"
                   ) : (
@@ -770,20 +962,51 @@ export function ManageUsersDialog({
                                   className="h-9 w-40 font-mono text-xs"
                                 />
                               </div>
-                              <div className="flex flex-col items-end">
-                                <span className="text-muted-foreground mb-1 text-[10px] font-bold uppercase">
-                                  Assign ID
-                                </span>
-                                <div className="relative w-44">
-                                  <Hash className="text-primary absolute top-2.5 left-2.5 h-3.5 w-3.5" />
-                                  <Input
-                                    value={employeeId}
-                                    onChange={(e) => setEmployeeId(e.target.value)}
-                                    className="h-9 pl-8 font-mono text-xs"
-                                    placeholder="ACOB/2026/001"
-                                  />
-                                </div>
+                              <div className="flex flex-col items-start gap-1">
+                                <span className="text-muted-foreground text-[10px] font-bold uppercase">Type</span>
+                                <Select
+                                  value={employmentType}
+                                  onValueChange={(value: any) => {
+                                    setEmploymentType(value)
+                                    if (value !== "contract") {
+                                      setContractCategoryCode("")
+                                    } else if (contractCategories.length > 0) {
+                                      setContractCategoryCode(contractCategories[0].code)
+                                    }
+                                  }}
+                                >
+                                  <SelectTrigger className="h-9 w-32 text-xs font-bold">
+                                    <SelectValue placeholder="Type" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="full_time">Full Time</SelectItem>
+                                    <SelectItem value="part_time">Part Time</SelectItem>
+                                    <SelectItem value="contract">Contract</SelectItem>
+                                  </SelectContent>
+                                </Select>
                               </div>
+                              {employmentType === "contract" && (
+                                <div className="flex flex-col items-start gap-1">
+                                  <span className="text-muted-foreground text-[10px] font-bold uppercase">
+                                    Category
+                                  </span>
+                                  <Select
+                                    value={contractCategoryCode}
+                                    onValueChange={(value) => setContractCategoryCode(value)}
+                                  >
+                                    <SelectTrigger className="h-9 w-32 text-xs font-bold">
+                                      <SelectValue placeholder="Category" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {contractCategories.map((cat) => (
+                                        <SelectItem key={cat.id} value={cat.code}>
+                                          {cat.name}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              )}
                               <Badge variant="outline" className="self-end text-[10px] font-bold">
                                 PENDING
                               </Badge>
@@ -791,27 +1014,174 @@ export function ManageUsersDialog({
                           </div>
 
                           <div className="border-border overflow-hidden rounded-lg border shadow-sm">
-                            <DetailRow label="First Name" value={formatName(selectedUser.first_name)} />
-                            <DetailRow label="Last Name" value={formatName(selectedUser.last_name)} />
-                            <DetailRow label="Other Names" value={formatName(selectedUser.other_names)} />
+                            <DetailRow
+                              label="First Name"
+                              value={
+                                <Input
+                                  value={firstName}
+                                  onChange={(e) => setFirstName(e.target.value)}
+                                  className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                                />
+                              }
+                            />
+                            <DetailRow
+                              label="Last Name"
+                              value={
+                                <Input
+                                  value={lastName}
+                                  onChange={(e) => setLastName(e.target.value)}
+                                  className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                                />
+                              }
+                            />
+                            <DetailRow
+                              label="Other Names"
+                              value={
+                                <Input
+                                  value={otherNames}
+                                  onChange={(e) => setOtherNames(e.target.value)}
+                                  className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                                  placeholder="Optional other names"
+                                />
+                              }
+                            />
                             <div>
                               <div className="bg-muted/20 text-muted-foreground border-border border-b p-2 text-[10px] font-bold uppercase">
                                 Organisational
                               </div>
-                              <DetailRow label="Department" value={selectedUser.department} />
-                              <DetailRow label="Designation" value={selectedUser.designation} />
-                              <DetailRow label="System Email" value={selectedUser.company_email} />
-                              <DetailRow label="Assigned ID" value={employeeId} />
-                              <DetailRow label="Office" value={selectedUser.office_location || "N/A"} />
+                              <DetailRow
+                                label="Department"
+                                value={
+                                  <Select value={department} onValueChange={setDepartment}>
+                                    <SelectTrigger className="h-8 w-full border-0 bg-transparent text-left font-medium shadow-none focus:ring-0">
+                                      <SelectValue placeholder="Select Department" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {DEPARTMENTS.map((dept) => (
+                                        <SelectItem key={dept} value={dept}>
+                                          {dept}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                }
+                              />
+                              <DetailRow
+                                label="Designation"
+                                value={
+                                  <Input
+                                    value={designation}
+                                    onChange={(e) => setDesignation(e.target.value)}
+                                    className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                                  />
+                                }
+                              />
+                              <DetailRow
+                                label="System Email"
+                                value={
+                                  <Input
+                                    value={companyEmail}
+                                    onChange={(e) => setCompanyEmail(e.target.value)}
+                                    className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                                  />
+                                }
+                              />
+                              <DetailRow
+                                label="Expected Company ID"
+                                value={
+                                  <span className="text-foreground pl-3 text-sm font-medium">
+                                    {employmentType === "full_time"
+                                      ? `ACOB/${new Date().getFullYear()}/... (Auto-generated)`
+                                      : employmentType === "part_time"
+                                        ? `ACOB/PT/${new Date().getFullYear()}/... (Auto-generated)`
+                                        : `ACOB/${contractCategoryCode || "SIWES"}/${new Date().getFullYear()}/... (Auto-generated)`}
+                                  </span>
+                                }
+                              />
+                              <DetailRow
+                                label="Applicant Type Choice"
+                                value={
+                                  <span className="text-foreground pl-3 text-sm font-medium">
+                                    {selectedUser.employment_type
+                                      ? selectedUser.employment_type
+                                          .replace("_", " ")
+                                          .replace(/\b\w/g, (c) => c.toUpperCase())
+                                      : "Not selected"}
+                                  </span>
+                                }
+                              />
+                              {selectedUser.employment_type === "contract" && (
+                                <DetailRow
+                                  label="Applicant Category Choice"
+                                  value={
+                                    <span className="text-foreground pl-3 text-sm font-medium">
+                                      {selectedUser.contract_categories?.name
+                                        ? `${selectedUser.contract_categories.name} (${selectedUser.contract_categories.code})`
+                                        : "Not selected"}
+                                    </span>
+                                  }
+                                />
+                              )}
+                              <DetailRow
+                                label="Office"
+                                value={
+                                  <Select value={officeLocation} onValueChange={setOfficeLocation}>
+                                    <SelectTrigger className="h-8 w-full border-0 bg-transparent text-left font-medium shadow-none focus:ring-0">
+                                      <SelectValue placeholder="Select Location" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {OFFICE_LOCATIONS.map((loc: string) => (
+                                        <SelectItem key={loc} value={loc}>
+                                          {loc}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
+                                }
+                              />
                             </div>
                             <div>
                               <div className="bg-muted/20 text-muted-foreground border-border border-b p-2 text-[10px] font-bold uppercase">
                                 Personal & Contact
                               </div>
-                              <DetailRow label="Phone" value={selectedUser.phone_number} />
-                              <DetailRow label="Personal Email" value={selectedUser.personal_email} />
-                              <DetailRow label="Address" value={selectedUser.residential_address} />
-                              <DetailRow label="Applied" value={format(new Date(selectedUser.created_at), "PPPP")} />
+                              <DetailRow
+                                label="Phone"
+                                value={
+                                  <Input
+                                    value={phoneNumber}
+                                    onChange={(e) => setPhoneNumber(e.target.value)}
+                                    className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                                  />
+                                }
+                              />
+                              <DetailRow
+                                label="Personal Email"
+                                value={
+                                  <Input
+                                    value={personalEmailState}
+                                    onChange={(e) => setPersonalEmailState(e.target.value)}
+                                    className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                                  />
+                                }
+                              />
+                              <DetailRow
+                                label="Address"
+                                value={
+                                  <Input
+                                    value={residentialAddress}
+                                    onChange={(e) => setResidentialAddress(e.target.value)}
+                                    className="focus-visible:ring-primary h-8 border-0 bg-transparent font-medium shadow-none focus-visible:ring-1"
+                                  />
+                                }
+                              />
+                              <DetailRow
+                                label="Applied"
+                                value={
+                                  <span className="text-foreground pl-3 text-sm font-medium">
+                                    {format(new Date(selectedUser.created_at), "PPPP")}
+                                  </span>
+                                }
+                              />
                             </div>
                           </div>
 
@@ -1184,7 +1554,7 @@ export function ManageUsersDialog({
                 if (!pendingEmailDispatch) return
                 setIsSendingEmails(true)
                 try {
-                  const res = await fetch("/api/admin/send-onboarding-emails", {
+                  const res = await apiFetch("/api/admin/send-onboarding-emails", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify(pendingEmailDispatch),

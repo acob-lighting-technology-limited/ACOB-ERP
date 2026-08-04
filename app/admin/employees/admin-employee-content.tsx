@@ -29,6 +29,7 @@ import { EmployeeListView } from "@/components/employees/EmployeeListView"
 import { getAssignableRolesForActor } from "@/lib/role-management"
 import { formValidation } from "@/lib/validation"
 import { toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("employees-admin-employee-content")
 
@@ -40,6 +41,7 @@ export interface Employee {
   other_names: string | null
   company_email: string
   additional_email: string | null
+  personal_email: string | null
   department: string
   designation: string | null
   role: UserRole
@@ -172,7 +174,13 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     phoneNumber: "",
     role: "employee" as UserRole,
     admin_routes: [] as string[],
-    employeeNumber: "",
+    employmentType: "full_time" as "full_time" | "part_time" | "contract",
+    contractCategoryCode: "",
+    gender: "male" as "male" | "female",
+    dateOfBirth: "",
+    additionalPhone: "",
+    residentialAddress: "",
+    officeLocation: "",
   })
 
   // Edit form state (matches EmployeeViewModal's EditForm shape)
@@ -190,6 +198,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     other_names: "",
     company_email: "",
     additional_email: "",
+    personal_email: "",
     phone_number: "",
     additional_phone: "",
     residential_address: "",
@@ -255,6 +264,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           other_names: fullProfile.other_names || "",
           company_email: fullProfile.company_email || "",
           additional_email: fullProfile.additional_email || "",
+          personal_email: fullProfile.personal_email || "",
           phone_number: fullProfile.phone_number || "",
           additional_phone: fullProfile.additional_phone || "",
           residential_address: fullProfile.residential_address || "",
@@ -282,6 +292,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           other_names: employee.other_names || "",
           company_email: employee.company_email || "",
           additional_email: employee.additional_email || "",
+          personal_email: employee.personal_email || "",
           phone_number: employee.phone_number || "",
           additional_phone: "",
           residential_address: employee.residential_address || "",
@@ -435,6 +446,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
 
       const companyEmail = editForm.company_email.trim().toLowerCase()
       const additionalEmail = editForm.additional_email.trim().toLowerCase()
+      const personalEmail = editForm.personal_email.trim().toLowerCase()
 
       if (!companyEmail) {
         toast.error("Company email is required")
@@ -494,6 +506,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         other_names: editForm.other_names || null,
         company_email: companyEmail,
         additional_email: additionalEmail || null,
+        personal_email: personalEmail || null,
         phone_number: editForm.phone_number || null,
         additional_phone: editForm.additional_phone || null,
         residential_address: editForm.residential_address || null,
@@ -508,7 +521,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
 
       ;(updateData as Record<string, unknown>).attendance_exempt = editForm.attendance_exempt
 
-      const emailSyncResponse = await fetch(`/api/admin/hr/employees/${selectedEmployee.id}/email`, {
+      const emailSyncResponse = await apiFetch(`/api/admin/hr/employees/${selectedEmployee.id}/email`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ companyEmail, additionalEmail: additionalEmail || null }),
@@ -580,7 +593,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         return
       }
 
-      const response = await fetch("/api/admin/create-user", {
+      const response = await apiFetch("/api/admin/create-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(createUserForm),
@@ -604,7 +617,13 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         phoneNumber: "",
         role: "employee",
         admin_routes: [],
-        employeeNumber: "",
+        employmentType: "full_time",
+        contractCategoryCode: "",
+        gender: "male",
+        dateOfBirth: "",
+        additionalPhone: "",
+        residentialAddress: "",
+        officeLocation: "",
       })
       loadData()
     } catch (error: unknown) {

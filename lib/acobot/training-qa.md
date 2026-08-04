@@ -1,7 +1,7 @@
 # ACOBot — 300 Q&A Training Reference
 
 This document contains 300 representative question-and-answer pairs covering every
-major area of the ACOB ERP platform. It is used to help ACOBot provide accurate,
+major area of the Matrix platform. It is used to help ACOBot provide accurate,
 consistent guidance to staff.
 
 ---
@@ -9,10 +9,10 @@ consistent guidance to staff.
 ## 1. General / Navigation
 
 **Q: What is ACOBot?**
-A: ACOBot is your internal assistant inside the ACOB ERP. I can help you find the right module, explain how workflows work, and answer questions about your own records (leave, attendance, tasks, assets, and more).
+A: ACOBot is your internal assistant inside the Matrix. I can help you find the right module, explain how workflows work, and answer questions about your own records (leave, attendance, tasks, assets, and more).
 
 **Q: What can you help me with?**
-A: I can explain how to use any ERP module, answer questions about your personal records (leave balance, tasks, tickets, attendance, assets, profile), look up a colleague's contact details, and guide you to the right page for any task.
+A: I can explain how to use any Matrix module, answer questions about your personal records (leave balance, tasks, tickets, attendance, assets, profile), look up a colleague's contact details, and guide you to the right page for any task.
 
 **Q: Where is the Dashboard?**
 A: The Dashboard is at [/](/). It shows a summary of your tasks, leave, attendance, and recent activity.
@@ -70,7 +70,7 @@ A: Designation is your job title (e.g. "Graduate Trainee"). Role is your system 
 A: Go to [Settings](/settings) → Security / Password section.
 
 **Q: How do I update my profile photo?**
-A: Profile photos are not currently supported in the ERP. Your initials are used as your avatar.
+A: Profile photos are not currently supported in Matrix. Your initials are used as your avatar.
 
 ---
 
@@ -133,7 +133,7 @@ A: Your used days are deducted once the leave is approved and the dates pass. Yo
 ## 5. Attendance
 
 **Q: How do I clock in?**
-A: Clocking in is done via the mobile app or the attendance kiosk. The ERP portal shows your records but does not have a manual clock-in button for employees.
+A: Clocking in is done via the mobile app or the attendance kiosk. Matrix shows your records but does not have a manual clock-in button for employees.
 
 **Q: How do I check my attendance record?**
 A: Go to [Attendance](/attendance) to see your clock-in/out times, lateness flags, and monthly summary.
@@ -254,7 +254,7 @@ A: Individual = assigned to a specific person. Department = available to all sta
 A: Go to [Payments](/payments) to see your payment records and payslips.
 
 **Q: When will I receive my salary?**
-A: Contact your HR/Finance team. Payment schedules are determined by management and are not set within the ERP.
+A: Contact your HR/Finance team. Payment schedules are determined by management and are not set within Matrix.
 
 **Q: What payment types are there?**
 A: Common types include Salary, Allowance, Bonus, Reimbursement, and Loan. The types available depend on your organisation's configuration.
@@ -567,7 +567,7 @@ A: Go to your Department Console → Attendance section. All records and reports
 **Q: I don't have access to a page — what do I do?**
 A: Contact your admin. Access is controlled by your role (employee, department lead, admin, super admin). You need to be assigned the appropriate role to access restricted pages.
 
-**Q: What roles exist in the ERP?**
+**Q: What roles exist in Matrix?**
 A: Employee (default), Department Lead (scoped lead view + approval rights), Admin (full admin dashboard), Super Admin (system settings + all admin access).
 
 **Q: Who can access the admin dashboard?**
@@ -580,7 +580,7 @@ A: Super admins can access [Settings](/admin/settings) for role management, user
 
 ## 25. System & Technical
 
-**Q: The ERP is slow — what do I do?**
+**Q: Matrix is slow — what do I do?**
 A: Try refreshing the page. If the issue persists, raise a ticket on [Help Desk](/help-desk) for the IT team.
 
 **Q: I got an error on a page — what do I do?**
@@ -589,8 +589,8 @@ A: Note the error message and raise a ticket on [Help Desk](/help-desk) with a d
 **Q: How do I log out?**
 A: Click your profile avatar or initials in the top-right corner → click "Sign Out" or "Log Out".
 
-**Q: Is the ERP available on mobile?**
-A: Yes — the ERP is responsive and works on mobile browsers. Some features (e.g. clock-in) may use the dedicated mobile app.
+**Q: Is Matrix available on mobile?**
+A: Yes — Matrix is responsive and works on mobile browsers. Some features (e.g. clock-in) may use the dedicated mobile app.
 
 **Q: My session expired — how do I get back in?**
 A: Your session timed out for security. Log in again with your credentials at the login page.
@@ -640,10 +640,10 @@ A: [Fleet](/fleet) tracks company vehicles — assignments, usage logs, and main
 **Q: What is Documentation?**
 A: [Documentation](/documentation) is a library of company policies, procedures, and reference documents.
 
-**Q: What are the Reports in the ERP?**
+**Q: What are the Reports in Matrix?**
 A: [Reports](/reports) includes KSS reports (knowledge sharing session summaries), the Action Tracker (follow-ups from meetings), and weekly staff reports.
 
-**Q: What does "Goals" mean in the ERP?**
+**Q: What does "Goals" mean in Matrix?**
 A: [Goals](/goals) lets you set and track personal or team objectives, linked to your PMS performance cycle.
 
 **Q: What is the Purchasing module?**

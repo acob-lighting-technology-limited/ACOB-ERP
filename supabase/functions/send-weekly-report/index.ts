@@ -898,7 +898,7 @@ function buildEmailHtml(
 ): string {
   const safePreparedBy = escapeHtml((preparedByName || "").trim() || "Terna")
   const safeDesignation = escapeHtml((preparedByDesignation || "").trim())
-  const safeDepartment = escapeHtml((preparedByDepartment || "").trim() || "Admin & HR Department")
+  const safeDepartment = escapeHtml((preparedByDepartment || "").trim() || "Admin & HR")
   const title = buildEmailTitle(ctx)
   const weekBadge =
     ctx.weekLabels.length <= 3
@@ -931,7 +931,7 @@ function buildEmailHtml(
   <div class="email-shell">
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">
     <tr><td align="center" bgcolor="#000000" style="padding:20px 0;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;">
-      <img src="https://erp.acoblighting.com/images/acob-logo-dark.png" height="65" alt="ACOB Lighting">
+      <img src="https://matrix.acoblighting.com/images/acob-logo-dark.png" height="65" alt="ACOB Lighting">
     </td></tr>
   </table>
   <div class="wrapper">
@@ -1300,7 +1300,7 @@ serve(async (req) => {
       nextMeetingDateLabel,
       preparedByName || "Terna",
       preparedByDesignation || null,
-      preparedByDepartment || "Admin & HR Department",
+      preparedByDepartment || "Admin & HR",
       emailCtx
     )
     logWeeklyReportEvent(requestStartedAt, "email html built", {
@@ -1406,7 +1406,7 @@ serve(async (req) => {
           failure_count: failureCount,
           prepared_by: preparedByName || "Terna",
           prepared_by_designation: preparedByDesignation || null,
-          prepared_by_department: preparedByDepartment || "Admin & HR Department",
+          prepared_by_department: preparedByDepartment || "Admin & HR",
           attachments: attachments.map((a) => a.filename),
           failed_recipients: results.filter((r) => !r.success).map((r) => r.to),
           delivery_results: results.map((r) => ({ to: r.to, success: r.success, emailId: r.emailId ?? null })),

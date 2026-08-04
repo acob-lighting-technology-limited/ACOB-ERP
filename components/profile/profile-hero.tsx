@@ -1,14 +1,30 @@
 "use client"
 
+import { useRef, useState } from "react"
+import Link from "next/link"
+import { toast } from "sonner"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { Edit, Building2, MapPin, CalendarDays, Mail, Phone, Cake, Home, ShieldCheck } from "lucide-react"
-import { formatName } from "@/lib/utils"
-import { formatWATDate, formatBirthdayLabel } from "@/lib/utils/date"
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import { Pencil, Mail, Phone, Cake, Home, Camera, Trash2, Loader2 } from "lucide-react"
+import { formatName, cn } from "@/lib/utils"
+import { formatWATDate, formatBirthdayLabel, toLocalISODate } from "@/lib/utils/date"
 import { getRoleBadgeColor, getRoleDisplayName } from "@/lib/permissions"
+import { apiFetch } from "@/lib/api-client"
 import type { UserRole } from "@/types/database"
+import type { AttendanceItem } from "@/app/(app)/profile/page"
 
 interface ProfileHeroProps {
   profile: {
@@ -29,11 +45,45 @@ interface ProfileHeroProps {
     role: string
     is_department_lead?: boolean | null
   }
+  avatarUrl?: string | null
+  attendance: AttendanceItem[]
+  onAvatarChange?: (url: string | null) => void
   onEdit: () => void
+}
+
+const ATTENDANCE_STATUS_LABELS: Record<string, string> = {
+  present: "Present",
+  late: "Late",
+  lateness_with_permission: "Late (Excused)",
+  absent: "Absent",
+  absent_with_permission: "Absent (Excused)",
+  on_leave: "On Leave",
+  out_of_station: "Out of Station",
+  incomplete: "Clocked In",
+  waiver: "Waived",
+}
+
+const ATTENDANCE_DOT_COLORS: Record<string, string> = {
+  present: "bg-green-500",
+  late: "bg-amber-500",
+  lateness_with_permission: "bg-amber-500",
+  absent: "bg-red-500",
+  absent_with_permission: "bg-amber-500",
+  on_leave: "bg-blue-500",
+  out_of_station: "bg-blue-500",
+  incomplete: "bg-green-500",
+  waiver: "bg-muted-foreground",
 }
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
   return `${firstName?.[0] || ""}${lastName?.[0] || ""}`.toUpperCase()
+}
+
+function getGreeting(): string {
+  const hour = new Date().getHours()
+  if (hour < 12) return "Good morning"
+  if (hour < 17) return "Good afternoon"
+  return "Good evening"
 }
 
 function getTenureLabel(employmentDate?: string | null): string | null {
@@ -47,221 +97,293 @@ function getTenureLabel(employmentDate?: string | null): string | null {
   return months > 0 ? `${years}y ${months}mo` : `${years}y`
 }
 
-export function ProfileHero({ profile, onEdit }: ProfileHeroProps) {
+function AttendanceChip({ attendance }: { attendance: AttendanceItem[] }) {
+  const todayIso = toLocalISODate()
+  const today = attendance.find((record) => record.date === todayIso) || null
+
+  const label = today ? (ATTENDANCE_STATUS_LABELS[today.status] ?? today.status) : "Not clocked in"
+  const dotColor = today ? (ATTENDANCE_DOT_COLORS[today.status] ?? "bg-muted-foreground") : "bg-muted-foreground"
+  const clockIn = today?.clock_in ? String(today.clock_in).slice(0, 5) : null
+
+  return (
+    <Link
+      href="/attendance"
+      className="bg-background/60 hover:bg-accent flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors"
+      title="View attendance"
+    >
+      <span className={cn("h-2 w-2 shrink-0 rounded-full", dotColor)} aria-hidden="true" />
+      <span>{label}</span>
+      {clockIn && <span className="text-muted-foreground">· in {clockIn}</span>}
+    </Link>
+  )
+}
+
+export function ProfileHero({ profile, avatarUrl, attendance, onAvatarChange, onEdit }: ProfileHeroProps) {
   const fullName = [formatName(profile.first_name), formatName(profile.other_names), formatName(profile.last_name)]
     .filter(Boolean)
     .join(" ")
 
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [isUploading, setIsUploading] = useState(false)
+  const [isLightboxOpen, setIsLightboxOpen] = useState(false)
+  const [isRemoveConfirmOpen, setIsRemoveConfirmOpen] = useState(false)
+
+  async function handleFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", file)
+      const response = await apiFetch("/api/profile/avatar", { method: "POST", body: formData })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to upload photo")
+      }
+      onAvatarChange?.(payload?.data?.avatarUrl ?? null)
+      toast.success("Profile photo updated")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to upload photo")
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  async function handleRemovePhoto() {
+    setIsUploading(true)
+    try {
+      const response = await apiFetch("/api/profile/avatar", { method: "DELETE" })
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        throw new Error(payload?.error || "Failed to remove photo")
+      }
+      onAvatarChange?.(null)
+      toast.success("Profile photo removed")
+      setIsRemoveConfirmOpen(false)
+      setIsLightboxOpen(false)
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to remove photo")
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
+  function handleAvatarClick() {
+    if (avatarUrl) {
+      setIsLightboxOpen(true)
+    } else {
+      fileInputRef.current?.click()
+    }
+  }
+
   const tenure = getTenureLabel(profile.employment_date)
   const joinedDate = profile.employment_date
-    ? formatWATDate(new Date(profile.employment_date), { month: "short", year: "numeric" })
+    ? formatWATDate(new Date(profile.employment_date), { day: "numeric", month: "short", year: "numeric" })
     : null
 
   const birthdayLabel = formatBirthdayLabel(profile.birthday)
 
+  const identityLine = [
+    profile.designation,
+    profile.department,
+    joinedDate ? `Joined ${joinedDate}${tenure ? ` · ${tenure}` : ""}` : null,
+  ].filter(Boolean)
+
   return (
-    <Card className="overflow-hidden border shadow-lg transition-all duration-300 dark:border-zinc-800">
-      {/* Reverted to Old Green Gradient Banner & Moved Edit Button to Top Right of Banner */}
-      <div className="from-primary/20 via-primary/10 relative h-24 bg-gradient-to-r to-transparent sm:h-32">
-        <div className="absolute top-4 right-4 z-10 sm:top-6 sm:right-6">
-          <Button
-            onClick={onEdit}
-            variant="outline"
-            size="sm"
-            className="border-primary/20 bg-background/80 hover:bg-background gap-1.5 shadow-sm backdrop-blur-sm"
-          >
-            <Edit className="text-primary h-3.5 w-3.5" />
-            <span className="text-foreground">Edit Profile</span>
-          </Button>
-        </div>
-      </div>
+    <Card className="overflow-hidden border shadow-sm">
+      <CardContent className="p-5 sm:p-7 lg:p-8">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
+          <div className="flex items-start gap-4 sm:gap-5">
+            {/* Avatar with lightbox */}
+            <div className="group relative shrink-0">
+              <button
+                type="button"
+                onClick={handleAvatarClick}
+                disabled={isUploading}
+                aria-label={avatarUrl ? "View profile photo" : "Add profile photo"}
+                className="block rounded-full"
+              >
+                <Avatar className="border-background h-16 w-16 border-2 shadow-md transition-transform group-hover:scale-105 sm:h-24 sm:w-24 lg:h-28 lg:w-28">
+                  {avatarUrl && <AvatarImage src={avatarUrl} alt={fullName || "Profile photo"} />}
+                  <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold sm:text-2xl">
+                    {getInitials(profile.first_name, profile.last_name)}
+                  </AvatarFallback>
+                </Avatar>
+              </button>
 
-      <CardContent className="relative px-6 pb-6">
-        {/* Responsive Grid */}
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-3 lg:gap-8">
-          {/* Column 1: Avatar, Name, Designation & Badges */}
-          <div className="-mt-12 flex flex-col items-center text-center lg:-mt-16 lg:items-start lg:text-left">
-            <Avatar className="border-background ring-primary/10 h-24 w-24 border-4 shadow-xl ring-2 sm:h-32 sm:w-32 lg:h-36 lg:w-36">
-              <AvatarFallback className="bg-primary text-primary-foreground text-3xl font-bold lg:text-4xl">
-                {getInitials(profile.first_name, profile.last_name)}
-              </AvatarFallback>
-            </Avatar>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/jpeg,image/jpg,image/png,image/webp"
+                className="hidden"
+                onChange={handleFileSelected}
+              />
 
-            <div className="mt-4 space-y-2">
-              <h1 className="text-foreground text-2xl leading-tight font-bold tracking-tight sm:text-3xl">
+              <div
+                className={cn(
+                  "bg-background/80 border-border/50 pointer-events-none absolute inset-0 flex items-center justify-center rounded-full border opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100",
+                  isUploading && "opacity-100"
+                )}
+              >
+                {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
+              </div>
+            </div>
+
+            {/* Identity */}
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className="text-muted-foreground text-xs sm:text-sm">
+                {getGreeting()}
+                {profile.first_name ? `, ${formatName(profile.first_name)}` : ""}
+                <span className="hidden sm:inline">
+                  {" "}
+                  · {formatWATDate(new Date(), { weekday: "long", day: "numeric", month: "long" })}
+                </span>
+              </p>
+              <h1 className="text-foreground mt-1 text-xl leading-tight font-bold tracking-tight sm:text-2xl lg:text-3xl">
                 {fullName || "—"}
               </h1>
-              {profile.designation && (
-                <p className="text-muted-foreground text-sm font-semibold sm:text-base">{profile.designation}</p>
-              )}
-
-              <div className="flex flex-wrap justify-center gap-1.5 pt-1 lg:justify-start">
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 <Badge
                   variant="outline"
-                  className={`px-2.5 py-0.5 text-xs font-semibold ${getRoleBadgeColor(profile.role as UserRole)}`}
+                  className={`text-xs font-medium ${getRoleBadgeColor(profile.role as UserRole)}`}
                 >
                   {getRoleDisplayName(profile.role as UserRole)}
                 </Badge>
                 {profile.is_department_lead && (
                   <Badge
                     variant="outline"
-                    className="border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-600 dark:text-amber-400"
+                    className="border-amber-500/30 bg-amber-500/10 text-xs font-medium text-amber-600 dark:text-amber-400"
                   >
                     Dept Lead
                   </Badge>
                 )}
               </div>
+              {identityLine.length > 0 && (
+                <p className="text-muted-foreground mt-2 flex flex-wrap gap-x-1.5 text-sm">
+                  {identityLine.map((part, i) => (
+                    <span key={i} className="flex items-center gap-1.5">
+                      {i > 0 && <span className="opacity-30">·</span>}
+                      {part}
+                    </span>
+                  ))}
+                </p>
+              )}
+
+              {/* Status + actions — inline under the identity text on mobile so it
+                  shares the same left edge (avoids sitting flush under the avatar) */}
+              <div className="mt-3 flex items-center gap-2 sm:hidden">
+                <AttendanceChip attendance={attendance} />
+                <Button onClick={onEdit} variant="outline" size="sm" className="gap-1.5">
+                  <Pencil className="h-3 w-3" />
+                  Edit Profile
+                </Button>
+              </div>
             </div>
           </div>
 
-          {/* Columns 2 & 3: Info Grid */}
-          <div className="lg:col-span-2 lg:pt-4">
-            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-              {/* Professional details */}
-              <div className="space-y-4">
-                <h2 className="text-muted-foreground/80 border-b pb-2 text-xs font-bold tracking-wider uppercase">
-                  Professional Details
-                </h2>
-                <div className="space-y-3">
-                  {profile.department && (
-                    <div className="flex items-start gap-2.5 text-sm">
-                      <Building2 className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-                      <div>
-                        <span className="text-muted-foreground/70 block text-[11px] font-bold tracking-wide uppercase">
-                          Department
-                        </span>
-                        <span className="text-foreground font-medium">{profile.department}</span>
-                      </div>
-                    </div>
-                  )}
-                  {profile.office_location && (
-                    <div className="flex items-start gap-2.5 text-sm">
-                      <MapPin className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-                      <div>
-                        <span className="text-muted-foreground/70 block text-[11px] font-bold tracking-wide uppercase">
-                          Office Location
-                        </span>
-                        <span className="text-foreground font-medium">{profile.office_location}</span>
-                      </div>
-                    </div>
-                  )}
-                  {joinedDate && (
-                    <div className="flex items-start gap-2.5 text-sm">
-                      <CalendarDays className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-                      <div>
-                        <span className="text-muted-foreground/70 block text-[11px] font-bold tracking-wide uppercase">
-                          Joined Date
-                        </span>
-                        <span className="text-foreground font-medium">
-                          {joinedDate}{" "}
-                          {tenure && <span className="text-muted-foreground text-xs font-normal">({tenure})</span>}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                  <div className="flex items-start gap-2.5 text-sm">
-                    <ShieldCheck className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-                    <div>
-                      <span className="text-muted-foreground/70 block text-[11px] font-bold tracking-wide uppercase">
-                        Access & Role
-                      </span>
-                      <span className="text-foreground font-medium">
-                        {getRoleDisplayName(profile.role as UserRole)}
-                        {profile.is_department_lead && (
-                          <span className="text-muted-foreground font-normal"> · Dept Lead</span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Contact & Personal details */}
-              <div className="space-y-4">
-                <h2 className="text-muted-foreground/80 border-b pb-2 text-xs font-bold tracking-wider uppercase">
-                  Contact & Personal Details
-                </h2>
-                <div className="space-y-3">
-                  {profile.company_email && (
-                    <div className="flex items-start gap-2.5 text-sm">
-                      <Mail className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-                      <div className="min-w-0">
-                        <span className="text-muted-foreground/70 block text-[11px] font-bold tracking-wide uppercase">
-                          Email Address
-                        </span>
-                        <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-                          <a
-                            href={`mailto:${profile.company_email}`}
-                            className="text-foreground hover:text-primary font-medium break-all transition-colors"
-                          >
-                            {profile.company_email}
-                          </a>
-                          {profile.additional_email && (
-                            <span className="text-muted-foreground text-xs font-normal break-all">
-                              ({profile.additional_email})
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {(profile.phone_number || profile.additional_phone) && (
-                    <div className="flex items-start gap-2.5 text-sm">
-                      <Phone className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-                      <div>
-                        <span className="text-muted-foreground/70 block text-[11px] font-bold tracking-wide uppercase">
-                          Phone Number
-                        </span>
-                        <div className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-                          {profile.phone_number ? (
-                            <a
-                              href={`tel:${profile.phone_number}`}
-                              className="text-foreground hover:text-primary font-medium transition-colors"
-                            >
-                              {profile.phone_number}
-                            </a>
-                          ) : (
-                            <span className="text-foreground font-medium">—</span>
-                          )}
-                          {profile.additional_phone && (
-                            <span className="text-muted-foreground text-xs font-normal">
-                              ({profile.additional_phone})
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {birthdayLabel && (
-                    <div className="flex items-start gap-2.5 text-sm">
-                      <Cake className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-                      <div>
-                        <span className="text-muted-foreground/70 block text-[11px] font-bold tracking-wide uppercase">
-                          Birthday
-                        </span>
-                        <span className="text-foreground font-medium">{birthdayLabel}</span>
-                      </div>
-                    </div>
-                  )}
-                  {profile.residential_address && (
-                    <div className="flex items-start gap-2.5 text-sm">
-                      <Home className="text-muted-foreground mt-0.5 h-4 w-4 shrink-0" />
-                      <div>
-                        <span className="text-muted-foreground/70 block text-[11px] font-bold tracking-wide uppercase">
-                          Residential Address
-                        </span>
-                        <span className="text-foreground block leading-tight font-medium break-words">
-                          {profile.residential_address}
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
+          {/* Status + actions — desktop: docked to the right of the header */}
+          <div className="hidden shrink-0 items-center gap-2 sm:flex">
+            <AttendanceChip attendance={attendance} />
+            <Button onClick={onEdit} variant="outline" size="sm" className="gap-1.5">
+              <Pencil className="h-3 w-3" />
+              Edit Profile
+            </Button>
           </div>
         </div>
+
+        {/* Contact strip */}
+        <div className="text-muted-foreground mt-6 grid grid-cols-1 gap-x-6 gap-y-2.5 border-t pt-5 text-sm sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center">
+          {profile.company_email && (
+            <a
+              href={`mailto:${profile.company_email}`}
+              className="hover:text-foreground flex min-w-0 items-center gap-1.5 transition-colors"
+              title={profile.company_email}
+            >
+              <Mail className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{profile.company_email}</span>
+            </a>
+          )}
+          {profile.phone_number && (
+            <a
+              href={`tel:${profile.phone_number}`}
+              className="hover:text-foreground flex items-center gap-1.5 transition-colors"
+            >
+              <Phone className="h-3.5 w-3.5 shrink-0" />
+              {profile.phone_number}
+            </a>
+          )}
+          {birthdayLabel && (
+            <span className="flex items-center gap-1.5">
+              <Cake className="h-3.5 w-3.5 shrink-0" />
+              {birthdayLabel}
+            </span>
+          )}
+          {profile.residential_address && (
+            <span className="flex min-w-0 items-center gap-1.5" title={profile.residential_address}>
+              <Home className="h-3.5 w-3.5 shrink-0" />
+              <span className="truncate">{profile.residential_address}</span>
+            </span>
+          )}
+        </div>
       </CardContent>
+
+      <Dialog open={isLightboxOpen} onOpenChange={setIsLightboxOpen}>
+        <DialogContent className="max-w-md gap-4 p-4 sm:p-4">
+          <DialogTitle className="sr-only">Profile photo</DialogTitle>
+          <div className="bg-muted overflow-hidden rounded-lg">
+            {avatarUrl && (
+              // eslint-disable-next-line @next/next/no-img-element -- signed URL, not an optimizable static asset
+              <img src={avatarUrl} alt={fullName || "Profile photo"} className="aspect-square w-full object-cover" />
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1 gap-1.5"
+              disabled={isUploading}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Change Photo
+            </Button>
+            <Button
+              variant="outline"
+              className="text-destructive hover:text-destructive flex-1 gap-1.5"
+              disabled={isUploading}
+              onClick={() => setIsRemoveConfirmOpen(true)}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              Remove
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={isRemoveConfirmOpen} onOpenChange={setIsRemoveConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove profile photo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove your profile photo. You can upload a new one at any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isUploading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                handleRemovePhoto()
+              }}
+              disabled={isUploading}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Remove"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }

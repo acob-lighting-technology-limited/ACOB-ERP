@@ -19,17 +19,19 @@ export async function GET(req: Request) {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
-  const [deptsResult, locsResult] = await Promise.all([
+  const [deptsResult, locsResult, catsResult] = await Promise.all([
     supabase.from("departments").select("name").eq("is_active", true).order("name"),
     supabase.from("office_locations").select("name").eq("is_active", true).order("name"),
+    supabase.from("contract_categories").select("name, code").eq("is_active", true).order("sort_order"),
   ])
 
-  if (deptsResult.error || locsResult.error) {
+  if (deptsResult.error || locsResult.error || catsResult.error) {
     return NextResponse.json({ error: "Failed to fetch options" }, { status: 500 })
   }
 
   return NextResponse.json({
     departments: deptsResult.data.map((d) => d.name),
     officeLocations: locsResult.data.map((d) => d.name),
+    contractCategories: catsResult.data || [],
   })
 }

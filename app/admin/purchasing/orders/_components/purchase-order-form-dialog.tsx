@@ -4,7 +4,6 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { createClient } from "@/lib/supabase/client"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -18,6 +17,7 @@ import { toast } from "sonner"
 import { FormFieldGroup } from "@/components/ui/patterns"
 import type { QueryClient } from "@tanstack/react-query"
 import { toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 interface Supplier {
   id: string
@@ -53,12 +53,10 @@ interface PurchaseOrderFormDialogProps {
 }
 
 async function fetchNewPOFormData(): Promise<NewPOFormData> {
-  const supabase = createClient()
-  const [{ data: sups }, { data: prods }] = await Promise.all([
-    supabase.from("suppliers").select("id, name, code").eq("is_active", true).order("name"),
-    supabase.from("products").select("id, name, sku, unit_cost").eq("status", "active").order("name"),
-  ])
-  return { suppliers: sups || [], products: prods || [] }
+  const res = await apiFetch("/api/admin/purchasing/orders/form-data", { cache: "no-store" })
+  if (!res.ok) return { suppliers: [], products: [] }
+  const json = await res.json()
+  return { suppliers: json.suppliers || [], products: json.products || [] }
 }
 
 export function PurchaseOrderFormDialog({ open, onOpenChange, queryClient }: PurchaseOrderFormDialogProps) {
@@ -130,42 +128,27 @@ export function PurchaseOrderFormDialog({ open, onOpenChange, queryClient }: Pur
 
     setSaving(true)
     try {
-      const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return toast.error("Not logged in")
-
-      const poNumber = `PO-${Date.now().toString(36).toUpperCase()}`
-      const total = calculateTotal()
-      const { data: po, error: poError } = await supabase
-        .from("purchase_orders")
-        .insert({
-          po_number: poNumber,
+      const res = await apiFetch("/api/admin/purchasing/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           supplier_id: formData.supplier_id,
           order_date: formData.order_date,
           expected_date: formData.expected_date || null,
-          total_amount: total,
           currency: formData.currency,
-          status: "draft",
           notes: formData.notes || null,
-          created_by: user.id,
-        })
-        .select()
-        .single()
-      if (poError) throw poError
+          items: items.map((i) => ({
+            product_id: i.product_id,
+            quantity: i.quantity,
+            unit_price: i.unit_price,
+            amount: i.amount,
+          })),
+        }),
+      })
+      const json = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(json?.error || "Failed to create")
 
-      const poItems = items.map((i) => ({
-        purchase_order_id: po.id,
-        product_id: i.product_id,
-        quantity: i.quantity,
-        unit_price: i.unit_price,
-        amount: i.amount,
-      }))
-      const { error: itemsError } = await supabase.from("purchase_order_items").insert(poItems)
-      if (itemsError) throw itemsError
-
-      toast.success(`PO ${poNumber} created!`)
+      toast.success(`PO ${json?.po_number ?? ""} created!`)
       await queryClient?.invalidateQueries({ queryKey: QUERY_KEYS.adminPurchaseOrders() })
       onOpenChange(false)
       router.refresh()

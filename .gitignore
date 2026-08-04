@@ -48,6 +48,22 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# local build/debug output dumps (never intended to be committed)
+/build.log
+/build_output.log
+/type-check.log
+/logs.txt
+/output.txt
+/start_output.txt
+/filelist.txt
+/debug_output*.txt
+/pr_body*.md
+/tmp-*.pdf
+/tmp-*.zip
+/tmp-*.patch
+/email-preview*.html
+/public/email-preview*.html
+
 # local env files
 .env*.local
 
@@ -64,3 +80,11 @@ supabase/.branches/
 .env.local
 
 .mcp.json
+
+# Launch video media (kept local, not deployed via git)
+launch-video/
+
+# python cache
+__pycache__/
+*.pyc
+

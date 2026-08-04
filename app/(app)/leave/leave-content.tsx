@@ -25,6 +25,7 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { formatName } from "@/lib/utils"
 import { formatWATDateTime } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 interface LeaveContentProps {
   currentUserId: string
@@ -143,7 +144,7 @@ export function LeaveContent({
       const relieverIdParam = formData.reliever_identifier
         ? `?reliever_id=${encodeURIComponent(formData.reliever_identifier)}`
         : ""
-      const response = await fetch(`/api/hr/leave/flow/my-preview${relieverIdParam}`)
+      const response = await apiFetch(`/api/hr/leave/flow/my-preview${relieverIdParam}`)
       const payload = await response.json().catch(() => ({}))
       if (!response.ok) throw new Error(payload.error || "Failed to load approval route preview")
       return payload.data as LeaveRoutePreview
@@ -369,7 +370,7 @@ export function LeaveContent({
       if (!isEditing && requiresAttachmentOnCreate && !attachment) {
         throw new Error("Attachment is required for this leave type")
       }
-      const response = await fetch("/api/hr/leave/requests", {
+      const response = await apiFetch("/api/hr/leave/requests", {
         method: isEditing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(isEditing ? { id: editingRequestId, ...requestPayload } : requestPayload),
@@ -395,7 +396,7 @@ export function LeaveContent({
         uploadPayload.set("file", attachment)
         uploadPayload.set("document_type", evidenceDocumentTypes[0])
 
-        const uploadResponse = await fetch("/api/hr/leave/evidence/upload", {
+        const uploadResponse = await apiFetch("/api/hr/leave/evidence/upload", {
           method: "POST",
           body: uploadPayload,
         })
@@ -405,7 +406,7 @@ export function LeaveContent({
         }
 
         for (const documentType of evidenceDocumentTypes) {
-          const evidenceResponse = await fetch("/api/hr/leave/evidence", {
+          const evidenceResponse = await apiFetch("/api/hr/leave/evidence", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -438,7 +439,7 @@ export function LeaveContent({
   async function executeDeleteRequest(request: LeaveRequest) {
     setIsDeleting(true)
     try {
-      const response = await fetch(`/api/hr/leave/requests?id=${encodeURIComponent(request.id)}`, {
+      const response = await apiFetch(`/api/hr/leave/requests?id=${encodeURIComponent(request.id)}`, {
         method: "DELETE",
       })
       const payload = await response.json().catch(() => ({}))
@@ -463,7 +464,7 @@ export function LeaveContent({
 
   async function submitAction(requestId: string, action: "approve" | "reject", comments: string) {
     try {
-      const response = await fetch("/api/hr/leave/approve", {
+      const response = await apiFetch("/api/hr/leave/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ leave_request_id: requestId, action, comments }),
@@ -483,7 +484,7 @@ export function LeaveContent({
       uploadPayload.set("file", file)
       uploadPayload.set("document_type", documentType)
 
-      const uploadResponse = await fetch("/api/hr/leave/evidence/upload", {
+      const uploadResponse = await apiFetch("/api/hr/leave/evidence/upload", {
         method: "POST",
         body: uploadPayload,
       })
@@ -493,7 +494,7 @@ export function LeaveContent({
         throw new Error(uploadBody?.error || "Evidence file upload failed")
       }
 
-      const response = await fetch("/api/hr/leave/evidence", {
+      const response = await apiFetch("/api/hr/leave/evidence", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

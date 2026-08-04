@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatCard } from "@/components/ui/stat-card"
+import { apiFetch } from "@/lib/api-client"
 
 type CycleStatus = "planned" | "active" | "closed" | "locked"
 
@@ -143,7 +144,7 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
     setIsLoading(true)
     setError(null)
     try {
-      const res = await fetch("/api/hr/performance/cycles")
+      const res = await apiFetch("/api/hr/performance/cycles")
       const data = (await res.json().catch(() => ({}))) as { data?: ReviewCycle[]; error?: string }
       if (!res.ok) throw new Error(data.error || "Failed to load cycles")
       setCycles(data.data || [])
@@ -170,7 +171,7 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
     event.preventDefault()
     setIsSubmitting(true)
     try {
-      const res = await fetch("/api/hr/performance/cycles", {
+      const res = await apiFetch("/api/hr/performance/cycles", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, review_type: reviewType, start_date: startDate, end_date: endDate, status }),
@@ -191,7 +192,7 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
   async function handleStatusChange(cycle: ReviewCycle, newStatus: CycleStatus) {
     setIsSubmitting(true)
     try {
-      const res = await fetch("/api/hr/performance/cycles", {
+      const res = await apiFetch("/api/hr/performance/cycles", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: cycle.id, status: newStatus }),
@@ -211,7 +212,7 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
   async function handleDelete(cycle: ReviewCycle) {
     setIsSubmitting(true)
     try {
-      const res = await fetch(`/api/hr/performance/cycles?id=${encodeURIComponent(cycle.id)}`, {
+      const res = await apiFetch(`/api/hr/performance/cycles?id=${encodeURIComponent(cycle.id)}`, {
         method: "DELETE",
       })
       const data = (await res.json().catch(() => ({}))) as { error?: string; message?: string }

@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { getCurrentOfficeWeek } from "@/lib/meeting-week"
 import { REPORT_DOC_MAX_SIZE_BYTES, formatLimitMb } from "@/lib/reports/document-upload-limits"
 import { BookOpen, CalendarDays, Loader2, Presentation, Upload } from "lucide-react"
+import { apiFetch } from "@/lib/api-client"
 
 const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
@@ -80,7 +81,7 @@ export function MeetingDocumentLibrary({ employees, backHref, backLabel, title =
   const { data: kssRosterForWeek, refetch: refetchRoster } = useQuery({
     queryKey: ["kss-roster-page", weekNumber, yearNumber],
     queryFn: async (): Promise<KssRosterEntry | null> => {
-      const res = await fetch(`/api/reports/kss-roster?week=${weekNumber}&year=${yearNumber}`)
+      const res = await apiFetch(`/api/reports/kss-roster?week=${weekNumber}&year=${yearNumber}`)
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Failed to fetch KSS roster")
       return (payload.data || [])[0] || null
@@ -90,7 +91,7 @@ export function MeetingDocumentLibrary({ employees, backHref, backLabel, title =
   const { data: meetingDocuments = [], refetch: refetchMeetingDocuments } = useQuery({
     queryKey: ["meeting-week-documents-page", weekNumber, yearNumber],
     queryFn: async (): Promise<MeetingWeekDocument[]> => {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/reports/meeting-week-documents?week=${weekNumber}&year=${yearNumber}&currentOnly=true`
       )
       const payload = await res.json()
@@ -119,7 +120,7 @@ export function MeetingDocumentLibrary({ employees, backHref, backLabel, title =
 
     setSavingRoster(true)
     try {
-      const res = await fetch("/api/reports/kss-roster", {
+      const res = await apiFetch("/api/reports/kss-roster", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -169,7 +170,7 @@ export function MeetingDocumentLibrary({ employees, backHref, backLabel, title =
         if (kssNotes.trim()) fd.append("notes", kssNotes.trim())
       }
 
-      const res = await fetch("/api/reports/meeting-week-documents", {
+      const res = await apiFetch("/api/reports/meeting-week-documents", {
         method: "POST",
         body: fd,
       })

@@ -17,6 +17,7 @@ import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { exportPmsRowsToExcel, exportPmsRowsToPdf } from "@/lib/pms/export"
 import { toLocalISODate } from "@/lib/utils/date"
 import { IndividualAttendanceExpandedRow } from "./individual-attendance-expanded-row"
+import { apiFetch } from "@/lib/api-client"
 
 type MetricKey = "kpi" | "goals" | "attendance" | "behaviour"
 type TabKey = "individual" | "department" | "cycle"
@@ -126,7 +127,7 @@ function MetricAddDialog({
         setDepartment(selectedUser?.department || "")
 
         if (metric === "kpi") {
-          const response = await fetch(
+          const response = await apiFetch(
             `/api/hr/performance/reviews?user_id=${encodeURIComponent(userId)}&cycle_id=${encodeURIComponent(cycleId)}`,
             { cache: "no-store" }
           )
@@ -139,7 +140,7 @@ function MetricAddDialog({
         }
 
         if (metric === "goals") {
-          const response = await fetch(
+          const response = await apiFetch(
             `/api/hr/performance/goals?department=${encodeURIComponent(selectedUser?.department || "")}&cycle_id=${encodeURIComponent(cycleId)}`,
             { cache: "no-store" }
           )
@@ -150,7 +151,7 @@ function MetricAddDialog({
         }
 
         if (metric === "behaviour") {
-          const response = await fetch(
+          const response = await apiFetch(
             `/api/hr/performance/score?user_id=${encodeURIComponent(userId)}&cycle_id=${encodeURIComponent(cycleId)}`,
             { cache: "no-store" }
           )
@@ -204,7 +205,7 @@ function MetricAddDialog({
         const numericScore = Number(scoreValue)
         if (!Number.isFinite(numericScore) || numericScore <= 0 || numericScore > 100)
           throw new Error("KPI score must be between 1 and 100")
-        const response = await fetch("/api/hr/performance/reviews", {
+        const response = await apiFetch("/api/hr/performance/reviews", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ user_id: userId, review_cycle_id: cycleId, kpi_score: numericScore }),
@@ -212,7 +213,7 @@ function MetricAddDialog({
         const payload = (await response.json().catch(() => null)) as { error?: string } | null
         if (!response.ok) throw new Error(payload?.error || "Failed to save")
       } else if (metric === "goals") {
-        const response = await fetch("/api/hr/performance/goals", {
+        const response = await apiFetch("/api/hr/performance/goals", {
           method: goalId ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
@@ -224,7 +225,7 @@ function MetricAddDialog({
         const payload = (await response.json().catch(() => null)) as { error?: string } | null
         if (!response.ok) throw new Error(payload?.error || "Failed to save")
       } else {
-        const response = await fetch("/api/hr/performance/reviews", {
+        const response = await apiFetch("/api/hr/performance/reviews", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -394,6 +395,8 @@ export function PmsMetricTabsPage({
   const [isInitialLoading, setIsInitialLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedRawRows, setProcessedRawRows] = useState<Record<string, unknown>[]>([])
   const [data, setData] = useState<MetricSnapshotPayload | null>(null)
   const [cycleId, setCycleId] = useState("")
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -413,7 +416,7 @@ export function PmsMetricTabsPage({
     void (async () => {
       try {
         const query = cycleId ? `&cycle_id=${encodeURIComponent(cycleId)}` : ""
-        const response = await fetch(`/api/hr/performance/metric-snapshot?metric=${metric}${query}`, {
+        const response = await apiFetch(`/api/hr/performance/metric-snapshot?metric=${metric}${query}`, {
           cache: "no-store",
         })
         const payload = (await response.json().catch(() => null)) as {
@@ -455,19 +458,20 @@ export function PmsMetricTabsPage({
     return ["cycle", "review_type", "employee_count", "submitted_count", "departments_counted", "metric_value"]
   }, [metric, tab])
 
-  const exportRows = useMemo(
-    () =>
-      rawRows.map((row, index) =>
-        Object.fromEntries([
-          ["S/N", index + 1],
-          ...columnKeys.map((col) => [
-            col.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-            asString((row as Record<string, unknown>)[col]),
-          ]),
-        ])
-      ),
-    [rawRows, columnKeys]
-  )
+  // Export the rows currently visible in the table (respects search + filters + sort),
+  // falling back to the full set before the table has reported its processed rows.
+  const exportRows = useMemo(() => {
+    const source = processedRawRows.length ? processedRawRows : rawRows
+    return source.map((row, index) =>
+      Object.fromEntries([
+        ["S/N", index + 1],
+        ...columnKeys.map((col) => [
+          col.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+          asString((row as Record<string, unknown>)[col]),
+        ]),
+      ])
+    )
+  }, [rawRows, columnKeys, processedRawRows])
 
   const MOBILE_HIDDEN_COLS = new Set([
     "cycle",
@@ -669,6 +673,7 @@ export function PmsMetricTabsPage({
       <DataTable<Record<string, unknown>>
         data={rawRows as Record<string, unknown>[]}
         columns={tableColumns}
+        onProcessedDataChange={setProcessedRawRows}
         filters={tableFilters}
         getRowId={(row) => String(row.user_id || row.department || row.cycle || JSON.stringify(row).slice(0, 40))}
         pagination={{ pageSize: 50 }}

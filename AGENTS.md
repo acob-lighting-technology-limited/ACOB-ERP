@@ -52,6 +52,26 @@ Examples:
 - When working with joins, type the selected result shape explicitly instead of relying on deep inference.
 - Prefer local row types over broad casts.
 
+## Database Security Standard — RLS, Grants & Functions (Mandatory)
+
+**Core principle:** the Supabase `anon` key is public and ships in the browser. PostgREST exposes every table and RPC directly to the internet at `/rest/v1/*` and `/rest/v1/rpc/*`, **bypassing Next.js, middleware, `lib/admin/rbac.ts`, and `lib/admin/policy-v2.ts` entirely.** App-layer authorization does **not** protect this path. The **only** server-side boundary on the anon path is database Row-Level Security (RLS) and function `EXECUTE` grants. Treat every table and `SECURITY DEFINER` function as internet-facing.
+
+Non-negotiable rules:
+
+1. **Every new table enables RLS in the same migration that creates it**, with at least one explicit policy. A `CREATE TABLE` without `ENABLE ROW LEVEL SECURITY` is world-readable *and* world-writable via the anon key (the `anon`/`authenticated` roles hold blanket table grants in this project).
+2. **Never write a permissive policy for untrusted roles.** No `USING (true)` and no policy with role `public` or `anon` on any table holding non-public data. Scope every policy `TO authenticated` and gate it with `has_role(...)`, `auth.uid() = <owner_col>`, or an equivalent predicate.
+3. **Never disable RLS on a production table to "fix" a query.** Empty results or `permission denied` mean the policy is wrong or the wrong client is used — fix the policy, or read via the service-role client in a server route. Disabling RLS turns the table wide open and is the exact cause of past incidents.
+4. **Browser code never relies on loose RLS.** Sensitive reads/writes go through server API routes using the service-role client (`getServiceRoleClientOrFallback` / `getServiceClient`), which bypasses RLS. The RLS policy is the backstop, not the app's data path.
+5. **`SECURITY DEFINER` functions:**
+   - Never trust a caller-supplied identity. Derive it from `auth.uid()`; if a `p_user_id`-style parameter is unavoidable, guard with `IF auth.uid() IS NOT NULL AND p_user_id <> auth.uid() THEN RAISE EXCEPTION ...` (this allows the service role, whose `auth.uid()` is null, while blocking authenticated impersonation).
+   - **Always `REVOKE EXECUTE ON FUNCTION ... FROM anon, PUBLIC` in the creating migration.** Postgres grants `EXECUTE` to `PUBLIC` by default and `anon` inherits it — revoking from `anon` alone is not enough. Then `GRANT EXECUTE` explicitly only to the roles that need it (`authenticated` and/or `service_role`).
+   - Functions that return or mutate sensitive data must check role internally (do not rely on the app layer to gate a directly-callable RPC).
+6. **Sequence / counter RPCs** (employee numbers, correspondence references, etc.) require an authenticated privileged role plus rate limiting — never anon/`PUBLIC`.
+7. **Migrations are the only way to change schema, policies, or grants in production.** No hand edits in the Supabase dashboard or SQL editor — they drift from the repo (which cannot see them) and leave no audit trail.
+8. **Review/CI gate — reject a migration if it:** creates a table without `ENABLE ROW LEVEL SECURITY` + a policy; adds a policy with role `public`/`anon` on non-public data; or defines a `SECURITY DEFINER` function without a matching `REVOKE EXECUTE ... FROM PUBLIC`.
+9. **Verify after every RLS/grant/function change** by impersonating the anon role: `BEGIN; SET LOCAL ROLE anon; <attempt the access>; ROLLBACK;` — confirm intended access is denied. Do not assume the repo reflects production; check live state.
+10. **Governance:** MFA must be enabled on all Supabase org members; direct production DDL access must be restricted; keep public sign-up (`disable_signup`) off unless a self-service flow explicitly requires it (an open `auth.users` signup lets anyone mint a valid UUID regardless of the in-app approval workflow).
+
 ## Query Construction Rules
 
 Be cautious with helper wrappers around Supabase queries in build-sensitive code.
@@ -626,6 +646,37 @@ For any leave workflow event, always use `notifyUsers` from `lib/hr/leave-workfl
 - **Next app** (`lib/`, `app/api/`): import from `ORG_EMAIL_SENDERS` in `lib/org-config.ts` (`.notification`, `.hr`, `.helpDesk`, `.correspondence`). Add a new key there rather than writing `` `ACOB X <notifications@...>` `` inline.
 - **Edge functions** (`supabase/functions/`, Deno — cannot import `lib/`): import from `EDGE_SENDERS` / `edgeDepartmentSender()` / `edgeDepartmentSenderBare()` in `supabase/functions/_shared/senders.ts`.
 
-The canonical HR/People sender is **`ACOB Admin & HR Department`** — never "ACOB HR ...". Department-derived senders (exit, asset, broadcast) resolve the label from the lead's `lead_departments` (which is "Admin & HR"), so they already produce the correct name.
+The canonical HR/People sender is **`ACOB Admin & HR`** — never "ACOB HR ..." and never "... Admin & HR Department" (no "Department" suffix). Department-derived senders (exit, asset, broadcast) resolve the label from the lead's `lead_departments` (which is "Admin & HR") via `orgDepartmentSenderBare()` / `edgeDepartmentSenderBare()` — use the *bare* variant for HR; the non-bare `orgDepartmentSender()` / `edgeDepartmentSender()` always appends "Department" and is only for genuinely departmental senders (e.g. "ACOB Finance Department").
 
 Edge functions are excluded from `tsc`/`eslint` and can't be validated locally without Deno — **smoke-test any sender change on deploy**.
+
+## Email Template Standard — Header, Footer, and Dark-Mode Lock (Mandatory)
+
+**Every email sent from this ERP must use the branded ACOB shell**: black header bar with the ACOB logo, green (`#16a34a`) top/bottom borders, a white 600–680px content wrapper, and a matching black footer with the company name + subsystem line + automated-notice text. Do not invent a one-off lighter/plainer template — copy the shell from an existing sender (`supabase/functions/_shared/artifact-email.ts` or `supabase/functions/send-meeting-reminder/index.ts` are the reference implementations) and only swap the body content.
+
+**The header/footer black bars must be dark-mode-locked**, or Gmail/Outlook dark mode will invert them to a white bar with unreadable text. Every black header/footer `<table>` cell must carry all of the following together — no partial subset:
+
+```html
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000"
+  style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">
+  <tr><td align="center" style="padding:20px 0;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;">
+    <!-- logo or footer text -->
+  </td></tr>
+</table>
+```
+
+The `background-image:linear-gradient(color,color) !important` is the load-bearing part — Gmail's dark-mode algorithm inverts flat `background-color` values but leaves elements with a `background-image` alone. `background:` alone (as used in `_shared/artifact-email.ts` before this was fixed) is **not sufficient** and will still get inverted in Gmail dark mode.
+
+Before adding a new email template (Next.js `lib/email-templates/`, `lib/*-mailer.ts`, or a Supabase edge function), verify the header/footer table matches this exact pattern. If you copy an existing template as a starting point, grep it for `linear-gradient` first — `send-birthday-emails`, `send-communications-mail`, `send-email-notification`, `send-weekly-report`, and `send-meeting-reminder` already have it correctly.
+
+## Email Delivery Standard — Loop Over Recipients Individually (Mandatory)
+
+**Never send a system/automated email to multiple recipients in a single `to` array/list.** Doing this puts all recipients in the email header's `to` field, exposing everyone's email address to all other recipients (acting like an unintentional public "CC").
+
+- **Standard Policy**: If an email needs to go to multiple people, always loop over the recipient list and call the email dispatch helper (`sendEmail` or equivalent) individually for each recipient, so that each person receives a separate email where they are the sole recipient.
+- **Reference Implementations**:
+  - `send-meeting-reminder` (loops through `recipients` individually).
+  - `send-attendance-daily-report` (loops through `recipientEmails` individually).
+  - `send-weekly-report` (uses `processRecipientBatch` to send to each recipient individually).
+  - `send-communications-mail` (uses `processRecipientBatch` to send to each recipient individually).
+

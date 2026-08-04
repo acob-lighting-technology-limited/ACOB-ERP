@@ -68,17 +68,26 @@ function formatTime(t: string | null | undefined) {
 }
 
 const CELL_BG: Record<string, string> = {
-  present: "bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800",
-  late: "bg-yellow-50 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800",
-  lateness_with_permission: "bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800",
-  incomplete: "bg-cyan-50 border-cyan-200 dark:bg-cyan-950/30 dark:border-cyan-800",
-  absent: "bg-red-50 border-red-200 dark:bg-red-950/30 dark:border-red-800",
-  absent_with_permission: "bg-orange-50 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800",
-  out_of_station: "bg-indigo-50 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-800",
-  waiver: "bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800",
-  exempted: "bg-violet-50 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800",
-  on_leave: "bg-purple-50 border-purple-200 dark:bg-purple-950/30 dark:border-purple-800",
-  holiday: "bg-sky-50 border-sky-200 dark:bg-sky-950/30 dark:border-sky-800",
+  early: "bg-green-50/80 border-green-200 dark:bg-green-950/30 dark:border-green-800",
+  present: "bg-blue-50/80 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800",
+  late: "bg-yellow-50/80 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800",
+  lateness_with_permission: "bg-amber-50/80 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800",
+  early_departure: "bg-orange-50/80 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800",
+  early_departure_with_permission: "bg-orange-50/80 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800",
+  early_closure: "bg-blue-50/80 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800",
+  late_resumption: "bg-sky-50/80 border-sky-200 dark:bg-sky-950/30 dark:border-sky-800",
+  incomplete: "bg-cyan-50/80 border-cyan-200 dark:bg-cyan-950/30 dark:border-cyan-800",
+  absent: "bg-red-50/80 border-red-200 dark:bg-red-950/30 dark:border-red-800",
+  absent_with_permission: "bg-rose-50/80 border-rose-200 dark:bg-rose-950/30 dark:border-rose-800",
+  out_of_station: "bg-indigo-50/80 border-indigo-200 dark:bg-indigo-950/30 dark:border-indigo-800",
+  waiver: "bg-blue-50/80 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800",
+  waived: "bg-blue-50/80 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800",
+  exempted: "bg-violet-50/80 border-violet-200 dark:bg-violet-950/30 dark:border-violet-800",
+  on_leave: "bg-purple-50/80 border-purple-200 dark:bg-purple-950/30 dark:border-purple-800",
+  holiday: "bg-sky-50/80 border-sky-200 dark:bg-sky-950/30 dark:border-sky-800",
+  weekend: "bg-slate-50/60 border-slate-200 dark:bg-slate-900/40 dark:border-slate-800",
+  no_record: "bg-gray-50/80 border-gray-200 dark:bg-gray-900/30 dark:border-gray-800",
+  half_day: "bg-yellow-50/80 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800",
 }
 
 export function EmployeeCalendarView() {
@@ -233,11 +242,16 @@ export function EmployeeCalendarView() {
                   </div>
                   {!isFuture && day && status && status !== "weekend" && (
                     <>
-                      <div className="truncate leading-tight font-medium" style={{ fontSize: "10px" }}>
+                      <Badge
+                        className={`max-w-full truncate px-1 py-0 text-[10px] font-medium ${
+                          ATTENDANCE_STATUS_COLORS[status as keyof typeof ATTENDANCE_STATUS_COLORS] ??
+                          "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
+                        }`}
+                      >
                         {ATTENDANCE_STATUS_LABELS[status as keyof typeof ATTENDANCE_STATUS_LABELS] ?? status}
-                      </div>
+                      </Badge>
                       {timeLabel && (
-                        <div className="text-muted-foreground leading-tight" style={{ fontSize: "10px" }}>
+                        <div className="text-muted-foreground mt-0.5 leading-tight" style={{ fontSize: "10px" }}>
                           {timeLabel}
                         </div>
                       )}
@@ -251,15 +265,17 @@ export function EmployeeCalendarView() {
       )}
 
       {/* Legend */}
-      <div className="mt-3 flex flex-wrap gap-2">
-        {(Object.entries(ATTENDANCE_STATUS_LABELS) as [string, string][]).map(([key, label]) => (
-          <Badge
-            key={key}
-            className={`text-xs ${ATTENDANCE_STATUS_COLORS[key as keyof typeof ATTENDANCE_STATUS_COLORS]}`}
-          >
-            {label}
-          </Badge>
-        ))}
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {(Object.entries(ATTENDANCE_STATUS_LABELS) as [string, string][])
+          .filter(([key]) => key !== "waived" && key !== "no_record")
+          .map(([key, label]) => (
+            <Badge
+              key={key}
+              className={`text-xs ${ATTENDANCE_STATUS_COLORS[key as keyof typeof ATTENDANCE_STATUS_COLORS] ?? "bg-gray-100 text-gray-800"}`}
+            >
+              {label}
+            </Badge>
+          ))}
       </div>
     </div>
   )

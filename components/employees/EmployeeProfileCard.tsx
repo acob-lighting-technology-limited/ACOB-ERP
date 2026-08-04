@@ -43,6 +43,16 @@ export function EmployeeProfileCard({ profile, fullName, initials }: EmployeePro
             </div>
           </div>
 
+          {profile.personal_email && (
+            <div className="flex items-center gap-3">
+              <Mail className="text-muted-foreground h-5 w-5" />
+              <div>
+                <p className="text-muted-foreground text-sm">Personal Email</p>
+                <p className="font-medium">{profile.personal_email}</p>
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center gap-3">
             <Building2 className="text-muted-foreground h-5 w-5" />
             <div>

@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Camera, CheckCircle2, AlertCircle, Loader2, MapPin, RefreshCcw, ShieldCheck, ShieldX } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-client"
 
 type Step = "camera" | "location" | "confirm"
 type Mode = "clock-in" | "clock-out"
@@ -139,7 +140,7 @@ export function RemoteCheckinModal({ open, mode, onClose, onSuccess }: Props) {
         const lng = pos.coords.longitude
         // Ask the server which site (if any) we're near
         try {
-          const res = await fetch(`/api/hr/attendance/sites/nearest?lat=${lat}&lng=${lng}`)
+          const res = await apiFetch(`/api/hr/attendance/sites/nearest?lat=${lat}&lng=${lng}`)
           const data = res.ok ? await res.json() : {}
           setLocationState({
             lat,
@@ -179,7 +180,7 @@ export function RemoteCheckinModal({ open, mode, onClose, onSuccess }: Props) {
     fd.append("longitude", String(locationState.lng ?? 0))
 
     try {
-      const res = await fetch(endpoint, { method: "POST", body: fd })
+      const res = await apiFetch(endpoint, { method: "POST", body: fd })
       const data = await res.json()
 
       if (!res.ok) {

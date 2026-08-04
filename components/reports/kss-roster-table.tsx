@@ -3,7 +3,8 @@
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { QUERY_KEYS } from "@/lib/query-keys"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -29,6 +30,7 @@ import { getCurrentOfficeWeek } from "@/lib/meeting-week"
 import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { REPORT_DOC_MAX_SIZE_BYTES, formatLimitMb } from "@/lib/reports/document-upload-limits"
 import { buildMeetingDocumentFileName } from "@/lib/reports/meeting-date"
+import { apiFetch } from "@/lib/api-client"
 import {
   CalendarDays,
   Download,
@@ -95,6 +97,7 @@ const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingm
 const PPTX_MIME = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 type UploadPhase = "idle" | "saving" | "converting" | "uploading"
 type PresenterType = "employee" | "visitor"
+const GUEST_DEPARTMENT = "Guest"
 
 interface Props {
   employees: Employee[]
@@ -141,6 +144,7 @@ export function KssRosterTable({
   enableScoring = false,
 }: Props) {
   const supabase = createClient()
+  const queryClient = useQueryClient()
   const currentOfficeWeek = getCurrentOfficeWeek()
   const defaultWeek = currentOfficeWeek.week
   const defaultYear = currentOfficeWeek.year
@@ -190,7 +194,7 @@ export function KssRosterTable({
   } = useQuery({
     queryKey: ["kss-roster-table"],
     queryFn: async (): Promise<KssRosterEntry[]> => {
-      const res = await fetch("/api/reports/kss-roster")
+      const res = await apiFetch("/api/reports/kss-roster")
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Failed to fetch KSS roster")
       return payload.data || []
@@ -205,7 +209,7 @@ export function KssRosterTable({
   } = useQuery({
     queryKey: ["kss-documents-table"],
     queryFn: async (): Promise<KssDocument[]> => {
-      const res = await fetch(
+      const res = await apiFetch(
         "/api/reports/meeting-week-documents?documentType=knowledge_sharing_session&currentOnly=true"
       )
       const payload = await res.json()
@@ -218,7 +222,7 @@ export function KssRosterTable({
     queryKey: ["kss-results-table"],
     enabled: enableScoring && Boolean(currentUserId),
     queryFn: async (): Promise<KssResult[]> => {
-      const res = await fetch("/api/reports/kss-results")
+      const res = await apiFetch("/api/reports/kss-results")
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Failed to fetch KSS scores")
       return payload.data || []
@@ -286,9 +290,10 @@ export function KssRosterTable({
   const selectedWeekDoc = docByWeekYear.get(`${yearNumber}-${weekNumber}`) || null
   const canUploadMissingForLockedWeek =
     isSelectedWeekLocked && Boolean(selectedWeekExistingRow) && !selectedWeekDoc && !readOnly
-  const isFormLocked = Boolean(editingId)
-    ? isSelectedWeekLocked && Boolean(selectedWeekDoc)
-    : isSelectedWeekLocked && Boolean(selectedWeekExistingRow) && Boolean(selectedWeekDoc)
+  const isFormLocked =
+    (Boolean(editingId)
+      ? isSelectedWeekLocked && Boolean(selectedWeekDoc)
+      : isSelectedWeekLocked && Boolean(selectedWeekExistingRow) && Boolean(selectedWeekDoc)) && !hasGraceOverride
 
   useEffect(() => {
     if (!canUploadMissingForLockedWeek || !selectedWeekExistingRow || editingId) return
@@ -427,7 +432,7 @@ export function KssRosterTable({
         }
         savedRoster = selectedWeekExistingRow
       } else {
-        const rosterRes = await fetch("/api/reports/kss-roster", {
+        const rosterRes = await apiFetch("/api/reports/kss-roster", {
           method: editingId ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(
@@ -482,7 +487,7 @@ export function KssRosterTable({
           }, 1200)
         }
 
-        const uploadRes = await fetch("/api/reports/meeting-week-documents", {
+        const uploadRes = await apiFetch("/api/reports/meeting-week-documents", {
           method: "POST",
           body: fd,
         })
@@ -500,7 +505,12 @@ export function KssRosterTable({
       }
       resetForm()
       setShowCreate(false)
-      await Promise.all([refetchRoster(), refetchDocs()])
+      await Promise.all([
+        refetchRoster(),
+        refetchDocs(),
+        queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminWeeklyReportLockState(weekNumber, yearNumber) }),
+        queryClient.invalidateQueries({ queryKey: ["general-meeting-week-setup", weekNumber, yearNumber] }),
+      ])
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Failed to save KSS")
     } finally {
@@ -521,17 +531,24 @@ export function KssRosterTable({
     try {
       const doc = docByWeekYear.get(`${row.meeting_year}-${row.meeting_week}`)
       if (doc) {
-        const docRes = await fetch(`/api/reports/meeting-week-documents?id=${doc.id}`, { method: "DELETE" })
+        const docRes = await apiFetch(`/api/reports/meeting-week-documents?id=${doc.id}`, { method: "DELETE" })
         const docPayload = await docRes.json()
         if (!docRes.ok) throw new Error(docPayload.error || "Failed to delete KSS file")
       }
 
-      const res = await fetch(`/api/reports/kss-roster?id=${row.id}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/reports/kss-roster?id=${row.id}`, { method: "DELETE" })
       const payload = await res.json()
       if (!res.ok) throw new Error(payload.error || "Failed to delete KSS roster")
       toast.success("KSS deleted")
       setPendingDeleteRow(null)
-      await Promise.all([refetchRoster(), refetchDocs()])
+      await Promise.all([
+        refetchRoster(),
+        refetchDocs(),
+        queryClient.invalidateQueries({
+          queryKey: QUERY_KEYS.adminWeeklyReportLockState(row.meeting_week, row.meeting_year),
+        }),
+        queryClient.invalidateQueries({ queryKey: ["general-meeting-week-setup", row.meeting_week, row.meeting_year] }),
+      ])
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : "Delete failed")
     }
@@ -548,7 +565,7 @@ export function KssRosterTable({
 
     setSavingScore(true)
     try {
-      const res = await fetch("/api/reports/kss-results", {
+      const res = await apiFetch("/api/reports/kss-results", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -962,6 +979,11 @@ export function KssRosterTable({
         <Dialog
           open={showCreate}
           onOpenChange={(open) => {
+            // Opening the override-confirm AlertDialog on top of this Dialog can trigger a
+            // spurious Radix "outside interaction" close event on this Dialog. Ignore close
+            // requests while the override confirmation is pending so form state (department,
+            // presenter, week/year) isn't wiped out before "Yes, Override and Save" runs.
+            if (!open && showOverrideConfirm) return
             setShowCreate(open)
             if (!open) resetForm()
           }}
@@ -1023,6 +1045,7 @@ export function KssRosterTable({
                     setPresenterType(value)
                     setPresenterId("none")
                     setVisitorPresenterName("")
+                    setDepartment(value === "visitor" ? GUEST_DEPARTMENT : "none")
                   }}
                   disabled={isFormLocked || canUploadMissingForLockedWeek}
                 >
@@ -1032,6 +1055,33 @@ export function KssRosterTable({
                   <SelectContent>
                     <SelectItem value="employee">Employee</SelectItem>
                     <SelectItem value="visitor">Visitor</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Department</Label>
+                <Select
+                  value={department}
+                  onValueChange={(value) => {
+                    setDepartment(value)
+                    setPresenterId("none")
+                  }}
+                  disabled={isFormLocked || canUploadMissingForLockedWeek || presenterType === "visitor"}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Select department</SelectItem>
+                    {presenterType === "visitor" && !departments.includes(GUEST_DEPARTMENT) ? (
+                      <SelectItem value={GUEST_DEPARTMENT}>{GUEST_DEPARTMENT}</SelectItem>
+                    ) : null}
+                    {departments.map((dept) => (
+                      <SelectItem key={dept} value={dept}>
+                        {dept}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -1050,7 +1100,7 @@ export function KssRosterTable({
                         }
                       }
                     }}
-                    disabled={isFormLocked || canUploadMissingForLockedWeek}
+                    disabled={isFormLocked || canUploadMissingForLockedWeek || department === "none"}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select presenter" />
@@ -1075,30 +1125,6 @@ export function KssRosterTable({
                     disabled={isFormLocked || canUploadMissingForLockedWeek}
                   />
                 )}
-              </div>
-
-              <div className="space-y-2">
-                <Label>Department</Label>
-                <Select
-                  value={department}
-                  onValueChange={(value) => {
-                    setDepartment(value)
-                    setPresenterId("none")
-                  }}
-                  disabled={isFormLocked || canUploadMissingForLockedWeek}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select department" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Select department</SelectItem>
-                    {departments.map((dept) => (
-                      <SelectItem key={dept} value={dept}>
-                        {dept}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
               </div>
 
               <div className="space-y-2">

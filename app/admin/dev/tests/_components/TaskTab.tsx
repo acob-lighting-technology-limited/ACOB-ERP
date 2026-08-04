@@ -11,6 +11,7 @@ import { Loader2, PlayCircle, ClipboardList } from "lucide-react"
 import { TaskRouteDiagnosticsPanel } from "./TaskRouteDiagnosticsPanel"
 import { ResultCard } from "./StepList"
 import type { TestResult } from "./shared-types"
+import { apiFetch } from "@/lib/api-client"
 
 interface TaskTabProps {
   employees: { value: string; label: string }[]
@@ -35,7 +36,7 @@ export function TaskTab({ employees }: TaskTabProps) {
     setRunning(true)
     setResult(null)
     try {
-      const res = await fetch("/api/dev/flow-tests", {
+      const res = await apiFetch("/api/dev/flow-tests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ kind: "task", assigner_id: assignerId, assignee_id: assigneeId, cleanup }),

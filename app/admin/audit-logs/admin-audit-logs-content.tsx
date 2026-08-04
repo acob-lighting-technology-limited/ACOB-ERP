@@ -47,6 +47,8 @@ export function AdminAuditLogsContent({
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false)
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedLogs, setProcessedLogs] = useState<AuditLog[]>([])
 
   const handleCopyEntry = useCallback(async (r: AuditLog) => {
     const userName = r.user ? `${r.user.first_name} ${r.user.last_name}` : "System"
@@ -267,6 +269,7 @@ export function AdminAuditLogsContent({
     >
       <DataTable<AuditLog>
         data={filteredData}
+        onProcessedDataChange={setProcessedLogs}
         columns={columns}
         getRowId={(r) => r.id}
         searchPlaceholder="Search action, module, user or summary..."
@@ -420,9 +423,10 @@ export function AdminAuditLogsContent({
           { id: "word", label: "Word (.docx)", icon: "word" },
         ]}
         onSelect={(id) => {
-          if (id === "excel") return exportAuditLogsToExcel(initialLogs)
-          if (id === "pdf") return exportAuditLogsToPDF(initialLogs)
-          exportAuditLogsToWord(initialLogs)
+          const rowsToExport = processedLogs.length ? processedLogs : filteredData
+          if (id === "excel") return exportAuditLogsToExcel(rowsToExport)
+          if (id === "pdf") return exportAuditLogsToPDF(rowsToExport)
+          exportAuditLogsToWord(rowsToExport)
         }}
       />
     </DataTablePage>

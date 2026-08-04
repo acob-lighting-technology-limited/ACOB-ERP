@@ -37,7 +37,7 @@ type QuestionRow = {
   option_b: string
   option_c: string
   option_d: string
-  correct_option: "A" | "B" | "C" | "D"
+  correct_option?: "A" | "B" | "C" | "D"
   department?: string | null
   is_bonus?: boolean
 }
@@ -189,7 +189,7 @@ export async function POST(request: NextRequest) {
     if (submittedAttempt) {
       const { data: questionsData, error: questionsError } = await supabase
         .from("cbt_questions")
-        .select("id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, correct_option, department")
+        .select("id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, department")
         .in("id", submittedAttempt.question_ids || [])
         .returns<QuestionRow[]>()
 
@@ -245,9 +245,7 @@ export async function POST(request: NextRequest) {
       sessionAttemptId = existingAttempt.id
       const { data: questionsData, error: questionsError } = await supabase
         .from("cbt_questions")
-        .select(
-          "id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, correct_option, department, is_bonus"
-        )
+        .select("id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, department, is_bonus")
         .in("id", existingAttempt.question_ids)
         .returns<QuestionRow[]>()
 
@@ -267,9 +265,7 @@ export async function POST(request: NextRequest) {
       // 2. Fetch all active standard questions for the review cycle
       const { data: allQuestions, error: questionsError } = await supabase
         .from("cbt_questions")
-        .select(
-          "id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, correct_option, department, is_bonus"
-        )
+        .select("id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, department, is_bonus")
         .eq("review_cycle_id", review_cycle_id)
         .eq("is_active", true)
         .eq("is_bonus", false)
@@ -286,9 +282,7 @@ export async function POST(request: NextRequest) {
       // Query active bonus questions matching candidate's email
       const { data: bonusQuestions, error: bonusError } = await supabase
         .from("cbt_questions")
-        .select(
-          "id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, correct_option, department, is_bonus"
-        )
+        .select("id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, department, is_bonus")
         .eq("review_cycle_id", review_cycle_id)
         .eq("is_active", true)
         .eq("is_bonus", true)

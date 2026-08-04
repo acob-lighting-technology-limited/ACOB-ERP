@@ -29,6 +29,7 @@ import { usePaymentExport } from "./use-payment-export"
 import type { CreatePaymentFormData } from "./create-payment-dialog"
 import { logger } from "@/lib/logger"
 import { QUERY_KEYS } from "@/lib/query-keys"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("payments-table")
 
@@ -90,7 +91,7 @@ const EMPTY_PAYMENTS: Payment[] = []
 const EMPTY_DEPARTMENTS: Department[] = []
 
 async function fetchPaymentsTableData(): Promise<PaymentsTableData> {
-  const [paymentsRes, deptRes] = await Promise.all([fetch("/api/payments"), fetch("/api/departments")])
+  const [paymentsRes, deptRes] = await Promise.all([apiFetch("/api/payments"), apiFetch("/api/departments")])
 
   if (!paymentsRes.ok) {
     const data = await paymentsRes.json().catch(() => ({}))
@@ -546,7 +547,7 @@ export function PaymentsTable({
         return
       }
 
-      const response = await fetch("/api/payments", {
+      const response = await apiFetch("/api/payments", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -572,7 +573,7 @@ export function PaymentsTable({
         uploadFormData.append("document_type", "receipt")
         uploadFormData.append("applicable_date", submittedFormData.payment_date)
 
-        const uploadResponse = await fetch(`/api/payments/${paymentId}/documents`, {
+        const uploadResponse = await apiFetch(`/api/payments/${paymentId}/documents`, {
           method: "POST",
           body: uploadFormData,
         })
@@ -733,7 +734,7 @@ export function PaymentsTable({
         uploadData.append("applicable_date", selectedPaymentForReceiptUpload.payment_date)
       }
 
-      const response = await fetch(`/api/payments/${selectedPaymentForReceiptUpload.id}/documents`, {
+      const response = await apiFetch(`/api/payments/${selectedPaymentForReceiptUpload.id}/documents`, {
         method: "POST",
         body: uploadData,
       })

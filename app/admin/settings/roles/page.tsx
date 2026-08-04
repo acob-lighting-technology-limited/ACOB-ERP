@@ -2,7 +2,6 @@
 
 import { useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import {
   AlertDialog,
@@ -29,6 +28,7 @@ import type { Role, RoleFormData } from "./_components/role-form-dialog"
 import type { RoleMember } from "./_components/role-users-dialog"
 
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("settings-roles")
 
@@ -57,24 +57,18 @@ export default function RolesPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     try {
-      const supabase = createClient()
-      if (editingRole) {
-        const { error } = await supabase
-          .from("roles")
-          .update({ name: formData.name, description: formData.description || null, permissions: formData.permissions })
-          .eq("id", editingRole.id)
-        if (error) throw error
-        toast.success("Role updated")
-      } else {
-        const { error } = await supabase.from("roles").insert({
+      const res = await apiFetch("/api/admin/settings/roles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: editingRole?.id,
           name: formData.name,
           description: formData.description || null,
           permissions: formData.permissions,
-          is_system: false,
-        })
-        if (error) throw error
-        toast.success("Role created")
-      }
+        }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to save")
+      toast.success(editingRole ? "Role updated" : "Role created")
       setIsDialogOpen(false)
       setEditingRole(null)
       setFormData({ name: "", description: "", permissions: [] })
@@ -91,9 +85,8 @@ export default function RolesPage() {
       return
     }
     try {
-      const supabase = createClient()
-      const { error } = await supabase.from("roles").delete().eq("id", role.id)
-      if (error) throw error
+      const res = await apiFetch(`/api/admin/settings/roles?id=${encodeURIComponent(role.id)}`, { method: "DELETE" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to delete")
       toast.success("Deleted")
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminRolesSettings() })
     } catch (error: unknown) {
@@ -120,14 +113,12 @@ export default function RolesPage() {
     setRoleUsersOpen(true)
     setRoleUsersLoading(true)
     try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, first_name, last_name, company_email, department, employment_status, created_at")
-        .eq("role", roleName)
-        .order("first_name", { ascending: true })
-      if (error) throw error
-      setRoleUsers((data || []) as RoleMember[])
+      const res = await apiFetch(`/api/admin/settings/roles/users?role=${encodeURIComponent(roleName)}`, {
+        cache: "no-store",
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || "Failed to load role users")
+      setRoleUsers((json.data || []) as RoleMember[])
     } catch (error: unknown) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       toast.error((error as any)?.message || "Failed to load role users")
@@ -138,13 +129,10 @@ export default function RolesPage() {
 
   async function fetchAllUsersForRoleModal() {
     try {
-      const supabase = createClient()
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, first_name, last_name, company_email, department, employment_status, created_at")
-        .order("first_name", { ascending: true })
-      if (error) throw error
-      setAvailableUsers((data || []) as RoleMember[])
+      const res = await apiFetch("/api/admin/settings/roles/users", { cache: "no-store" })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json?.error || "Failed to load users")
+      setAvailableUsers((json.data || []) as RoleMember[])
     } catch (error: unknown) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       toast.error((error as any)?.message || "Failed to load users")
@@ -166,7 +154,7 @@ export default function RolesPage() {
     if (!selectedRoleName || !selectedUserId) return
     setAddingUser(true)
     try {
-      const response = await fetch("/api/admin/users/role", {
+      const response = await apiFetch("/api/admin/users/role", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ targetUserId: selectedUserId, role: selectedRoleName }),

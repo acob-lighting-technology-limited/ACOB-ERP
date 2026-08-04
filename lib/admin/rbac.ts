@@ -28,6 +28,7 @@ export type AdminSection =
   | "projects"
   | "purchasing"
   | "reports"
+  | "security"
   | "settings"
   | "tasks"
   | "admin"
@@ -81,6 +82,7 @@ const SECTION_TO_ROUTES: Partial<Record<AdminSection, AdminRouteKeyV2[]>> = {
   projects: [],
   purchasing: ["purchasing.main"],
   reports: ["reports.weekly", "reports.other"],
+  security: ["security.networkActivity"],
   settings: ["settings.main"],
   tasks: ["tasks.main"],
   admin: [],

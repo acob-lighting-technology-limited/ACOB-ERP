@@ -24,6 +24,7 @@ import { AdminUserModal } from "./admin-user-modal"
 import { AdminUserTable } from "@/components/admin/AdminUserTable"
 import { AdminUserDetailsDialog } from "@/components/admin/AdminUserDetailsDialog"
 import { toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 interface AdminDashboardProps {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -168,7 +169,7 @@ export function AdminDashboard({ users, currentUserId: _currentUserId, feedbackB
     setIsImporting(true)
     toast.loading("Importing employee data...", { id: "import" })
     try {
-      const response = await fetch("/api/admin/import-csv", { method: "POST" })
+      const response = await apiFetch("/api/admin/import-csv", { method: "POST" })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || "Import failed")
       toast.success(

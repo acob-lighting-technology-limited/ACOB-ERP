@@ -1,7 +1,6 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
-import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -10,29 +9,10 @@ import Link from "next/link"
 import { PageWrapper, PageHeader, Section } from "@/components/layout"
 import { StatCard } from "@/components/ui/stat-card"
 
-import { logger } from "@/lib/logger"
-
-const log = logger("inventory")
-
 async function fetchInventoryStats(): Promise<InventoryStats> {
-  const supabase = createClient()
-  const { data: products, error: prodError } = await supabase.from("products").select("*")
-  if (prodError && prodError.code !== "42P01") log.error("Error fetching products:", prodError)
-  const { data: categories, error: catError } = await supabase.from("product_categories").select("*")
-  if (catError && catError.code !== "42P01") log.error("Error fetching categories:", catError)
-  const { data: warehouses, error: whError } = await supabase.from("warehouses").select("*")
-  if (whError && whError.code !== "42P01") log.error("Error fetching warehouses:", whError)
-
-  const allProducts = (products || []) as ProductRow[]
-  const lowStock = allProducts.filter((p) => (p.quantity_on_hand || 0) <= (p.reorder_level || 10))
-  const totalVal = allProducts.reduce((sum, p) => sum + (p.unit_cost || 0) * (p.quantity_on_hand || 0), 0)
-  return {
-    totalProducts: allProducts.length,
-    totalCategories: categories?.length || 0,
-    totalWarehouses: warehouses?.length || 0,
-    lowStockItems: lowStock.length,
-    totalValue: totalVal,
-  }
+  const res = await fetch("/api/admin/inventory/stats", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load inventory stats")
+  return res.json()
 }
 
 interface InventoryStats {
@@ -41,12 +21,6 @@ interface InventoryStats {
   totalWarehouses: number
   lowStockItems: number
   totalValue: number
-}
-
-interface ProductRow {
-  quantity_on_hand?: number | null
-  reorder_level?: number | null
-  unit_cost?: number | null
 }
 
 export default function InventoryDashboard() {

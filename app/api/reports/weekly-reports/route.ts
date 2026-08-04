@@ -325,7 +325,7 @@ export async function PATCH(request: Request) {
 
           const parsedTitles = parseTasksNewWeekLines(tasksNewWeek)
           if (parsedTitles.length > 0 && status === "submitted") {
-            const actionItemPayload = parsedTitles.map((title) => ({
+            const actionItemPayload = parsedTitles.map((title, index) => ({
               title,
               department,
               status: "pending",
@@ -333,6 +333,7 @@ export async function PATCH(request: Request) {
               year: yearNumber,
               assigned_by: user.id,
               report_id: reportId,
+              position: index,
             }))
             const { error: insertActionItemsError } = await dataClient.from("action_items").insert(actionItemPayload)
             if (insertActionItemsError) {

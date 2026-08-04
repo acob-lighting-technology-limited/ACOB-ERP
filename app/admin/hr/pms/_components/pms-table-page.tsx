@@ -68,6 +68,8 @@ export function PmsTablePage({
 }: PmsTablePageProps) {
   const Icon = iconMap[icon]
   const [isExportOpen, setIsExportOpen] = useState(false)
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedRows, setProcessedRows] = useState<TableRowData[]>([])
 
   const tableColumns = useMemo<DataTableColumn<TableRowData>[]>(() => {
     return columns.map((column, index) => ({
@@ -152,16 +154,17 @@ export function PmsTablePage({
     hideSecondaryFilter,
   ])
 
-  const exportRows = useMemo(
-    () =>
-      rows.map((row, index) =>
-        Object.fromEntries([
-          ["S/N", index + 1],
-          ...columns.map((column) => [column.label, normalizeCell(row[column.key])]),
-        ])
-      ),
-    [columns, rows]
-  )
+  // Export the rows currently visible in the table (respects search + filters + sort),
+  // falling back to the full set before the table has reported its processed rows.
+  const exportRows = useMemo(() => {
+    const source = processedRows.length ? processedRows : rows
+    return source.map((row, index) =>
+      Object.fromEntries([
+        ["S/N", index + 1],
+        ...columns.map((column) => [column.label, normalizeCell(row[column.key])]),
+      ])
+    )
+  }, [columns, rows, processedRows])
 
   const shouldRenderTaskExpansion = rows.some((row) => Array.isArray((row as { __tasks?: unknown }).__tasks))
 
@@ -203,6 +206,7 @@ export function PmsTablePage({
       <DataTable<TableRowData>
         data={rows.map((row, index) => ({ ...row, __rowId: `row-${index}-${normalizeCell(row[firstColumnKey])}` }))}
         columns={tableColumns}
+        onProcessedDataChange={setProcessedRows}
         filters={filters}
         getRowId={(row) => row.__rowId || normalizeCell(row[firstColumnKey])}
         pagination={{ pageSize: 50 }}

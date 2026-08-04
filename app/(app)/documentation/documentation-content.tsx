@@ -23,6 +23,7 @@ import { DocViewToggle } from "@/components/documentation/doc-view-toggle"
 import { DocEmptyState } from "@/components/documentation/doc-empty-state"
 
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("documentation-documentation-content")
 
@@ -168,7 +169,7 @@ export function DocumentationContent({
         payload.append("attachments", file)
       }
 
-      const response = await fetch(
+      const response = await apiFetch(
         selectedDoc ? `/api/documentation/internal/${selectedDoc.id}` : "/api/documentation/internal",
         {
           method: selectedDoc ? "PUT" : "POST",
@@ -202,7 +203,7 @@ export function DocumentationContent({
 
     setIsSaving(true)
     try {
-      const response = await fetch(`/api/documentation/internal/${selectedDoc.id}`, { method: "DELETE" })
+      const response = await apiFetch(`/api/documentation/internal/${selectedDoc.id}`, { method: "DELETE" })
       const result = await response.json()
       if (!response.ok) {
         throw new Error(result.error || "Failed to delete documentation")

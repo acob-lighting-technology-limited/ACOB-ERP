@@ -1,5 +1,5 @@
-import { FormPageSkeleton } from "@/components/skeletons"
+import { AuthPageSkeleton } from "@/components/skeletons"
 
 export default function Loading() {
-  return <FormPageSkeleton sections={2} fieldsPerSection={3} showSidebar={true} />
+  return <AuthPageSkeleton />
 }

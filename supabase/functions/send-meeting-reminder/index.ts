@@ -237,7 +237,7 @@ function buildMeetingReminderHtml(
   const displayTime = formatTimeWithMeridiem(meetingTime)
   const preparedBy = escapeHtml(preparedByName?.trim() || "ACOB Team")
   const designation = escapeHtml(preparedByDesignation?.trim() || "")
-  const department = escapeHtml(preparedByDepartment?.trim() || "Admin & HR Department")
+  const department = escapeHtml(preparedByDepartment?.trim() || "Admin & HR")
   const presenterName = getKnowledgePresenterName(kssPresenter)
   const isGuestPresenter = Boolean(presenterName) && !kssPresenter?.id
   const presenterDisplayText = presenterName ? `${presenterName}${isGuestPresenter ? " (Guest)" : ""}` : ""
@@ -295,7 +295,7 @@ function buildMeetingReminderHtml(
     '<div class="email-shell">' +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">' +
     '<tr><td align="center" style="padding:20px 0;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;">' +
-    '<img src="https://erp.acoblighting.com/images/acob-logo-dark.png" height="65" alt="ACOB Lighting">' +
+    '<img src="https://matrix.acoblighting.com/images/acob-logo-dark.png" height="65" alt="ACOB Lighting">' +
     "</td></tr></table>" +
     '<div class="wrapper">' +
     '<div class="title">Reminder for General Weekly Meeting</div>' +
@@ -393,7 +393,7 @@ function buildKnowledgeSharingHtml(sessionDate: string, sessionTime: string, dur
     '<div class="email-shell">' +
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">' +
     '<tr><td align="center" style="padding:20px 0;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;">' +
-    '<img src="https://erp.acoblighting.com/images/acob-logo-dark.png" height="65" alt="ACOB Lighting">' +
+    '<img src="https://matrix.acoblighting.com/images/acob-logo-dark.png" height="65" alt="ACOB Lighting">' +
     "</td></tr></table>" +
     '<div class="wrapper">' +
     '<div class="title">Reminder: Knowledge Sharing Session</div>' +
@@ -625,17 +625,22 @@ serve(async (req) => {
         ? Math.floor((parsedMeetingDate.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
         : null
 
+      // Prefer the office week derived from the meeting date. The date is
+      // regenerated on every recurring send, whereas an explicit
+      // meetingWeek/meetingYear may be a stale value frozen into the schedule's
+      // meeting_config at creation time. Trusting the stale week caused
+      // reminders to announce meeting dates weeks in the past.
       const resolvedOfficeWeek =
-        typeof body?.meetingWeek === "number" && typeof body?.meetingYear === "number"
-          ? { week: body.meetingWeek, year: body.meetingYear }
-          : parsedMeetingDate && dayDiffFromToday !== null && Math.abs(dayDiffFromToday) <= 7
-            ? getOfficeWeekFromDate(
-                new Date(
-                  parsedMeetingDate.getUTCFullYear(),
-                  parsedMeetingDate.getUTCMonth(),
-                  parsedMeetingDate.getUTCDate()
-                )
+        parsedMeetingDate && dayDiffFromToday !== null && Math.abs(dayDiffFromToday) <= 7
+          ? getOfficeWeekFromDate(
+              new Date(
+                parsedMeetingDate.getUTCFullYear(),
+                parsedMeetingDate.getUTCMonth(),
+                parsedMeetingDate.getUTCDate()
               )
+            )
+          : typeof body?.meetingWeek === "number" && typeof body?.meetingYear === "number"
+            ? { week: body.meetingWeek, year: body.meetingYear }
             : getCurrentOfficeWeek()
 
       effectiveMeetingDate = await resolveEffectiveMeetingDateIso(
@@ -763,7 +768,7 @@ serve(async (req) => {
           kss_roster_status: kssRosterStatus || null,
           prepared_by: meetingPreparedByName || null,
           prepared_by_designation: meetingPreparedByDesignation || null,
-          prepared_by_department: meetingPreparedByDepartment || "Admin & HR Department",
+          prepared_by_department: meetingPreparedByDepartment || "Admin & HR",
         },
       })
     } catch (auditErr) {

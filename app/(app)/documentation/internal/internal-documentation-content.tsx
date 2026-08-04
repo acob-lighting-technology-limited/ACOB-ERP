@@ -16,6 +16,7 @@ import { DocFormDialog, type DocFormData } from "@/components/documentation/doc-
 import { DocDeleteDialog } from "@/components/documentation/doc-delete-dialog"
 import type { DocumentationAttachment } from "@/lib/documentation/sharepoint"
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("internal-documentation-content")
 
@@ -195,7 +196,7 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
         payload.append("attachments", file)
       }
 
-      const response = await fetch(
+      const response = await apiFetch(
         selectedDoc ? `/api/documentation/internal/${selectedDoc.id}` : "/api/documentation/internal",
         {
           method: selectedDoc ? "PUT" : "POST",
@@ -224,7 +225,7 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
 
     setIsSaving(true)
     try {
-      const response = await fetch(`/api/documentation/internal/${selectedDoc.id}`, { method: "DELETE" })
+      const response = await apiFetch(`/api/documentation/internal/${selectedDoc.id}`, { method: "DELETE" })
       const result = await response.json()
       if (!response.ok) {
         throw new Error(result.error || "Failed to delete documentation")

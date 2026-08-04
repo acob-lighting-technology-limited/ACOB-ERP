@@ -8,8 +8,10 @@ const EMAIL_HEADER_LOGO_SRC =
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
-const DB_TRIGGER_SECRET = Deno.env.get("DB_TRIGGER_SECRET")
-const LEGACY_TRIGGER_SECRET = Deno.env.get("LEGACY_TRIGGER_SECRET")
+// Static shared-secret fallbacks (DB_TRIGGER_SECRET / LEGACY_TRIGGER_SECRET) were
+// removed: their values were leaked in repo migrations. Auth is now the
+// service-role bearer (which all live DB callers send) or the WEBHOOK_SECRET env
+// value only.
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -52,14 +54,11 @@ serve(async (req) => {
     // Auth Check
     const bearerToken = authHeader?.replace("Bearer ", "")
     const isServiceRole = bearerToken === SUPABASE_SERVICE_ROLE_KEY
-    const isSecretValid =
-      (webhookSecret && signature === webhookSecret) ||
-      signature === DB_TRIGGER_SECRET ||
-      signature === LEGACY_TRIGGER_SECRET
+    const isSecretValid = Boolean(webhookSecret && signature === webhookSecret)
 
     if (!isServiceRole && !isSecretValid) {
       console.error(
-        `[AUTH FAIL] sig="${signature?.slice(0, 10) ?? "none"}" db_secret="${DB_TRIGGER_SECRET?.slice(0, 10) ?? "UNSET"}" legacy="${LEGACY_TRIGGER_SECRET?.slice(0, 10) ?? "UNSET"}" webhook="${webhookSecret?.slice(0, 10) ?? "UNSET"}" bearer_match=${isServiceRole}`
+        `[AUTH FAIL] sig="${signature?.slice(0, 10) ?? "none"}" webhook="${webhookSecret?.slice(0, 10) ?? "UNSET"}" bearer_match=${isServiceRole}`
       )
       return new Response("Unauthorized", { status: 401 })
     }

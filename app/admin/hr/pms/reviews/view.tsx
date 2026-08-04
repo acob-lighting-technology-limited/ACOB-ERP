@@ -296,6 +296,11 @@ export function AdminPmsReviewsPage({
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [reviews, setReviews] = useState<ReviewRow[]>([])
+  // Rows currently visible in the department/cycle tables (after search + filters + sort).
+  // The individual tab is server-paginated (search/filters there aren't wired to refetch yet
+  // — a separate pre-existing issue — so its export intentionally mirrors canonicalReviews).
+  const [processedDeptRows, setProcessedDeptRows] = useState<DeptRow[]>([])
+  const [processedCycleRows, setProcessedCycleRows] = useState<CycleRow[]>([])
   const [totalReviews, setTotalReviews] = useState(0)
   const [serverPage, setServerPage] = useState(0)
   const hasLoadedRef = useRef(false)
@@ -453,7 +458,7 @@ export function AdminPmsReviewsPage({
         Status: r.status ?? "-",
       }))
     if (tab === "department")
-      return deptRows.map((r, i) => ({
+      return (processedDeptRows.length ? processedDeptRows : deptRows).map((r, i) => ({
         "S/N": i + 1,
         Department: r.department,
         Quarter: r.cycle,
@@ -465,7 +470,7 @@ export function AdminPmsReviewsPage({
         "Avg Behaviour": r.behaviour,
         "Avg Final": r.final,
       }))
-    return cycleRows.map((r, i) => ({
+    return (processedCycleRows.length ? processedCycleRows : cycleRows).map((r, i) => ({
       "S/N": i + 1,
       Quarter: r.cycle,
       "Review Type": r.review_type,
@@ -474,7 +479,7 @@ export function AdminPmsReviewsPage({
       Departments: r.departments,
       Completed: r.completed,
     }))
-  }, [tab, canonicalReviews, deptRows, cycleRows])
+  }, [tab, canonicalReviews, deptRows, cycleRows, processedDeptRows, processedCycleRows])
 
   // ─── Navigation helpers ───────────────────────────────────────────────────
 
@@ -909,6 +914,7 @@ export function AdminPmsReviewsPage({
         <DataTable<DeptRow>
           data={deptRows}
           columns={deptColumns}
+          onProcessedDataChange={setProcessedDeptRows}
           getRowId={(r) => r.id}
           searchPlaceholder="Search department or quarter…"
           searchFn={(row, q) => row.department.toLowerCase().includes(q) || row.cycle.toLowerCase().includes(q)}
@@ -952,6 +958,7 @@ export function AdminPmsReviewsPage({
         <DataTable<CycleRow>
           data={cycleRows}
           columns={cycleColumns}
+          onProcessedDataChange={setProcessedCycleRows}
           getRowId={(r) => r.id}
           searchPlaceholder="Search quarter or review type…"
           searchFn={(row, q) => row.cycle.toLowerCase().includes(q) || row.review_type.toLowerCase().includes(q)}

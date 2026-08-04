@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { createClient } from "@/lib/supabase/client"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,6 +15,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { toast } from "sonner"
 import { FormFieldGroup } from "@/components/ui/patterns"
 import type { QueryClient } from "@tanstack/react-query"
+import { apiFetch } from "@/lib/api-client"
 
 interface Category {
   id: string
@@ -43,10 +43,10 @@ interface ProductFormDialogProps {
 }
 
 async function fetchProductCategories(): Promise<Category[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase.from("product_categories").select("id, name").order("name")
-  if (error && error.code !== "42P01") throw new Error(error.message)
-  return data || []
+  const res = await apiFetch("/api/admin/inventory/categories/options", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load categories")
+  const json = await res.json()
+  return json.data || []
 }
 
 const defaultFormData: ProductValues = {
@@ -83,12 +83,6 @@ export function ProductFormDialog({ open, onOpenChange, queryClient, product = n
 
     setSaving(true)
     try {
-      const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return toast.error("You must be logged in")
-
       const payload = {
         sku: formData.sku,
         name: formData.name,
@@ -102,13 +96,21 @@ export function ProductFormDialog({ open, onOpenChange, queryClient, product = n
       }
 
       if (isEditing && product?.id) {
-        const { error } = await supabase.from("products").update(payload).eq("id", product.id)
-        if (error) throw error
+        const res = await apiFetch(`/api/admin/inventory/products/${product.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to update product")
         toast.success("Product updated")
         await queryClient?.invalidateQueries({ queryKey: QUERY_KEYS.adminProductDetail(product.id) })
       } else {
-        const { error } = await supabase.from("products").insert({ ...payload, created_by: user.id })
-        if (error) throw error
+        const res = await apiFetch("/api/admin/inventory/products", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to create product")
         toast.success("Product created successfully!")
       }
 

@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { StatCard } from "@/components/ui/stat-card"
+import { apiFetch } from "@/lib/api-client"
 import {
   Dialog,
   DialogContent,
@@ -173,9 +174,9 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
     setError(null)
     try {
       const [plansRes, profilesRes, cyclesRes] = await Promise.all([
-        fetch("/api/hr/performance/development-plans?user_id=all_admin"),
-        fetch("/api/hr/profiles?all=true"),
-        fetch("/api/hr/performance/cycles"),
+        apiFetch("/api/hr/performance/development-plans?user_id=all_admin"),
+        apiFetch("/api/hr/profiles?all=true"),
+        apiFetch("/api/hr/performance/cycles"),
       ])
       const [plansData, profilesData, cyclesData] = await Promise.all([
         plansRes.json().catch(() => ({})),
@@ -263,7 +264,7 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
         .filter(Boolean)
         .map((line) => ({ title: line }))
 
-      const res = await fetch("/api/hr/performance/development-plans", {
+      const res = await apiFetch("/api/hr/performance/development-plans", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -298,7 +299,7 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
     if (!editingPlan) return
     setIsSubmitting(true)
     try {
-      const res = await fetch("/api/hr/performance/development-plans", {
+      const res = await apiFetch("/api/hr/performance/development-plans", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

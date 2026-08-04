@@ -83,6 +83,12 @@ export const OFFICE_LOCATIONS_BY_TYPE: Record<OfficeType, OfficeLocation[]> = {
       department: "Technical",
       description: "Technical Department Extension Office",
     },
+    {
+      name: "SIWES",
+      type: "department_office",
+      department: "SIWES",
+      description: "SIWES Department Office",
+    },
   ],
 
   // Conference rooms (shared meeting spaces)

@@ -3,8 +3,9 @@ import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
-import { isLate } from "@/lib/hr/attendance-utils"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
+import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 
 const log = logger("hikvision-events")
@@ -33,6 +34,14 @@ async function processHikvisionEvent(event: ParsedEvent) {
     auth: { autoRefreshToken: false, persistSession: false },
   })
 
+  // Load attendance policy configuration
+  const { data: settingRow } = await supabase
+    .from("system_settings")
+    .select("value")
+    .eq("key", "attendance_policy")
+    .maybeSingle()
+  const policy = (settingRow?.value as AttendancePolicy) || DEFAULT_ATTENDANCE_POLICY
+
   const { dateTime, AccessControllerEvent: ace } = event
   const { employeeNoString, attendanceStatus } = ace
 
@@ -42,11 +51,15 @@ async function processHikvisionEvent(event: ParsedEvent) {
   // Skip break events
   if (attendanceStatus === "breakIn" || attendanceStatus === "breakOut") return
 
-  // Resolve employee
+  // Resolve employee by the compact device key enrolled on the Hikvision unit.
+  // device_key is derived from employee_number: full-time = numeric suffix (e.g. "063"),
+  // contract/part-time = CODE + suffix (e.g. "SIWES001"). Uppercased so casing on the
+  // device (e.g. "siwes001") still matches. This is unique per person, unlike the old
+  // suffix match which collided across namespaced ID series.
   const { data: profile } = await supabase
     .from("profiles")
     .select("id")
-    .like("employee_number", `%/${employeeNoString}`)
+    .eq("device_key", employeeNoString.toUpperCase())
     .eq("employment_status", "active")
     .maybeSingle()
 
@@ -69,6 +82,99 @@ async function processHikvisionEvent(event: ParsedEvent) {
     .eq("user_id", userId)
     .eq("date", date)
     .maybeSingle()
+
+  // ── After-midnight exit rollback ─────────────────────────────────────────────
+  // A swipe in the small hours from someone who has no record yet for the new day
+  // but still has an *open* record from the previous day is their (very late) exit,
+  // not a fresh clock-in. Left unhandled, the device's exit punch opens a phantom
+  // clock-in for the new day and leaves the previous day stuck on "incomplete".
+  // We roll it back and use it to close out the previous day instead.
+  const AFTER_MIDNIGHT_ROLLBACK_CUTOFF = "04:00:00"
+  if (!existing?.clock_in && time < AFTER_MIDNIGHT_ROLLBACK_CUTOFF) {
+    const prevDateObj = new Date(`${date}T00:00:00Z`)
+    prevDateObj.setUTCDate(prevDateObj.getUTCDate() - 1)
+    const prevDate = prevDateObj.toISOString().slice(0, 10)
+
+    const { data: prev } = await supabase
+      .from("attendance_records")
+      .select("id, clock_in, clock_out")
+      .eq("user_id", userId)
+      .eq("date", prevDate)
+      .maybeSingle()
+
+    if (prev?.clock_in && !prev.clock_out) {
+      // The exit crossed midnight; the schema stores clock_out as a same-day time,
+      // so cap it at end of the previous day (23:59:59) rather than the new-day time.
+      const cappedOut = "23:59:59"
+      const clockInTs = new Date(`${prevDate}T${prev.clock_in}Z`).getTime()
+      const cappedOutTs = new Date(`${prevDate}T${cappedOut}Z`).getTime()
+      const rawHours = Math.max(0, (cappedOutTs - clockInTs) / (1000 * 60 * 60))
+      const breakDuration = rawHours >= 5 ? 60 : 0
+      const totalHours = rawHours - breakDuration / 60
+
+      const status = deriveUnifiedAttendanceStatus(
+        {
+          record: { clock_in: prev.clock_in, clock_out: cappedOut, status: null, waived: false },
+          recordDate: prevDate,
+        },
+        policy
+      )
+
+      const { error } = await supabase
+        .from("attendance_records")
+        .update({
+          clock_out: cappedOut,
+          total_hours: totalHours,
+          break_duration: breakDuration,
+          status,
+          source: "hikvision",
+          clock_out_source: "hikvision",
+        })
+        .eq("id", prev.id)
+
+      if (error) {
+        log.error(
+          { err: String(error), userId, prevDate },
+          "Failed to close out prior-day record from after-midnight exit"
+        )
+        return
+      }
+
+      await writeAuditLog(
+        supabase,
+        {
+          action: "update",
+          entityType: "attendance_record",
+          entityId: prev.id,
+          newValues: { clock_out: cappedOut, total_hours: totalHours, status, source: "hikvision" },
+          context: { actorId: userId, source: "system", route: "/api/devices/hikvision/events" },
+        },
+        { failOpen: true }
+      )
+
+      await recordAttendanceEvent(supabase, {
+        userId,
+        eventDate: prevDate,
+        eventType: "device_punch_out",
+        attendanceRecordId: prev.id,
+        source: "hikvision",
+        actorId: null,
+        metadata: {
+          clock_out: cappedOut,
+          actual_exit_time: time,
+          total_hours: totalHours,
+          employee_no: employeeNoString,
+          after_midnight_rollback: true,
+        },
+      })
+
+      log.info(
+        { userId, prevDate, time, employeeNoString },
+        "Hikvision after-midnight exit rolled back to close prior day"
+      )
+      return
+    }
+  }
 
   // ── Determine action ────────────────────────────────────────────────────────
   const normalised = (attendanceStatus ?? "").toLowerCase().trim()
@@ -97,7 +203,13 @@ async function processHikvisionEvent(event: ParsedEvent) {
 
   // ── Write attendance record ─────────────────────────────────────────────────
   if (action === "in") {
-    const status = isLate(time) ? "late" : "present"
+    const status = deriveUnifiedAttendanceStatus(
+      {
+        record: { clock_in: time, clock_out: null, status: null, waived: false },
+        recordDate: date,
+      },
+      policy
+    )
     const { data: upserted, error } = await supabase
       .from("attendance_records")
       .upsert(
@@ -142,11 +254,28 @@ async function processHikvisionEvent(event: ParsedEvent) {
 
     const clockIn = new Date(`${date}T${existing.clock_in}Z`)
     const clockOut = new Date(`${date}T${time}Z`)
-    const totalHours = Math.max(0, (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60))
+    const rawHours = Math.max(0, (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60))
+    const breakDuration = rawHours >= 5 ? 60 : 0
+    const totalHours = rawHours - breakDuration / 60
+
+    const status = deriveUnifiedAttendanceStatus(
+      {
+        record: { clock_in: existing.clock_in, clock_out: time, status: null, waived: false },
+        recordDate: date,
+      },
+      policy
+    )
 
     const { error } = await supabase
       .from("attendance_records")
-      .update({ clock_out: time, total_hours: totalHours, source: "hikvision", clock_out_source: "hikvision" })
+      .update({
+        clock_out: time,
+        total_hours: totalHours,
+        break_duration: breakDuration,
+        status,
+        source: "hikvision",
+        clock_out_source: "hikvision",
+      })
       .eq("user_id", userId)
       .eq("date", date)
 
@@ -161,7 +290,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
         action: "update",
         entityType: "attendance_record",
         entityId: existing.id,
-        newValues: { clock_out: time, total_hours: totalHours, source: "hikvision" },
+        newValues: { clock_out: time, total_hours: totalHours, status, source: "hikvision" },
         context: { actorId: userId, source: "system", route: "/api/devices/hikvision/events" },
       },
       { failOpen: true }

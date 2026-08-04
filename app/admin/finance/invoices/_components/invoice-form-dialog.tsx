@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { createClient } from "@/lib/supabase/client"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -16,6 +15,7 @@ import { QUERY_KEYS } from "@/lib/query-keys"
 import { logger } from "@/lib/logger"
 import type { QueryClient } from "@tanstack/react-query"
 import { toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("finance-invoice-dialog")
 
@@ -147,88 +147,55 @@ export function InvoiceFormDialog({
 
     setSaving(true)
     try {
-      const supabase = createClient()
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) return toast.error("You must be logged in")
+      const itemsPayload = items.map((item) => ({
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        tax_rate: item.tax_rate,
+        amount: item.amount,
+      }))
 
-      const { subtotal, taxAmount, total } = calculateTotals()
       if (invoice?.id) {
-        const { error: invoiceError } = await supabase
-          .from("invoices")
-          .update({
+        const res = await apiFetch(`/api/admin/finance/invoices/${invoice.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mode: "edit",
             customer_name: formData.customer_name,
             customer_email: formData.customer_email || null,
             customer_address: formData.customer_address || null,
             issue_date: formData.issue_date,
             due_date: formData.due_date,
-            subtotal,
-            tax_amount: taxAmount,
-            total_amount: total,
-            balance_due: total,
             currency: formData.currency,
             notes: formData.notes || null,
             terms: formData.terms || null,
-          })
-          .eq("id", invoice.id)
-        if (invoiceError) throw invoiceError
-
-        const { error: deleteItemsError } = await supabase.from("invoice_items").delete().eq("invoice_id", invoice.id)
-        if (deleteItemsError) throw deleteItemsError
-        const { error: insertItemsError } = await supabase.from("invoice_items").insert(
-          items.map((item) => ({
-            invoice_id: invoice.id,
-            description: item.description,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            tax_rate: item.tax_rate,
-            amount: item.amount,
-          }))
-        )
-        if (insertItemsError) throw insertItemsError
+            items: itemsPayload,
+          }),
+        })
+        if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to update invoice")
 
         toast.success("Invoice updated successfully!")
         await queryClient?.invalidateQueries({ queryKey: QUERY_KEYS.adminInvoiceDetail(invoice.id) })
       } else {
-        const invoiceNumber = `INV-${Date.now().toString(36).toUpperCase()}`
-        const { data: createdInvoice, error: invoiceError } = await supabase
-          .from("invoices")
-          .insert({
-            invoice_number: invoiceNumber,
+        const res = await apiFetch("/api/admin/finance/invoices", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
             customer_name: formData.customer_name,
             customer_email: formData.customer_email || null,
             customer_address: formData.customer_address || null,
             issue_date: formData.issue_date,
             due_date: formData.due_date,
-            subtotal,
-            tax_amount: taxAmount,
-            discount_amount: 0,
-            total_amount: total,
-            amount_paid: 0,
-            balance_due: total,
             currency: formData.currency,
-            status,
             notes: formData.notes || null,
             terms: formData.terms || null,
-            created_by: user.id,
-          })
-          .select()
-          .single()
-        if (invoiceError) throw invoiceError
-
-        const { error: itemsError } = await supabase.from("invoice_items").insert(
-          items.map((item) => ({
-            invoice_id: createdInvoice.id,
-            description: item.description,
-            quantity: item.quantity,
-            unit_price: item.unit_price,
-            tax_rate: item.tax_rate,
-            amount: item.amount,
-          }))
-        )
-        if (itemsError) throw itemsError
-        toast.success(`Invoice ${invoiceNumber} created successfully!`)
+            status,
+            items: itemsPayload,
+          }),
+        })
+        const json = await res.json().catch(() => null)
+        if (!res.ok) throw new Error(json?.error || "Failed to create invoice")
+        toast.success(`Invoice ${json?.invoice_number ?? ""} created successfully!`)
       }
 
       await queryClient?.invalidateQueries({ queryKey: QUERY_KEYS.adminInvoices() })

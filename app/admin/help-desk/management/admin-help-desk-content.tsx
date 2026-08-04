@@ -28,6 +28,7 @@ import { formatName } from "@/lib/utils"
 import { formatWATDateTime } from "@/lib/utils/date"
 import type { HelpDeskTicket, EmployeeOption, LeadDirectoryMember } from "@/components/help-desk/ticket-queue-table"
 import { resolveCurrentStage, resolveApproverName } from "@/components/help-desk/ticket-queue-table"
+import { apiFetch } from "@/lib/api-client"
 
 interface AdminHelpDeskContentProps {
   initialTickets: HelpDeskTicket[]
@@ -188,7 +189,7 @@ export function AdminHelpDeskContent({
   const refresh = useCallback(async () => {
     const params = new URLSearchParams({ scope: "department" })
     if (lockedDepartment) params.set("department", lockedDepartment)
-    const res = await fetch(`/api/help-desk/tickets?${params.toString()}`, { cache: "no-store" })
+    const res = await apiFetch(`/api/help-desk/tickets?${params.toString()}`, { cache: "no-store" })
     const json = await res.json()
     if (!res.ok) {
       toast.error(json?.error || "Failed to refresh help desk queue")
@@ -206,7 +207,7 @@ export function AdminHelpDeskContent({
       }
       setLoadingTicketId(ticketId)
       try {
-        const res = await fetch(`/api/help-desk/tickets/${ticketId}/assign`, {
+        const res = await apiFetch(`/api/help-desk/tickets/${ticketId}/assign`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action: "assign_staff", assigned_to: assignedTo }),
@@ -229,7 +230,7 @@ export function AdminHelpDeskContent({
   async function routeTicket(ticketId: string, action: "send_to_queue" | "assign_department" | "assign_me") {
     setLoadingTicketId(ticketId)
     try {
-      const res = await fetch(`/api/help-desk/tickets/${ticketId}/assign`, {
+      const res = await apiFetch(`/api/help-desk/tickets/${ticketId}/assign`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action }),
@@ -250,7 +251,7 @@ export function AdminHelpDeskContent({
   async function pivot(ticketId: string) {
     setLoadingTicketId(ticketId)
     try {
-      const res = await fetch(`/api/help-desk/tickets/${ticketId}/pivot`, {
+      const res = await apiFetch(`/api/help-desk/tickets/${ticketId}/pivot`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ reason: "Requires procurement support" }),
@@ -273,7 +274,7 @@ export function AdminHelpDeskContent({
     const { ticketId, decision } = approvalPrompt
     setLoadingTicketId(ticketId)
     try {
-      const res = await fetch(`/api/help-desk/tickets/${ticketId}/approvals`, {
+      const res = await apiFetch(`/api/help-desk/tickets/${ticketId}/approvals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ decision, comments: comments || null }),

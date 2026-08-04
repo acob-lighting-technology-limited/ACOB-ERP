@@ -6,14 +6,16 @@ import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { PromptDialog } from "@/components/ui/prompt-dialog"
-import { CheckCircle, Clock, FileText, ListFilter, ShieldCheck, Download } from "lucide-react"
+import { Building2, CheckCircle, Clock, FileText, ListFilter, ShieldCheck, Download } from "lucide-react"
 import type { CorrespondenceRecord, CorrespondenceStatus } from "@/types/correspondence"
+import { getCanonicalDepartmentOrder } from "@/shared/departments"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { formatName } from "@/lib/utils"
 import { logger } from "@/lib/logger"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
+import { apiFetch } from "@/lib/api-client"
 import {
   exportCorrespondenceToExcel,
   exportCorrespondenceToPDF,
@@ -47,12 +49,14 @@ export function AdminReferenceGeneratorContent({
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false)
   const [tabCounts, setTabCounts] = useState({ all: initialRecords.length, external: 0, internal: 0 })
   const [globalCounts, setGlobalCounts] = useState({ total: 0, underReview: 0, approved: 0, rejected: 0 })
+  const [departmentFilter, setDepartmentFilter] = useState("")
   const recordsUrl = useCallback(
     (params: URLSearchParams) => {
       if (lockedDepartment) params.set("department", lockedDepartment)
+      else if (departmentFilter) params.set("department", departmentFilter)
       return `/api/correspondence/records?${params.toString()}`
     },
-    [lockedDepartment]
+    [lockedDepartment, departmentFilter]
   )
 
   const [decisionPrompt, setDecisionPrompt] = useState<{
@@ -64,13 +68,13 @@ export function AdminReferenceGeneratorContent({
     async function fetchTabCounts() {
       try {
         const [all, external, internal] = await Promise.all([
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1" })), { cache: "no-store" }).then((r) =>
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1" })), { cache: "no-store" }).then((r) =>
             r.json()
           ),
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", letter_type: "external" })), {
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", letter_type: "external" })), {
             cache: "no-store",
           }).then((r) => r.json()),
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", letter_type: "internal" })), {
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", letter_type: "internal" })), {
             cache: "no-store",
           }).then((r) => r.json()),
         ])
@@ -87,16 +91,16 @@ export function AdminReferenceGeneratorContent({
     async function fetchGlobalCounts() {
       try {
         const [all, underReview, approved, rejected] = await Promise.all([
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1" })), { cache: "no-store" }).then((r) =>
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1" })), { cache: "no-store" }).then((r) =>
             r.json()
           ),
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "under_review" })), {
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "under_review" })), {
             cache: "no-store",
           }).then((r) => r.json()),
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "approved" })), {
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "approved" })), {
             cache: "no-store",
           }).then((r) => r.json()),
-          fetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "rejected" })), {
+          apiFetch(recordsUrl(new URLSearchParams({ page: "1", limit: "1", status: "rejected" })), {
             cache: "no-store",
           }).then((r) => r.json()),
         ])
@@ -144,7 +148,7 @@ export function AdminReferenceGeneratorContent({
       if (activeTab !== "all") params.set("letter_type", activeTab)
       if (searchQuery.trim()) params.set("search", searchQuery.trim())
 
-      const res = await fetch(recordsUrl(params), { cache: "no-store" })
+      const res = await apiFetch(recordsUrl(params), { cache: "no-store" })
       const json = await res.json()
       const allMatchingRecords = json.data || []
 
@@ -180,7 +184,7 @@ export function AdminReferenceGeneratorContent({
         if (activeTab !== "all") params.set("letter_type", activeTab)
         if (searchQuery.trim()) params.set("search", searchQuery.trim())
 
-        const res = await fetch(recordsUrl(params), { cache: "no-store" })
+        const res = await apiFetch(recordsUrl(params), { cache: "no-store" })
         const json = await res.json()
         setRecords(json.data || [])
         setTotal(Number(json.total || 0))
@@ -205,7 +209,7 @@ export function AdminReferenceGeneratorContent({
     const prevRecord = records.find((r) => r.id === recordId)
     setLoadingRecordId(recordId)
     try {
-      const res = await fetch(`/api/correspondence/records/${recordId}/approvals`, {
+      const res = await apiFetch(`/api/correspondence/records/${recordId}/approvals`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -249,11 +253,57 @@ export function AdminReferenceGeneratorContent({
       resizable: true,
       initialWidth: 220,
       accessor: (r) => r.reference_number,
-      render: (r) => (
-        <span className="font-medium">
-          {["approved", "sent", "filed"].includes(r.status) ? r.reference_number || "-" : "-"}
-        </span>
-      ),
+      render: (r) => {
+        if (!["approved", "sent", "filed"].includes(r.status) || !r.reference_number) {
+          return "-"
+        }
+
+        const copyToClipboard = (text: string) => {
+          navigator.clipboard.writeText(text)
+          toast.success(`Copied: ${text}`)
+        }
+
+        if (r.letter_type === "external" && r.simulated_sequence) {
+          const lastSlashIndex = r.reference_number.lastIndexOf("/")
+          if (lastSlashIndex !== -1) {
+            const prefix = r.reference_number.substring(0, lastSlashIndex + 1)
+            const seqStr = String(r.simulated_sequence).padStart(3, "0")
+            const simulatedRef = `${prefix}${seqStr}`
+            if (simulatedRef !== r.reference_number) {
+              return (
+                <span className="flex flex-wrap items-center gap-x-1 font-medium">
+                  <span
+                    className="cursor-pointer hover:underline"
+                    onClick={() => copyToClipboard(r.reference_number!)}
+                    title="Click to copy original reference"
+                  >
+                    {r.reference_number}
+                  </span>
+                  <span
+                    className="text-muted-foreground cursor-pointer text-xs font-normal hover:underline"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      copyToClipboard(simulatedRef)
+                    }}
+                    title="Click to copy simulated reference"
+                  >
+                    ({simulatedRef})
+                  </span>
+                </span>
+              )
+            }
+          }
+        }
+        return (
+          <span
+            className="cursor-pointer font-medium hover:underline"
+            onClick={() => copyToClipboard(r.reference_number!)}
+            title="Click to copy reference"
+          >
+            {r.reference_number}
+          </span>
+        )
+      },
     },
     {
       key: "letter_type",
@@ -331,6 +381,22 @@ export function AdminReferenceGeneratorContent({
       mode: "custom",
       filterFn: (row, selected) => selected.includes(String(new Date(row.created_at || "").getFullYear())),
     },
+    // Department filter is server-side (see onFilterChange → departmentFilter).
+    // Hidden when the page is already locked to a single department.
+    ...(lockedDepartment
+      ? []
+      : [
+          {
+            key: "department",
+            label: "Department",
+            icon: <Building2 className="h-4 w-4" />,
+            multi: false,
+            mode: "custom" as const,
+            // Server does the actual filtering; keep client-side rows intact.
+            filterFn: () => true,
+            options: getCanonicalDepartmentOrder().map((name) => ({ value: name, label: name })),
+          } satisfies DataTableFilter<CorrespondenceRecord>,
+        ]),
   ]
 
   return (
@@ -403,8 +469,16 @@ export function AdminReferenceGeneratorContent({
         isLoading={isLoading}
         pagination={{ pageSize: 50, serverSide: true }}
         totalRows={total}
-        onPageChange={setPage}
+        currentPage={page - 1}
+        onPageChange={(p) => setPage(p + 1)}
         onSearchChange={setSearchQuery}
+        onFilterChange={(f) => {
+          const dept = f.department?.[0] ?? ""
+          if (dept !== departmentFilter) {
+            setDepartmentFilter(dept)
+            setPage(1)
+          }
+        }}
         rowActions={[
           {
             label: "Approve",

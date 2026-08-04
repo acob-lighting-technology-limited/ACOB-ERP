@@ -4,7 +4,6 @@ import { useMemo } from "react"
 import { formatWATDate } from "@/lib/utils/date"
 import { useQuery } from "@tanstack/react-query"
 import { CalendarDays, Package, PackageCheck, ReceiptText, ShoppingBag } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Badge } from "@/components/ui/badge"
 import { StatCard } from "@/components/ui/stat-card"
@@ -21,29 +20,11 @@ interface Receipt {
   created_at: string
 }
 
-type ReceiptRow = Receipt & {
-  purchase_order?: {
-    po_number?: string | null
-    supplier?: { name?: string | null } | null
-  } | null
-}
-
 async function fetchReceipts(): Promise<Receipt[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase
-    .from("goods_receipts")
-    .select("*, purchase_order:purchase_orders(po_number, supplier:suppliers(name))")
-    .order("created_at", { ascending: false })
-
-  if (error && error.code !== "42P01") {
-    throw new Error(error.message)
-  }
-
-  return ((data || []) as ReceiptRow[]).map((receipt) => ({
-    ...receipt,
-    po_number: receipt.purchase_order?.po_number || undefined,
-    supplier_name: receipt.purchase_order?.supplier?.name || undefined,
-  }))
+  const res = await fetch("/api/admin/purchasing/receipts", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load receipts")
+  const json = await res.json()
+  return (json.data || []) as Receipt[]
 }
 
 function formatDate(date: string) {

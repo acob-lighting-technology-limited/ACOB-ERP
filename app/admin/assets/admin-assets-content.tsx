@@ -13,7 +13,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { formatName } from "@/lib/utils"
 import { isAssignableProfile } from "@/lib/workforce/assignment-policy"
@@ -48,11 +47,12 @@ import {
   exportEmployeeReportToWord,
 } from "@/lib/assets/asset-export"
 import { toLocalDateTimeInput, toLocalISODate } from "@/lib/utils/date"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("assets-admin-assets-content")
 
 async function fetchAssetTypes(): Promise<{ label: string; code: string; requiresSerialModel: boolean }[]> {
-  const response = await fetch("/api/admin/assets/types", {
+  const response = await apiFetch("/api/admin/assets/types", {
     method: "GET",
     credentials: "include",
     cache: "no-store",
@@ -358,7 +358,6 @@ export function AdminAssetsContent({
 
   const [currentAssignment, setCurrentAssignment] = useState<AssetAssignment | null>(null)
 
-  const supabase = createClient()
   const scopedDepartments = useMemo(
     () => userProfile.managed_departments ?? userProfile.lead_departments ?? [],
     [userProfile.lead_departments, userProfile.managed_departments]
@@ -406,7 +405,7 @@ export function AdminAssetsContent({
 
     setIsCreatingAssetType(true)
     try {
-      const response = await fetch("/api/admin/assets/types", {
+      const response = await apiFetch("/api/admin/assets/types", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -453,7 +452,7 @@ export function AdminAssetsContent({
     try {
       const params = new URLSearchParams()
       if (lockedDepartment) params.set("department", lockedDepartment)
-      const response = await fetch(`/api/admin/assets/snapshot?${params.toString()}`, {
+      const response = await apiFetch(`/api/admin/assets/snapshot?${params.toString()}`, {
         method: "GET",
         credentials: "include",
         cache: "no-store",
@@ -476,56 +475,45 @@ export function AdminAssetsContent({
 
   const loadAssetHistory = async (asset: Asset) => {
     try {
-      // 1. Fetch Assignments
-      const { data: assignments, error: assignmentsError } = await supabase
-        .from("asset_assignments")
-        .select(
-          "id, assigned_at, handed_over_at, assignment_notes, handover_notes, assigned_by, assigned_to, department, office_location, assignment_type"
-        )
-        .eq("asset_id", asset.id)
-
-      if (assignmentsError) throw assignmentsError
-
-      // 2. Fetch Issues
-      const { data: issues, error: issuesError } = await supabase
-        .from("asset_issues")
-        .select("id, description, resolved, created_at, resolved_at, created_by, resolved_by")
-        .eq("asset_id", asset.id)
-
-      if (issuesError) throw issuesError
-
-      // 3. Fetch Status Changes from Audit Logs
-      const { data: auditLogs, error: auditError } = await supabase
-        .from("audit_logs")
-        .select("id, operation, old_values, new_values, created_at, user_id")
-        .eq("table_name", "assets")
-        .eq("record_id", asset.id)
-        .eq("operation", "UPDATE")
-
-      if (auditError) throw auditError
-
-      // 4. Resolve User Names
-      const userIds = new Set<string>()
-      assignments?.forEach((a) => {
-        if (a.assigned_by) userIds.add(a.assigned_by)
-        if (a.assigned_to) userIds.add(a.assigned_to)
-      })
-      issues?.forEach((i) => {
-        if (i.created_by) userIds.add(i.created_by)
-        if (i.resolved_by) userIds.add(i.resolved_by)
-      })
-      auditLogs?.forEach((l) => {
-        if (l.user_id) userIds.add(l.user_id)
-      })
-
-      let usersMap = new Map<string, ProfileNameRow>()
-      if (userIds.size > 0) {
-        const { data: usersData } = await supabase
-          .from("profiles")
-          .select("id, first_name, last_name")
-          .in("id", Array.from(userIds))
-        if (usersData) usersMap = new Map((usersData as ProfileNameRow[]).map((u) => [u.id, u] as const))
+      const res = await apiFetch(`/api/admin/assets/${asset.id}/history`, { cache: "no-store" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load asset history")
+      type HistoryAssignmentRow = {
+        id: string
+        assigned_at: string
+        handed_over_at: string | null
+        assignment_notes: string | null
+        handover_notes: string | null
+        assigned_by: string | null
+        assigned_to: string | null
+        department: string | null
+        office_location: string | null
+        assignment_type: string | null
       }
+      type HistoryIssueRow = {
+        id: string
+        description: string
+        resolved: boolean
+        created_at: string
+        resolved_at: string | null
+        created_by: string | null
+        resolved_by: string | null
+      }
+      type HistoryAuditRow = {
+        id: string
+        created_at: string
+        user_id: string | null
+        old_values: { status?: string } | null
+        new_values: { status?: string } | null
+      }
+      const payload = (await res.json()) as {
+        assignments: HistoryAssignmentRow[]
+        issues: HistoryIssueRow[]
+        auditLogs: HistoryAuditRow[]
+        users: ProfileNameRow[]
+      }
+      const { assignments, issues, auditLogs } = payload
+
+      const usersMap = new Map<string, ProfileNameRow>(payload.users.map((u) => [u.id, u] as const))
 
       const getUName = (id: string | null | undefined) => {
         if (!id) return null
@@ -549,8 +537,8 @@ export function AdminAssetsContent({
             : a.department || a.office_location || "Office",
           performed_by_name: getUName(a.assigned_by) || "System Admin",
           details: {
-            notes: a.assignment_notes,
-            assignment_type: a.assignment_type,
+            notes: a.assignment_notes ?? undefined,
+            assignment_type: a.assignment_type ?? undefined,
           },
         })
 
@@ -565,7 +553,7 @@ export function AdminAssetsContent({
               ? getUName(a.assigned_to) || a.department || a.office_location || "Office"
               : a.department || a.office_location || "Office",
             details: {
-              notes: a.handover_notes,
+              notes: a.handover_notes ?? undefined,
             },
           })
         }
@@ -627,14 +615,10 @@ export function AdminAssetsContent({
 
   const loadAssetIssues = async (assetId: string) => {
     try {
-      const { data, error } = await supabase
-        .from("asset_issues")
-        .select("*")
-        .eq("asset_id", assetId)
-        .order("created_at", { ascending: false })
-
-      if (error) throw error
-      setAssetIssues(data || [])
+      const res = await apiFetch(`/api/admin/assets/${assetId}/issues`, { cache: "no-store" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load asset issues")
+      const json = await res.json()
+      setAssetIssues(json.data || [])
     } catch (error: unknown) {
       log.error("Error loading asset issues:", error)
       toast.error("Failed to load asset issues")
@@ -646,21 +630,12 @@ export function AdminAssetsContent({
 
     setIsAddingIssue(true)
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) {
-        setIsAddingIssue(false)
-        return
-      }
-
-      const { error } = await supabase.from("asset_issues").insert({
-        asset_id: selectedAsset.id,
-        description: newIssueDescription.trim(),
-        created_by: user.id,
+      const res = await apiFetch(`/api/admin/assets/${selectedAsset.id}/issues`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: newIssueDescription.trim() }),
       })
-
-      if (error) throw error
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to add issue")
 
       toast.success("Issue added")
       setNewIssueDescription("")
@@ -676,9 +651,12 @@ export function AdminAssetsContent({
 
   const handleToggleIssue = async (issue: AssetIssue) => {
     try {
-      const { error } = await supabase.from("asset_issues").update({ resolved: !issue.resolved }).eq("id", issue.id)
-
-      if (error) throw error
+      const res = await apiFetch(`/api/admin/assets/${issue.asset_id}/issues/${issue.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ resolved: !issue.resolved }),
+      })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to update issue")
 
       toast.success(issue.resolved ? "Issue marked as unresolved" : "Issue marked as resolved")
       if (selectedAsset) {
@@ -693,14 +671,12 @@ export function AdminAssetsContent({
 
   const handleDeleteIssue = async (issueId: string) => {
     try {
-      const { error } = await supabase.from("asset_issues").delete().eq("id", issueId)
-
-      if (error) throw error
+      if (!selectedAsset) return
+      const res = await apiFetch(`/api/admin/assets/${selectedAsset.id}/issues/${issueId}`, { method: "DELETE" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to delete issue")
 
       toast.success("Issue deleted")
-      if (selectedAsset) {
-        await loadAssetIssues(selectedAsset.id)
-      }
+      await loadAssetIssues(selectedAsset.id)
       await loadData() // Refresh to update issue counts
     } catch (error: unknown) {
       log.error("Error deleting issue:", error)
@@ -724,16 +700,19 @@ export function AdminAssetsContent({
       }
 
       if (asset.status === "assigned" || asset.status === "retired" || asset.status === "maintenance") {
-        const { data, error: assignmentFetchError } = await supabase
-          .from("asset_assignments")
-          .select("assigned_by, assigned_at, assigned_to, department, office_location, assignment_notes")
-          .eq("asset_id", asset.id)
-          .eq("is_current", true)
-          .single()
-
-        if (assignmentFetchError && assignmentFetchError.code !== "PGRST116") {
-          log.error("Error fetching current assignment:", assignmentFetchError)
+        const res = await apiFetch(`/api/admin/assets/${asset.id}/current-assignment`, { cache: "no-store" })
+        if (!res.ok) {
+          log.error("Error fetching current assignment:", await res.text().catch(() => ""))
         }
+        const json = res.ok ? await res.json() : { data: null }
+        const data = json.data as {
+          assigned_by: string | null
+          assigned_at: string | null
+          assigned_to: string | null
+          department: string | null
+          office_location: string | null
+          assignment_notes: string | null
+        } | null
 
         if (data) {
           assignmentDetails = {
@@ -783,9 +762,8 @@ export function AdminAssetsContent({
         assigned_at: formData.assigned_at,
       })
     } else {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
+      const currentUserRes = await apiFetch("/api/admin/assets/current-user", { cache: "no-store" })
+      const currentUserId = currentUserRes.ok ? ((await currentUserRes.json()).userId as string | undefined) : undefined
 
       setBatchQuantity(1)
       setSelectedAsset(null)
@@ -802,7 +780,7 @@ export function AdminAssetsContent({
         assignment_department: "",
         office_location: "",
         assignment_notes: "",
-        assigned_by: user?.id || "",
+        assigned_by: currentUserId || "",
         assigned_at: toLocalDateTimeInput(),
       })
       setOriginalAssetForm({
@@ -818,7 +796,7 @@ export function AdminAssetsContent({
         assignment_department: "",
         office_location: "",
         assignment_notes: "",
-        assigned_by: user?.id || "",
+        assigned_by: currentUserId || "",
         assigned_at: toLocalDateTimeInput(),
       })
     }
@@ -856,7 +834,7 @@ export function AdminAssetsContent({
         }
       }
 
-      const response = await fetch("/api/admin/assets", {
+      const response = await apiFetch("/api/admin/assets", {
         method: "POST",
         credentials: "include",
         headers: {
@@ -904,14 +882,6 @@ export function AdminAssetsContent({
         return
       }
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) {
-        setIsAssigning(false)
-        return
-      }
-
       // Validate
       const validationError = assignmentValidation.validateAssignment(
         assignForm.assignment_type,
@@ -925,23 +895,21 @@ export function AdminAssetsContent({
         return
       }
 
-      // Use RPC for atomic reassignment
-      const { error: rpcError } = await supabase.rpc("reassign_asset", {
-        p_asset_id: selectedAsset.id,
-        p_new_assignment_type: assignForm.assignment_type,
-        p_assigned_to: assignForm.assigned_to || null,
-        p_department: assignForm.department || null,
-        p_office_location: assignForm.office_location || null,
-        p_assigned_by: assignForm.assigned_by || user.id,
-        p_assigned_at: assignForm.assigned_at
-          ? new Date(assignForm.assigned_at).toISOString()
-          : new Date().toISOString(),
-        p_assignment_notes: assignForm.assignment_notes || null,
-        p_handover_notes: "Reassigned",
-        p_new_status: "assigned",
+      // Server resolves the caller as the default "assigned by" if left blank.
+      const res = await apiFetch(`/api/admin/assets/${selectedAsset.id}/reassign`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          assignment_type: assignForm.assignment_type,
+          assigned_to: assignForm.assigned_to || null,
+          department: assignForm.department || null,
+          office_location: assignForm.office_location || null,
+          assigned_by: assignForm.assigned_by || null,
+          assigned_at: assignForm.assigned_at ? new Date(assignForm.assigned_at).toISOString() : null,
+          assignment_notes: assignForm.assignment_notes || null,
+        }),
       })
-
-      if (rpcError) throw rpcError
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to reassign asset")
 
       toast.success("Asset reassigned successfully")
       setIsAssignDialogOpen(false)
@@ -964,16 +932,8 @@ export function AdminAssetsContent({
         return
       }
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-
-      const { error } = await supabase.rpc("release_asset", {
-        p_asset_id: assetToRelease.id,
-        p_released_by: user?.id ?? null,
-      })
-
-      if (error) throw error
+      const res = await apiFetch(`/api/admin/assets/${assetToRelease.id}/release`, { method: "POST" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to release asset")
 
       toast.success("Asset released and returned to the available pool")
       setIsReleaseDialogOpen(false)
@@ -997,47 +957,8 @@ export function AdminAssetsContent({
         return
       }
 
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) {
-        setIsDeleting(false)
-        return
-      }
-
-      const isArchived = Boolean(assetToDelete.deleted_at)
-      if (isArchived) {
-        toast.error("Asset is already archived")
-        setIsDeleting(false)
-        return
-      }
-
-      // Only check for active assignments if the asset status is "assigned"
-      if (assetToDelete.status === "assigned") {
-        const { data: assignments } = await supabase
-          .from("asset_assignments")
-          .select("*")
-          .eq("asset_id", assetToDelete.id)
-          .eq("is_current", true)
-
-        if (assignments && assignments.length > 0) {
-          toast.error("Cannot archive asset with active assignments. Please return or reassign first.")
-          setIsDeleting(false)
-          return
-        }
-      }
-
-      const { error } = await supabase
-        .from("assets")
-        .update({
-          deleted_at: new Date().toISOString(),
-          deleted_by: user.id,
-          delete_reason: "Archived from Admin Assets",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", assetToDelete.id)
-
-      if (error) throw error
+      const res = await apiFetch(`/api/admin/assets/${assetToDelete.id}/archive`, { method: "POST" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to archive asset")
 
       toast.success("Asset archived. You can restore it later.")
       setIsDeleteDialogOpen(false)
@@ -1056,17 +977,8 @@ export function AdminAssetsContent({
     if (isDeleting) return
     setIsDeleting(true)
     try {
-      const { error } = await supabase
-        .from("assets")
-        .update({
-          deleted_at: null,
-          deleted_by: null,
-          delete_reason: null,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", asset.id)
-
-      if (error) throw error
+      const res = await apiFetch(`/api/admin/assets/${asset.id}/restore`, { method: "POST" })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to restore asset")
       toast.success("Asset restored successfully")
       await loadData()
     } catch (error: unknown) {
@@ -1086,26 +998,22 @@ export function AdminAssetsContent({
     let assignedAt = toLocalDateTimeInput()
     const assignmentNotes = ""
 
+    let currentUserId = ""
     try {
-      const { data: assignment } = await supabase
-        .from("asset_assignments")
-        .select("id, assigned_to, department, office_location, assignment_type, assigned_at, is_current")
-        .eq("asset_id", asset.id)
-        .eq("is_current", true)
-        .maybeSingle<AssetAssignment>()
-
-      if (assignment) {
-        assignmentState = assignment
-        assignedAt = assignment.assigned_at ? toLocalDateTimeInput(new Date(assignment.assigned_at)) : assignedAt
+      const res = await apiFetch(`/api/admin/assets/${asset.id}/current-assignment`, { cache: "no-store" })
+      if (res.ok) {
+        const json = (await res.json()) as { data: AssetAssignment | null; currentUserId?: string }
+        if (json.data) {
+          assignmentState = json.data
+          assignedAt = json.data.assigned_at ? toLocalDateTimeInput(new Date(json.data.assigned_at)) : assignedAt
+        }
+        currentUserId = json.currentUserId || ""
       }
     } catch (error) {
       log.error("Error loading current assignment:", error)
     }
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    assignedBy = user?.id || ""
+    assignedBy = currentUserId
 
     setCurrentAssignment(assignmentState)
     setAssignForm({

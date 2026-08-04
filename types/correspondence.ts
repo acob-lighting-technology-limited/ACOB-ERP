@@ -54,6 +54,7 @@ export interface CorrespondenceRecord {
   metadata: Record<string, unknown> | null
   created_at: string
   updated_at: string
+  simulated_sequence?: number | null
 }
 
 export interface CorrespondenceApproval {

@@ -10,13 +10,29 @@ import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { formatName, cn } from "@/lib/utils"
 import { formatWATDate, formatDateOfBirth } from "@/lib/utils/date"
-import { Users, Shield, Mail, Phone, Download, Pencil, Eye, Building2, Calendar, IdCard, Settings2 } from "lucide-react"
+import {
+  Users,
+  Shield,
+  Mail,
+  Phone,
+  Download,
+  Pencil,
+  Eye,
+  Building2,
+  Calendar,
+  IdCard,
+  Settings2,
+  Tags,
+  Cake,
+  MoreVertical,
+} from "lucide-react"
 import type { UserRole, EmploymentStatus } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
 import { formValidation } from "@/lib/validation"
 import { getAssignableRolesForActor } from "@/lib/role-management"
 import { logger } from "@/lib/logger"
 import { ManageUsersDialog } from "@/components/hr/manage-users-dialog"
+import { ManageContractCategoriesDialog } from "@/components/hr/manage-contract-categories-dialog"
 import { EmployeeViewModal } from "@/components/employees/EmployeeViewModal"
 import { EmployeeDeletionDialog } from "@/components/employees/EmployeeDeletionDialog"
 import { EmployeeExportDialog } from "@/components/employees/EmployeeExportDialog"
@@ -29,11 +45,14 @@ import {
 import type { Database } from "@/types/database"
 import type { EmployeeAssignedItems, EmployeeProfile, EmployeeViewData } from "@/components/employees/types"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
+import { BirthdayManagerDialog } from "@/components/hr/birthday-manager-dialog"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { StatCard } from "@/components/ui/stat-card"
 import { EmployeeStatusBadge } from "@/components/hr/employee-status-badge"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("hr-employees-admin-employee-content")
 
@@ -47,7 +66,7 @@ const genderFilterOptions: { value: EmployeeGender; label: string }[] = [
 ]
 
 async function fetchAllEmployees(): Promise<Employee[]> {
-  const response = await fetch("/api/admin/employees", { cache: "no-store" })
+  const response = await apiFetch("/api/admin/employees", { cache: "no-store" })
   if (!response.ok) {
     const payload = (await response.json().catch(() => ({}))) as { error?: string }
     throw new Error(payload.error || "Failed to fetch employees")
@@ -64,6 +83,7 @@ export interface Employee {
   other_names: string | null
   company_email: string
   additional_email: string | null
+  personal_email: string | null
   department: string
   designation: string | null
   role: UserRole
@@ -73,6 +93,7 @@ export interface Employee {
   gender?: EmployeeGender | null
   residential_address: string | null
   office_location: string | null
+  device_key?: string | null
   bank_name: string | null
   bank_account_number: string | null
   bank_account_name: string | null
@@ -83,6 +104,9 @@ export interface Employee {
   is_department_lead: boolean
   lead_departments: string[]
   employment_status: EmploymentStatus
+  employment_type?: "full_time" | "part_time" | "contract"
+  contract_category_id?: string | null
+  contract_categories?: { id: string; name: string; code: string } | null
   created_at: string
 }
 
@@ -136,6 +160,8 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     "Office Location": true,
     "Date of Birth": true,
     "Employment Date": true,
+    "Employment Type": true,
+    "Contract Category": true,
     "Lead Departments": true,
     "Created At": true,
   })
@@ -158,6 +184,8 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
   })
 
   const [manageUsersOpen, setManageUsersOpen] = useState(false)
+  const [categoriesDialogOpen, setCategoriesDialogOpen] = useState(false)
+  const [birthdayManagerOpen, setBirthdayManagerOpen] = useState(false)
 
   const [editForm, setEditForm] = useState({
     role: "employee" as UserRole,
@@ -173,6 +201,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     other_names: "",
     company_email: "",
     additional_email: "",
+    personal_email: "",
     phone_number: "",
     additional_phone: "",
     residential_address: "",
@@ -200,6 +229,10 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     queryFn: fetchAllEmployees,
     initialData: initialEmployees,
   })
+
+  // Rows currently visible in the table (after search + filters + sort), kept in
+  // sync via the DataTable's onProcessedDataChange so exports match what the user sees.
+  const [processedEmployees, setProcessedEmployees] = useState<Employee[]>(initialEmployees)
 
   const loadData = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminEmployees() })
@@ -233,6 +266,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             other_names: fullProfile.other_names || "",
             company_email: fullProfile.company_email || "",
             additional_email: fullProfile.additional_email || "",
+            personal_email: fullProfile.personal_email || "",
             phone_number: fullProfile.phone_number || "",
             additional_phone: fullProfile.additional_phone || "",
             residential_address: fullProfile.residential_address || "",
@@ -268,7 +302,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       setViewEmployeeData({ tasks: [], assets: [], documentation: [] })
       setIsViewDialogOpen(true)
 
-      const response = await fetch(`/api/admin/hr/employees/${employee.id}/overview`, { cache: "no-store" })
+      const response = await apiFetch(`/api/admin/hr/employees/${employee.id}/overview`, { cache: "no-store" })
       const payload = (await response.json().catch(() => ({}))) as {
         error?: string
         profile?: EmployeeProfile
@@ -286,7 +320,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       })
 
       // Also fetch full assigned items for deletion check or detailed view
-      const detailResponse = await fetch(`/api/admin/hr/employees/${employee.id}/details`)
+      const detailResponse = await apiFetch(`/api/admin/hr/employees/${employee.id}/details`)
       if (detailResponse.ok) {
         const detailData = await detailResponse.json()
         setAssignedItems(detailData)
@@ -317,6 +351,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
 
       const companyEmail = editForm.company_email.trim().toLowerCase()
       const additionalEmail = editForm.additional_email.trim().toLowerCase()
+      const personalEmail = editForm.personal_email.trim().toLowerCase()
 
       if (!companyEmail || !formValidation.isCompanyEmail(companyEmail)) {
         toast.error("Valid company email is required")
@@ -352,10 +387,11 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         job_description: editForm.job_description || null,
       }
 
-      // attendance_exempt is not in the generated DB type yet — cast to allow it
+      // attendance_exempt and personal_email are not in the generated DB type yet — cast to allow them
       ;(updateData as Record<string, unknown>).attendance_exempt = editForm.attendance_exempt
+      ;(updateData as Record<string, unknown>).personal_email = personalEmail || null
 
-      const emailSyncResponse = await fetch(`/api/admin/hr/employees/${selectedEmployee.id}/email`, {
+      const emailSyncResponse = await apiFetch(`/api/admin/hr/employees/${selectedEmployee.id}/email`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ companyEmail, additionalEmail: additionalEmail || null }),
@@ -395,11 +431,13 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
   }
 
   const handleExportExecute = async () => {
-    if (!exportType || employees.length === 0) return
+    // Export the rows currently visible in the table (respects search + filters + sort).
+    const rowsToExport = processedEmployees
+    if (!exportType || rowsToExport.length === 0) return
     try {
-      const exportRows = buildEmployeeExportRows(employees, { selectedColumns })
+      const exportRows = buildEmployeeExportRows(rowsToExport, { selectedColumns })
       if (exportType === "excel") await exportEmployeesToExcel(exportRows)
-      else if (exportType === "pdf") await exportEmployeesToPDF(employees, { selectedColumns })
+      else if (exportType === "pdf") await exportEmployeesToPDF(rowsToExport, { selectedColumns })
       else if (exportType === "word") await exportEmployeesToWord(exportRows)
       setExportEmployeeDialogOpen(false)
     } catch (_error: unknown) {
@@ -512,6 +550,30 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         render: (r) => <Badge className={getRoleBadgeColor(r.role)}>{getRoleDisplayName(r.role)}</Badge>,
       },
       {
+        key: "employment_type",
+        label: "Employee Type",
+        sortable: true,
+        accessor: (r) => r.employment_type || "full_time",
+        render: (r) => {
+          const type = r.employment_type || "full_time"
+          const display =
+            type === "full_time"
+              ? "Full Time"
+              : type === "part_time"
+                ? "Part Time"
+                : r.contract_categories?.name
+                  ? `Contract (${r.contract_categories.name})`
+                  : "Contract"
+          const badgeColor =
+            type === "full_time"
+              ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/10 border-transparent shadow-none"
+              : type === "part_time"
+                ? "bg-purple-500/10 text-purple-500 hover:bg-purple-500/10 border-transparent shadow-none"
+                : "bg-orange-500/10 text-orange-500 hover:bg-orange-500/10 border-transparent shadow-none"
+          return <Badge className={badgeColor}>{display}</Badge>
+        },
+      },
+      {
         key: "status",
         label: "Status",
         accessor: (r) => r.employment_status || "active",
@@ -593,13 +655,27 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         label: "Status",
         options: [
           { value: "active", label: "Active" },
+          { value: "contract", label: "Contract" },
           { value: "suspended", label: "Suspended" },
           { value: "on_leave", label: "On Leave" },
           { value: "exited", label: "Exited" },
         ],
         placeholder: "Active Statuses",
         // Hide exited employees by default; user can opt to include them.
-        defaultValues: ["active", "suspended", "on_leave"],
+        defaultValues: ["active", "contract", "suspended", "on_leave"],
+      },
+      {
+        key: "employment_type",
+        label: "Employment Type",
+        options: [
+          { value: "full_time", label: "Full Time" },
+          { value: "part_time", label: "Part Time" },
+          { value: "contract", label: "Contract" },
+        ],
+        placeholder: "All Types",
+        defaultValues: ["full_time"],
+        mode: "custom",
+        filterFn: (employee, selected) => selected.includes(employee.employment_type || "full_time"),
       },
     ],
     [departments, offices]
@@ -640,6 +716,25 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
               <span className="hidden sm:inline">Manage Users</span>
             </Button>
           )}
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setBirthdayManagerOpen(true)}>
+                <Cake className="mr-2 h-4 w-4" />
+                Birthday Manager
+              </DropdownMenuItem>
+              {(canManageUsers || canReviewApplications) && (
+                <DropdownMenuItem onClick={() => setCategoriesDialogOpen(true)}>
+                  <Tags className="mr-2 h-4 w-4" />
+                  Manage Categories
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button
             variant="outline"
             size="sm"
@@ -689,6 +784,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         data={employees}
         columns={columns}
         getRowId={(r) => r.id}
+        onProcessedDataChange={setProcessedEmployees}
         pagination={{ pageSize: 50 }}
         isLoading={isLoading}
         error={error instanceof Error ? error.message : null}
@@ -879,6 +975,10 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         canManageUsers={canManageUsers}
         userProfile={userProfile}
       />
+
+      <ManageContractCategoriesDialog isOpen={categoriesDialogOpen} onOpenChange={setCategoriesDialogOpen} />
+
+      <BirthdayManagerDialog open={birthdayManagerOpen} onOpenChange={setBirthdayManagerOpen} />
 
       <EmployeeDeletionDialog
         isOpen={isDeleteDialogOpen}

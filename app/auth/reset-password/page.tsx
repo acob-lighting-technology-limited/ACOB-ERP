@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
 import { toast } from "sonner"
 import { Lock, CheckCircle, Eye, EyeOff } from "lucide-react"
-import { FormPageSkeleton } from "@/components/skeletons"
+import { AuthPageSkeleton } from "@/components/skeletons"
 
 export default function ResetPasswordPage() {
   const [password, setPassword] = useState("")
@@ -44,7 +44,7 @@ export default function ResetPasswordPage() {
   }, [router])
 
   if (isChecking) {
-    return <FormPageSkeleton sections={2} fieldsPerSection={3} showSidebar={false} />
+    return <AuthPageSkeleton />
   }
 
   const handleResetPassword = async (e: React.FormEvent) => {

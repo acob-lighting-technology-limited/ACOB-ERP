@@ -4,7 +4,6 @@ import { useMemo, useState } from "react"
 import { useSearchParams } from "next/navigation"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { formatWATDateTime } from "@/lib/utils/date"
-import { createClient } from "@/lib/supabase/client"
 import { getCurrentOfficeWeek, getOfficeWeekMonday } from "@/lib/meeting-week"
 import { toast } from "sonner"
 import { CheckCircle2, Clock, Download, Eye, FileSpreadsheet, RefreshCw } from "lucide-react"
@@ -17,9 +16,9 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { fetchWeeklyReportLockState } from "@/lib/weekly-report-lock"
 import { type ActionItem } from "@/lib/export-utils"
 import { logger } from "@/lib/logger"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("reports-action-tracker-action-tracker-co")
 
@@ -76,7 +75,7 @@ async function fetchAdminActionTrackerTasks(
   if (scopedDepartments.length > 0) {
     params.set("scoped_departments", scopedDepartments.join(","))
   }
-  const response = await fetch(`/api/reports/action-tracker?${params.toString()}`, { cache: "no-store" })
+  const response = await apiFetch(`/api/reports/action-tracker?${params.toString()}`, { cache: "no-store" })
   const payload = (await response.json().catch(() => null)) as { data?: ActionTask[]; error?: string } | null
   if (!response.ok) throw new Error(payload?.error || "Failed to fetch action items")
   return payload?.data || []
@@ -154,8 +153,9 @@ export function ActionTrackerContent({
     items: [],
   })
   const [viewingDepartment, setViewingDepartment] = useState<DepartmentActionRow | null>(null)
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedDepartmentRows, setProcessedDepartmentRows] = useState<DepartmentActionRow[]>([])
 
-  const supabase = createClient()
   const canMutateTask = (task: ActionTask) => canGlobalEdit || editableDepartments.includes(task.department)
 
   const {
@@ -170,7 +170,13 @@ export function ActionTrackerContent({
 
   const { data: lockState } = useQuery({
     queryKey: QUERY_KEYS.adminWeeklyReportLockState(weekFilter, yearFilter),
-    queryFn: () => fetchWeeklyReportLockState(supabase, weekFilter, yearFilter),
+    queryFn: async () => {
+      const res = await apiFetch(`/api/admin/reports/weekly-lock-state?week=${weekFilter}&year=${yearFilter}`, {
+        cache: "no-store",
+      })
+      if (!res.ok) throw new Error("Failed to resolve lock state")
+      return res.json()
+    },
   })
 
   const tasksQueryKey = QUERY_KEYS.adminActionTrackerTasks({ weekFilter, yearFilter, deptFilter, scopedDepartments })
@@ -189,7 +195,7 @@ export function ActionTrackerContent({
     )
 
     try {
-      const response = await fetch(`/api/reports/action-tracker/${taskId}`, {
+      const response = await apiFetch(`/api/reports/action-tracker/${taskId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
@@ -207,7 +213,7 @@ export function ActionTrackerContent({
   const handleCarryForward = async () => {
     setIsCarryForwarding(true)
     try {
-      const response = await fetch("/api/reports/action-tracker/carry-forward", {
+      const response = await apiFetch("/api/reports/action-tracker/carry-forward", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ week_number: weekFilter, year: yearFilter }),
@@ -233,19 +239,20 @@ export function ActionTrackerContent({
     return { total, completed, pending, notStarted, inProgress }
   }, [tasks])
 
-  const actionItemsForExport: ActionItem[] = useMemo(
-    () =>
-      tasks.map((task) => ({
-        id: task.id,
-        title: task.title,
-        description: task.description,
-        department: task.department,
-        status: task.status,
-        week_number: task.week_number,
-        year: task.year,
-      })),
-    [tasks]
-  )
+  // Built from the currently visible (search/filter/sort) rows, falling back to all tasks
+  // before the table has reported its processed rows.
+  const actionItemsForExport: ActionItem[] = useMemo(() => {
+    const source = processedDepartmentRows.length ? processedDepartmentRows.flatMap((row) => row.tasks) : tasks
+    return source.map((task) => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      department: task.department,
+      status: task.status,
+      week_number: task.week_number,
+      year: task.year,
+    }))
+  }, [tasks, processedDepartmentRows])
 
   const toActionItems = (sourceTasks: ActionTask[]): ActionItem[] =>
     sourceTasks.map((task) => ({
@@ -458,6 +465,7 @@ export function ActionTrackerContent({
     >
       <DataTable<DepartmentActionRow>
         data={departmentRows}
+        onProcessedDataChange={setProcessedDepartmentRows}
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}

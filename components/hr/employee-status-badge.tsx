@@ -3,7 +3,7 @@
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import type { EmploymentStatus } from "@/types/database"
-import { Circle, AlertTriangle, XCircle, Clock } from "lucide-react"
+import { Circle, AlertTriangle, XCircle, Clock, FileText } from "lucide-react"
 
 interface EmployeeStatusBadgeProps {
   status: EmploymentStatus
@@ -49,6 +49,13 @@ const statusConfig: Record<
     color: "text-blue-700 dark:text-blue-400",
     bgColor: "bg-blue-100 dark:bg-blue-900/50 border-blue-200 dark:border-blue-800",
     icon: Clock,
+  },
+  contract: {
+    label: "Contract",
+    variant: "secondary",
+    color: "text-purple-700 dark:text-purple-400",
+    bgColor: "bg-purple-100 dark:bg-purple-900/50 border-purple-200 dark:border-purple-800",
+    icon: FileText,
   },
 }
 

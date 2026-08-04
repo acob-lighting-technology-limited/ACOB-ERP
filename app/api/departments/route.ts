@@ -26,6 +26,7 @@ const CreateDepartmentSchema = z.object({
     .optional()
     .nullable(),
   is_executive_dept: z.boolean().optional(),
+  is_active: z.boolean().optional(),
 })
 
 // Helper function to create Supabase client
@@ -117,7 +118,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
     }
 
-    const { name, description, department_head_id, department_code, is_executive_dept } = parsed.data
+    const { name, description, department_head_id, department_code, is_executive_dept, is_active } = parsed.data
 
     const { data: department, error } = await supabase
       .from("departments")
@@ -127,6 +128,7 @@ export async function POST(request: Request) {
         department_head_id,
         department_code: department_code ?? null,
         is_executive_dept: is_executive_dept ?? false,
+        ...(is_active !== undefined ? { is_active } : {}),
       })
       .select()
       .single()
@@ -139,7 +141,7 @@ export async function POST(request: Request) {
         action: "create",
         entityType: "department",
         entityId: department.id,
-        newValues: { name, description, department_head_id, department_code, is_executive_dept },
+        newValues: { name, description, department_head_id, department_code, is_executive_dept, is_active },
         context: { actorId: user.id, source: "api", route: "/api/departments" },
       },
       { failOpen: true }

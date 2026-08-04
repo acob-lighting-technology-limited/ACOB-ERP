@@ -23,6 +23,8 @@ const ApproveUserSchema = z.object({
   // When false (default for UI), skip auto-sending emails and return the built preview so the
   // frontend can ask the admin whether to send before dispatching.
   sendEmails: z.boolean().optional().default(false),
+  employmentType: z.enum(["full_time", "part_time", "contract"]).optional().default("full_time"),
+  contractCategoryCode: z.string().trim().nullable().optional(),
 })
 
 export async function POST(req: Request) {
@@ -127,7 +129,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
     }
 
-    const { pendingUserId, employeeId: manualEmployeeId, hireDate, sendEmails } = parsed.data
+    const {
+      pendingUserId,
+      employeeId: manualEmployeeId,
+      hireDate,
+      sendEmails,
+      employmentType = "full_time",
+      contractCategoryCode,
+    } = parsed.data
 
     // 1. Fetch Pending User Details
     const { data: pendingUser, error: fetchError } = await supabaseAdmin
@@ -162,7 +171,7 @@ export async function POST(req: Request) {
     let employeeId = manualEmployeeId
 
     if (employeeId) {
-      const empNumPattern = /^ACOB\/[0-9]{4}\/[0-9]{3}$/
+      const empNumPattern = /^ACOB\/([A-Z0-9-]+\/)?[0-9]{4}\/[0-9]{3}$/
       if (!empNumPattern.test(employeeId)) {
         return NextResponse.json(
           { error: "Employee number must be in format: ACOB/YEAR/NUMBER (e.g., ACOB/2026/058)" },
@@ -172,12 +181,27 @@ export async function POST(req: Request) {
     }
 
     if (!employeeId) {
-      // next_employee_number() calls nextval() on a sequence — fully atomic, no race condition
-      const { data: seqRow, error: seqError } = await supabaseAdmin.rpc("next_employee_number")
+      // generate_staff_number() updates counters atomically
+      const { data: seqRow, error: seqError } = await supabaseAdmin.rpc("generate_staff_number", {
+        p_type: employmentType,
+        p_category_code: contractCategoryCode || null,
+      })
       if (seqError || !seqRow) {
         throw new Error(`Failed to generate employee number: ${seqError?.message ?? "unknown error"}`)
       }
       employeeId = seqRow as string
+    }
+
+    // Resolve contract category ID if contract
+    let contractCategoryId = null
+    if (employmentType === "contract" && contractCategoryCode) {
+      const { data: catData } = await supabaseAdmin
+        .from("contract_categories")
+        .select("id")
+        .eq("code", contractCategoryCode.toUpperCase())
+        .eq("is_active", true)
+        .single()
+      contractCategoryId = catData?.id || null
     }
 
     const emailPreview = await buildApprovalEmailPreview({
@@ -190,7 +214,7 @@ export async function POST(req: Request) {
           caller.email ||
           "Admin & HR Lead",
         designation: callerProfile?.designation || null,
-        department: callerProfile?.department || "Admin & HR Department",
+        department: callerProfile?.department || "Admin & HR",
       },
     })
 
@@ -397,6 +421,8 @@ export async function POST(req: Request) {
       p_employment_date: hireDate ?? null,
       p_birthday: pendingBirthday,
       p_birth_year: pendingBirthYear,
+      p_employment_type: employmentType,
+      p_contract_category_id: contractCategoryId,
     })
 
     if (approvalError) {
@@ -504,6 +530,8 @@ export async function POST(req: Request) {
           department: pendingUser.department,
           role: "employee",
           employment_status: "active",
+          employment_type: employmentType,
+          contract_category_id: contractCategoryId,
         },
         metadata: { source: "approve-user", pending_user_id: pendingUserId, email_warnings: emailWarnings },
       },

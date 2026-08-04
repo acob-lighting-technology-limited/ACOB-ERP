@@ -16,6 +16,7 @@ import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-tabl
 import { StatCard } from "@/components/ui/stat-card"
 import { Badge } from "@/components/ui/badge"
 import type { Goal } from "./page"
+import { apiFetch } from "@/lib/api-client"
 
 type GoalsContentProps = {
   initialGoals: Goal[]
@@ -175,7 +176,7 @@ export function GoalsContent({
 
     setSaving(true)
     try {
-      const response = await fetch("/api/hr/performance/goals", {
+      const response = await apiFetch("/api/hr/performance/goals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),

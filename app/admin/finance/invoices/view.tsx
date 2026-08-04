@@ -5,7 +5,6 @@ import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "next/navigation"
 import { CircleDollarSign, Download, Eye, FileClock, FileText, Plus, Send, Wallet } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -13,9 +12,6 @@ import { StatCard } from "@/components/ui/stat-card"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { InvoiceFormDialog } from "./_components/invoice-form-dialog"
-import { logger } from "@/lib/logger"
-
-const log = logger("finance-invoices")
 
 export interface Invoice {
   id: string
@@ -43,18 +39,10 @@ const statusColors: Record<Invoice["status"], InvoiceStatusVariant> = {
 }
 
 async function fetchInvoicesList(): Promise<Invoice[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase.from("invoices").select("*").order("created_at", { ascending: false })
-
-  if (error) {
-    if (error.code === "42P01") {
-      log.debug("Invoices table does not exist yet")
-      return []
-    }
-    throw new Error(error.message)
-  }
-
-  return data || []
+  const res = await fetch("/api/admin/finance/invoices", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load invoices")
+  const json = await res.json()
+  return (json.data || []) as Invoice[]
 }
 
 function formatCurrency(amount: number, currency = "NGN") {

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
-import { getWorkdaysInMonth, monthBounds, toLocalISODate } from "@/lib/hr/attendance-utils"
+import { getWorkdaysInMonth, monthBounds, toLocalISODate, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
@@ -28,6 +28,7 @@ export async function GET(request: NextRequest) {
   const scopeResult = await requireApiAdminScope()
   if (!scopeResult.ok) return scopeResult.response
   const { scope, supabase } = scopeResult
+  const policy = await loadAttendancePolicy(supabase)
 
   const userId = String(request.nextUrl.searchParams.get("user_id") || "")
   const yearMonth = String(request.nextUrl.searchParams.get("year_month") || "")
@@ -159,14 +160,28 @@ export async function GET(request: NextRequest) {
     .filter((d) => d <= today)
     .map((date) => {
       const rec = recordsByDate.get(date) || null
-      const status = deriveUnifiedAttendanceStatus({
+      const closeTime = ctx.earlyCloseTime(date)
+      const lateRes = ctx.lateResumptionTime(date)
+      const status = deriveUnifiedAttendanceStatus(
+        {
+          record: rec,
+          isHoliday: ctx.isHoliday(date),
+          isOnLeave: ctx.isOnLeave(userId, date),
+          isExempted: exemptHint || Boolean(profile?.attendance_exempt) || ctx.isExempt(userId, date),
+          recordDate: date,
+          earlyClosure: closeTime ? { closeTime } : null,
+          lateResumption: lateRes ? { resumptionTime: lateRes } : null,
+        },
+        policy
+      )
+      return {
+        date,
         record: rec,
-        isHoliday: ctx.isHoliday(date),
-        isOnLeave: ctx.isOnLeave(userId, date),
-        isExempted: exemptHint || Boolean(profile?.attendance_exempt) || ctx.isExempt(userId, date),
-        recordDate: date,
-      })
-      return { date, record: rec, status, manual_by: manualByDate(date) }
+        status,
+        manual_by: manualByDate(date),
+        early_closure_time: closeTime,
+        late_resumption_time: lateRes,
+      }
     })
 
   return NextResponse.json({ data: rows })

@@ -56,29 +56,6 @@ export type {
 } from "./finance"
 
 // ============================================
-// CRM types (will be separate app)
-// ============================================
-export type {
-  CRMPipeline,
-  PipelineStage,
-  CRMContact,
-  CRMAddress,
-  CRMOpportunity,
-  CRMActivity,
-  CRMTag,
-  CreateContactInput,
-  UpdateContactInput,
-  CreateOpportunityInput,
-  UpdateOpportunityInput,
-  CreateActivityInput,
-  UpdateActivityInput,
-  CRMDashboardMetrics,
-  ContactFilters,
-  OpportunityFilters,
-  ActivityFilters,
-} from "./crm"
-
-// ============================================
 // Payments types (excluding duplicates from database.ts)
 // ============================================
 export type {

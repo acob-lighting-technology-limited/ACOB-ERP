@@ -23,6 +23,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
+import { apiFetch } from "@/lib/api-client"
 
 type FleetResource = {
   id: string
@@ -81,14 +82,14 @@ function toLocalDateTimeInput(value?: string) {
 }
 
 async function fetchFleetResources(): Promise<FleetResource[]> {
-  const response = await fetch("/api/fleet/resources")
+  const response = await apiFetch("/api/fleet/resources")
   if (!response.ok) throw new Error("Failed to load fleet resources")
   const payload = await response.json()
   return payload.data || []
 }
 
 async function fetchFleetBookings(): Promise<{ bookings: FleetBooking[]; schedule: FleetSchedule[] }> {
-  const response = await fetch("/api/fleet/bookings")
+  const response = await apiFetch("/api/fleet/bookings")
   if (!response.ok) throw new Error("Failed to load fleet bookings")
   const payload = await response.json()
   return { bookings: payload.data || [], schedule: payload.resource_schedule || [] }
@@ -150,7 +151,7 @@ export function FleetContent() {
 
   const { mutate: submitBooking, isPending: submitting } = useMutation({
     mutationFn: async (formData: FormData) => {
-      const response = await fetch("/api/fleet/bookings", { method: "POST", body: formData })
+      const response = await apiFetch("/api/fleet/bookings", { method: "POST", body: formData })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || "Failed to submit booking")
       return payload
@@ -191,7 +192,7 @@ export function FleetContent() {
   async function handleCancel(bookingId: string) {
     setCancelingId(bookingId)
     try {
-      const response = await fetch(`/api/fleet/bookings/${bookingId}/cancel`, { method: "PATCH" })
+      const response = await apiFetch(`/api/fleet/bookings/${bookingId}/cancel`, { method: "PATCH" })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || "Failed to cancel booking")
       toast.success("Booking cancelled")

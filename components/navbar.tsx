@@ -58,10 +58,9 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
   const isMaintenancePage = pathname.startsWith("/maintenance")
   const { resolvedTheme } = useTheme()
   const dashboardHref = isAdminMode ? "/admin" : "/profile"
-  const use2026Logo = isTemporary2026LogoPeriod()
-  const logoWidth = use2026Logo ? 220 : 150
-  const logoHeight = use2026Logo ? 56 : 150
-  const logoClassName = use2026Logo ? "h-12 w-auto" : "h-8 w-auto"
+  const logoWidth = 180
+  const logoHeight = 180
+  const logoClassName = "h-8 md:h-10 w-auto object-contain max-h-10 transition-all"
 
   // Get sidebar context safely (returns null if not available)
   const sidebarContext = useSidebarSafe()

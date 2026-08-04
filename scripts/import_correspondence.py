@@ -1,8 +1,9 @@
+import os
 import psycopg2
 from datetime import datetime, timedelta
 
 SURAJO = 'f16cd078-5324-4837-a011-50c57f9a32d5'
-DSN = 'postgres://postgres.itqegqxeqkeogwrvlzlj:yhUHpxFsvHmDw24C@aws-1-eu-central-1.pooler.supabase.com:5432/postgres?sslmode=require'
+DSN = os.environ.get('DATABASE_URL', '')
 
 # (reference_number, subject, dept_name, dept_code, recipient_name, recipient_code, category, letter_type, date_str)
 records = [

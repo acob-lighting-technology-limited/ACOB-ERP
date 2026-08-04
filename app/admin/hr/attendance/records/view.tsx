@@ -21,9 +21,15 @@ import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
 import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
-import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS, isEarlyDeparture } from "@/lib/hr/attendance-status"
+import {
+  ATTENDANCE_STATUS_COLORS,
+  ATTENDANCE_STATUS_LABELS,
+  isEarlyDeparture,
+  normalizeStoredAttendanceStatus,
+} from "@/lib/hr/attendance-status"
 import { isLate } from "@/lib/hr/attendance-utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("admin-attendance-records")
 
@@ -61,13 +67,15 @@ function formatTime(t: string | null) {
 }
 
 function StatusBadge({ status }: { status: string }) {
+  const norm = normalizeStoredAttendanceStatus(status) || status
   return (
     <Badge
       className={
-        ATTENDANCE_STATUS_COLORS[status as keyof typeof ATTENDANCE_STATUS_COLORS] ?? "bg-gray-100 text-gray-800"
+        ATTENDANCE_STATUS_COLORS[norm as keyof typeof ATTENDANCE_STATUS_COLORS] ??
+        "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
       }
     >
-      {ATTENDANCE_STATUS_LABELS[status as keyof typeof ATTENDANCE_STATUS_LABELS] ?? status}
+      {ATTENDANCE_STATUS_LABELS[norm as keyof typeof ATTENDANCE_STATUS_LABELS] ?? norm}
     </Badge>
   )
 }
@@ -77,6 +85,8 @@ export function AdminAttendanceRecordsPage({
   lockedDepartment,
 }: { backLinkHref?: string; lockedDepartment?: string } = {}) {
   const [records, setRecords] = useState<AttendanceRecord[]>([])
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedRecords, setProcessedRecords] = useState<AttendanceRecord[]>([])
   const [loading, setLoading] = useState(false)
   const [filters, setFilters] = useState({
     start_date: toLocalISODate(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)),
@@ -94,7 +104,7 @@ export function AdminAttendanceRecordsPage({
     try {
       const params = new URLSearchParams({ start_date: filters.start_date, end_date: filters.end_date })
       if (lockedDepartment) params.set("department", lockedDepartment)
-      const res = await fetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load records")
       setRecords(payload.records || [])
@@ -148,7 +158,7 @@ export function AdminAttendanceRecordsPage({
         status: editForm.status,
       }
 
-      const res = await fetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
+      const res = await apiFetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -167,7 +177,8 @@ export function AdminAttendanceRecordsPage({
 
   function downloadCSV() {
     const headers = ["Date", "Employee", "Department", "Clock In", "Clock Out", "Hours", "Status", "Source"]
-    const rows = records.map((r) => [
+    const source = processedRecords.length ? processedRecords : records
+    const rows = source.map((r) => [
       formatDate(r.date),
       r.user_name,
       r.department,
@@ -416,6 +427,7 @@ export function AdminAttendanceRecordsPage({
         <DataTable<AttendanceRecord>
           data={records}
           columns={columns}
+          onProcessedDataChange={setProcessedRecords}
           filters={tableFilters}
           getRowId={(r) => r.id}
           pagination={{ pageSize: 50 }}

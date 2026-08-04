@@ -9,7 +9,10 @@ import { CalendarView } from "./_components/calendar-view"
 import type { EmployeeOption } from "./_components/calendar-view"
 import { ExceptionsView } from "./_components/exceptions-view"
 import { AppealsView } from "./_components/appeals-view"
+import { LeaderboardView } from "./_components/leaderboard-view"
 import { AttendanceManagerDialog } from "./_components/attendance-manager-dialog"
+import { AttendanceReportDialog } from "./_components/attendance-report-dialog"
+import { AttendanceLunchExportDialog } from "./_components/attendance-lunch-export-dialog"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StatCard } from "@/components/ui/stat-card"
@@ -25,10 +28,17 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { BarChart3, Download, FileText, Users, Clock, AlertCircle, Pencil, Info, Settings2 } from "lucide-react"
+import { BarChart3, Download, FileText, Users, Clock, AlertCircle, Pencil, Info, Settings2, Mail } from "lucide-react"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
-import { getWorkdaysInMonth, monthBounds, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
+import {
+  ATTENDANCE_TRACKING_START,
+  getWorkdaysInMonth,
+  monthBounds,
+  quarterBounds,
+  toLocalISODate,
+  toLocalYearMonth,
+} from "@/lib/hr/attendance-utils"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import {
   ATTENDANCE_STATUS_COLORS,
@@ -37,6 +47,7 @@ import {
   getManualStatusEditOptions,
 } from "@/lib/hr/attendance-status"
 import { StatusBadge, labelSource } from "./_components/status-badge"
+import { apiFetch } from "@/lib/api-client"
 
 const log = logger("hr-attendance-reports")
 
@@ -46,6 +57,7 @@ interface AttendanceReport {
   user_name: string
   department: string
   total_days: number
+  early_days?: number
   present_days: number
   late_days: number
   incomplete_days?: number
@@ -61,6 +73,9 @@ interface AttendanceReport {
   total_hours: number
   total_missed_hours?: number
   attendance_rate: number
+  overtime_hours?: number
+  avg_clock_in_minutes?: number | null
+  appeal_count?: number
   attendance_exempt?: boolean
   attendance_exempt_until?: string | null
   period_label?: string
@@ -96,6 +111,8 @@ type DayStatus =
   | "on_leave"
   | "holiday"
   | "weekend"
+  | "early_closure"
+  | "late_resumption"
 
 interface CalendarDay {
   date: string
@@ -104,6 +121,8 @@ interface CalendarDay {
   isOnLeave: boolean
   status: DayStatus
   manualBy: string | null
+  earlyClosureTime?: string | null
+  lateResumptionTime?: string | null
 }
 
 /**
@@ -203,14 +222,6 @@ type UnifiedDayPayload = {
   }>
 }
 
-function quarterBounds(year: number, quarter: "Q1" | "Q2" | "Q3" | "Q4") {
-  const monthStart = quarter === "Q1" ? 1 : quarter === "Q2" ? 4 : quarter === "Q3" ? 7 : 10
-  const start = `${year}-${String(monthStart).padStart(2, "0")}-01`
-  const monthEnd = monthStart + 2
-  const endDate = toLocalISODate(new Date(Date.UTC(year, monthEnd, 0)))
-  return { start, end: endDate }
-}
-
 function currentYearMonth() {
   return toLocalYearMonth()
 }
@@ -236,7 +247,12 @@ function formatHours(hours: number | null) {
   return `${hours.toFixed(1)}h`
 }
 
-function getHourBreakdown(record: DayRecord | null, status?: string) {
+function getHourBreakdown(
+  record: DayRecord | null,
+  status?: string,
+  lateResumptionTime?: string | null,
+  earlyClosureTime?: string | null
+) {
   const covered =
     status === "waiver" ||
     status === "on_leave" ||
@@ -267,9 +283,48 @@ function getHourBreakdown(record: DayRecord | null, status?: string) {
   const workStart = 8 * 60
   const workEnd = 17 * 60
   const workMinutes = Math.max(0, Math.min(outMin, workEnd) - Math.max(inMin, workStart))
-  const work = workMinutes / 60
-  const overtime = Math.max(0, total - work)
-  const missed = Math.max(0, 9 - work)
+
+  // Subtract 1 hour from work hours only if total time in office >= 5 hours
+  const hasLunch = total >= 5
+  const work = Math.max(0, workMinutes / 60 - (hasLunch ? 1.0 : 0.0))
+  const overtime = Math.max(0, total - workMinutes / 60)
+
+  // 1. Calculate Lateness Hours
+  let lateness = 0
+  const graceMin = 8 * 60 + 20 // 08:20 AM
+  const nineMin = 9 * 60 // 09:00 AM
+
+  // If clock-in is after 4:00 PM (16:00), they are considered absent (8.5 hrs missed)
+  if (inMin > 16 * 60) {
+    return { total, work, overtime, missed: 8.5 }
+  }
+
+  if (lateResumptionTime) {
+    const [rh, rm] = lateResumptionTime.split(":").map(Number)
+    if (!isNaN(rh) && !isNaN(rm)) {
+      const resumptionMin = rh * 60 + rm
+      if (inMin > resumptionMin) {
+        lateness = Math.ceil((inMin - resumptionMin) / 60)
+      }
+    }
+  } else {
+    if (inMin > graceMin) {
+      if (inMin <= nineMin) {
+        lateness = 0.5
+      } else {
+        lateness = Math.ceil((inMin - nineMin) / 60)
+      }
+    }
+  }
+
+  // 2. Calculate Early Departure Hours (capped at 5:00 PM or early closure close time)
+  let earlyDeparture = 0
+  const effectiveEnd = earlyClosureTime ? (parseTimeToMinutes(earlyClosureTime) ?? workEnd) : workEnd
+  if (outMin < effectiveEnd) {
+    earlyDeparture = Math.ceil((effectiveEnd - outMin) / 60)
+  }
+
+  const missed = lateness + earlyDeparture
   return { total, work, overtime, missed }
 }
 
@@ -301,15 +356,17 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           year_month: yearMonth,
           exempt_hint: report.attendance_exempt ? "1" : "0",
         })
-        const res = await fetch(`/api/admin/hr/attendance/employee-days?${qs.toString()}`, { cache: "no-store" })
+        const res = await apiFetch(`/api/admin/hr/attendance/employee-days?${qs.toString()}`, { cache: "no-store" })
         const payload = res.ok ? ((await res.json()) as UnifiedDayPayload) : null
         const calDays: CalendarDay[] = (payload?.data || []).map((row) => ({
           date: row.date,
           dayName: formatDayShort(row.date),
           record: row.record,
           isOnLeave: row.status === "on_leave",
-          status: row.status,
+          status: row.status as DayStatus,
           manualBy: row.manual_by ?? row.record?.editor_first_name ?? null,
+          earlyClosureTime: (row as any).early_closure_time ?? null,
+          lateResumptionTime: (row as any).late_resumption_time ?? null,
         }))
 
         setDays(calDays)
@@ -349,7 +406,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           manual_comment: editForm.manual_comment,
           status: editForm.status,
         }
-        res = await fetch(`/api/admin/hr/attendance/records/${editTarget.record.id}`, {
+        res = await apiFetch(`/api/admin/hr/attendance/records/${editTarget.record.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -365,7 +422,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           clock_in: null,
           clock_out: null,
         }
-        res = await fetch("/api/admin/hr/attendance/records", {
+        res = await apiFetch("/api/admin/hr/attendance/records", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
@@ -393,7 +450,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
     setHistoryLoading(true)
     try {
       const qs = new URLSearchParams({ user_id: report.user_id, date: day.date })
-      const res = await fetch(`/api/admin/hr/attendance/timeline?${qs.toString()}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/hr/attendance/timeline?${qs.toString()}`, { cache: "no-store" })
       const payload = (await res.json().catch(() => null)) as {
         data?: { events?: TimelineEvent[]; context?: TimelineContext }
       } | null
@@ -475,7 +532,7 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           <span></span>
         </div>
         {visibleDays.map((day) => {
-          const hours = getHourBreakdown(day.record, day.status)
+          const hours = getHourBreakdown(day.record, day.status, day.lateResumptionTime, day.earlyClosureTime)
           return (
             <div
               key={day.date}
@@ -483,7 +540,12 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
             >
               <span className="text-xs font-medium">{day.dayName}</span>
               <div>
-                <StatusBadge status={day.status} waived={day.record?.waived} />
+                <StatusBadge
+                  status={day.status}
+                  waived={day.record?.waived}
+                  record={day.record}
+                  earlyClosure={day.earlyClosureTime ? { closeTime: day.earlyClosureTime } : null}
+                />
               </div>
               <span className="text-muted-foreground flex items-center gap-1.5 text-xs">
                 {day.record?.clock_in ? (
@@ -617,16 +679,18 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           {historyContext && (historyContext.holiday || historyContext.on_leave || historyContext.exempt) && (
             <div className="flex flex-wrap gap-2">
               {historyContext.holiday && (
-                <Badge className="bg-sky-100 text-xs text-sky-800">
+                <Badge className="bg-sky-100 text-xs text-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
                   Holiday — {historyContext.holiday}
                   {historyContext.holiday_added_by ? ` · added by ${historyContext.holiday_added_by}` : ""}
                 </Badge>
               )}
               {historyContext.on_leave && (
-                <Badge className="bg-purple-100 text-xs text-purple-800">On leave — {historyContext.on_leave}</Badge>
+                <Badge className="bg-purple-100 text-xs text-purple-800 dark:bg-purple-950/40 dark:text-purple-300">
+                  On leave — {historyContext.on_leave}
+                </Badge>
               )}
               {historyContext.exempt && (
-                <Badge className="bg-violet-100 text-xs text-violet-800">
+                <Badge className="bg-violet-100 text-xs text-violet-800 dark:bg-violet-950/40 dark:text-violet-300">
                   Exempt{historyContext.exempt_reason ? ` — ${historyContext.exempt_reason}` : ""}
                 </Badge>
               )}
@@ -683,11 +747,12 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   )
 }
 
-type AttendanceTab = "summary" | "daily" | "calendar" | "exceptions" | "appeals"
+type AttendanceTab = "summary" | "daily" | "calendar" | "exceptions" | "appeals" | "leaderboard"
 
 const ATTENDANCE_TABS: DataTableTab[] = [
   { key: "daily", label: "Daily Roster" },
   { key: "summary", label: "Summary" },
+  { key: "leaderboard", label: "Leaderboard" },
   { key: "calendar", label: "Calendar" },
   { key: "exceptions", label: "Exceptions" },
   { key: "appeals", label: "Appeals" },
@@ -700,6 +765,8 @@ export function AttendanceReportsPage({
   const [activeTab, setActiveTab] = useState<AttendanceTab>("daily")
   const [loading, setLoading] = useState(false)
   const [reports, setReports] = useState<AttendanceReport[]>([])
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedReports, setProcessedReports] = useState<AttendanceReport[]>([])
   const [departments, setDepartments] = useState<string[]>([])
   const [yearMonth, setYearMonth] = useState(currentYearMonth)
   const [periodMode, setPeriodMode] = useState<"month" | "quarter">("month")
@@ -710,6 +777,8 @@ export function AttendanceReportsPage({
   const [holidays, setHolidays] = useState<Array<{ holiday_date: string; name?: string | null }>>([])
   // Unified Attendance Manager dialog
   const [managerOpen, setManagerOpen] = useState(false)
+  const [reportDialogOpen, setReportDialogOpen] = useState(false)
+  const [lunchExportOpen, setLunchExportOpen] = useState(false)
 
   const refreshSingleEmployeeSummary = useCallback(
     async (userId: string) => {
@@ -721,7 +790,7 @@ export function AttendanceReportsPage({
           department: reportDepartment,
           user_id: userId,
         })
-        const response = await fetch(`/api/hr/attendance/reports?${params.toString()}`, { cache: "no-store" })
+        const response = await apiFetch(`/api/hr/attendance/reports?${params.toString()}`, { cache: "no-store" })
         const payload = (await response.json().catch(() => null)) as {
           data?: AttendanceReport[]
           error?: string
@@ -755,7 +824,7 @@ export function AttendanceReportsPage({
     try {
       const { start, end } = periodMode === "month" ? monthBounds(yearMonth) : quarterBounds(quarterYear, quarter)
       const params = new URLSearchParams({ start_date: start, end_date: end, department: reportDepartment })
-      const response = await fetch(`/api/hr/attendance/reports?${params.toString()}`, { cache: "no-store" })
+      const response = await apiFetch(`/api/hr/attendance/reports?${params.toString()}`, { cache: "no-store" })
       const payload = (await response.json().catch(() => null)) as {
         data?: AttendanceReport[]
         departments?: string[]
@@ -781,7 +850,7 @@ export function AttendanceReportsPage({
   }, [yearMonth, reportDepartment, periodMode, quarter, quarterYear, lockedDepartment])
 
   const loadHolidays = useCallback(async () => {
-    const response = await fetch(`/api/admin/hr/attendance/holidays?month=${yearMonth}`, { cache: "no-store" })
+    const response = await apiFetch(`/api/admin/hr/attendance/holidays?month=${yearMonth}`, { cache: "no-store" })
     const payload = (await response.json().catch(() => null)) as {
       data?: Array<{ holiday_date: string; name?: string | null }>
     } | null
@@ -800,6 +869,7 @@ export function AttendanceReportsPage({
     "Name",
     "Department",
     "Total Days",
+    "Early",
     "Present",
     "Late",
     "LWP",
@@ -818,10 +888,12 @@ export function AttendanceReportsPage({
   ]
 
   function buildExportRows(): (string | number)[][] {
-    return reports.map((r) => [
+    const source = processedReports.length ? processedReports : reports
+    return source.map((r) => [
       r.user_name,
       r.department,
       r.total_days,
+      r.early_days ?? 0,
       r.present_days,
       r.late_days,
       r.lateness_with_permission_days ?? 0,
@@ -895,8 +967,9 @@ export function AttendanceReportsPage({
     const currentYear = now.getFullYear()
     const currentMonth = now.getMonth()
 
-    const startYear = 2026
-    const startMonth = 3 // April is index 3
+    const [trackingStartYear, trackingStartMonth] = ATTENDANCE_TRACKING_START.split("-").map(Number)
+    const startYear = trackingStartYear
+    const startMonth = trackingStartMonth - 1
 
     let y = currentYear
     let m = currentMonth
@@ -953,11 +1026,20 @@ export function AttendanceReportsPage({
       initialWidth: 200,
     },
     {
+      key: "early_days",
+      label: "Early",
+      sortable: true,
+      accessor: (r) => r.early_days ?? 0,
+      render: (r) => <span className="text-green-600">{r.early_days ?? 0}</span>,
+      align: "center",
+      hideOnMobile: true,
+    },
+    {
       key: "present_days",
       label: "Present",
       sortable: true,
       accessor: (r) => r.present_days,
-      render: (r) => <span className="text-green-600">{r.present_days}</span>,
+      render: (r) => <span className="text-blue-600">{r.present_days}</span>,
       align: "center",
       hideOnMobile: true,
     },
@@ -1107,7 +1189,9 @@ export function AttendanceReportsPage({
             ? "All check-in records for a selected date."
             : activeTab === "calendar"
               ? "Month-view calendar for an individual employee."
-              : "Records needing attention — late arrivals, missing clock-outs, absences."
+              : activeTab === "leaderboard"
+                ? "Rankings across punctuality, hours, and reliability for the selected period."
+                : "Records needing attention — late arrivals, missing clock-outs, absences."
       }
       icon={BarChart3}
       backLink={{ href: backLinkHref ?? "/admin/hr", label: "Back to HR" }}
@@ -1116,6 +1200,10 @@ export function AttendanceReportsPage({
       onTabChange={(t) => setActiveTab(t as AttendanceTab)}
       actions={
         <div className="flex items-center gap-2">
+          <Button variant="outline" onClick={() => setReportDialogOpen(true)} size="sm">
+            <Mail className="mr-2 h-4 w-4" />
+            Reports
+          </Button>
           <Button variant="outline" onClick={() => setManagerOpen(true)} size="sm">
             <Settings2 className="mr-2 h-4 w-4" />
             Attendance Manager
@@ -1123,6 +1211,10 @@ export function AttendanceReportsPage({
           <Button variant="outline" onClick={() => setIsExportOpen(true)} disabled={reports.length === 0} size="sm">
             <Download className="mr-2 h-4 w-4" />
             Export
+          </Button>
+          <Button variant="outline" onClick={() => setLunchExportOpen(true)} size="sm">
+            <FileText className="mr-2 h-4 w-4" />
+            Attendance & Lunch Report
           </Button>
         </div>
       }
@@ -1155,6 +1247,7 @@ export function AttendanceReportsPage({
       }
     >
       {activeTab === "daily" && <DailyRosterView departments={departments} lockedDepartment={lockedDepartment} />}
+      {activeTab === "leaderboard" && <LeaderboardView departments={departments} lockedDepartment={lockedDepartment} />}
       {activeTab === "calendar" && <CalendarView employees={employeeOptions} />}
       {activeTab === "exceptions" && <ExceptionsView departments={departments} lockedDepartment={lockedDepartment} />}
       {activeTab === "appeals" && <AppealsView lockedDepartment={lockedDepartment} />}
@@ -1162,6 +1255,7 @@ export function AttendanceReportsPage({
         <DataTable<AttendanceReport>
           data={reports}
           columns={columns}
+          onProcessedDataChange={setProcessedReports}
           filters={reportFilters}
           getRowId={(r) => r.user_id}
           pagination={{ pageSize: 50 }}
@@ -1213,6 +1307,15 @@ export function AttendanceReportsPage({
         }}
         onReportChanged={() => void generateReport()}
         lockedDepartment={lockedDepartment}
+      />
+
+      <AttendanceReportDialog open={reportDialogOpen} onOpenChange={setReportDialogOpen} />
+
+      <AttendanceLunchExportDialog
+        open={lunchExportOpen}
+        onOpenChange={setLunchExportOpen}
+        department={lockedDepartment}
+        monthOptions={monthOptions}
       />
     </DataTablePage>
   )

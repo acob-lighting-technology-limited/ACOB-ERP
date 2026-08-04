@@ -4,7 +4,6 @@ import { useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "next/navigation"
 import { AlertTriangle, Eye, Package, Pencil, Plus, Tags, Wallet } from "lucide-react"
-import { createClient } from "@/lib/supabase/client"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -13,9 +12,6 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import type { BadgeProps } from "@/components/ui/badge"
 import { ProductFormDialog } from "./_components/product-form-dialog"
-import { logger } from "@/lib/logger"
-
-const log = logger("inventory-products")
 
 interface Product {
   id: string
@@ -32,12 +28,6 @@ interface Product {
   created_at: string
 }
 
-interface ProductRow extends Product {
-  category?: {
-    name: string | null
-  } | null
-}
-
 const statusColors: Record<Product["status"], BadgeProps["variant"]> = {
   active: "default",
   inactive: "secondary",
@@ -45,21 +35,10 @@ const statusColors: Record<Product["status"], BadgeProps["variant"]> = {
 }
 
 async function fetchProductsList(): Promise<Product[]> {
-  const supabase = createClient()
-  const { data, error } = await supabase.from("products").select("*, category:product_categories(name)").order("name")
-
-  if (error) {
-    if (error.code === "42P01") {
-      log.debug("Products table does not exist yet")
-      return []
-    }
-    throw new Error(error.message)
-  }
-
-  return ((data || []) as ProductRow[]).map((product) => ({
-    ...product,
-    category_name: product.category?.name || undefined,
-  }))
+  const res = await fetch("/api/admin/inventory/products", { cache: "no-store" })
+  if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to load products")
+  const json = await res.json()
+  return (json.data || []) as Product[]
 }
 
 function formatCurrency(amount: number) {

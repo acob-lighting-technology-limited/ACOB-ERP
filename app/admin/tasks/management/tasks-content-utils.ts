@@ -1,10 +1,10 @@
-import { createClient } from "@/lib/supabase/client"
+import type { SupabaseClient as GenericSupabaseClient } from "@supabase/supabase-js"
 import { dateValidation } from "@/lib/validation"
 import type { TaskFormState } from "@/components/tasks/TaskFormDialog"
 import type { Task } from "@/types/task"
 import type { employee, UserProfile } from "./admin-tasks-content"
 
-export type SupabaseClient = ReturnType<typeof createClient>
+export type SupabaseClient = GenericSupabaseClient
 
 type NotificationPriority = "low" | "medium" | "high" | "urgent"
 

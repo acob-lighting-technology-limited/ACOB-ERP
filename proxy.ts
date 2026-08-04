@@ -2,8 +2,8 @@ import { updateSession } from "@/lib/supabase/middleware"
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 
-const LEGACY_HOSTS = new Set(["acob-erp.vercel.app"])
-const CANONICAL_HOST = "erp.acoblighting.com"
+const LEGACY_HOSTS = new Set(["acob-erp.vercel.app", "erp.acoblighting.com"])
+const CANONICAL_HOST = "matrix.acoblighting.com"
 
 export async function proxy(request: NextRequest) {
   const hostname = request.nextUrl.hostname.toLowerCase()

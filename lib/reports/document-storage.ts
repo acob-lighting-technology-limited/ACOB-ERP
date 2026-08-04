@@ -3,7 +3,7 @@ import { sanitizeStoragePathSegment } from "@/lib/reports/meeting-date"
 const REPORTS_LIBRARY = "reports"
 const GENERAL_MEETING_FOLDER = "general-meeting"
 
-type ReportDocumentType = "knowledge_sharing_session" | "minutes"
+type ReportDocumentType = "knowledge_sharing_session" | "minutes" | "attendance" | "transcript"
 type GeneratedReportExportType = "weekly-reports" | "action-points"
 
 function sanitizeName(name: string): string {
@@ -11,7 +11,10 @@ function sanitizeName(name: string): string {
 }
 
 function reportDocumentTypeFolder(documentType: ReportDocumentType): string {
-  return documentType === "knowledge_sharing_session" ? "kss" : "minutes"
+  if (documentType === "knowledge_sharing_session") return "kss"
+  if (documentType === "attendance") return "attendance"
+  if (documentType === "transcript") return "transcript"
+  return "minutes"
 }
 
 function generatedExportTypeFolder(exportType: GeneratedReportExportType): string {

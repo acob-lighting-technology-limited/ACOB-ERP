@@ -1,14 +1,61 @@
 import { Badge } from "@/components/ui/badge"
-import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
+import {
+  ATTENDANCE_STATUS_COLORS,
+  ATTENDANCE_STATUS_LABELS,
+  getEarlyDepartureFacts,
+  normalizeStoredAttendanceStatus,
+  type AttendanceLike,
+  type EarlyClosureInfo,
+} from "@/lib/hr/attendance-status"
 
-export function StatusBadge({ status, waived }: { status: string; waived?: boolean }) {
-  const s = waived ? "waiver" : status
-  return (
+/**
+ * Attendance status chip. When `record` is provided and the primary status is "Late"
+ * while the employee also left early, a secondary "Left Early" (or "LEWP" if approved)
+ * chip is shown alongside it — so a late + early-departure day surfaces both facts.
+ */
+export function StatusBadge({
+  status,
+  waived,
+  record,
+  earlyClosure,
+}: {
+  status: string
+  waived?: boolean
+  record?: AttendanceLike | null
+  earlyClosure?: EarlyClosureInfo
+}) {
+  const normalized = normalizeStoredAttendanceStatus(status) || status
+  const s = waived ? "waiver" : normalized
+
+  let secondary: { label: string; className: string } | null = null
+  if (record && (s === "late" || s === "lateness_with_permission")) {
+    const facts = getEarlyDepartureFacts(record, earlyClosure)
+    if (facts.leftEarly) {
+      const key = facts.approved ? "early_departure_with_permission" : "early_departure"
+      secondary = {
+        label: facts.approved ? "LEWP" : "Left Early",
+        className: ATTENDANCE_STATUS_COLORS[key as keyof typeof ATTENDANCE_STATUS_COLORS],
+      }
+    }
+  }
+
+  const primary = (
     <Badge
-      className={ATTENDANCE_STATUS_COLORS[s as keyof typeof ATTENDANCE_STATUS_COLORS] ?? "bg-gray-100 text-gray-800"}
+      className={
+        ATTENDANCE_STATUS_COLORS[s as keyof typeof ATTENDANCE_STATUS_COLORS] ??
+        "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
+      }
     >
       {ATTENDANCE_STATUS_LABELS[s as keyof typeof ATTENDANCE_STATUS_LABELS] ?? s}
     </Badge>
+  )
+
+  if (!secondary) return primary
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      {primary}
+      <Badge className={secondary.className}>{secondary.label}</Badge>
+    </span>
   )
 }
 

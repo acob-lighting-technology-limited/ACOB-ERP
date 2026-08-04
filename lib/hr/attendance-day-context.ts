@@ -17,6 +17,10 @@ export interface DayContext {
   isOnLeave(userId: string, date: string): boolean
   /** Period-based exemption only — does NOT include the profile.attendance_exempt flag. */
   isExempt(userId: string, date: string): boolean
+  /** Org-wide early-closure time (HH:MM) for the date, or null if not a closure day. */
+  earlyCloseTime(date: string): string | null
+  /** Org-wide late-resumption time (HH:MM) for the date, or null if not a late-resumption day. */
+  lateResumptionTime(date: string): string | null
 }
 
 function expandInto(target: Set<string>, startDate: string, endDate: string) {
@@ -34,6 +38,30 @@ export async function loadDayContext(
   const holidayDates = new Set<string>()
   const leaveByUser = new Map<string, Set<string>>()
   const exemptByUser = new Map<string, Set<string>>()
+  const closureByDate = new Map<string, string>()
+  const resumptionByDate = new Map<string, string>()
+
+  // Org-wide early-closure and late-resumption days apply regardless of user set.
+  const [{ data: closures }, { data: resumptions }] = await Promise.all([
+    client
+      .from("attendance_early_closures")
+      .select("closure_date, close_time")
+      .gte("closure_date", start)
+      .lte("closure_date", end),
+    client
+      .from("attendance_late_resumptions")
+      .select("resumption_date, resumption_time")
+      .gte("resumption_date", start)
+      .lte("resumption_date", end),
+  ])
+
+  for (const c of (closures ?? []) as Array<{ closure_date: string; close_time: string }>) {
+    if (c.closure_date && c.close_time) closureByDate.set(c.closure_date, String(c.close_time).slice(0, 5))
+  }
+  for (const r of (resumptions ?? []) as Array<{ resumption_date: string; resumption_time: string }>) {
+    if (r.resumption_date && r.resumption_time)
+      resumptionByDate.set(r.resumption_date, String(r.resumption_time).slice(0, 5))
+  }
 
   if (userIds.length === 0) {
     // Still load holidays so callers with no users (rare) behave sanely.
@@ -78,5 +106,7 @@ export async function loadDayContext(
     isHoliday: (date) => holidayDates.has(date),
     isOnLeave: (userId, date) => leaveByUser.get(userId)?.has(date) ?? false,
     isExempt: (userId, date) => exemptByUser.get(userId)?.has(date) ?? false,
+    earlyCloseTime: (date) => closureByDate.get(date) ?? null,
+    lateResumptionTime: (date) => resumptionByDate.get(date) ?? null,
   }
 }

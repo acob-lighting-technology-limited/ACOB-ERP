@@ -21,7 +21,8 @@ import { Clock, AlertTriangle, XCircle, FileText, Pencil } from "lucide-react"
 import { toast } from "sonner"
 import { toLocalISODate, monthBounds, toLocalYearMonth, isLate } from "@/lib/hr/attendance-utils"
 import { MANUAL_ATTENDANCE_STATUS_OPTIONS, isEarlyDeparture } from "@/lib/hr/attendance-status"
-import { formatTime, labelSource } from "./status-badge"
+import { formatTime, labelSource, StatusBadge } from "./status-badge"
+import { apiFetch } from "@/lib/api-client"
 
 interface AttendanceRecord {
   id: string
@@ -45,16 +46,9 @@ interface ExceptionsViewProps {
 }
 
 function issueBadge(record: AttendanceRecord) {
-  if (record.status === "late") {
-    return <Badge className="bg-yellow-100 text-yellow-800">Late</Badge>
-  }
-  if (record.status === "incomplete" || (record.clock_in && !record.clock_out)) {
-    return <Badge className="bg-cyan-100 text-cyan-800">Missing Clock-Out</Badge>
-  }
-  if (record.status === "absent") {
-    return <Badge className="bg-red-100 text-red-800">Absent</Badge>
-  }
-  return <Badge className="bg-gray-100 text-gray-800">{record.status}</Badge>
+  const statusKey =
+    record.status === "incomplete" || (record.clock_in && !record.clock_out) ? "incomplete" : record.status
+  return <StatusBadge status={statusKey} record={record} />
 }
 
 function isException(r: AttendanceRecord) {
@@ -79,7 +73,7 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
     try {
       const params = new URLSearchParams({ start_date: startDate, end_date: endDate })
       if (lockedDepartment) params.set("department", lockedDepartment)
-      const res = await fetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
+      const res = await apiFetch(`/api/admin/hr/attendance/records?${params}`, { cache: "no-store" })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load")
       const all: AttendanceRecord[] = payload.records || []
@@ -132,7 +126,7 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
         manual_comment: editForm.manual_comment,
         status: editForm.status,
       }
-      const res = await fetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
+      const res = await apiFetch(`/api/admin/hr/attendance/records/${editRecord.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),

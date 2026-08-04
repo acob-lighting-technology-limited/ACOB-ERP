@@ -35,6 +35,9 @@ export interface Employee {
   status_changed_by?: string
   separation_date?: string
   separation_reason?: string
+  employment_type?: "full_time" | "part_time" | "contract"
+  contract_category_id?: string | null
+  contract_categories?: { id: string; name: string; code: string } | null
   created_at: string
   updated_at: string
 }
@@ -100,7 +103,7 @@ export interface DepartmentWithStats extends Department {
 // Attendance Types
 // ============================================
 
-export type AttendanceStatus = "present" | "absent" | "late" | "on_leave"
+export type AttendanceStatus = "early" | "present" | "absent" | "late" | "on_leave" | "incomplete"
 
 export interface AttendanceRecord {
   id: string

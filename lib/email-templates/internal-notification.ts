@@ -21,7 +21,7 @@ export function renderInternalNotificationEmail({ pendingUser, preparedBy }: Int
   const address = pendingUser.residential_address ? escapeHtml(pendingUser.residential_address) : "N/A"
   const preparedByName = escapeHtml((preparedBy?.name || "Admin & HR Lead").trim())
   const preparedByDesignation = escapeHtml((preparedBy?.designation || "").trim())
-  const preparedByDepartment = escapeHtml((preparedBy?.department || "Admin & HR Department").trim())
+  const preparedByDepartment = escapeHtml((preparedBy?.department || "Admin & HR").trim())
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -37,7 +37,7 @@ export function renderInternalNotificationEmail({ pendingUser, preparedBy }: Int
     <div style="max-width: 600px; margin: 0 auto; overflow: hidden;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#000000" style="background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;border-top:3px solid #16a34a;border-bottom:3px solid #16a34a;mso-line-height-rule:exactly;">
         <tr><td align="center" style="padding:20px 0;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;">
-            <img src="https://erp.acoblighting.com/images/acob-logo-dark.png" alt="ACOB Lighting" height="65">
+            <img src="https://matrix.acoblighting.com/images/acob-logo-dark.png" alt="ACOB Lighting" height="65">
         </td></tr>
     </table>
     <div style="max-width: 600px; margin: 0 auto; background: #fff; padding: 32px 28px;">
@@ -69,12 +69,8 @@ export function renderInternalNotificationEmail({ pendingUser, preparedBy }: Int
                     <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">${role}</td>
                 </tr>
                 <tr>
-                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">Phone Number</td>
-                    <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">${phoneNumber}</td>
-                </tr>
-                <tr>
-                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px;">Address</td>
-                    <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px;">${address}</td>
+                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px;">Phone Number</td>
+                    <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px;">${phoneNumber}</td>
                 </tr>
             </table>
         </div>

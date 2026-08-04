@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/data-table"
 
 import type { Goal } from "@/app/(app)/goals/page"
+import { apiFetch } from "@/lib/api-client"
 
 type ReviewCycle = {
   id: string
@@ -227,7 +228,7 @@ export function AdminGoalsContent({
 
     setSaving(true)
     try {
-      const response = await fetch("/api/hr/performance/goals", {
+      const response = await apiFetch("/api/hr/performance/goals", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
