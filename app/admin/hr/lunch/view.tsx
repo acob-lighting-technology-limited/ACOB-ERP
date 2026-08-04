@@ -114,6 +114,8 @@ export function LunchRegisterPage({
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<LunchTab>("daily")
   const [employees] = useState<LunchEmployee[]>(initialEmployees)
+  // Rows currently visible in each table (after search + filters + sort).
+  const [processedDailyRows, setProcessedDailyRows] = useState<{ id: string; employee: LunchEmployee }[]>([])
 
   // Daily Register tab states
   const [selectedDate, setSelectedDate] = useState<string>(todayDate)
@@ -123,6 +125,7 @@ export function LunchRegisterPage({
   // Monthly Summary & Calendar tab states
   const [selectedMonth, setSelectedMonth] = useState<string>(todayDate.substring(0, 7))
   const [summaryData, setSummaryData] = useState<LunchSummaryRow[]>([])
+  const [processedSummaryData, setProcessedSummaryData] = useState<LunchSummaryRow[]>([])
   const [rawLogs, setRawLogs] = useState<LunchRawLog[]>([])
   const [fetchingSummary, setFetchingSummary] = useState(false)
 
@@ -377,7 +380,8 @@ export function LunchRegisterPage({
     ]
     const csvRows = [headers.join(",")]
 
-    employees.forEach((emp) => {
+    const source = processedDailyRows.length ? processedDailyRows.map((r) => r.employee) : employees
+    source.forEach((emp) => {
       const hasEaten = ateUserIds.includes(emp.id)
       const row = [
         `"${emp.full_name}"`,
@@ -408,7 +412,8 @@ export function LunchRegisterPage({
     const headers = ["Employee Name", "Staff Code", "Department", "Month", "Lunch Days Count", "Total Deduction"]
     const csvRows = [headers.join(",")]
 
-    summaryData.forEach((row) => {
+    const source = processedSummaryData.length ? processedSummaryData : summaryData
+    source.forEach((row) => {
       const r = [
         `"${row.full_name}"`,
         `"${row.employee_number}"`,
@@ -905,6 +910,7 @@ export function LunchRegisterPage({
               data={dailyMappedRows}
               columns={dailyColumns}
               getRowId={(row) => row.id}
+              onProcessedDataChange={setProcessedDailyRows}
               searchPlaceholder="Search staff name..."
               searchFn={(row, q) => row.employee.full_name.toLowerCase().includes(q.toLowerCase())}
               filters={dailyFilters.filter((f) => f.key !== "date")}
@@ -925,6 +931,7 @@ export function LunchRegisterPage({
             data={summaryData}
             columns={summaryColumns}
             getRowId={(row) => row.user_id}
+            onProcessedDataChange={setProcessedSummaryData}
             searchPlaceholder="Search staff name..."
             searchFn={(row, q) => row.full_name.toLowerCase().includes(q.toLowerCase())}
             filters={summaryFilters}

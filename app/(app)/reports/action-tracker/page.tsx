@@ -100,6 +100,8 @@ export default function ActionTrackerPortal() {
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false)
   const [exportScope, setExportScope] = useState<ExportScope>({ label: "All Departments", items: [] })
   const [viewingDepartment, setViewingDepartment] = useState<DepartmentActionRow | null>(null)
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedDepartmentRows, setProcessedDepartmentRows] = useState<DepartmentActionRow[]>([])
 
   const { data: metaData } = useQuery({
     queryKey: QUERY_KEYS.actionTrackerMetadata(),
@@ -138,7 +140,12 @@ export default function ActionTrackerPortal() {
       year: task.year,
     }))
 
-  const actionItemsForExport = useMemo(() => toActionItems(tasks), [tasks])
+  // Built from the currently visible (search/filter/sort) rows, falling back to all tasks
+  // before the table has reported its processed rows.
+  const actionItemsForExport = useMemo(
+    () => toActionItems(processedDepartmentRows.length ? processedDepartmentRows.flatMap((row) => row.tasks) : tasks),
+    [tasks, processedDepartmentRows]
+  )
 
   const tasksQueryKey = QUERY_KEYS.actionTrackerTasks({ week, year, deptFilter })
 
@@ -358,6 +365,7 @@ export default function ActionTrackerPortal() {
       <DataTable<DepartmentActionRow>
         data={departmentRows}
         columns={columns}
+        onProcessedDataChange={setProcessedDepartmentRows}
         filters={filters}
         getRowId={(row) => row.id}
         pagination={{ pageSize: 50 }}

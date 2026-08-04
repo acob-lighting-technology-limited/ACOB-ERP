@@ -132,6 +132,9 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
   const [isInitialLoading, setIsInitialLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [reviews, setReviews] = useState<ReviewRow[]>([])
+  // Rows currently visible in each mode's table (after search + filters + sort).
+  const [processedIndividualRows, setProcessedIndividualRows] = useState<ReviewRow[]>([])
+  const [processedDeptRows, setProcessedDeptRows] = useState<DeptSummaryRow[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingTarget, setEditingTarget] = useState<ReviewRow | null>(null)
   const [isExportOpen, setIsExportOpen] = useState(false)
@@ -259,9 +262,10 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
 
   // ── Export rows ──────────────────────────────────────────────────────────
 
+  // Export the rows currently visible in the active mode's table (respects search + filters + sort).
   const exportRows =
     mode === "individual"
-      ? canonicalReviews.map((r, i) => ({
+      ? (processedIndividualRows.length ? processedIndividualRows : canonicalReviews).map((r, i) => ({
           "S/N": i + 1,
           Employee: `${r.user?.first_name || ""} ${r.user?.last_name || ""}`.trim() || "Employee",
           Department: r.user?.department || "-",
@@ -273,7 +277,7 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
           Status: String(r.status || "draft"),
         }))
       : mode === "department"
-        ? deptRows.map((row, i) => ({
+        ? (processedDeptRows.length ? processedDeptRows : deptRows).map((row, i) => ({
             "S/N": i + 1,
             Department: row.department,
             Reviews: row.reviews,
@@ -634,6 +638,7 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
         <DataTable<ReviewRow>
           data={canonicalReviews}
           columns={individualColumns}
+          onProcessedDataChange={setProcessedIndividualRows}
           filters={individualFilters}
           getRowId={(r) => r.id}
           isLoading={isInitialLoading}
@@ -690,6 +695,7 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
         <DataTable<DeptSummaryRow>
           data={deptRows}
           columns={deptColumns}
+          onProcessedDataChange={setProcessedDeptRows}
           filters={deptFilters}
           getRowId={(r) => r.id}
           isLoading={isInitialLoading}

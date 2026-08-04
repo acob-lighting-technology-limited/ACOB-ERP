@@ -395,6 +395,8 @@ export function PmsMetricTabsPage({
   const [isInitialLoading, setIsInitialLoading] = useState(true)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedRawRows, setProcessedRawRows] = useState<Record<string, unknown>[]>([])
   const [data, setData] = useState<MetricSnapshotPayload | null>(null)
   const [cycleId, setCycleId] = useState("")
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -456,19 +458,20 @@ export function PmsMetricTabsPage({
     return ["cycle", "review_type", "employee_count", "submitted_count", "departments_counted", "metric_value"]
   }, [metric, tab])
 
-  const exportRows = useMemo(
-    () =>
-      rawRows.map((row, index) =>
-        Object.fromEntries([
-          ["S/N", index + 1],
-          ...columnKeys.map((col) => [
-            col.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-            asString((row as Record<string, unknown>)[col]),
-          ]),
-        ])
-      ),
-    [rawRows, columnKeys]
-  )
+  // Export the rows currently visible in the table (respects search + filters + sort),
+  // falling back to the full set before the table has reported its processed rows.
+  const exportRows = useMemo(() => {
+    const source = processedRawRows.length ? processedRawRows : rawRows
+    return source.map((row, index) =>
+      Object.fromEntries([
+        ["S/N", index + 1],
+        ...columnKeys.map((col) => [
+          col.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+          asString((row as Record<string, unknown>)[col]),
+        ]),
+      ])
+    )
+  }, [rawRows, columnKeys, processedRawRows])
 
   const MOBILE_HIDDEN_COLS = new Set([
     "cycle",
@@ -670,6 +673,7 @@ export function PmsMetricTabsPage({
       <DataTable<Record<string, unknown>>
         data={rawRows as Record<string, unknown>[]}
         columns={tableColumns}
+        onProcessedDataChange={setProcessedRawRows}
         filters={tableFilters}
         getRowId={(row) => String(row.user_id || row.department || row.cycle || JSON.stringify(row).slice(0, 40))}
         pagination={{ pageSize: 50 }}

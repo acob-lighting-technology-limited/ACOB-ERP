@@ -12,6 +12,7 @@ import { AppealsView } from "./_components/appeals-view"
 import { LeaderboardView } from "./_components/leaderboard-view"
 import { AttendanceManagerDialog } from "./_components/attendance-manager-dialog"
 import { AttendanceReportDialog } from "./_components/attendance-report-dialog"
+import { AttendanceLunchExportDialog } from "./_components/attendance-lunch-export-dialog"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StatCard } from "@/components/ui/stat-card"
@@ -678,16 +679,18 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           {historyContext && (historyContext.holiday || historyContext.on_leave || historyContext.exempt) && (
             <div className="flex flex-wrap gap-2">
               {historyContext.holiday && (
-                <Badge className="bg-sky-100 text-xs text-sky-800">
+                <Badge className="bg-sky-100 text-xs text-sky-800 dark:bg-sky-950/40 dark:text-sky-300">
                   Holiday — {historyContext.holiday}
                   {historyContext.holiday_added_by ? ` · added by ${historyContext.holiday_added_by}` : ""}
                 </Badge>
               )}
               {historyContext.on_leave && (
-                <Badge className="bg-purple-100 text-xs text-purple-800">On leave — {historyContext.on_leave}</Badge>
+                <Badge className="bg-purple-100 text-xs text-purple-800 dark:bg-purple-950/40 dark:text-purple-300">
+                  On leave — {historyContext.on_leave}
+                </Badge>
               )}
               {historyContext.exempt && (
-                <Badge className="bg-violet-100 text-xs text-violet-800">
+                <Badge className="bg-violet-100 text-xs text-violet-800 dark:bg-violet-950/40 dark:text-violet-300">
                   Exempt{historyContext.exempt_reason ? ` — ${historyContext.exempt_reason}` : ""}
                 </Badge>
               )}
@@ -762,6 +765,8 @@ export function AttendanceReportsPage({
   const [activeTab, setActiveTab] = useState<AttendanceTab>("daily")
   const [loading, setLoading] = useState(false)
   const [reports, setReports] = useState<AttendanceReport[]>([])
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedReports, setProcessedReports] = useState<AttendanceReport[]>([])
   const [departments, setDepartments] = useState<string[]>([])
   const [yearMonth, setYearMonth] = useState(currentYearMonth)
   const [periodMode, setPeriodMode] = useState<"month" | "quarter">("month")
@@ -773,6 +778,7 @@ export function AttendanceReportsPage({
   // Unified Attendance Manager dialog
   const [managerOpen, setManagerOpen] = useState(false)
   const [reportDialogOpen, setReportDialogOpen] = useState(false)
+  const [lunchExportOpen, setLunchExportOpen] = useState(false)
 
   const refreshSingleEmployeeSummary = useCallback(
     async (userId: string) => {
@@ -882,7 +888,8 @@ export function AttendanceReportsPage({
   ]
 
   function buildExportRows(): (string | number)[][] {
-    return reports.map((r) => [
+    const source = processedReports.length ? processedReports : reports
+    return source.map((r) => [
       r.user_name,
       r.department,
       r.total_days,
@@ -1205,6 +1212,10 @@ export function AttendanceReportsPage({
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
+          <Button variant="outline" onClick={() => setLunchExportOpen(true)} size="sm">
+            <FileText className="mr-2 h-4 w-4" />
+            Attendance & Lunch Report
+          </Button>
         </div>
       }
       stats={
@@ -1244,6 +1255,7 @@ export function AttendanceReportsPage({
         <DataTable<AttendanceReport>
           data={reports}
           columns={columns}
+          onProcessedDataChange={setProcessedReports}
           filters={reportFilters}
           getRowId={(r) => r.user_id}
           pagination={{ pageSize: 50 }}
@@ -1298,6 +1310,13 @@ export function AttendanceReportsPage({
       />
 
       <AttendanceReportDialog open={reportDialogOpen} onOpenChange={setReportDialogOpen} />
+
+      <AttendanceLunchExportDialog
+        open={lunchExportOpen}
+        onOpenChange={setLunchExportOpen}
+        department={lockedDepartment}
+        monthOptions={monthOptions}
+      />
     </DataTablePage>
   )
 }

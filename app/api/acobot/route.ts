@@ -10,8 +10,8 @@ import { buildAcobotContext } from "@/lib/acobot/context"
 
 export const dynamic = "force-dynamic"
 const log = logger("acobot")
-// OpenAI's open 120B model on Groq — stronger than Llama 3.3 70B, same 1,000 req/day free tier.
-const MODEL_ID = "openai/gpt-oss-120b"
+// Flagship Llama 3.3 70B model on Groq — fast, high intelligence, 1,000 req/day free tier.
+const MODEL_ID = "llama-3.3-70b-versatile"
 
 type ChatRole = "system" | "user" | "assistant"
 type ChatMessage = { role: ChatRole; content: string }

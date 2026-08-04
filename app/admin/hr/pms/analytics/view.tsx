@@ -111,6 +111,8 @@ function AnalyticsCard({ row }: { row: AnalyticsRow }) {
 export function PmsAnalyticsPage({ backLinkHref }: { backLinkHref?: string } = {}) {
   const [reviews, setReviews] = useState<ReviewRow[]>([])
   const [cycles, setCycles] = useState<Cycle[]>([])
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedRows, setProcessedRows] = useState<AnalyticsRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -187,7 +189,9 @@ export function PmsAnalyticsPage({ backLinkHref }: { backLinkHref?: string } = {
   const atRisk = scoredRows.filter((row) => (row.final as number) < 40).length
   const activeCycles = cycles.filter((cycle) => cycle.status === "active").length
 
-  const exportRows = rows.map((row, index) => ({
+  // Export the rows currently visible in the table (respects search + filters + sort).
+  const exportSource = processedRows.length ? processedRows : rows
+  const exportRows = exportSource.map((row, index) => ({
     "S/N": index + 1,
     Employee: row.employee,
     Department: row.department,
@@ -380,6 +384,7 @@ export function PmsAnalyticsPage({ backLinkHref }: { backLinkHref?: string } = {
       <DataTable<AnalyticsRow>
         data={rows}
         columns={columns}
+        onProcessedDataChange={setProcessedRows}
         filters={filters}
         getRowId={(row) => row.id}
         pagination={{ pageSize: 50 }}

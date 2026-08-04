@@ -153,6 +153,8 @@ export function ActionTrackerContent({
     items: [],
   })
   const [viewingDepartment, setViewingDepartment] = useState<DepartmentActionRow | null>(null)
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedDepartmentRows, setProcessedDepartmentRows] = useState<DepartmentActionRow[]>([])
 
   const canMutateTask = (task: ActionTask) => canGlobalEdit || editableDepartments.includes(task.department)
 
@@ -237,19 +239,20 @@ export function ActionTrackerContent({
     return { total, completed, pending, notStarted, inProgress }
   }, [tasks])
 
-  const actionItemsForExport: ActionItem[] = useMemo(
-    () =>
-      tasks.map((task) => ({
-        id: task.id,
-        title: task.title,
-        description: task.description,
-        department: task.department,
-        status: task.status,
-        week_number: task.week_number,
-        year: task.year,
-      })),
-    [tasks]
-  )
+  // Built from the currently visible (search/filter/sort) rows, falling back to all tasks
+  // before the table has reported its processed rows.
+  const actionItemsForExport: ActionItem[] = useMemo(() => {
+    const source = processedDepartmentRows.length ? processedDepartmentRows.flatMap((row) => row.tasks) : tasks
+    return source.map((task) => ({
+      id: task.id,
+      title: task.title,
+      description: task.description,
+      department: task.department,
+      status: task.status,
+      week_number: task.week_number,
+      year: task.year,
+    }))
+  }, [tasks, processedDepartmentRows])
 
   const toActionItems = (sourceTasks: ActionTask[]): ActionItem[] =>
     sourceTasks.map((task) => ({
@@ -462,6 +465,7 @@ export function ActionTrackerContent({
     >
       <DataTable<DepartmentActionRow>
         data={departmentRows}
+        onProcessedDataChange={setProcessedDepartmentRows}
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}

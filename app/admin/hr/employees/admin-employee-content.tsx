@@ -230,6 +230,10 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     initialData: initialEmployees,
   })
 
+  // Rows currently visible in the table (after search + filters + sort), kept in
+  // sync via the DataTable's onProcessedDataChange so exports match what the user sees.
+  const [processedEmployees, setProcessedEmployees] = useState<Employee[]>(initialEmployees)
+
   const loadData = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminEmployees() })
   }, [queryClient])
@@ -427,11 +431,13 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
   }
 
   const handleExportExecute = async () => {
-    if (!exportType || employees.length === 0) return
+    // Export the rows currently visible in the table (respects search + filters + sort).
+    const rowsToExport = processedEmployees
+    if (!exportType || rowsToExport.length === 0) return
     try {
-      const exportRows = buildEmployeeExportRows(employees, { selectedColumns })
+      const exportRows = buildEmployeeExportRows(rowsToExport, { selectedColumns })
       if (exportType === "excel") await exportEmployeesToExcel(exportRows)
-      else if (exportType === "pdf") await exportEmployeesToPDF(employees, { selectedColumns })
+      else if (exportType === "pdf") await exportEmployeesToPDF(rowsToExport, { selectedColumns })
       else if (exportType === "word") await exportEmployeesToWord(exportRows)
       setExportEmployeeDialogOpen(false)
     } catch (_error: unknown) {
@@ -778,6 +784,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         data={employees}
         columns={columns}
         getRowId={(r) => r.id}
+        onProcessedDataChange={setProcessedEmployees}
         pagination={{ pageSize: 50 }}
         isLoading={isLoading}
         error={error instanceof Error ? error.message : null}

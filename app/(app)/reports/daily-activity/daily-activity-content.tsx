@@ -119,6 +119,8 @@ export function DailyActivityContent() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [date, setDate] = useState(() => toLocalISODate())
   const [tasks, setTasks] = useState<EditableTask[]>([emptyTask()])
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedDayRows, setProcessedDayRows] = useState<DayTableRow[]>([])
   const [reportStatus, setReportStatus] = useState<string>("draft")
   const [acknowledged, setAcknowledged] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -454,7 +456,8 @@ export function DailyActivityContent() {
       "Planned",
       "Unforeseen",
     ]
-    const rows = dayRows.map((r) => [
+    const source = processedDayRows.length ? processedDayRows : dayRows
+    const rows = source.map((r) => [
       r.report_date,
       r.report ? (DAILY_REPORT_STATUS_LABELS[r.report.status] ?? r.report.status) : "No Report",
       r.report?.acknowledged ? "Yes" : "No",
@@ -532,6 +535,7 @@ export function DailyActivityContent() {
         <DataTable<DayTableRow>
           data={dayRows}
           columns={columns}
+          onProcessedDataChange={setProcessedDayRows}
           filters={tableFilters}
           getRowId={(r) => r.id}
           searchPlaceholder="Search day, report status, or task summary..."

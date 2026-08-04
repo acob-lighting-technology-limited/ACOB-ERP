@@ -48,6 +48,8 @@ async function fetchDirectory(): Promise<DirectoryRow[]> {
 export function DirectoryContent() {
   const queryClient = useQueryClient()
   const [exportOpen, setExportOpen] = useState(false)
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedRows, setProcessedRows] = useState<DirectoryRow[]>([])
 
   const {
     data: rows = [],
@@ -57,7 +59,8 @@ export function DirectoryContent() {
   } = useQuery({ queryKey: QUERY_KEYS.directory(), queryFn: fetchDirectory })
 
   const handleExport = (format: string) => {
-    const exportRows: DirectoryExportRow[] = rows.map((r) => ({
+    const source = processedRows.length ? processedRows : rows
+    const exportRows: DirectoryExportRow[] = source.map((r) => ({
       Name: displayName(r),
       Designation: r.designation || "",
       Department: r.department || "",
@@ -259,6 +262,7 @@ export function DirectoryContent() {
         columns={columns}
         filters={filters}
         getRowId={(r) => r.id}
+        onProcessedDataChange={setProcessedRows}
         pagination={{ pageSize: 50 }}
         searchPlaceholder="Search name, email, department, phone…"
         searchFn={(row, query) => {

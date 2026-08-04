@@ -83,3 +83,8 @@ supabase/.branches/
 
 # Launch video media (kept local, not deployed via git)
 launch-video/
+
+# python cache
+__pycache__/
+*.pyc
+

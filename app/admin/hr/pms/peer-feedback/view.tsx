@@ -80,6 +80,8 @@ function FeedbackCard({ row, onView }: { row: PeerFeedbackRow; onView: (row: Pee
 export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string } = {}) {
   const [feedback, setFeedback] = useState<PeerFeedbackRow[]>([])
   const [cycles, setCycles] = useState<Cycle[]>([])
+  // Rows currently visible in the table (after search + filters + sort).
+  const [processedFeedback, setProcessedFeedback] = useState<PeerFeedbackRow[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [selectedRow, setSelectedRow] = useState<PeerFeedbackRow | null>(null)
@@ -143,7 +145,9 @@ export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string 
       ? Math.round((feedback.reduce((sum, row) => sum + row.score, 0) / feedback.length) * 100) / 100
       : null
 
-  const exportRows = feedback.map((row, index) => ({
+  // Export the rows currently visible in the table (respects search + filters + sort).
+  const exportSource = processedFeedback.length ? processedFeedback : feedback
+  const exportRows = exportSource.map((row, index) => ({
     "S/N": index + 1,
     Subject: formatName(row.subject),
     Reviewer: formatName(row.reviewer),
@@ -314,6 +318,7 @@ export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string 
       <DataTable<PeerFeedbackRow>
         data={feedback}
         columns={columns}
+        onProcessedDataChange={setProcessedFeedback}
         filters={filters}
         getRowId={(row) => row.id}
         pagination={{ pageSize: 50 }}

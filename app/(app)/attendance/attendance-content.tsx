@@ -29,6 +29,7 @@ import {
   ATTENDANCE_STATUS_COLORS,
   ATTENDANCE_STATUS_LABELS,
   deriveUnifiedAttendanceStatus,
+  normalizeStoredAttendanceStatus,
 } from "@/lib/hr/attendance-status"
 import type { UnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { apiFetch } from "@/lib/api-client"
@@ -890,9 +891,15 @@ function normalizeStatus(record: AttendanceRecord | null, recordDate?: string): 
 }
 
 function StatusBadge({ status }: { status: AttendanceRow["normalizedStatus"] }) {
+  const norm = normalizeStoredAttendanceStatus(status) || status
   return (
-    <Badge className={ATTENDANCE_STATUS_COLORS[status] ?? "bg-gray-100 text-gray-800"}>
-      {ATTENDANCE_STATUS_LABELS[status] ?? status}
+    <Badge
+      className={
+        ATTENDANCE_STATUS_COLORS[norm as keyof typeof ATTENDANCE_STATUS_COLORS] ??
+        "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
+      }
+    >
+      {ATTENDANCE_STATUS_LABELS[norm as keyof typeof ATTENDANCE_STATUS_LABELS] ?? norm}
     </Badge>
   )
 }

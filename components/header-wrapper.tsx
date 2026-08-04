@@ -35,6 +35,11 @@ export function HeaderWrapper({ user, canAccessAdmin = false }: HeaderWrapperPro
     return null
   }
 
+  // Public launch / landing page has its own full-screen design
+  if (pathname?.startsWith("/launch")) {
+    return null
+  }
+
   const isAdminMode = pathname?.startsWith("/admin")
 
   return <Navbar user={user} canAccessAdmin={canAccessAdmin} isAdminMode={isAdminMode} />

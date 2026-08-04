@@ -298,6 +298,7 @@ export async function updateSession(request: NextRequest) {
     pathname !== "/" &&
     !user &&
     !pathname.startsWith("/auth") &&
+    !pathname.startsWith("/launch") &&
     !pathname.startsWith("/employee/new") &&
     !pathname.startsWith("/api/public") &&
     !pathname.startsWith("/api/devices") &&

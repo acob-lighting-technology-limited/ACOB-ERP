@@ -14,6 +14,7 @@ export type UnifiedAttendanceStatus =
   | "holiday"
   | "exempted"
   | "waiver"
+  | "waived"
   | "early"
   | "present"
   | "late"
@@ -27,28 +28,41 @@ export type UnifiedAttendanceStatus =
   | "absent_with_permission"
   | "out_of_station"
   | "on_leave"
+  | "weekend"
+  | "no_record"
+  | "half_day"
 
-/** Tailwind colour classes for every canonical attendance status. */
+/** Tailwind colour classes for every canonical attendance status (with dark mode support). */
 export const ATTENDANCE_STATUS_COLORS: Record<UnifiedAttendanceStatus, string> = {
-  early: "bg-green-100 text-green-800",
-  present: "bg-blue-100 text-blue-800",
-  late: "bg-yellow-100 text-yellow-800",
+  early: "bg-green-100 text-green-800 dark:bg-green-950/40 dark:text-green-300 border-green-200 dark:border-green-800",
+  present: "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+  late: "bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800",
   lateness_with_permission:
     "bg-gradient-to-r from-amber-100 to-green-100 text-green-800 border-amber-200 dark:from-amber-950/40 dark:to-green-950/40 dark:text-green-300",
-  early_departure: "bg-orange-100 text-orange-800",
+  early_departure:
+    "bg-orange-100 text-orange-800 dark:bg-orange-950/40 dark:text-orange-300 border-orange-200 dark:border-orange-800",
   early_departure_with_permission:
     "bg-gradient-to-r from-orange-100 to-green-100 text-green-800 border-orange-200 dark:from-orange-950/40 dark:to-green-950/40 dark:text-green-300",
-  early_closure: "bg-blue-100 text-blue-800",
-  late_resumption: "bg-sky-100 text-sky-800",
-  incomplete: "bg-cyan-100 text-cyan-800",
-  absent: "bg-red-100 text-red-800",
+  early_closure:
+    "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+  late_resumption: "bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300 border-sky-200 dark:border-sky-800",
+  incomplete: "bg-cyan-100 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800",
+  absent: "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border-red-200 dark:border-red-800",
   absent_with_permission:
     "bg-gradient-to-r from-red-100 to-green-100 text-green-800 border-red-200 dark:from-red-950/40 dark:to-green-950/40 dark:text-green-300",
-  out_of_station: "bg-indigo-100 text-indigo-800",
-  waiver: "bg-blue-100 text-blue-700",
-  exempted: "bg-violet-100 text-violet-700",
-  on_leave: "bg-purple-100 text-purple-800",
-  holiday: "bg-sky-100 text-sky-700",
+  out_of_station:
+    "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800",
+  waiver: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+  waived: "bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-800",
+  exempted:
+    "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 border-violet-200 dark:border-violet-800",
+  on_leave:
+    "bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800",
+  holiday: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 border-sky-200 dark:border-sky-800",
+  weekend: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700",
+  no_record: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700",
+  half_day:
+    "bg-yellow-100 text-yellow-800 dark:bg-yellow-950/40 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800",
 }
 
 /** Human-readable labels for statuses whose raw value would look bad in the UI. */
@@ -66,9 +80,13 @@ export const ATTENDANCE_STATUS_LABELS: Record<UnifiedAttendanceStatus, string> =
   absent_with_permission: "AWP",
   out_of_station: "OOS",
   waiver: "Waiver",
+  waived: "Waiver",
   exempted: "Exempted",
   on_leave: "On Leave",
   holiday: "Holiday",
+  weekend: "Weekend",
+  no_record: "No Record",
+  half_day: "Half Day",
 }
 export const DB_WRITABLE_STATUSES = [
   "early",
@@ -113,6 +131,7 @@ export function normalizeStoredAttendanceStatus(status: string | null | undefine
   if (!status) return null
   if (status === "waived") return "waiver"
   if (status === "half_day") return "late"
+  if (status in ATTENDANCE_STATUS_COLORS) return status as UnifiedAttendanceStatus
   if ((DB_WRITABLE_STATUSES as readonly string[]).includes(status)) return status as UnifiedAttendanceStatus
   return null
 }
