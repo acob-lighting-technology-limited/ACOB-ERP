@@ -139,8 +139,14 @@ const STAFF_PAGE_DESCRIPTIONS: Array<[string, string]> = [
   ["/", "Dashboard — your home page with a summary of tasks, leave, attendance, and recent activity."],
 ]
 
+function stripTrailingSlashes(str: string): string {
+  let end = str.length
+  while (end > 0 && str[end - 1] === "/") end--
+  return str.slice(0, end)
+}
+
 function getPageDescription(path: string): string | null {
-  const p = path.split("?")[0].replace(/\/+$/, "") || "/"
+  const p = stripTrailingSlashes(path.split("?")[0]) || "/"
 
   // Admin pages
   for (const [prefix, desc] of ADMIN_PAGE_DESCRIPTIONS) {
@@ -179,7 +185,7 @@ function getSurface(path: string): string {
 
 function getAdminGuidance(path: string, isDeptConsole: boolean): string {
   const surface = isDeptConsole ? "Department console" : "Admin dashboard"
-  const p = path.split("?")[0].replace(/\/+$/, "")
+  const p = stripTrailingSlashes(path.split("?")[0])
 
   // Specific page-level guidance
   if (p.includes("/hr/attendance")) {
