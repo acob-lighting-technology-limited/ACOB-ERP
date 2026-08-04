@@ -66,11 +66,13 @@ function normalizeDisplayToken(value: string): string {
 }
 
 function ensurePdfExtension(extension?: string): string {
-  const normalized = String(extension || "pdf")
+  const raw = String(extension || "pdf")
     .trim()
-    .replace(/^\./, "")
     .toLowerCase()
-  return normalized || "pdf"
+  let start = 0
+  while (start < raw.length && raw[start] === ".") start++
+  const cleaned = raw.slice(start).replace(/[^a-z0-9]/g, "")
+  return cleaned || "pdf"
 }
 
 export function buildMeetingDocumentFileName({
@@ -106,14 +108,13 @@ export function buildMeetingDocumentFileName({
 }
 
 export function sanitizeStoragePathSegment(value: string): string {
-  return (
-    String(value || "file")
-      .trim()
-      .replace(/[<>:"/\\|?*\u0000-\u001F]/g, " ")
-      .replace(/\s+/g, " ")
-      .replace(/\.+$/g, "")
-      .trim() || "file"
-  )
+  let str = String(value || "file").trim()
+  str = str.replace(/[<>:"/\\|?*\u0000-\u001F]/g, " ")
+  str = str.replace(/\s+/g, " ")
+  let end = str.length
+  while (end > 0 && str[end - 1] === ".") end--
+  str = str.slice(0, end).trim()
+  return str || "file"
 }
 
 export async function resolveEffectiveMeetingDateIso(

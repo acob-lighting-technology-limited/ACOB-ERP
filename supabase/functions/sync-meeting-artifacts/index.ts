@@ -50,7 +50,13 @@ function parseVtt(vtt: string): Array<{ speaker: string; text: string }> {
     if (!raw) continue
     const speakerMatch = raw.match(/<v\s+([^>]+)>/i)
     const speaker = speakerMatch ? speakerMatch[1].trim() : ""
-    const text = raw.replace(/<[^>]+>/g, "").trim()
+    let text = raw
+    let prev = ""
+    while (text !== prev) {
+      prev = text
+      text = text.replace(/<[^>]*>/g, "")
+    }
+    text = text.trim()
     if (!text) continue
     const last = turns[turns.length - 1]
     if (last && last.speaker === speaker) last.text += " " + text
