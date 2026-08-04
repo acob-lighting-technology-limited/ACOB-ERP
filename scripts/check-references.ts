@@ -1,11 +1,11 @@
 import { Client } from "pg"
 
 const client = new Client({
-  user: "postgres.itqegqxeqkeogwrvlzlj",
-  password: "yhUHpxFsvHmDw24C",
-  host: "aws-1-eu-central-1.pooler.supabase.com",
-  port: 5432,
-  database: "postgres",
+  user: process.env.PGUSER || "postgres",
+  password: process.env.PGPASSWORD || process.env.SUPABASE_DB_PASSWORD || "",
+  host: process.env.PGHOST || "aws-1-eu-central-1.pooler.supabase.com",
+  port: Number(process.env.PGPORT) || 5432,
+  database: process.env.PGDATABASE || "postgres",
   ssl: {
     rejectUnauthorized: false,
   },

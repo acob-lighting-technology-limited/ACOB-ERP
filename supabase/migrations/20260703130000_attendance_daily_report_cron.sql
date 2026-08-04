@@ -3,14 +3,29 @@
 -- system_settings (key "attendance_daily_report_config") and decides whether a slot is
 -- due (and skips weekends) — the schedule itself is fully admin-editable at runtime via
 -- the Attendance Reports dialog, not baked into this cron expression.
-select cron.schedule(
-  'process-attendance-daily-report',
-  '*/15 * * * *',
-  $job$
-  select net.http_post(
-    url := 'https://itqegqxeqkeogwrvlzlj.supabase.co/functions/v1/send-attendance-daily-report',
-    headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0cWVncXhlcWtlb2d3cnZsemxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2NDI0NTcsImV4cCI6MjA3NzIxODQ1N30.eVYpuw_VqDrg28DXJFoeYGAbth4Q-t0tXokA1Nq1dog"}'::jsonb,
-    body := '{}'::jsonb
+do $$
+declare
+  v_anon_key text;
+begin
+  select decrypted_secret into v_anon_key from vault.decrypted_secrets where name = 'anon_key';
+  if v_anon_key is null or v_anon_key = '' then
+    v_anon_key := nullif(current_setting('app.settings.anon_key', true), '');
+  end if;
+
+  perform cron.schedule(
+    'process-attendance-daily-report',
+    '*/15 * * * *',
+    format(
+      $f$
+      select net.http_post(
+        url := 'https://itqegqxeqkeogwrvlzlj.supabase.co/functions/v1/send-attendance-daily-report',
+        headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || %L),
+        body := '{}'::jsonb
+      );
+      $f$,
+      coalesce(v_anon_key, '')
+    )
   );
-  $job$
-);
+end;
+$$;
+

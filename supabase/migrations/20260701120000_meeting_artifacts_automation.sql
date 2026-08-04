@@ -171,14 +171,28 @@ execute function public.meeting_docs_set_updated_at();
 -- The meeting runs mornings Lagos time (UTC+1); artifacts/transcripts settle by
 -- early afternoon. The edge function self-gates on the ERP effective meeting
 -- date, so off-days and off-weeks are cheap no-ops; the ledger dedupes reruns.
-select cron.schedule(
-  'sync-meeting-artifacts',
-  '*/20 11-16 * * 1-5',
-  $job$
-  select net.http_post(
-    url := 'https://itqegqxeqkeogwrvlzlj.supabase.co/functions/v1/sync-meeting-artifacts',
-    headers := '{"Content-Type": "application/json", "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Iml0cWVncXhlcWtlb2d3cnZsemxqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjE2NDI0NTcsImV4cCI6MjA3NzIxODQ1N30.eVYpuw_VqDrg28DXJFoeYGAbth4Q-t0tXokA1Nq1dog"}'::jsonb,
-    body := '{}'::jsonb
+do $$
+declare
+  v_anon_key text;
+begin
+  select decrypted_secret into v_anon_key from vault.decrypted_secrets where name = 'anon_key';
+  if v_anon_key is null or v_anon_key = '' then
+    v_anon_key := nullif(current_setting('app.settings.anon_key', true), '');
+  end if;
+
+  perform cron.schedule(
+    'sync-meeting-artifacts',
+    '*/20 11-16 * * 1-5',
+    format(
+      $f$
+      select net.http_post(
+        url := 'https://itqegqxeqkeogwrvlzlj.supabase.co/functions/v1/sync-meeting-artifacts',
+        headers := jsonb_build_object('Content-Type', 'application/json', 'Authorization', 'Bearer ' || %L),
+        body := '{}'::jsonb
+      );
+      $f$,
+      coalesce(v_anon_key, '')
+    )
   );
-  $job$
-);
+end;
+$$;
