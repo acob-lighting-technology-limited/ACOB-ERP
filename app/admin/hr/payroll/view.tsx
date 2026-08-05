@@ -4,6 +4,8 @@ import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
 import { DataTablePage, DataTable } from "@/components/ui/data-table"
+import type { DataTableFilter, DataTableTab } from "@/components/ui/data-table"
+import type { PayrollBreakdown } from "@/lib/hr/payroll-utils"
 import { StatCard } from "@/components/ui/stat-card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -32,8 +34,34 @@ export interface PayrollPeriod {
 }
 
 export interface DbPayrollEntry {
+  id?: string
+  user_id?: string
+  payroll_period_id?: string
+  basic_salary?: number
+  gross_salary?: number
+  total_deductions?: number
   net_salary: number
   tax_amount: number
+  bonus?: number
+  lunch_deduction?: number
+  loan_repayment?: number
+  lateness_surcharge?: number
+  absent_surcharge?: number
+  status?: string | null
+  breakdown?: PayrollBreakdown | null
+  user?: {
+    id?: string
+    full_name?: string | null
+    employee_number?: string | null
+    department?: string | null
+  } | null
+  payroll_periods?: {
+    id?: string
+    name?: string | null
+    pay_date?: string | null
+    start_date?: string | null
+    status?: string | null
+  } | null
 }
 
 export interface PayrollPeriodsPageProps {
@@ -44,11 +72,17 @@ export interface PayrollPeriodsPageProps {
   }
 }
 
+const TABS: DataTableTab[] = [
+  { key: "register", label: "Payroll Register", icon: ClipboardList },
+  { key: "periods", label: "Periods", icon: Calendar },
+]
+
 export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
   const router = useRouter()
   const [periods, setPeriods] = useState<PayrollPeriod[]>(initialData?.periods || [])
   const [openPeriod, setOpenPeriod] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [activeTab, setActiveTab] = useState("register")
 
   const [periodForm, setPeriodForm] = useState({
     name: "",
@@ -118,6 +152,118 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
           </Link>
         </Button>
       ),
+    },
+  ]
+
+  // ── Payroll Register: every entry across every period ──────────────────────
+  const entries = initialData.entries
+  const money = (value: unknown) => `₦${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+
+  const registerColumns = [
+    {
+      key: "employee",
+      label: "Employee",
+      accessor: (e: DbPayrollEntry) => e.user?.full_name || "—",
+      sortable: true,
+      render: (e: DbPayrollEntry) => (
+        <div className="min-w-0">
+          <p className="text-foreground truncate font-medium">{e.user?.full_name || "Unknown"}</p>
+          <p className="text-muted-foreground truncate font-mono text-[11px]">{e.user?.employee_number || "—"}</p>
+        </div>
+      ),
+    },
+    {
+      key: "period",
+      label: "Period",
+      accessor: (e: DbPayrollEntry) => e.payroll_periods?.name || "—",
+      sortable: true,
+      render: (e: DbPayrollEntry) => <span className="font-medium">{e.payroll_periods?.name || "—"}</span>,
+    },
+    {
+      key: "department",
+      label: "Department",
+      accessor: (e: DbPayrollEntry) => e.user?.department || "—",
+      render: (e: DbPayrollEntry) => <span className="text-muted-foreground text-xs">{e.user?.department || "—"}</span>,
+    },
+    {
+      key: "gross_salary",
+      label: "Gross Pay",
+      accessor: (e: DbPayrollEntry) => Number(e.gross_salary || 0) + Number(e.bonus || 0),
+      sortable: true,
+      render: (e: DbPayrollEntry) => <span>{money(Number(e.gross_salary || 0) + Number(e.bonus || 0))}</span>,
+    },
+    {
+      key: "total_deductions",
+      label: "Deductions",
+      accessor: (e: DbPayrollEntry) => Number(e.total_deductions || 0),
+      sortable: true,
+      render: (e: DbPayrollEntry) => <span className="text-red-600">-{money(e.total_deductions)}</span>,
+    },
+    {
+      key: "net_salary",
+      label: "Net Pay",
+      accessor: (e: DbPayrollEntry) => Number(e.net_salary || 0),
+      sortable: true,
+      render: (e: DbPayrollEntry) => (
+        <span className="font-semibold text-emerald-600">{money(e.net_salary)}</span>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      accessor: (e: DbPayrollEntry) => e.payroll_periods?.status || "draft",
+      render: (e: DbPayrollEntry) =>
+        e.payroll_periods?.status === "completed" ? (
+          <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20">Paid</Badge>
+        ) : (
+          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-600">
+            Draft
+          </Badge>
+        ),
+    },
+    {
+      key: "actions",
+      label: "Actions",
+      render: (e: DbPayrollEntry) => (
+        <Button asChild size="sm" variant="outline">
+          <Link href={`/admin/hr/payroll/${e.payroll_period_id}`}>
+            <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> Worksheet
+          </Link>
+        </Button>
+      ),
+    },
+  ]
+
+  const registerFilters: DataTableFilter<DbPayrollEntry>[] = [
+    {
+      key: "period",
+      label: "Month",
+      icon: <Calendar className="h-3.5 w-3.5" />,
+      placeholder: "Filter by month",
+      mode: "custom",
+      options: periods.map((p) => ({ value: p.id, label: p.name })),
+      filterFn: (row, selected) => selected.includes(row.payroll_period_id || ""),
+    },
+    {
+      key: "department",
+      label: "Department",
+      placeholder: "Filter by department",
+      mode: "custom",
+      options: [...new Set(entries.map((e) => e.user?.department).filter(Boolean) as string[])]
+        .sort()
+        .map((d) => ({ value: d, label: d })),
+      filterFn: (row, selected) => selected.includes(row.user?.department || ""),
+    },
+    {
+      key: "period_status",
+      label: "Status",
+      placeholder: "Filter by status",
+      mode: "custom",
+      options: [
+        { value: "completed", label: "Paid / Locked" },
+        { value: "draft", label: "Draft" },
+      ],
+      filterFn: (row, selected) => selected.includes(row.payroll_periods?.status || "draft"),
     },
   ]
 
@@ -252,18 +398,41 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
       description="Create monthly payroll periods, then open a period's worksheet to run the bulk calculation and publish payslips."
       icon={FileText}
       backLink={{ href: "/admin/hr", label: "Back to HR Dashboard" }}
+      tabs={TABS}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
       stats={stats}
       actions={actions}
     >
-      <DataTable
-        data={periods}
-        columns={columns}
-        getRowId={(row) => row.id}
-        searchPlaceholder="Search by period name..."
-        searchFn={(row, q) => row.name.toLowerCase().includes(q.toLowerCase())}
-        filters={[]}
-        isLoading={false}
-      />
+      {activeTab === "periods" ? (
+        <DataTable
+          data={periods}
+          columns={columns}
+          getRowId={(row) => row.id}
+          searchPlaceholder="Search by period name..."
+          searchFn={(row, q) => row.name.toLowerCase().includes(q.toLowerCase())}
+          filters={[]}
+          isLoading={false}
+        />
+      ) : (
+        <DataTable<DbPayrollEntry>
+          data={entries}
+          columns={registerColumns}
+          getRowId={(row) => row.id || `${row.payroll_period_id}-${row.user_id}`}
+          pagination={{ pageSize: 50 }}
+          searchPlaceholder="Search by employee, staff number, or period..."
+          searchFn={(row, q) =>
+            `${row.user?.full_name || ""} ${row.user?.employee_number || ""} ${row.payroll_periods?.name || ""}`
+              .toLowerCase()
+              .includes(q)
+          }
+          filters={registerFilters}
+          isLoading={false}
+          emptyIcon={FileText}
+          emptyTitle="No payslips yet"
+          emptyDescription="Payslips appear here once a payroll period has been saved or locked from its worksheet."
+        />
+      )}
     </DataTablePage>
   )
 }

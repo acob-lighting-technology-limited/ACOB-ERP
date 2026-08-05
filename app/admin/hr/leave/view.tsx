@@ -3,7 +3,7 @@
 import { useMemo, useRef, useState, useEffect } from "react"
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { Clock, History, CalendarCheck2, CheckCircle2, AlertCircle, Eye, Check, X, FileText } from "lucide-react"
+import { Clock, History, CalendarCheck2, CheckCircle2, AlertCircle, Eye, Check, X, FileText, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -12,6 +12,7 @@ import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/component
 import { StatCard } from "@/components/ui/stat-card"
 import { PromptDialog } from "@/components/ui/prompt-dialog"
 import { LeaveDetailDialog } from "./_components/leave-detail-dialog"
+import { AddLeaveDialog } from "./_components/add-leave-dialog"
 import { formatName } from "@/lib/utils"
 import { formatWATDateTime } from "@/lib/utils/date"
 import { apiFetch } from "@/lib/api-client"
@@ -282,6 +283,7 @@ export function LeaveApprovePage({
   const [detailDialogOpen, setDetailDialogOpen] = useState(false)
   const [selectedLeaveDetail, setSelectedLeaveDetail] = useState<LeaveItem | null>(null)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
+  const [addLeaveOpen, setAddLeaveOpen] = useState(false)
 
   useEffect(() => {
     apiFetch("/api/admin/current-user", { cache: "no-store" })
@@ -546,11 +548,28 @@ export function LeaveApprovePage({
         showActionButtons={activeTab === "my-actions"}
       />
 
+      <AddLeaveDialog
+        open={addLeaveOpen}
+        onOpenChange={setAddLeaveOpen}
+        onAdded={() => {
+          void queryClient.invalidateQueries({
+            queryKey: QUERY_KEYS.leaveRequests({ scope: "approve", apiBasePath: normalizedApiBasePath }),
+          })
+          void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.leaveRequests() })
+        }}
+      />
+
       <DataTablePage
         title="Leave Approvals"
         description="Review and manage leave requests, endorsements, and workflow history."
         icon={CalendarCheck2}
         backLink={{ href: backLinkHref ?? "/admin/hr", label: "Back to HR" }}
+        actions={
+          <Button size="sm" onClick={() => setAddLeaveOpen(true)}>
+            <Plus className="mr-1.5 h-4 w-4" />
+            Add Leave
+          </Button>
+        }
         tabs={dynamicTabs}
         activeTab={activeTab}
         onTabChange={setActiveTab}

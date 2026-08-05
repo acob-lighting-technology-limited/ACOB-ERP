@@ -1,4 +1,5 @@
 import { missedHours, getWorkdaysInRange } from "@/lib/hr/attendance-utils"
+import { toLocalISODate } from "@/lib/utils/date"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import type { AttendancePolicy } from "@/lib/org-config"
 
@@ -9,6 +10,7 @@ export interface PayrollBreakdown {
   hourlyRate: number
   missedHours: number
   absentDays: number
+  unpaidLeaveDays: number
 
   // Annualized Cash Benefits (P.A.)
   annualBase: number
@@ -51,6 +53,7 @@ export interface PayrollBreakdown {
   bonus: number
   loanRepayment: number
   lunchDeduction: number
+  unpaidLeaveDeduction: number
   otherDeductions: number
 
   totalDeductions: number
@@ -133,6 +136,7 @@ export function calculatePayroll({
   workdays,
   missedHours = 0,
   absentDays = 0,
+  unpaidLeaveDays = 0,
   bonus = 0,
   loanRepayment = 0,
   lunchDeduction = 0,
@@ -144,6 +148,8 @@ export function calculatePayroll({
   workdays: number
   missedHours?: number
   absentDays?: number
+  /** Working days in the period spent on leave whose type is flagged `is_paid = false`. */
+  unpaidLeaveDays?: number
   bonus?: number
   loanRepayment?: number
   lunchDeduction?: number
@@ -194,11 +200,21 @@ export function calculatePayroll({
   const monthlyPensionEmployer = pensionEmployerAnnual / 12
   const monthlyTax = taxDetails.statutoryTax / 12
 
+  // Unpaid leave (LWOP, Study, etc.) is docked pro-rata against monthly gross, not
+  // monthlyBase — an unpaid day withholds the whole day's earnings, allowances included.
+  // Only working days count; `unpaidLeaveDays` is already filtered to the period's
+  // workday set by the caller, so weekends and public holidays never attract a charge.
+  // Leave days are exempt from absentSurcharge via isCoveredPayrollStatus, so this is
+  // the only charge they attract — no double-docking.
+  const grossDailyPay = workdays > 0 ? monthlyGross / workdays : 0
+  const unpaidLeaveDeduction = grossDailyPay * unpaidLeaveDays
+
   const totalDeductions =
     latenessSurcharge +
     absentSurcharge +
     loanRepayment +
     lunchDeduction +
+    unpaidLeaveDeduction +
     monthlyPensionEmployee +
     monthlyTax +
     otherDeductions
@@ -212,6 +228,7 @@ export function calculatePayroll({
     hourlyRate,
     missedHours,
     absentDays,
+    unpaidLeaveDays,
 
     annualBase,
     basic,
@@ -250,6 +267,7 @@ export function calculatePayroll({
     bonus,
     loanRepayment,
     lunchDeduction,
+    unpaidLeaveDeduction,
     otherDeductions,
 
     totalDeductions,
@@ -351,4 +369,46 @@ export function derivePayrollAttendance(params: {
 /** Working days for a payroll period: Mon–Fri in range, excluding org holidays. */
 export function getPayrollWorkdays(start: string, end: string, ctx: Pick<PayrollDayContext, "isHoliday">): string[] {
   return getWorkdaysInRange(start, end).filter((date) => !ctx.isHoliday(date))
+}
+
+/** An approved leave grant whose type carries no pay. */
+export interface UnpaidLeaveRow {
+  user_id: string
+  start_date: string
+  end_date: string
+}
+
+/**
+ * Counts each employee's unpaid-leave days that fall on a payroll working day.
+ *
+ * Overlapping or duplicated grants are de-duplicated per date, so a day can never be
+ * docked twice. Days outside `workdayDates` — weekends, public holidays, and any date
+ * beyond the period — are ignored entirely.
+ */
+export function countUnpaidLeaveDays(rows: UnpaidLeaveRow[], workdayDates: string[]): Map<string, number> {
+  const workdaySet = new Set(workdayDates)
+  const datesByUser = new Map<string, Set<string>>()
+
+  for (const row of rows) {
+    if (!row.user_id || !row.start_date || !row.end_date) continue
+    // Local-date arithmetic, matching getWorkdaysInRange — the workday set this is
+    // intersected against is built the same way, so the two always line up.
+    const [sy, sm, sd] = row.start_date.split("-").map(Number)
+    const [ey, em, ed] = row.end_date.split("-").map(Number)
+    if ([sy, sm, sd, ey, em, ed].some((n) => !Number.isFinite(n))) continue
+
+    const cursor = new Date(sy, sm - 1, sd)
+    const end = new Date(ey, em - 1, ed)
+
+    while (cursor <= end) {
+      const iso = toLocalISODate(cursor)
+      if (workdaySet.has(iso)) {
+        if (!datesByUser.has(row.user_id)) datesByUser.set(row.user_id, new Set())
+        datesByUser.get(row.user_id)!.add(iso)
+      }
+      cursor.setDate(cursor.getDate() + 1)
+    }
+  }
+
+  return new Map([...datesByUser].map(([userId, dates]) => [userId, dates.size]))
 }
