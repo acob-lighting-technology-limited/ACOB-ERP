@@ -632,9 +632,9 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       },
       {
         key: "office_location",
-        label: "Location",
+        label: "Office",
         options: offices.map((o) => ({ value: o, label: o })),
-        placeholder: "All Locations",
+        placeholder: "All Offices",
       },
       {
         key: "gender",
@@ -653,6 +653,10 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       {
         key: "status",
         label: "Status",
+        // "Contract" appears here as well as under Staff type because 46 profiles carry it as
+        // their employment_status rather than 'active' — a data problem, not a UI one. Removing
+        // the option would hide them entirely, since it is also a default value. Fix the data
+        // (status 'active' + staff type 'contract') and this option can go.
         options: [
           { value: "active", label: "Active" },
           { value: "contract", label: "Contract" },
@@ -666,7 +670,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       },
       {
         key: "employment_type",
-        label: "Employment Type",
+        label: "Staff type",
         options: [
           { value: "full_time", label: "Full Time" },
           { value: "part_time", label: "Part Time" },
@@ -681,15 +685,17 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     [departments, offices]
   )
 
-  const stats = useMemo(
-    () => ({
-      total: employees.length,
-      admins: employees.filter((s) => ["developer", "super_admin", "admin"].includes(s.role)).length,
-      leads: employees.filter((s) => s.is_department_lead).length,
-      currentEmployees: employees.filter((s) => s.role !== "visitor").length,
-    }),
-    [employees]
-  )
+  // Stats follow what the table is actually showing — counting the full set would claim
+  // people the default Status and Staff type filters have hidden.
+  const stats = useMemo(() => {
+    const source = processedEmployees.length ? processedEmployees : employees
+    return {
+      total: source.length,
+      admins: source.filter((s) => ["developer", "super_admin", "admin"].includes(s.role)).length,
+      leads: source.filter((s) => s.is_department_lead).length,
+      currentEmployees: source.filter((s) => s.role !== "visitor").length,
+    }
+  }, [employees, processedEmployees])
 
   // Handle userId from search params (for edit dialog)
   useEffect(() => {

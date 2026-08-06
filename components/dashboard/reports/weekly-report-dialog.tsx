@@ -65,11 +65,19 @@ export function WeeklyReportDialog({ isOpen, onClose, onSuccess, initialData }: 
   const supabase = createClient()
 
   useEffect(() => {
+    let cancelled = false
+    // Clear first so the form falls back to its locked-by-default state while the
+    // new week resolves — otherwise the previous week's lock verdict stays applied
+    // and briefly leaves a locked week editable.
+    setLockState(null)
     const fetchLockState = async () => {
       const state = await fetchWeeklyReportLockState(supabase, formData.week_number, formData.year)
-      setLockState(state)
+      if (!cancelled) setLockState(state)
     }
-    fetchLockState()
+    void fetchLockState()
+    return () => {
+      cancelled = true
+    }
   }, [formData.week_number, formData.year, supabase])
 
   const setupDialog = useCallback(async () => {
@@ -175,6 +183,11 @@ export function WeeklyReportDialog({ isOpen, onClose, onSuccess, initialData }: 
     }
   }
 
+  // Once the grace window has closed the week is read-only — block typing outright
+  // instead of letting the user fill the form and fail at submit. Also treat the
+  // pre-resolved state as locked so there is no editable gap while the RPC is in flight.
+  const isWeekLocked = lockState === null || lockState.isLocked
+
   const handleKey = (e: React.KeyboardEvent, field: ReportTextField) => {
     if (e.key === "Enter") {
       const val = formData[field] as string
@@ -215,7 +228,8 @@ export function WeeklyReportDialog({ isOpen, onClose, onSuccess, initialData }: 
           </DialogDescription>
           {lockState?.isLocked && (
             <p className="text-destructive text-xs">
-              Locked after meeting date {lockState.meetingDate}. Editing is now closed for this week.
+              Locked after meeting date {lockState.meetingDate}. This week is read-only — contact an admin for a
+              temporary unlock.
             </p>
           )}
         </DialogHeader>
@@ -236,9 +250,10 @@ export function WeeklyReportDialog({ isOpen, onClose, onSuccess, initialData }: 
                   onKeyDown={(e) => handleKey(e, f)}
                   placeholder={`1. ...`}
                   rows={4}
-                  disabled={f === "tasks_new_week" && isNextWeekActive}
+                  readOnly={isWeekLocked}
+                  disabled={isWeekLocked || (f === "tasks_new_week" && isNextWeekActive)}
                 />
-                {f === "tasks_new_week" && isNextWeekActive && (
+                {f === "tasks_new_week" && isNextWeekActive && !isWeekLocked && (
                   <p className="text-muted-foreground text-[10px] italic">
                     Locked: Next week&apos;s tracker is already active.
                   </p>
@@ -252,7 +267,7 @@ export function WeeklyReportDialog({ isOpen, onClose, onSuccess, initialData }: 
           <Button variant="outline" onClick={onClose} disabled={saving}>
             Cancel
           </Button>
-          <Button onClick={handleSubmit} disabled={saving || loading || !!lockState?.isLocked}>
+          <Button onClick={handleSubmit} disabled={saving || loading || isWeekLocked}>
             {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             {id ? "Update Report" : "Submit Report"}
           </Button>

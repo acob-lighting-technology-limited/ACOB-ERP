@@ -1,5 +1,5 @@
 import { sendNotificationEmailsIndividuallyWithRetry } from "@/lib/notifications/email-gateway"
-import { ORG_EMAIL_SENDERS } from "@/lib/org-config"
+import { ORG_EMAIL_SENDERS, ORG_MAIL_ROUTING } from "@/lib/org-config"
 
 export interface CorrespondenceApprovalEmailPayload {
   to: string[]
@@ -127,7 +127,7 @@ function buildHtml(payload: Omit<CorrespondenceDecisionEmailPayload, "to">) {
     '<strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>' +
     '<span style="color:#16a34a;font-weight:600;">Correspondence Management System</span>' +
     "<br><br>" +
-    '<i style="color:#9ca3af;">This is an automated notification. Please do not reply directly to this email.</i>' +
+    '<i style="color:#9ca3af;">This is an automated notification, but replies are read — reply to this email and it reaches the team that sent it.</i>' +
     "</td></tr></table>" +
     "</div>" +
     "</body>" +
@@ -145,9 +145,10 @@ export async function sendCorrespondenceDecisionEmail(payload: CorrespondenceDec
   const typeLabel = getTypeLabel(payload.letterType)
   const decisionLabel = getDecisionLabel(payload.decision)
   await sendNotificationEmailsIndividuallyWithRetry({
-    from: ORG_EMAIL_SENDERS.correspondence,
+    from: ORG_EMAIL_SENDERS.system,
+    ...ORG_MAIL_ROUTING["Correspondence"],
     to: recipients,
-    subject: `${typeLabel} Correspondence ${decisionLabel}: ${payload.referenceNumber}`,
+    subject: `${typeLabel} Correspondence ${decisionLabel} — ${payload.referenceNumber}`,
     html: buildHtml(payload),
   })
 }

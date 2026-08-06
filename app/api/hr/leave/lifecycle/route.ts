@@ -24,25 +24,6 @@ const LeaveLifecycleSchema = z.object({
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 
-async function restoreBalance(supabase: SupabaseServerClient, userId: string, leaveTypeId: string, days: number) {
-  const currentYear = new Date().getUTCFullYear()
-
-  const { data: balance } = await supabase
-    .from("leave_balances")
-    .select("id, used_days")
-    .eq("user_id", userId)
-    .eq("leave_type_id", leaveTypeId)
-    .eq("year", currentYear)
-    .single()
-
-  if (!balance) return
-
-  await supabase
-    .from("leave_balances")
-    .update({ used_days: Math.max(0, Number(balance.used_days || 0) - days) })
-    .eq("id", balance.id)
-}
-
 export async function PATCH(request: NextRequest) {
   const rl = await rateLimit(`hr-leave-lifecycle:${getClientId(request)}`, { limit: 15, windowSec: 60 })
   if (!rl.allowed)
@@ -120,7 +101,8 @@ export async function PATCH(request: NextRequest) {
         .update({ status: "cancelled", approval_stage: "cancelled", rejected_reason: reason || "Cancelled" })
         .eq("id", leave_request_id)
 
-      await restoreBalance(supabase, leaveRequest.user_id, leaveRequest.leave_type_id, leaveRequest.days_count)
+      // Cancelling frees the days on its own — remaining days are derived from the request's
+      // status, so there is no stored balance to put back.
       await syncAttendanceForApprovedLeave(
         supabase,
         leaveRequest.user_id,
@@ -236,7 +218,8 @@ export async function PATCH(request: NextRequest) {
         .eq("id", leave_request_id)
 
       if (delta > 0) {
-        await restoreBalance(supabase, leaveRequest.user_id, leaveRequest.leave_type_id, delta)
+        // Shortening days_count above is what returns the unused days — the remaining figure
+        // is summed from the request itself.
         const clearFrom = toISODate(addDays(earlyDate, 1))
         await syncAttendanceForApprovedLeave(supabase, leaveRequest.user_id, clearFrom, leaveRequest.end_date, "clear")
       }

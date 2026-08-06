@@ -20,6 +20,7 @@ import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { normalizeDepartmentName } from "@/shared/departments"
 import { taskService } from "@/lib/services/tasks/task.service"
+import { getLeaveEntitlements } from "@/lib/hr/leave-entitlement"
 import { toLocalISODate } from "@/lib/utils/date"
 import { logger } from "@/lib/logger"
 
@@ -138,14 +139,6 @@ export function intentNeedsData(intent: AcobotIntent): boolean {
 }
 
 // ---------- row shapes (narrow, local) ----------
-type LeaveBalanceRow = {
-  leave_type_id: string | null
-  allocated_days?: number | null
-  used_days?: number | null
-  carry_forward_days?: number | null
-  balance_days?: number | null
-  leave_type?: { name?: string | null } | null
-}
 type LeaveRequestRow = {
   status: string | null
   start_date: string | null
@@ -188,34 +181,17 @@ async function leaveTypeNames(supabase: AnySupabase): Promise<Map<string, string
 async function personalLeaveBalances(supabase: AnySupabase, userId: string): Promise<string | null> {
   try {
     const year = new Date().getFullYear()
-    const { data, error } = await supabase
-      .from("leave_balances")
-      .select(
-        `leave_type_id, allocated_days, used_days, carry_forward_days, balance_days,
-         leave_type:leave_types!leave_balances_leave_type_id_fkey ( name )`
-      )
-      .eq("user_id", userId)
-      .eq("year", year)
-    if (error) {
-      log.error({ err: error.message }, "leave_balances query error")
-      return null
-    }
-    if (!data || data.length === 0) {
-      return `No leave balance records are on file for the signed-in user for ${year}.`
+    // Derived from the leave type allowance minus the user's own requests — see
+    // lib/hr/leave-entitlement.ts. Nothing is stored, so this is always current.
+    const entitlements = await getLeaveEntitlements(supabase as unknown as SupabaseClient, userId, { year })
+    if (entitlements.length === 0) {
+      return `No leave types are available to the signed-in user for ${year}.`
     }
 
-    const rows = data as unknown as LeaveBalanceRow[]
-    const lines = rows.map((r) => {
-      const name = r.leave_type?.name || "Leave"
-      const allocated = r.allocated_days ?? null
-      const used = r.used_days ?? null
-      const remaining =
-        r.balance_days ?? (allocated != null && used != null ? allocated + (r.carry_forward_days ?? 0) - used : null)
-      const parts: string[] = []
-      if (remaining != null) parts.push(`${remaining} day(s) remaining`)
-      if (allocated != null) parts.push(`${allocated} allocated`)
-      if (used != null) parts.push(`${used} used`)
-      return `- **${name}**: ${parts.join(", ") || "no data"}`
+    const lines = entitlements.map((e) => {
+      const parts = [`${e.remainingDays} day(s) remaining`, `${e.entitlementDays} allocated`, `${e.usedDays} used`]
+      if (e.pendingDays > 0) parts.push(`${e.pendingDays} awaiting approval`)
+      return `- **${e.name}**: ${parts.join(", ")}`
     })
     return `Leave balances for the signed-in user (${year}):\n${lines.join("\n")}`
   } catch (err) {

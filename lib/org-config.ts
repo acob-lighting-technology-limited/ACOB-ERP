@@ -13,6 +13,8 @@
  * 3. Update .env.example with the new key and its default.
  */
 
+import type { NotificationModule } from "@/lib/notifications/subject-policy"
+
 // ---------------------------------------------------------------------------
 // Company identity
 // ---------------------------------------------------------------------------
@@ -32,9 +34,22 @@ export const ORG_CODE = process.env.NEXT_PUBLIC_ORG_CODE ?? "ACOB"
 /** IT/ICT contact email shown in system emails */
 export const ORG_ICT_EMAIL = process.env.NEXT_PUBLIC_ORG_ICT_EMAIL ?? `ict@${ORG_PRIMARY_DOMAIN}`
 
+/** Admin & HR department mailbox — replies to HR, leave, exit, attendance mail. */
+export const ORG_HR_EMAIL = process.env.ORG_HR_EMAIL ?? `hradmin@${ORG_PRIMARY_DOMAIN}`
+
+/** Accounts department mailbox — replies to payment mail. */
+export const ORG_ACCOUNTS_EMAIL = process.env.ORG_ACCOUNTS_EMAIL ?? `accounts@${ORG_PRIMARY_DOMAIN}`
+
+/**
+ * Corporate Services contact for correspondence replies. Unlike the others this
+ * is a named individual (the department lead) rather than a shared mailbox, so
+ * it needs updating if the role changes hands — hence the env override.
+ */
+export const ORG_CORPORATE_SERVICES_EMAIL = process.env.ORG_CORPORATE_SERVICES_EMAIL ?? `a.peter@${ORG_PRIMARY_DOMAIN}`
+
 /** Sender display name + address used for all outbound notification emails */
 export const ORG_NOTIFICATION_SENDER =
-  process.env.ORG_NOTIFICATION_SENDER ?? `${ORG_CODE} Internal Systems <notifications@${ORG_PRIMARY_DOMAIN}>`
+  process.env.ORG_NOTIFICATION_SENDER ?? `${ORG_CODE} Lighting Technology Limited <notifications@${ORG_PRIMARY_DOMAIN}>`
 
 // ---------------------------------------------------------------------------
 // Outbound email sender identities ("From" display names)
@@ -53,16 +68,52 @@ export function orgSender(label: string): string {
   return `${label} <${ORG_SENDER_ADDRESS}>`
 }
 
+// All automated mail sends under ONE identity. Recipients learn to trust a
+// single sender; the subsystem is conveyed by the subject line, and replies are
+// routed by Reply-To (see ORG_MAIL_ROUTING) rather than by the display name. Per-
+// subsystem display names bought nothing — every one of them sent from the same
+// address, which is what mail clients actually thread, filter, and score.
 export const ORG_EMAIL_SENDERS = {
-  /** Generic system notifications / approvals (env-overridable). */
-  notification: ORG_NOTIFICATION_SENDER,
-  /** Admin & HR department mail — leave, exit notices, HR communications. */
-  hr: orgSender(`${ORG_CODE} Admin & HR`),
-  /** Help desk tickets. */
-  helpDesk: orgSender(`${ORG_CODE} Help Desk`),
-  /** Correspondence module. */
-  correspondence: orgSender(`${ORG_CODE} Correspondence System`),
+  /** The single identity for every automated notification (env-overridable). */
+  system: ORG_NOTIFICATION_SENDER,
 } as const
+
+/** RFC 2919 List-Id for a module, e.g. "<leave.acoblighting.com>". */
+function listId(stream: string): string {
+  return `<${stream}.${ORG_PRIMARY_DOMAIN}>`
+}
+
+/**
+ * Per-module mail routing — mirrored for the edge runtime in
+ * supabase/functions/_shared/senders.ts.
+ *
+ * `replyTo` is the knob that used to be (wrongly) expressed as a sender name.
+ * Every address must be a monitored mailbox — a Reply-To nobody opens is worse
+ * than none, because senders assume they were heard.
+ *
+ * `listId` is invisible to readers and exists so recipients can build durable
+ * filters (Gmail: `list:leave.acoblighting.com`) without the subject line
+ * having to carry a `[Leave]`-style prefix.
+ *
+ * `Communications` is absent by design: that mail is written by a real person,
+ * so it replies to their own department lead, resolved per send.
+ */
+export const ORG_MAIL_ROUTING: Record<
+  Exclude<NotificationModule, "Communications">,
+  { replyTo: string; listId: string }
+> = {
+  Assets: { replyTo: ORG_ICT_EMAIL, listId: listId("assets") },
+  "Help Desk": { replyTo: ORG_ICT_EMAIL, listId: listId("helpdesk") },
+  Leave: { replyTo: ORG_HR_EMAIL, listId: listId("leave") },
+  Onboarding: { replyTo: ORG_HR_EMAIL, listId: listId("onboarding") },
+  Meetings: { replyTo: ORG_HR_EMAIL, listId: listId("meetings") },
+  Reports: { replyTo: ORG_HR_EMAIL, listId: listId("reports") },
+  Attendance: { replyTo: ORG_HR_EMAIL, listId: listId("attendance") },
+  Exit: { replyTo: ORG_HR_EMAIL, listId: listId("exit") },
+  Birthday: { replyTo: ORG_HR_EMAIL, listId: listId("birthday") },
+  Payments: { replyTo: ORG_ACCOUNTS_EMAIL, listId: listId("payments") },
+  Correspondence: { replyTo: ORG_CORPORATE_SERVICES_EMAIL, listId: listId("correspondence") },
+}
 
 /** Dynamic department sender, e.g. "ACOB Finance Department" (label resolved at runtime). */
 export function orgDepartmentSender(departmentLabel: string): string {

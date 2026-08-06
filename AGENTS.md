@@ -639,16 +639,79 @@ Remaining edge functions still email-only and pending parity work: `send-weekly-
 
 For any leave workflow event, always use `notifyUsers` from `lib/hr/leave-workflow.ts`. It handles delivery policy resolution, channel eligibility, and both email and in-app in one call. Pass `emailEvent` so the correct `p_type` is set per the mapping above.
 
-## Email Sender Identity — Single Source of Truth
+## Email Identity, Routing, and Subjects — Single Source of Truth
 
-**Never hardcode an email "From" display name as a string literal.** All sender names live in one place per runtime so they can never drift (e.g. "HR" vs "Admin & HR"):
+**One sender for all automated mail.** Every automated notification sends as
+**`ACOB Lighting Technology Limited <notifications@acoblighting.com>`**. There are
+no per-subsystem display names — they all sent from the same address anyway, which
+is what mail clients thread, filter, and score, so the names bought nothing and
+forced a naming argument for every new subsystem.
 
-- **Next app** (`lib/`, `app/api/`): import from `ORG_EMAIL_SENDERS` in `lib/org-config.ts` (`.notification`, `.hr`, `.helpDesk`, `.correspondence`). Add a new key there rather than writing `` `ACOB X <notifications@...>` `` inline.
-- **Edge functions** (`supabase/functions/`, Deno — cannot import `lib/`): import from `EDGE_SENDERS` / `edgeDepartmentSender()` / `edgeDepartmentSenderBare()` in `supabase/functions/_shared/senders.ts`.
+**Never hardcode a "From", Reply-To, or List-Id as a string literal.** Each runtime
+has exactly one place for them:
 
-The canonical HR/People sender is **`ACOB Admin & HR`** — never "ACOB HR ..." and never "... Admin & HR Department" (no "Department" suffix). Department-derived senders (exit, asset, broadcast) resolve the label from the lead's `lead_departments` (which is "Admin & HR") via `orgDepartmentSenderBare()` / `edgeDepartmentSenderBare()` — use the *bare* variant for HR; the non-bare `orgDepartmentSender()` / `edgeDepartmentSender()` always appends "Department" and is only for genuinely departmental senders (e.g. "ACOB Finance Department").
+- **Next app** (`lib/`, `app/api/`): `ORG_EMAIL_SENDERS.system` and `ORG_MAIL_ROUTING`
+  in `lib/org-config.ts`.
+- **Edge functions** (`supabase/functions/`, Deno — cannot import `lib/`):
+  `EDGE_SENDERS.system` and `EDGE_MAIL_ROUTING` in `supabase/functions/_shared/senders.ts`.
 
-Edge functions are excluded from `tsc`/`eslint` and can't be validated locally without Deno — **smoke-test any sender change on deploy**.
+Call sites spread one routing entry so the pair can never disagree:
+
+```ts
+await sendNotificationEmailsIndividuallyWithRetry({
+  from: ORG_EMAIL_SENDERS.system,
+  ...ORG_MAIL_ROUTING["Leave"],   // supplies replyTo + listId together
+  to: recipients,
+  subject,
+  html,
+})
+```
+
+**Reply-To must be a monitored mailbox** — `ict@`, `hradmin@`, `accounts@`. A Reply-To
+nobody opens is worse than none, because senders assume they were heard. Never point
+it at a named individual unless the role genuinely has no shared mailbox (only
+Correspondence does today).
+
+**List-Id** (RFC 2919, e.g. `<leave.acoblighting.com>`) is invisible to readers and
+exists so recipients can filter a stream (`list:leave.acoblighting.com` in Gmail)
+without the subject carrying a `[Leave]`-style prefix. Add one for every new module.
+
+**The only sender that varies is `send-communications-mail`** — real correspondence
+written by a person, sent as `ACOB {department}` via `edgeDepartmentSenderBare()`,
+replying to that department's lead resolved per send.
+
+### Subject Line Standard (Mandatory)
+
+> **`{Module noun} {what happened} — {reference}`**
+
+1. **Lead with the module noun** — `Asset`, `Leave Request`, `Help Desk Ticket`,
+   `Payment`, `Meeting`, `Attendance`, `Staff Exit`. The sender is generic, so the
+   subject is the only thing identifying the stream. Non-negotiable.
+2. **Then the event in plain words** — past tense for what happened (`Assigned`,
+   `Approved`, `Returned`), forward-looking for what is needed (`Awaiting Your
+   Approval`, `Due Today`).
+3. **Then the reference after ` — ` (em dash), always last.** One separator. Never a
+   colon, never a hyphen, never both.
+4. **No prefixes, no brackets, no company name.** Not `System:`, not `[Assets]`, not
+   `— ACOB Lighting Technology Limited` — the From line already says it.
+5. **Meaning within ~45 characters** before the reference; that is roughly what a
+   phone shows.
+6. **Nothing dynamic in the opening words**, so a sorted inbox groups naturally.
+
+Conforming examples: `Asset Assigned — ACOB/HQ/DSKST/2023/005`,
+`Leave Request Approved — LR-0042`, `Payment Overdue — Generator Servicing`,
+`Help Desk Ticket Created — HD-0117`, `Staff Exit Notification — Jane Doe`.
+
+Birthday mail is the single deliberate exception (`Happy Birthday from ACOB
+Lighting!`) — it is meant to read as human, not as a system record.
+
+`withSubjectPrefix()` in both runtimes is intentionally a pass-through. Bracket
+prefixes were considered and rejected: they cost ~9 characters of mobile preview on
+every mail to duplicate what rule 1 already guarantees. Filtering is `List-Id`'s job.
+
+Edge functions are excluded from `tsc`/`eslint`; validate with
+`deno check --node-modules-dir=auto supabase/functions/*/index.ts` and **smoke-test any
+sender or subject change on deploy**.
 
 ## Email Template Standard — Header, Footer, and Dark-Mode Lock (Mandatory)
 

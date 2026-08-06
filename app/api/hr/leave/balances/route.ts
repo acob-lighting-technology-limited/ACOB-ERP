@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getRequestScope } from "@/lib/admin/api-scope"
+import { getLeaveEntitlements } from "@/lib/hr/leave-entitlement"
 import { logger } from "@/lib/logger"
 
 const log = logger("hr-leave-balances")
@@ -28,29 +29,26 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const { data: balances, error } = await supabase
-      .from("leave_balances")
-      .select(
-        `
-        *,
-        leave_type:leave_types!leave_balances_leave_type_id_fkey (
-          id,
-          name,
-          description,
-          max_days,
-          requires_approval
-        )
-      `
-      )
-      .eq("user_id", userId)
-      .order("leave_type_id")
+    // Balances are derived from the leave type's allowance minus the employee's own requests —
+    // see lib/hr/leave-entitlement.ts. The response keeps the field names of the old stored
+    // rows (allocated_days / used_days / balance_days) so existing callers are unaffected.
+    const year = new Date().getUTCFullYear()
+    const entitlements = await getLeaveEntitlements(supabase, userId, { year })
 
-    if (error) {
-      log.error({ err: String(error) }, "Error fetching leave balances:")
-      return NextResponse.json({ error: "Failed to fetch leave balances" }, { status: 500 })
-    }
+    const data = entitlements.map((e) => ({
+      user_id: userId,
+      leave_type_id: e.leaveTypeId,
+      year,
+      allocated_days: e.entitlementDays,
+      used_days: e.usedDays,
+      pending_days: e.pendingDays,
+      carry_forward_days: 0,
+      balance_days: e.remainingDays,
+      needs_evidence: e.needsEvidence,
+      leave_type: { id: e.leaveTypeId, name: e.name, code: e.code, max_days: e.entitlementDays },
+    }))
 
-    return NextResponse.json({ data: balances })
+    return NextResponse.json({ data })
   } catch (error) {
     log.error({ err: String(error) }, "Error in GET /api/hr/leave/balances:")
     return NextResponse.json({ error: "An error occurred" }, { status: 500 })

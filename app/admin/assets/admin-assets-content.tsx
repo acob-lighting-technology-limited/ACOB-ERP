@@ -462,8 +462,9 @@ export function AdminAssetsContent({
         throw new Error(`Failed to refresh assets (${response.status})`)
       }
 
-      const payload = (await response.json()) as { assets: Asset[]; employees: Employee[] }
-      setAssets(payload.assets || [])
+      // The snapshot route returns the paginated envelope: rows live under `data`.
+      const payload = (await response.json()) as { data: Asset[]; employees: Employee[] }
+      setAssets(payload.data || [])
       setEmployees(payload.employees || [])
     } catch (error: unknown) {
       log.error("Error loading data:", error)

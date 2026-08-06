@@ -197,7 +197,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       try {
         await sendHelpDeskMail({
           userIds: [newAssignedTo],
-          subject: `Help Desk Assignment: ${workItemNumber}`,
+          subject: `Help Desk Ticket Assigned — ${workItemNumber}`,
           title: "Ticket Assigned To You",
           message: `${ticket.title} has been assigned to you for execution.`,
           ticketNumber: workItemNumber,

@@ -13,6 +13,8 @@ type SendEmailOptions = {
   html: string
   from?: string
   replyTo?: string
+  /** RFC 2919 List-Id, e.g. "<assets.acoblighting.com>". Invisible to readers. */
+  listId?: string
   attachments?: EmailAttachment[]
   traceLabel?: string
 }
@@ -27,7 +29,7 @@ type SendEmailResult = {
 }
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY")
-const DEFAULT_FROM = EDGE_SENDERS.notification
+const DEFAULT_FROM = EDGE_SENDERS.system
 const RATE_LIMIT_INTERVAL_MS = 500
 const MAX_ATTEMPTS = 3
 let nextAvailableSendTime = 0
@@ -69,6 +71,7 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
     subject: options.subject,
     html: options.html,
     replyTo: options.replyTo,
+    ...(options.listId ? { headers: { "List-Id": options.listId } } : {}),
     attachments: options.attachments,
   }
   const traceLabel = options.traceLabel || payload.subject

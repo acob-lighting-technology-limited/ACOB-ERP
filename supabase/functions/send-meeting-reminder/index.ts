@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 import { writeEdgeAuditLog } from "../_shared/audit.ts"
 import { sendEmail } from "../_shared/email.ts"
-import { EDGE_SENDERS, SENDER_ADDRESS } from "../_shared/senders.ts"
+import { EDGE_MAIL_ROUTING, EDGE_SENDERS, SENDER_ADDRESS } from "../_shared/senders.ts"
 import {
   getCurrentOfficeWeek,
   getOfficeWeekFromDate,
@@ -30,7 +30,7 @@ type KnowledgePresenter = {
 }
 
 const DEFAULT_TIME_ZONE = "Africa/Lagos"
-const DEFAULT_SENDER = EDGE_SENDERS.meeting
+const DEFAULT_SENDER = EDGE_SENDERS.system
 // Configurable contact for meeting questions. Falls back to the shared
 // notifications mailbox (never a specific person, who may exit).
 const MEETING_CONTACT_EMAIL = Deno.env.get("MEETING_CONTACT_EMAIL") || SENDER_ADDRESS
@@ -339,7 +339,7 @@ function buildMeetingReminderHtml(
     '<strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>' +
     '<span style="color:#16a34a;font-weight:600;">Meeting Management System</span>' +
     "<br><br>" +
-    '<i style="color:#9ca3af;">This is an automated system notification. Please do not reply directly to this email.</i>' +
+    '<i style="color:#9ca3af;">This is an automated notification, but replies are read — reply to this email and it reaches the team that sent it.</i>' +
     "</td></tr></table>" +
     "</div>" +
     "</body>" +
@@ -424,7 +424,7 @@ function buildKnowledgeSharingHtml(sessionDate: string, sessionTime: string, dur
     '<strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>' +
     '<span style="color:#16a34a;font-weight:600;">Meeting Management System</span>' +
     "<br><br>" +
-    '<i style="color:#9ca3af;">This is an automated system notification. Please do not reply directly to this email.</i>' +
+    '<i style="color:#9ca3af;">This is an automated notification, but replies are read — reply to this email and it reaches the team that sent it.</i>' +
     "</td></tr></table>" +
     "</div>" +
     "</body>" +
@@ -654,7 +654,7 @@ serve(async (req) => {
         console.warn("[meeting-reminder] KSS roster missing for recurring schedule; sending without roster enrichment")
       }
 
-      subject = withSubjectPrefix("Meetings", "Reminder for General Weekly Meeting")
+      subject = withSubjectPrefix("Meetings", "Meeting Reminder — General Weekly Meeting")
       html = buildMeetingReminderHtml(
         effectiveMeetingDate,
         meetingTime || "8:30 AM",
@@ -667,7 +667,7 @@ serve(async (req) => {
         knowledgeSharingDepartment
       )
     } else {
-      subject = withSubjectPrefix("Meetings", "Reminder: Knowledge Sharing Session")
+      subject = withSubjectPrefix("Meetings", "Meeting Reminder — Knowledge Sharing Session")
       html = buildKnowledgeSharingHtml(sessionDate || "Monday", sessionTime || "8:30am", duration || "30 minutes")
     }
 
@@ -689,6 +689,7 @@ serve(async (req) => {
       try {
         const data = await sendEmail({
           from,
+          ...EDGE_MAIL_ROUTING.meetings,
           to,
           subject,
           html,

@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.224.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.95.3"
 import { canEdgeUserReceiveEmail, normalizeRecipientEmails } from "../_shared/notification-gateway.ts"
 import { sendEmail } from "../_shared/email.ts"
-import { EDGE_SENDERS } from "../_shared/senders.ts"
+import { EDGE_MAIL_ROUTING, EDGE_SENDERS } from "../_shared/senders.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
@@ -92,7 +92,7 @@ function buildPaymentEmailHtml(params: {
               View Payment
             </a>
           </p>
-          <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;">This is an automated system notification. Please do not reply directly to this email.</p>
+          <p style="margin:16px 0 0;color:#94a3b8;font-size:12px;">This is an automated notification, but replies are read — reply to this email and it reaches the team that sent it.</p>
         </div>
       </div>
     </div>
@@ -204,9 +204,7 @@ serve(async (req) => {
         const paymentTitle = event.payment.title || event.payment.category || "Recurring Payment"
         const category = event.payment.category || "N/A"
         const subject =
-          event.event === "due"
-            ? `System: Payment Due Today - ${paymentTitle}`
-            : `System: Payment Overdue - ${paymentTitle}`
+          event.event === "due" ? `Payment Due Today — ${paymentTitle}` : `Payment Overdue — ${paymentTitle}`
         const html = buildPaymentEmailHtml({
           recipientName:
             profile?.full_name || [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Team Member",
@@ -220,7 +218,8 @@ serve(async (req) => {
         })
 
         await sendEmail({
-          from: EDGE_SENDERS.payments,
+          from: EDGE_SENDERS.system,
+          ...EDGE_MAIL_ROUTING.payments,
           to: recipientEmails,
           subject,
           html,

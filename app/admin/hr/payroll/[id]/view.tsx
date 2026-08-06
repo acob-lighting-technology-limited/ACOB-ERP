@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input"
 import { calculatePayroll, type PayrollBreakdown } from "@/lib/hr/payroll-utils"
 import { FileText, Save, Lock, Download, DollarSign, Clock, Eye, Printer } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-client"
 
 export interface PayrollRow {
   user_id: string
@@ -118,7 +119,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
         })),
       }
 
-      const res = await fetch("/api/admin/hr/payroll/run", {
+      const res = await apiFetch("/api/admin/hr/payroll/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -351,9 +352,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
       align: "right",
       sortable: true,
       accessor: (r) => r.breakdown.monthlyPensionEmployee,
-      render: (r) => (
-        <span className="text-muted-foreground text-xs">{money(r.breakdown.monthlyPensionEmployee)}</span>
-      ),
+      render: (r) => <span className="text-muted-foreground text-xs">{money(r.breakdown.monthlyPensionEmployee)}</span>,
       hideOnMobile: true,
     },
     {
@@ -371,9 +370,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
       align: "right",
       sortable: true,
       accessor: (r) => r.breakdown.monthlyGross + r.breakdown.bonus,
-      render: (r) => (
-        <span className="text-xs font-medium">{money(r.breakdown.monthlyGross + r.breakdown.bonus)}</span>
-      ),
+      render: (r) => <span className="text-xs font-medium">{money(r.breakdown.monthlyGross + r.breakdown.bonus)}</span>,
     },
     {
       key: "netPay",

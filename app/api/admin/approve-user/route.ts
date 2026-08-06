@@ -423,6 +423,7 @@ export async function POST(req: Request) {
       p_birth_year: pendingBirthYear,
       p_employment_type: employmentType,
       p_contract_category_id: contractCategoryId,
+      p_gender: pendingUser.gender ?? null,
     })
 
     if (approvalError) {
@@ -434,6 +435,9 @@ export async function POST(req: Request) {
       }
       throw new Error(`Profile creation failed: ${approvalError.message}`)
     }
+
+    // No leave records to create: entitlement is derived from the leave type's allowance minus
+    // the employee's own requests, so the new employee has their full allowance immediately.
 
     if (sendEmails) {
       // 6. Send Welcome Email

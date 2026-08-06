@@ -1,7 +1,7 @@
 import { sendEmail } from "./email.ts"
 import { EDGE_SENDERS } from "./senders.ts"
 
-export const DEFAULT_NOTIFICATION_SENDER = EDGE_SENDERS.notification
+export const DEFAULT_NOTIFICATION_SENDER = EDGE_SENDERS.system
 
 export type NotificationModule =
   | "Onboarding"
@@ -28,6 +28,10 @@ interface SendEdgeNotificationEmailInput {
   html: string
   moduleName: NotificationModule
   from?: string
+  /** Where a reply lands. Must be a monitored mailbox — see EDGE_MAIL_ROUTING. */
+  replyTo?: string
+  /** RFC 2919 List-Id so recipients can filter this stream. */
+  listId?: string
 }
 
 export function normalizeRecipientEmails(emails: Array<string | null | undefined>): string[] {
@@ -53,6 +57,8 @@ export async function sendEdgeNotificationEmail(input: SendEdgeNotificationEmail
     to: recipients,
     subject: withSubjectPrefix(input.moduleName, input.subject),
     html: input.html,
+    ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+    ...(input.listId ? { listId: input.listId } : {}),
     traceLabel: `notification-${input.moduleName.toLowerCase()}`,
   })
 

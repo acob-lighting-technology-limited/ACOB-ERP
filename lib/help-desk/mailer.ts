@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { sendNotificationEmail, sendNotificationEmailsIndividuallyWithRetry } from "@/lib/notifications/email-gateway"
-import { ORG_EMAIL_SENDERS } from "@/lib/org-config"
+import { ORG_EMAIL_SENDERS, ORG_MAIL_ROUTING } from "@/lib/org-config"
 import { withSubjectPrefix } from "@/lib/notifications/subject-policy"
 import { isSystemNotificationChannelEnabled, resolveChannelEligibleUserIds } from "@/lib/notifications/delivery-policy"
 
@@ -58,7 +58,7 @@ function buildEmailHtml(payload: HelpDeskMailPayload) {
     '<strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>' +
     '<span style="color:#16a34a;font-weight:600;">Help Desk System</span>' +
     "<br><br>" +
-    '<i style="color:#9ca3af;">This is an automated system notification. Please do not reply directly to this email.</i>' +
+    '<i style="color:#9ca3af;">This is an automated notification, but replies are read — reply to this email and it reaches the team that sent it.</i>' +
     "</td></tr></table>" +
     "</div>" +
     "</body>" +
@@ -80,7 +80,8 @@ export async function sendHelpDeskMail(payload: HelpDeskMailPayload) {
     if (!systemEnabled) return
 
     await sendNotificationEmail({
-      from: ORG_EMAIL_SENDERS.helpDesk,
+      from: ORG_EMAIL_SENDERS.system,
+      ...ORG_MAIL_ROUTING["Help Desk"],
       to: [overrideRecipient],
       subject: withSubjectPrefix("Help Desk", payload.subject),
       html: buildEmailHtml(payload),
@@ -116,7 +117,8 @@ export async function sendHelpDeskMail(payload: HelpDeskMailPayload) {
   if (!recipients.length) return
 
   await sendNotificationEmailsIndividuallyWithRetry({
-    from: ORG_EMAIL_SENDERS.helpDesk,
+    from: ORG_EMAIL_SENDERS.system,
+    ...ORG_MAIL_ROUTING["Help Desk"],
     to: recipients,
     subject: withSubjectPrefix("Help Desk", payload.subject),
     html: buildEmailHtml(payload),

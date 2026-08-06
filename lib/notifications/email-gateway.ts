@@ -11,6 +11,10 @@ interface SendEmailInput {
   subject: string
   html: string
   from?: string
+  /** Where a reply lands. Must be a monitored mailbox — see ORG_MAIL_ROUTING. */
+  replyTo?: string
+  /** RFC 2919 List-Id so recipients can filter this stream. Invisible to readers. */
+  listId?: string
 }
 
 export type SendNotificationEmailResult =
@@ -53,6 +57,8 @@ export async function sendNotificationEmail(input: SendEmailInput): Promise<Send
     to: recipients,
     subject: input.subject,
     html: input.html,
+    ...(input.replyTo ? { replyTo: input.replyTo } : {}),
+    ...(input.listId ? { headers: { "List-Id": input.listId } } : {}),
   })
 
   if (error) throw new Error(error.message || "Failed to send email")

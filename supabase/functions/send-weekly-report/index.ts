@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from "npm:pdf-lib@1.17.1"
 import { writeEdgeAuditLog } from "../_shared/audit.ts"
 import { sendEmail } from "../_shared/email.ts"
-import { EDGE_SENDERS } from "../_shared/senders.ts"
+import { EDGE_MAIL_ROUTING, EDGE_SENDERS } from "../_shared/senders.ts"
 import { normalizeDepartmentName } from "../../../shared/departments.ts"
 import {
   buildMeetingDocumentFileName,
@@ -30,7 +30,7 @@ const SLATE = rgb(0.2, 0.255, 0.333)
 const MUTED = rgb(0.392, 0.455, 0.545)
 const BLUE = rgb(0.114, 0.416, 0.588)
 const RED = rgb(0.725, 0.11, 0.11)
-const DEFAULT_SENDER = EDGE_SENDERS.meeting
+const DEFAULT_SENDER = EDGE_SENDERS.system
 const MEETING_DOCS_BUCKET = "meeting_documents"
 // Anchor day is read from _shared/meeting-date.ts (populated by initOfficeYearAnchors).
 
@@ -947,7 +947,7 @@ ${bodyHtml}
       <strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>
       <span style="color:#16a34a;font-weight:600;">Reports Management System</span>
       <br><br>
-      <i style="color:#9ca3af;">This is an automated system notification. Please do not reply directly to this email.</i>
+      <i style="color:#9ca3af;">This is an automated notification, but replies are read — reply to this email and it reaches the team that sent it.</i>
     </td></tr>
   </table>
   </div>
@@ -1326,6 +1326,7 @@ serve(async (req) => {
         try {
           const data = await sendEmail({
             from: DEFAULT_SENDER,
+            ...EDGE_MAIL_ROUTING.reports,
             to,
             subject,
             html,

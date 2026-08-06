@@ -1965,7 +1965,19 @@ interface ManualLeave {
 interface LeaveTypeOption {
   id: string
   name: string
-  remaining: number
+  /** null when the employee has no balance row for the year — remaining is untracked, not zero. */
+  remaining: number | null
+  /** Policy entitlement for the type (leave_types.max_days) — the "max" figure in the label. */
+  maxDays: number | null
+  /** Policy requires supporting documents the employee hasn't provided (admin collects offline). */
+  needsEvidence: boolean
+}
+
+/** Mirrors the leave module's option label: "Annual Leave (12 days left, max 15)". */
+function leaveTypeLabel(t: LeaveTypeOption): string {
+  const left = t.remaining == null ? "no balance set" : `${t.remaining} day${t.remaining === 1 ? "" : "s"} left`
+  const max = t.maxDays == null ? null : `max ${t.maxDays}`
+  return `${t.name} (${[left, max].filter(Boolean).join(", ")})`
 }
 
 function daysInclusive(start: string, end: string): number | null {
@@ -1982,20 +1994,30 @@ async function fetchLeaveTypeOptions(userId: string): Promise<LeaveTypeOption[]>
     const payload = (await res.json().catch(() => null)) as {
       data?: Array<{
         leave_type_id: string
+        has_balance?: boolean
+        eligibility_status?: string
         allocated_days?: number | null
         used_days?: number | null
         carry_forward_days?: number | null
         balance_days?: number | null
-        leave_type?: { id: string; name: string } | null
+        leave_type?: { id: string; name: string; max_days?: number | null } | null
       }>
     } | null
     if (!res.ok) return []
     return (payload?.data ?? []).map((b) => {
       const remaining =
-        b.balance_days != null
-          ? Number(b.balance_days)
-          : Number(b.allocated_days || 0) + Number(b.carry_forward_days || 0) - Number(b.used_days || 0)
-      return { id: b.leave_type_id, name: b.leave_type?.name ?? "Leave", remaining }
+        b.has_balance === false
+          ? null
+          : b.balance_days != null
+            ? Number(b.balance_days)
+            : Number(b.allocated_days || 0) + Number(b.carry_forward_days || 0) - Number(b.used_days || 0)
+      return {
+        id: b.leave_type_id,
+        name: b.leave_type?.name ?? "Leave",
+        remaining,
+        maxDays: b.leave_type?.max_days ?? null,
+        needsEvidence: b.eligibility_status === "missing_evidence",
+      }
     })
   } catch {
     return []
@@ -2212,14 +2234,14 @@ function LeaveTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: ()
           <SelectContent>
             {types.map((t) => (
               <SelectItem key={t.id} value={t.id}>
-                {t.name} — {t.remaining} day(s) left
+                {leaveTypeLabel(t)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
         {selectedId && !loadingTypes && types.length === 0 && (
           <p className="text-[11px] font-medium text-amber-600">
-            No leave balances configured for this employee — set them up in the leave module first.
+            No leave types this employee is eligible for — check their profile and leave policies.
           </p>
         )}
       </div>
@@ -2242,10 +2264,18 @@ function LeaveTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: ()
 
       {selectedType && previewDays != null && (
         <p className="text-muted-foreground text-xs">
-          {previewDays} day(s) · balance {selectedType.remaining} →{" "}
-          <span className={selectedType.remaining - previewDays < 0 ? "font-medium text-red-600" : ""}>
-            {selectedType.remaining - previewDays}
-          </span>
+          {previewDays} day(s)
+          {selectedType.remaining == null ? (
+            " · no balance tracked for this type"
+          ) : (
+            <>
+              {" · balance "}
+              {selectedType.remaining} →{" "}
+              <span className={selectedType.remaining - previewDays < 0 ? "font-medium text-red-600" : ""}>
+                {selectedType.remaining - previewDays}
+              </span>
+            </>
+          )}
         </p>
       )}
 
@@ -2261,8 +2291,8 @@ function LeaveTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: ()
         />
       </div>
       <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-        ⚠ If the employee clocked in on these days, the leave takes precedence in the roster. Their attendance is kept
-        — removing the leave restores it.
+        ⚠ If the employee clocked in on these days, the leave takes precedence in the roster. Their attendance is kept —
+        removing the leave restores it.
       </p>
       <Button
         type="button"
@@ -2321,7 +2351,7 @@ function LeaveTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: ()
                 <SelectContent>
                   {editTypes.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
-                      {t.name} — {t.remaining} day(s) left
+                      {leaveTypeLabel(t)}
                     </SelectItem>
                   ))}
                 </SelectContent>

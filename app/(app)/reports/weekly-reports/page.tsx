@@ -156,8 +156,16 @@ function getActionTrackerStatus(department: string, trackingData: TrackerStatus[
 
 export default function WeeklyReportsPortal() {
   const currentOfficeWeek = getCurrentOfficeWeek()
+  const nextOfficeWeek = useMemo(() => {
+    const next = new Date()
+    next.setDate(next.getDate() + 7)
+    return getCurrentOfficeWeek(next)
+  }, [])
   const [weekFilter, setWeekFilter] = useState(currentOfficeWeek.week)
   const [yearFilter, setYearFilter] = useState(currentOfficeWeek.year)
+  // New submissions target the upcoming week by default — the current week is only
+  // reached by editing its existing report or by picking that week in the filters.
+  const [hasManualWeekSelection, setHasManualWeekSelection] = useState(false)
   const [deptFilter, setDeptFilter] = useState("all")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [selectedReportParams, setSelectedReportParams] = useState<ReportDialogParams | null>(null)
@@ -403,9 +411,10 @@ export default function WeeklyReportsPortal() {
             size="sm"
             className="h-8 gap-2"
             onClick={() => {
+              const target = hasManualWeekSelection ? { week: weekFilter, year: yearFilter } : nextOfficeWeek
               setSelectedReportParams({
-                week: weekFilter,
-                year: yearFilter,
+                week: target.week,
+                year: target.year,
                 dept: profile?.department || undefined,
               })
               setIsDialogOpen(true)
@@ -477,15 +486,17 @@ export default function WeeklyReportsPortal() {
 
           if (weekValue) {
             const parsedWeek = Number(weekValue)
-            if (!Number.isNaN(parsedWeek) && parsedWeek !== weekFilter) {
-              setWeekFilter(parsedWeek)
+            if (!Number.isNaN(parsedWeek)) {
+              setHasManualWeekSelection(true)
+              if (parsedWeek !== weekFilter) setWeekFilter(parsedWeek)
             }
           }
 
           if (yearValue) {
             const parsedYear = Number(yearValue)
-            if (!Number.isNaN(parsedYear) && parsedYear !== yearFilter) {
-              setYearFilter(parsedYear)
+            if (!Number.isNaN(parsedYear)) {
+              setHasManualWeekSelection(true)
+              if (parsedYear !== yearFilter) setYearFilter(parsedYear)
             }
           }
 
