@@ -144,4 +144,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export const maxDuration = 600
+// Vercel rejects the build outright if this exceeds the plan's ceiling (300s),
+// so the whole app fails to deploy, not just this route.
+export const maxDuration = 300
