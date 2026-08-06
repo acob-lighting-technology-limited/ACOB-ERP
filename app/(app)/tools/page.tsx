@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { FileSignature, Droplet, ArrowRight, Wrench, Briefcase } from "lucide-react"
+import { FileSignature, Droplet, ArrowRight, Wrench, Briefcase, Video } from "lucide-react"
 import { PageHeader, PageWrapper } from "@/components/layout"
 
 const tools = [
@@ -37,6 +37,14 @@ const tools = [
     icon: Briefcase,
     color: "text-emerald-600",
     bgColor: "bg-emerald-50 dark:bg-emerald-950/30",
+  },
+  {
+    name: "Media & PDF Suite",
+    description: "Download, convert, compress media, and manage PDF documents",
+    href: "/tools/test",
+    icon: Video,
+    color: "text-indigo-500",
+    bgColor: "bg-indigo-50 dark:bg-indigo-950/30",
   },
 ]
 

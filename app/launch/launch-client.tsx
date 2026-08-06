@@ -404,6 +404,7 @@ export default function LaunchClient() {
                       <i />
                       <span>{f.url}</span>
                     </div>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={f.shot} alt={f.tag} loading="lazy" />
                   </Tilt>
                 </Reveal>
@@ -458,6 +459,7 @@ export default function LaunchClient() {
         {/* footer */}
         <footer className="lp-wrap">
           <div className="lp-footer">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={`${ASSET}/assets/matrix-logo.png`} alt="Matrix" />
             <span className="powered">
               Powered by <b>ACOB LIGHTING TECHNOLOGY LIMITED</b>

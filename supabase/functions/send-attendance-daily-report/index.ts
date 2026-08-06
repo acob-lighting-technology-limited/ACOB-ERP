@@ -330,6 +330,7 @@ serve(async (req) => {
     const addDaysIso = (dateIso: string, delta: number): string => {
       const d = new Date(`${dateIso}T00:00:00Z`)
       d.setUTCDate(d.getUTCDate() + delta)
+      // eslint-disable-next-line no-restricted-syntax
       return d.toISOString().slice(0, 10)
     }
     const isWeekend = (dateIso: string): boolean => {

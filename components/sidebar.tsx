@@ -121,6 +121,7 @@ const navigation: NavItemDef[] = [
       { name: "Signature Anniversary", href: "/tools/signature-anniversary" },
       { name: "Job Description", href: "/tools/job-description" },
       { name: "Watermark", href: "/tools/watermark" },
+      { name: "Media & PDF Suite", href: "/tools/test" },
     ],
   },
 ]
