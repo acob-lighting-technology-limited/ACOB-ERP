@@ -17,7 +17,11 @@ async function getWorksheetData(id: string) {
     const scope = await getRequestScope()
     if (!scope?.isAdminLike) return undefined
 
-    const { data: period, error } = await supabase.from("payroll_periods").select("*").eq("id", id).single()
+    const [{ data: period, error }, { data: allPeriods }] = await Promise.all([
+      supabase.from("payroll_periods").select("*").eq("id", id).single(),
+      // Powers the header month switcher — jump between periods without going back to the list.
+      supabase.from("payroll_periods").select("id, name, start_date").order("start_date", { ascending: false }),
+    ])
 
     if (error || !period) {
       log.error({ err: error?.message }, "Failed to fetch payroll period detail")
@@ -26,6 +30,7 @@ async function getWorksheetData(id: string) {
 
     return {
       period,
+      periodOptions: allPeriods || [],
       isAdmin: scope.scopeMode !== "lead",
     }
   } catch (err) {

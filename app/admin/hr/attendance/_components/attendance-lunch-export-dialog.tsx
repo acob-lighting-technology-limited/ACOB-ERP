@@ -14,8 +14,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { monthBounds, toLocalYearMonth } from "@/lib/hr/attendance-utils"
+import { ExportPeriodFields, useExportPeriod } from "./export-period-picker"
 import { logger } from "@/lib/logger"
 import { apiFetch } from "@/lib/api-client"
 
@@ -110,26 +109,13 @@ function attendanceRowToArray(r: AttendanceRow): (string | number)[] {
 }
 
 export function AttendanceLunchExportDialog({ open, onOpenChange, department, monthOptions }: Props) {
-  const [periodType, setPeriodType] = useState<"month" | "custom">("month")
-  const [month, setMonth] = useState(toLocalYearMonth())
-  const [startDate, setStartDate] = useState("")
-  const [endDate, setEndDate] = useState("")
+  const picker = useExportPeriod()
   const [exporting, setExporting] = useState(false)
 
-  function resolveRange(): { start: string; end: string; label: string } | null {
-    if (periodType === "month") {
-      const { start, end } = monthBounds(month)
-      return { start, end, label: month }
-    }
-    if (!startDate || !endDate) return null
-    if (startDate > endDate) return null
-    return { start: startDate, end: endDate, label: `${startDate}_to_${endDate}` }
-  }
-
   async function handleExport() {
-    const range = resolveRange()
+    const range = picker.resolve()
     if (!range) {
-      toast.error(periodType === "custom" ? "Pick a valid start and end date" : "Pick a month")
+      toast.error(picker.validationMessage())
       return
     }
 
@@ -205,48 +191,8 @@ export function AttendanceLunchExportDialog({ open, onOpenChange, department, mo
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4 py-2">
-          <div className="space-y-2">
-            <Label>Period</Label>
-            <Select value={periodType} onValueChange={(v) => setPeriodType(v as "month" | "custom")}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="month">Specific Month</SelectItem>
-                <SelectItem value="custom">Custom Period</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {periodType === "month" ? (
-            <div className="space-y-2">
-              <Label>Month</Label>
-              <Select value={month} onValueChange={setMonth}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {monthOptions.map((opt) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-2">
-                <Label>Start Date</Label>
-                <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>End Date</Label>
-                <Input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-              </div>
-            </div>
-          )}
+        <div className="py-2">
+          <ExportPeriodFields picker={picker} monthOptions={monthOptions} />
         </div>
 
         <DialogFooter>

@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { DataTablePage } from "@/components/ui/data-table"
+import { DataTable, DataTablePage } from "@/components/ui/data-table"
+import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { Button } from "@/components/ui/button"
 import {
@@ -14,7 +15,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { calculatePayroll, type PayrollBreakdown } from "@/lib/hr/payroll-utils"
 import { FileText, Save, Lock, Download, DollarSign, Clock, Eye, Printer } from "lucide-react"
 import { toast } from "sonner"
@@ -40,6 +40,7 @@ export interface PayrollPeriodDetail {
 interface WorksheetPageProps {
   initialData: {
     period: PayrollPeriodDetail
+    periodOptions?: { id: string; name: string; start_date: string }[]
     isAdmin: boolean
   }
 }
@@ -86,6 +87,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
           workdays: currentBreakdown.workdays,
           missedHours: currentBreakdown.missedHours,
           absentDays: currentBreakdown.absentDays,
+          unpaidLeaveDays: currentBreakdown.unpaidLeaveDays,
           bonus: field === "bonus" ? num : currentBreakdown.bonus,
           loanRepayment: field === "loanRepayment" ? num : currentBreakdown.loanRepayment,
           lunchDeduction: currentBreakdown.lunchDeduction,
@@ -148,6 +150,8 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
       "Lateness Surcharge (₦)",
       "Absent Days",
       "Absent Surcharge (₦)",
+      "Unpaid Leave Days",
+      "Unpaid Leave Deduction (₦)",
       "Lunch Deductions (₦)",
       "Loan Repayments (₦)",
       "Bonuses / Allowances (₦)",
@@ -171,6 +175,8 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
         b.latenessSurcharge.toFixed(2),
         b.absentDays,
         b.absentSurcharge.toFixed(2),
+        b.unpaidLeaveDays,
+        b.unpaidLeaveDeduction.toFixed(2),
         b.lunchDeduction.toFixed(2),
         b.loanRepayment.toFixed(2),
         b.bonus.toFixed(2),
@@ -224,6 +230,207 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
     </div>
   )
 
+  const periodOptions = initialData.periodOptions ?? []
+  const isLocked = status === "completed"
+  const money = (value: number) => `₦${value.toLocaleString("en-US", { minimumFractionDigits: 2 })}`
+
+  const columns: DataTableColumn<PayrollRow>[] = [
+    {
+      key: "full_name",
+      label: "Employee Name",
+      sortable: true,
+      accessor: (r) => r.full_name,
+      render: (r) => <span className="text-xs font-medium sm:text-sm">{r.full_name}</span>,
+    },
+    {
+      key: "employee_number",
+      label: "Code",
+      accessor: (r) => r.employee_number,
+      render: (r) => <span className="font-mono text-xs">{r.employee_number || "—"}</span>,
+      hideOnMobile: true,
+    },
+    {
+      key: "monthlyBase",
+      label: "Base Salary",
+      align: "right",
+      sortable: true,
+      accessor: (r) => r.breakdown.monthlyBase,
+      render: (r) => <span className="text-xs">{money(r.breakdown.monthlyBase)}</span>,
+    },
+    {
+      key: "missedHours",
+      label: "Late (h)",
+      align: "center",
+      sortable: true,
+      accessor: (r) => r.breakdown.missedHours,
+      render: (r) => <span className="font-mono text-xs">{r.breakdown.missedHours}</span>,
+    },
+    {
+      key: "latenessSurcharge",
+      label: "Late Surcharge",
+      align: "right",
+      sortable: true,
+      accessor: (r) => r.breakdown.latenessSurcharge,
+      render: (r) => <span className="text-xs text-red-600">{money(r.breakdown.latenessSurcharge)}</span>,
+    },
+    {
+      key: "absentDays",
+      label: "Absent (d)",
+      align: "center",
+      sortable: true,
+      accessor: (r) => r.breakdown.absentDays,
+      render: (r) => <span className="font-mono text-xs">{r.breakdown.absentDays}</span>,
+    },
+    {
+      key: "absentSurcharge",
+      label: "Absent Surcharge",
+      align: "right",
+      sortable: true,
+      accessor: (r) => r.breakdown.absentSurcharge,
+      render: (r) => <span className="text-xs text-red-600">{money(r.breakdown.absentSurcharge)}</span>,
+    },
+    {
+      key: "unpaidLeaveDays",
+      label: "Unpaid (d)",
+      align: "center",
+      sortable: true,
+      accessor: (r) => r.breakdown.unpaidLeaveDays,
+      render: (r) => <span className="font-mono text-xs">{r.breakdown.unpaidLeaveDays}</span>,
+    },
+    {
+      key: "unpaidLeaveDeduction",
+      label: "Unpaid Leave",
+      align: "right",
+      sortable: true,
+      accessor: (r) => r.breakdown.unpaidLeaveDeduction,
+      render: (r) => <span className="text-xs text-red-600">{money(r.breakdown.unpaidLeaveDeduction)}</span>,
+    },
+    {
+      key: "lunchDeduction",
+      label: "Lunch Deduction",
+      align: "right",
+      sortable: true,
+      accessor: (r) => r.breakdown.lunchDeduction,
+      render: (r) => <span className="text-muted-foreground text-xs">{money(r.breakdown.lunchDeduction)}</span>,
+    },
+    {
+      key: "loanRepayment",
+      label: "Loan Repay",
+      align: "right",
+      accessor: (r) => r.breakdown.loanRepayment,
+      render: (r) => (
+        <Input
+          type="number"
+          className="bg-muted/20 border-muted h-8 w-full min-w-[90px] text-right text-xs"
+          disabled={isLocked}
+          value={r.breakdown.loanRepayment || ""}
+          placeholder="0.00"
+          onChange={(e) => handleValChange(r.user_id, "loanRepayment", e.target.value)}
+        />
+      ),
+    },
+    {
+      key: "bonus",
+      label: "Bonus / Allow",
+      align: "right",
+      accessor: (r) => r.breakdown.bonus,
+      render: (r) => (
+        <Input
+          type="number"
+          className="h-8 w-full min-w-[90px] border-emerald-500/20 bg-emerald-500/5 text-right text-xs font-medium text-emerald-600"
+          disabled={isLocked}
+          value={r.breakdown.bonus || ""}
+          placeholder="0.00"
+          onChange={(e) => handleValChange(r.user_id, "bonus", e.target.value)}
+        />
+      ),
+    },
+    {
+      key: "monthlyPensionEmployee",
+      label: "EE Pension",
+      align: "right",
+      sortable: true,
+      accessor: (r) => r.breakdown.monthlyPensionEmployee,
+      render: (r) => (
+        <span className="text-muted-foreground text-xs">{money(r.breakdown.monthlyPensionEmployee)}</span>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: "monthlyTax",
+      label: "PAYE Tax",
+      align: "right",
+      sortable: true,
+      accessor: (r) => r.breakdown.monthlyTax,
+      render: (r) => <span className="text-muted-foreground text-xs">{money(r.breakdown.monthlyTax)}</span>,
+      hideOnMobile: true,
+    },
+    {
+      key: "grossCashPay",
+      label: "Gross Cash Pay",
+      align: "right",
+      sortable: true,
+      accessor: (r) => r.breakdown.monthlyGross + r.breakdown.bonus,
+      render: (r) => (
+        <span className="text-xs font-medium">{money(r.breakdown.monthlyGross + r.breakdown.bonus)}</span>
+      ),
+    },
+    {
+      key: "netPay",
+      label: "Net Pay",
+      align: "right",
+      sortable: true,
+      accessor: (r) => r.breakdown.netPay,
+      render: (r) => <span className="text-xs font-semibold text-emerald-600">{money(r.breakdown.netPay)}</span>,
+    },
+    {
+      key: "payslip",
+      label: "Payslip",
+      align: "center",
+      render: (r) => (
+        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setViewRow(r)}>
+          <Eye className="h-3.5 w-3.5" />
+        </Button>
+      ),
+    },
+  ]
+
+  const worksheetFilters: DataTableFilter<PayrollRow>[] = [
+    {
+      key: "period",
+      label: "Month",
+      placeholder: "Select Month",
+      options: periodOptions.map((p) => ({ value: p.id, label: p.name })),
+      multi: false,
+      defaultValues: [period.id],
+      mode: "custom",
+      filterFn: () => true, // navigation-only — see onFilterChange below
+    },
+    {
+      key: "deduction_state",
+      label: "Flags",
+      placeholder: "All Employees",
+      mode: "custom",
+      options: [
+        { value: "absent", label: "Has absences" },
+        { value: "late", label: "Has lateness" },
+        { value: "unpaid", label: "Has unpaid leave" },
+        { value: "clean", label: "No deductions" },
+      ],
+      filterFn: (r, values) => {
+        if (values.length === 0) return true
+        const b = r.breakdown
+        return values.some((v) => {
+          if (v === "absent") return b.absentDays > 0
+          if (v === "late") return b.missedHours > 0
+          if (v === "unpaid") return b.unpaidLeaveDays > 0
+          if (v === "clean") return b.absentDays === 0 && b.missedHours === 0 && b.unpaidLeaveDays === 0
+          return false
+        })
+      },
+    },
+  ]
+
   const actions = (
     <div className="flex items-center gap-2">
       <Button variant="outline" size="sm" onClick={handleExport} disabled={isLoading}>
@@ -259,122 +466,26 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
       stats={stats}
       actions={actions}
     >
-      <div className="bg-background rounded-md border">
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader className="bg-muted/80">
-              <TableRow>
-                <TableHead className="w-[50px] text-center">S/N</TableHead>
-                <TableHead className="min-w-[150px]">Employee Name</TableHead>
-                <TableHead className="w-[100px]">Code</TableHead>
-                <TableHead className="w-[120px] text-right">Base Salary</TableHead>
-                <TableHead className="w-[80px] text-center">Late (h)</TableHead>
-                <TableHead className="w-[120px] text-right">Late Surcharge</TableHead>
-                <TableHead className="w-[80px] text-center">Absent (d)</TableHead>
-                <TableHead className="w-[120px] text-right">Absent Surcharge</TableHead>
-                <TableHead className="w-[120px] text-right">Lunch Deduction</TableHead>
-                <TableHead className="w-[120px] text-right">Loan Repay</TableHead>
-                <TableHead className="w-[120px] text-right">Bonus / Allow</TableHead>
-                <TableHead className="w-[110px] text-right">EE Pension</TableHead>
-                <TableHead className="w-[110px] text-right">PAYE Tax</TableHead>
-                <TableHead className="w-[130px] text-right">Gross Cash Pay</TableHead>
-                <TableHead className="w-[130px] text-right font-semibold">Net Pay</TableHead>
-                <TableHead className="w-[60px] text-center">Payslip</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {isLoading ? (
-                // Shimmer Skeleton
-                Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>
-                    {Array.from({ length: 16 }).map((_, j) => (
-                      <TableCell key={j} className="h-12 text-center">
-                        <div className="bg-muted/80 mx-auto h-4 w-12 animate-pulse rounded" />
-                      </TableCell>
-                    ))}
-                  </TableRow>
-                ))
-              ) : rows.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={16} className="text-muted-foreground py-8 text-center">
-                    No active employees found to calculate payroll.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                rows.map((row, idx) => {
-                  const b = row.breakdown
-                  const isLocked = status === "completed"
-                  return (
-                    <TableRow key={row.user_id} className="hover:bg-muted/10">
-                      <TableCell className="text-muted-foreground text-center text-xs">{idx + 1}</TableCell>
-                      <TableCell className="text-xs font-medium sm:text-sm">{row.full_name}</TableCell>
-                      <TableCell className="font-mono text-xs">{row.employee_number || "—"}</TableCell>
-                      <TableCell className="text-right text-xs">
-                        ₦{b.monthlyBase.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell className="text-center font-mono text-xs">{b.missedHours}</TableCell>
-                      <TableCell className="text-right text-xs text-red-600">
-                        ₦{b.latenessSurcharge.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell className="text-center font-mono text-xs">{b.absentDays}</TableCell>
-                      <TableCell className="text-right text-xs text-red-600">
-                        ₦{b.absentSurcharge.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </TableCell>
-
-                      {/* Lunch Deduction — auto from the daily lunch register, not editable here */}
-                      <TableCell className="text-muted-foreground text-right text-xs">
-                        ₦{b.lunchDeduction.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </TableCell>
-
-                      {/* Loan Repayment (Editable inline) */}
-                      <TableCell className="p-1">
-                        <Input
-                          type="number"
-                          className="bg-muted/20 border-muted h-8 w-full text-right text-xs"
-                          disabled={isLocked}
-                          value={b.loanRepayment || ""}
-                          placeholder="0.00"
-                          onChange={(e) => handleValChange(row.user_id, "loanRepayment", e.target.value)}
-                        />
-                      </TableCell>
-
-                      {/* Bonus (Editable inline) */}
-                      <TableCell className="p-1">
-                        <Input
-                          type="number"
-                          className="h-8 w-full border-emerald-500/20 bg-emerald-500/5 text-right text-xs font-medium text-emerald-600"
-                          disabled={isLocked}
-                          value={b.bonus || ""}
-                          placeholder="0.00"
-                          onChange={(e) => handleValChange(row.user_id, "bonus", e.target.value)}
-                        />
-                      </TableCell>
-
-                      <TableCell className="text-muted-foreground text-right text-xs">
-                        ₦{b.monthlyPensionEmployee.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-right text-xs">
-                        ₦{b.monthlyTax.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell className="text-right text-xs font-medium">
-                        ₦{(b.monthlyGross + b.bonus).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell className="text-right text-xs font-semibold text-emerald-600">
-                        ₦{b.netPay.toLocaleString("en-US", { minimumFractionDigits: 2 })}
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => setViewRow(row)}>
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  )
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+      <DataTable<PayrollRow>
+        data={rows}
+        columns={columns}
+        getRowId={(row) => row.user_id}
+        isLoading={isLoading}
+        skeletonRows={6}
+        pagination={{ pageSize: 50 }}
+        searchPlaceholder="Search by employee name or staff number..."
+        searchFn={(row, q) => `${row.full_name} ${row.employee_number || ""}`.toLowerCase().includes(q)}
+        filters={worksheetFilters}
+        onFilterChange={(selected) => {
+          // The period filter navigates rather than filtering — each period is its own
+          // worksheet route. Mirrors the attendance report's month filter.
+          const nextPeriod = selected.period?.[0]
+          if (nextPeriod && nextPeriod !== period.id) router.push(`/admin/hr/payroll/${nextPeriod}`)
+        }}
+        emptyIcon={FileText}
+        emptyTitle="No employees to calculate"
+        emptyDescription="No active employees were found for this payroll period."
+      />
 
       {/* Printable Payslip Viewer */}
       <Dialog open={viewRow !== null} onOpenChange={(o) => !o && setViewRow(null)}>
@@ -470,6 +581,14 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
                       <span>PAYE Tax:</span>
                       <span>₦{vb.monthlyTax.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
                     </div>
+                    {vb.unpaidLeaveDeduction > 0 && (
+                      <div className="flex justify-between">
+                        <span>
+                          Unpaid Leave ({vb.unpaidLeaveDays} day{vb.unpaidLeaveDays === 1 ? "" : "s"}):
+                        </span>
+                        <span>₦{vb.unpaidLeaveDeduction.toLocaleString("en-US", { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
                     {vb.lunchDeduction > 0 && (
                       <div className="flex justify-between">
                         <span>Lunch Deduction:</span>

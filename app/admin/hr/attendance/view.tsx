@@ -13,7 +13,7 @@ import { LeaderboardView } from "./_components/leaderboard-view"
 import { AttendanceManagerDialog } from "./_components/attendance-manager-dialog"
 import { AttendanceReportDialog } from "./_components/attendance-report-dialog"
 import { AttendanceLunchExportDialog } from "./_components/attendance-lunch-export-dialog"
-import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
+import { AttendanceExportDialog } from "./_components/attendance-export-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StatCard } from "@/components/ui/stat-card"
 import { Badge } from "@/components/ui/badge"
@@ -865,99 +865,6 @@ export function AttendanceReportsPage({
     void loadHolidays()
   }, [loadHolidays])
 
-  const EXPORT_HEADERS = [
-    "Name",
-    "Department",
-    "Total Days",
-    "Early",
-    "Present",
-    "Late",
-    "LWP",
-    "Incomplete",
-    "Exempted",
-    "OOS",
-    "AWP",
-    "Leave",
-    "Holiday",
-    "Waiver",
-    "Absent",
-    "Total Hours",
-    "Hrs Missed",
-    "Credit",
-    "Attendance Rate",
-  ]
-
-  function buildExportRows(): (string | number)[][] {
-    const source = processedReports.length ? processedReports : reports
-    return source.map((r) => [
-      r.user_name,
-      r.department,
-      r.total_days,
-      r.early_days ?? 0,
-      r.present_days,
-      r.late_days,
-      r.lateness_with_permission_days ?? 0,
-      r.incomplete_days || 0,
-      r.exempted_days || 0,
-      r.out_of_station_days ?? 0,
-      r.absent_with_permission_days ?? 0,
-      r.leave_days ?? 0,
-      r.holiday_days ?? 0,
-      r.waived_days,
-      r.absent_days,
-      r.total_hours.toFixed(1),
-      (r.total_missed_hours ?? 0).toFixed(1),
-      `${(r.attendance_credits ?? 0).toFixed(2)} / ${r.total_days}`,
-      `${r.attendance_rate}%`,
-    ])
-  }
-
-  function exportCSV() {
-    const escapeCell = (value: string | number) => {
-      const str = String(value ?? "")
-      return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str
-    }
-    const rows = buildExportRows()
-    const csv = [EXPORT_HEADERS, ...rows].map((row) => row.map(escapeCell).join(",")).join("\n")
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `attendance_${yearMonth}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
-  async function exportXLSX() {
-    const XLSX = await import("@e965/xlsx")
-    const { saveAs } = await import("file-saver")
-    const rows = buildExportRows()
-    const sheet = XLSX.utils.aoa_to_sheet([EXPORT_HEADERS, ...rows])
-    const workbook = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(workbook, sheet, "Attendance")
-    const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" })
-    saveAs(
-      new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-      `attendance_${yearMonth}.xlsx`
-    )
-  }
-
-  async function exportPDF() {
-    const { jsPDF } = await import("jspdf")
-    const autoTable = (await import("jspdf-autotable")).default
-    const rows = buildExportRows()
-    const doc = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" })
-    doc.setFontSize(14)
-    doc.text(`Attendance Report — ${periodMode === "quarter" ? `Q${quarter} ${quarterYear}` : yearMonth}`, 40, 40)
-    autoTable(doc, {
-      head: [EXPORT_HEADERS],
-      body: rows.map((row) => row.map((cell) => String(cell))),
-      startY: 56,
-      styles: { fontSize: 7, cellPadding: 3 },
-      headStyles: { fillColor: [37, 99, 235], fontSize: 7 },
-    })
-    doc.save(`attendance_${yearMonth}.pdf`)
-  }
 
   const departmentOptions = useMemo(() => departments.map((d) => ({ value: d, label: d })), [departments])
 
@@ -1279,20 +1186,11 @@ export function AttendanceReportsPage({
           skeletonRows={6}
         />
       )}
-      <ExportOptionsDialog
+      <AttendanceExportDialog
         open={isExportOpen}
         onOpenChange={setIsExportOpen}
-        title="Export Attendance Report"
-        options={[
-          { id: "csv", label: "CSV (.csv)", icon: "excel" },
-          { id: "xlsx", label: "Excel (.xlsx)", icon: "excel" },
-          { id: "pdf", label: "PDF (.pdf)", icon: "pdf" },
-        ]}
-        onSelect={(id) => {
-          if (id === "csv") exportCSV()
-          else if (id === "xlsx") void exportXLSX()
-          else if (id === "pdf") void exportPDF()
-        }}
+        department={lockedDepartment}
+        monthOptions={monthOptions}
       />
 
       <AttendanceManagerDialog
