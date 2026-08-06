@@ -4,7 +4,7 @@ import { writeEdgeAuditLog } from "../_shared/audit.ts"
 import { sendEmail } from "../_shared/email.ts"
 import { isEdgeSystemEmailEnabled } from "../_shared/notification-gateway.ts"
 import { sanitizeHtml } from "../_shared/sanitize-html.ts"
-import { edgeDepartmentSenderBare } from "../_shared/senders.ts"
+import { COMMUNICATIONS_LIST_ID, edgeDepartmentSenderBare } from "../_shared/senders.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -78,6 +78,36 @@ function normalizeDepartmentLabel(input: string): string {
 
 function buildBroadcastSender(department: string): string {
   return edgeDepartmentSenderBare(normalizeDepartmentLabel(department))
+}
+
+/**
+ * Correspondence is written by a real person, so replies go to the lead of the
+ * department it was sent on behalf of — resolved per send, since it genuinely
+ * varies. Falls back to the HR mailbox when the department has no lead set.
+ */
+async function resolveDepartmentReplyTo(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  department: string
+): Promise<string> {
+  const fallback = Deno.env.get("ORG_HR_EMAIL") || "hradmin@acoblighting.com"
+  try {
+    const { data: dept } = await supabase
+      .from("departments")
+      .select("department_head_id")
+      .eq("name", normalizeDepartmentLabel(department))
+      .maybeSingle()
+    if (!dept?.department_head_id) return fallback
+
+    const { data: lead } = await supabase
+      .from("profiles")
+      .select("company_email")
+      .eq("id", dept.department_head_id)
+      .maybeSingle()
+    return normalizeEmail(lead?.company_email) || fallback
+  } catch {
+    return fallback
+  }
 }
 
 function withSubjectPrefix(moduleName: string, subject: string): string {
@@ -224,7 +254,7 @@ function buildAdminBroadcastHtml(
     '<strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>' +
     '<span style="color:#16a34a;font-weight:600;">Communications Management System</span>' +
     "<br><br>" +
-    '<i style="color:#9ca3af;">This is an automated system notification. Please do not reply directly to this email.</i>' +
+    '<i style="color:#9ca3af;">This is an automated notification, but replies are read — reply to this email and it reaches the team that sent it.</i>' +
     "</td></tr></table>" +
     "</div>" +
     "</body>" +
@@ -309,6 +339,7 @@ serve(async (req) => {
       broadcastPreparedByDepartment
     )
     const from = buildBroadcastSender(department)
+    const replyTo = await resolveDepartmentReplyTo(supabase, department)
 
     // ── Idempotency claim ────────────────────────────────────────────────────
     // Claim this broadcast before sending. A retry (or concurrent duplicate)
@@ -361,6 +392,8 @@ serve(async (req) => {
           try {
             const data = await sendEmail({
               from,
+              replyTo,
+              listId: COMMUNICATIONS_LIST_ID,
               to,
               subject,
               html,

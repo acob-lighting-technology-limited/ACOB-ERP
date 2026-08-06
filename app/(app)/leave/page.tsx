@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { evaluateLeaveEligibility, getLeavePolicy } from "@/lib/hr/leave-workflow"
+import { getLeaveEntitlements } from "@/lib/hr/leave-entitlement"
 import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { LeaveContent } from "./leave-content"
 import { toLocalISODate } from "@/lib/utils/date"
@@ -156,10 +157,16 @@ async function getLeaveData() {
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(100),
-      supabase
-        .from("leave_balances")
-        .select("leave_type_id, allocated_days, used_days, balance_days")
-        .eq("user_id", user.id),
+      getLeaveEntitlements(supabase, user.id).then((entitlements) => ({
+        // Derived from the leave type allowance minus this user's own requests — the shape
+        // matches the stored rows this used to read, so LeaveBalance consumers are unchanged.
+        data: entitlements.map((e) => ({
+          leave_type_id: e.leaveTypeId,
+          allocated_days: e.entitlementDays,
+          used_days: e.usedDays,
+          balance_days: e.remainingDays,
+        })),
+      })),
       supabase.from("leave_types").select("id, name, code, max_days").eq("is_active", true).order("name"),
       supabase
         .from("profiles")

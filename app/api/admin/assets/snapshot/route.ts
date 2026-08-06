@@ -167,8 +167,14 @@ export async function GET(request: Request) {
     }
   })
 
+  // The assets table paginates client-side, so only slice when the caller
+  // explicitly asked for a page — otherwise a refresh would silently truncate
+  // the table to the first `per_page` rows.
+  const wantsPage = searchParams.has("page") || searchParams.has("per_page")
+  const pageRows = wantsPage ? assets.slice(from, to + 1) : assets
+
   return NextResponse.json({
-    ...paginatedResponse(assets.slice(from, to + 1), assets.length, pagination),
+    ...paginatedResponse(pageRows, assets.length, pagination),
     employees,
   })
 }

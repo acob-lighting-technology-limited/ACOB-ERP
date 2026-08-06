@@ -13,8 +13,10 @@ import {
   computeLeaveDates,
   evaluateLeaveEligibility,
   getLeavePolicy,
+  parseISODate,
   resolveProfileByIdentifier,
 } from "@/lib/hr/leave-workflow"
+import { getLeaveEntitlements, getRemainingDays } from "@/lib/hr/leave-entitlement"
 import {
   buildResolvedRouteSnapshot,
   classifyRequesterKind,
@@ -166,32 +168,6 @@ function normalizeDepartment(value?: string | null) {
 
 function buildProfileLabel(row: ProfileReferenceRow) {
   return row.full_name?.trim() || `${row.first_name || ""} ${row.last_name || ""}`.trim() || "Unnamed"
-}
-
-async function deriveRemainingDays(params: {
-  supabase: SupabaseServerClient
-  userId: string
-  leaveTypeId: string
-  maxDays: number
-  excludeRequestId?: string
-}) {
-  let query = params.supabase
-    .from("leave_requests")
-    .select("id, days_count, status")
-    .eq("user_id", params.userId)
-    .eq("leave_type_id", params.leaveTypeId)
-    .in("status", ["pending", "pending_evidence", "approved"])
-
-  if (params.excludeRequestId) {
-    query = query.neq("id", params.excludeRequestId)
-  }
-
-  const { data } = await query
-  const usedDays = ((data || []) as Array<{ days_count?: number | null }>).reduce(
-    (acc, row) => acc + Number(row.days_count || 0),
-    0
-  )
-  return Math.max(0, Number(params.maxDays || 0) - usedDays)
 }
 
 function isRelieverStage(request: LeaveRequestStageState) {
@@ -422,11 +398,18 @@ export async function GET(request: NextRequest) {
     )
     const requestIds = requestRows.map((row) => row.id).filter(Boolean)
 
-    const { data: balanceRows } = await dataClient
-      .from("leave_balances")
-      .select("*")
-      .eq("user_id", targetUserId)
-      .order("leave_type_id")
+    // Derived from the leave type allowance minus this user's requests — see
+    // lib/hr/leave-entitlement.ts. Shaped like the stored rows this used to read so the
+    // response contract is unchanged.
+    const balanceRows = (await getLeaveEntitlements(dataClient, targetUserId)).map((e) => ({
+      user_id: targetUserId,
+      leave_type_id: e.leaveTypeId,
+      allocated_days: e.entitlementDays,
+      used_days: e.usedDays,
+      pending_days: e.pendingDays,
+      carry_forward_days: 0,
+      balance_days: e.remainingDays,
+    }))
 
     let evidenceRows: LeaveEvidenceRow[] = []
     let approvalRows: LeaveApprovalRow[] = []
@@ -464,7 +447,7 @@ export async function GET(request: NextRequest) {
     for (const row of requestRows) {
       if (row.leave_type_id) leaveTypeIdSet.add(row.leave_type_id)
     }
-    for (const balance of balanceRows || []) {
+    for (const balance of balanceRows) {
       if (balance.leave_type_id) leaveTypeIdSet.add(balance.leave_type_id)
     }
 
@@ -550,7 +533,7 @@ export async function GET(request: NextRequest) {
       })
     )
 
-    const balances = ((balanceRows || []) as LeaveBalanceRow[]).map((row) => ({
+    const balances = balanceRows.map((row) => ({
       ...row,
       leave_type: row.leave_type_id ? leaveTypeMap.get(row.leave_type_id) || null : null,
     }))
@@ -778,53 +761,14 @@ export async function POST(request: NextRequest) {
     await assertRequesterNotBlockedByRelieverCommitment(validationClient, user.id, start_date, endDate)
     await assertRelieverAvailability(validationClient, reliever.id, start_date, endDate)
 
-    const [{ data: balance }, { data: balanceReserved, error: reserveError }] = await Promise.all([
-      supabase
-        .from("leave_balances")
-        .select("balance_days")
-        .eq("user_id", user.id)
-        .eq("leave_type_id", leave_type_id)
-        .single(),
-      supabase.rpc("check_and_reserve_leave_balance", {
-        p_user_id: user.id,
-        p_leave_type_id: leave_type_id,
-        p_days: effectiveDays,
-      }),
-    ])
+    // Remaining days are derived from the leave type's allowance minus this user's own
+    // requests for the year, so there is no stored balance to reserve against and nothing to
+    // put back if the request is later cancelled — the sum simply changes.
+    const remainingDays = await getRemainingDays(supabase, user.id, leave_type_id, {
+      year: parseISODate(start_date).getUTCFullYear(),
+    })
 
-    let reservationAccepted = Boolean(balanceReserved)
-    if (reserveError) {
-      log.warn(
-        { err: String(reserveError), userId: user.id, leaveTypeId: leave_type_id, effectiveDays },
-        "Reserve balance check failed; deriving fallback remaining days"
-      )
-      const maxDays = Number(leaveType.max_days || 0)
-      const derivedRemaining = await deriveRemainingDays({
-        supabase,
-        userId: user.id,
-        leaveTypeId: leave_type_id,
-        maxDays,
-      })
-      if (effectiveDays > derivedRemaining) {
-        return NextResponse.json(
-          {
-            error: `Insufficient leave balance. You requested ${effectiveDays} day(s), but only ${derivedRemaining} day(s) remain.`,
-          },
-          { status: 400 }
-        )
-      }
-      reservationAccepted = true
-    }
-
-    if (!reservationAccepted) {
-      const maxDays = Number(leaveType.max_days || 0)
-      const derivedRemaining = await deriveRemainingDays({
-        supabase,
-        userId: user.id,
-        leaveTypeId: leave_type_id,
-        maxDays,
-      })
-      const remainingDays = Math.max(0, Math.min(Number(balance?.balance_days ?? derivedRemaining), derivedRemaining))
+    if (effectiveDays > remainingDays) {
       return NextResponse.json(
         {
           error: `Insufficient leave balance. You requested ${effectiveDays} day(s), but only ${remainingDays} day(s) remain.`,
@@ -1190,55 +1134,14 @@ export async function PATCH(request: NextRequest) {
     await assertRequesterNotBlockedByRelieverCommitment(validationClient, user.id, targetStartDate, endDate, id)
     await assertRelieverAvailability(validationClient, relieverId, targetStartDate, endDate, id)
 
-    const [{ data: balance }, { data: balanceReserved, error: reserveError }] = await Promise.all([
-      supabase
-        .from("leave_balances")
-        .select("balance_days")
-        .eq("user_id", user.id)
-        .eq("leave_type_id", targetLeaveTypeId)
-        .single(),
-      supabase.rpc("check_and_reserve_leave_balance", {
-        p_user_id: user.id,
-        p_leave_type_id: targetLeaveTypeId,
-        p_days: targetDays,
-      }),
-    ])
+    // The request being edited is excluded from the sum, so its own days are not counted
+    // against the employee twice.
+    const remainingDays = await getRemainingDays(supabase, user.id, targetLeaveTypeId, {
+      year: parseISODate(targetStartDate).getUTCFullYear(),
+      excludeRequestId: id,
+    })
 
-    let reservationAccepted = Boolean(balanceReserved)
-    if (reserveError) {
-      log.warn(
-        { err: String(reserveError), userId: user.id, leaveTypeId: targetLeaveTypeId, targetDays, requestId: id },
-        "Reserve balance check failed on update; deriving fallback remaining days"
-      )
-      const maxDays = Number(leaveType.max_days || 0)
-      const derivedRemaining = await deriveRemainingDays({
-        supabase,
-        userId: user.id,
-        leaveTypeId: targetLeaveTypeId,
-        maxDays,
-        excludeRequestId: id,
-      })
-      if (targetDays > derivedRemaining) {
-        return NextResponse.json(
-          {
-            error: `Insufficient leave balance. You requested ${targetDays} day(s), but only ${derivedRemaining} day(s) remain.`,
-          },
-          { status: 400 }
-        )
-      }
-      reservationAccepted = true
-    }
-
-    if (!reservationAccepted) {
-      const maxDays = Number(leaveType.max_days || 0)
-      const derivedRemaining = await deriveRemainingDays({
-        supabase,
-        userId: user.id,
-        leaveTypeId: targetLeaveTypeId,
-        maxDays,
-        excludeRequestId: id,
-      })
-      const remainingDays = Math.max(0, Math.min(Number(balance?.balance_days ?? derivedRemaining), derivedRemaining))
+    if (targetDays > remainingDays) {
       return NextResponse.json(
         {
           error: `Insufficient leave balance. You requested ${targetDays} day(s), but only ${remainingDays} day(s) remain.`,

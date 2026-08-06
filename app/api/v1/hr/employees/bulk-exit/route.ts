@@ -4,7 +4,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { canAccessAdminSection, resolveAdminScope } from "@/lib/admin/rbac"
 import { sendExitNotificationEmail } from "@/lib/hr/exit-mailer"
 import type { ExitedEmployee } from "@/lib/hr/exit-mailer"
-import { orgDepartmentSenderBare } from "@/lib/org-config"
+import { ORG_EMAIL_SENDERS } from "@/lib/org-config"
 import { logger } from "@/lib/logger"
 
 const log = logger("api-bulk-exit")
@@ -143,10 +143,9 @@ export async function POST(request: Request) {
         .eq("employment_status", "active")
         .limit(1)
       const hrLead = hrLeads?.[0]
-      // e.g. "ACOB Admin & HR" — derived from the lead's actual department name
-      const hrDeptName =
-        (hrLead?.lead_departments as string[] | undefined)?.find((d) => d.toLowerCase().includes("hr")) ?? "Admin & HR"
-      const exitEmailSender = orgDepartmentSenderBare(hrDeptName)
+      // Exit notices send under the single org identity like every other
+      // automated mail; replies route to the HR mailbox via ORG_MAIL_ROUTING.
+      const exitEmailSender = ORG_EMAIL_SENDERS.system
 
       // All active staff — include additional_email so no one is missed
       const { data: activeStaff } = await dataClient

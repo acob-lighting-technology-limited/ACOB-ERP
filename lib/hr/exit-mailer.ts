@@ -1,5 +1,5 @@
 import { sendNotificationEmailsIndividuallyWithRetry } from "@/lib/notifications/email-gateway"
-import { ORG_EMAIL_SENDERS } from "@/lib/org-config"
+import { ORG_EMAIL_SENDERS, ORG_MAIL_ROUTING } from "@/lib/org-config"
 import { logger } from "@/lib/logger"
 
 const log = logger("hr-exit-mailer")
@@ -137,7 +137,7 @@ function buildExitEmailHtml(payload: ExitNotificationPayload): string {
     '<strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>' +
     '<span style="color:#16a34a;font-weight:600;">HR Department</span>' +
     "<br><br>" +
-    '<i style="color:#9ca3af;">This is an automated system notification. Please do not reply directly to this email.</i>' +
+    '<i style="color:#9ca3af;">This is an automated notification, but replies are read — reply to this email and it reaches the team that sent it.</i>' +
     "</td></tr></table>" +
     "</div>" +
     "</body>" +
@@ -158,13 +158,16 @@ export async function sendExitNotificationEmail(payload: ExitNotificationPayload
   const names = employees.map((e) => e.fullName).join(", ")
   const isBulk = employees.length > 1
   const html = buildExitEmailHtml(payload)
+  // The From line already says ACOB Lighting Technology Limited; repeating it
+  // here just spends the mobile subject preview on nothing.
   const subject = isBulk
-    ? `Staff Exit Notification (${employees.length} staff) — ACOB Lighting Technology Limited`
-    : "Staff Exit Notification — ACOB Lighting Technology Limited"
+    ? `Staff Exit Notification — ${employees.length} staff`
+    : `Staff Exit Notification — ${employees[0].fullName}`
 
   try {
     const result = await sendNotificationEmailsIndividuallyWithRetry({
-      from: payload.from ?? ORG_EMAIL_SENDERS.hr,
+      from: payload.from ?? ORG_EMAIL_SENDERS.system,
+      ...ORG_MAIL_ROUTING["Exit"],
       to: recipients,
       subject,
       html,

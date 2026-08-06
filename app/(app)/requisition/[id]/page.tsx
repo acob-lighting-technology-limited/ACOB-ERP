@@ -5,6 +5,7 @@ import type { Requisition } from "@/lib/requisitions/types"
 import { RequisitionPdfDocument } from "../_components/requisition-pdf-document"
 import { ArrowLeft, Loader2, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { apiFetch } from "@/lib/api-client"
 import Link from "next/link"
 
 export default function RequisitionDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -41,7 +42,7 @@ export default function RequisitionDetailPage({ params }: { params: Promise<{ id
     if (!requisition) return
     setIsSubmitting(true)
     try {
-      const res = await fetch(`/api/requisitions/${requisition.id}/approve`, {
+      const res = await apiFetch(`/api/requisitions/${requisition.id}/approve`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "approve", comments }),
@@ -64,7 +65,7 @@ export default function RequisitionDetailPage({ params }: { params: Promise<{ id
     if (!requisition) return
     setIsSubmitting(true)
     try {
-      const res = await fetch(`/api/requisitions/${requisition.id}/approve`, {
+      const res = await apiFetch(`/api/requisitions/${requisition.id}/approve`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "reject", comments }),

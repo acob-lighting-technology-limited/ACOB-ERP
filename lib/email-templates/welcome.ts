@@ -140,7 +140,7 @@ export function renderWelcomeEmail({ pendingUser, tempPassword, portalUrl, prepa
         <strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>
         <span style="color:#16a34a;font-weight:600;">Employee Management System</span>
         <br><br>
-        <i style="color:#9ca3af;font-style:italic;">This is an automated system notification. Please do not reply directly to this email.</i>
+        <i style="color:#9ca3af;font-style:italic;">This is an automated notification, but replies are read — reply to this email and it reaches the team that sent it.</i>
       </td></tr>
     </table>
     </div>

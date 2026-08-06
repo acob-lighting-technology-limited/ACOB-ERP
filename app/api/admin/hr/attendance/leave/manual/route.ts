@@ -41,24 +41,6 @@ async function assertInScope(
   return Boolean(data && depts.includes(data.department || ""))
 }
 
-/** Consume leave balance for the year (used_days += days). Mirrors restoreBalance in reverse. */
-async function consumeBalance(dataClient: SupabaseClient, userId: string, leaveTypeId: string, days: number) {
-  if (days <= 0) return
-  const year = new Date().getUTCFullYear()
-  const { data: bal } = await dataClient
-    .from("leave_balances")
-    .select("id, used_days")
-    .eq("user_id", userId)
-    .eq("leave_type_id", leaveTypeId)
-    .eq("year", year)
-    .maybeSingle<{ id: string; used_days: number | null }>()
-  if (!bal) return
-  await dataClient
-    .from("leave_balances")
-    .update({ used_days: Number(bal.used_days || 0) + days })
-    .eq("id", bal.id)
-}
-
 // ── Create an approved leave grant (bypasses the request workflow) ──────────────────────
 export async function POST(request: NextRequest) {
   const rl = await rateLimit(`admin-hr-leave-manual:${getClientId(request)}`, { limit: 15, windowSec: 60 })
@@ -113,8 +95,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Failed to add leave" }, { status: 500 })
     }
 
-    // Consume balance (used_days += days) for the type's current-year balance row, if any.
-    await consumeBalance(dataClient, user_id, leave_type_id, days_count)
+    // No balance to draw down: the approved leave_requests row inserted above is itself what
+    // the remaining-days figure is derived from.
 
     // NOTE: we intentionally do NOT write on_leave rows into attendance_records. Status
     // derivation already returns "on_leave" from the approved leave_requests row, so the
@@ -299,23 +281,8 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: "Failed to delete leave record" }, { status: 500 })
     }
 
-    // Restore the consumed balance (mirrors restoreBalance in the leave lifecycle).
-    if (days > 0) {
-      const year = new Date().getUTCFullYear()
-      const { data: bal } = await dataClient
-        .from("leave_balances")
-        .select("id, used_days")
-        .eq("user_id", leave.user_id)
-        .eq("leave_type_id", leave.leave_type_id)
-        .eq("year", year)
-        .maybeSingle<{ id: string; used_days: number | null }>()
-      if (bal) {
-        await dataClient
-          .from("leave_balances")
-          .update({ used_days: Math.max(0, Number(bal.used_days || 0) - days) })
-          .eq("id", bal.id)
-      }
-    }
+    // No balance to restore: entitlement is derived from the employee's leave requests, so
+    // deleting the request above already frees the days.
 
     // No attendance_records to clean up — we never wrote on_leave rows (see POST note).
     // Removing the leave_requests row reverts derivation to the day's real status.

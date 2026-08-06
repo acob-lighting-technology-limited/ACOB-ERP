@@ -11,7 +11,9 @@ import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { toLocalISODate } from "@/lib/utils/date"
 import { exportDirectoryToCsv, exportDirectoryToExcel, type DirectoryExportRow } from "@/lib/directory/export"
-import { Building2, Download, Mail, MapPin, Phone, RefreshCw, ShieldCheck, Users } from "lucide-react"
+import { Building2, Check, Copy, Download, Mail, MapPin, Phone, RefreshCw, ShieldCheck, Users } from "lucide-react"
+import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 type DirectoryRow = {
   id: string
@@ -27,6 +29,55 @@ type DirectoryRow = {
   office_location: string | null
   is_department_lead: boolean | null
   lead_departments: string[] | null
+  employment_status: string | null
+}
+
+/** Field/contract staff are on the payroll but have no office contact details to look up. */
+function isContractStaff(row: DirectoryRow): boolean {
+  return (row.employment_status || "").toLowerCase() === "contract"
+}
+
+/**
+ * Directory values copy on click rather than launching anything. Opening a mail client
+ * is rarely what people want here — they are looking a colleague up to paste the detail
+ * somewhere else. Rendered as a <button> so the data table's row handler ignores the
+ * click and doesn't expand the row underneath.
+ */
+function CopyValue({ value, className, muted }: { value: string | null; className?: string; muted?: boolean }) {
+  const [copied, setCopied] = useState(false)
+
+  if (!value) return <span className="text-muted-foreground">-</span>
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value)
+      setCopied(true)
+      toast.success("Copied", { description: value })
+      window.setTimeout(() => setCopied(false), 1500)
+    } catch {
+      toast.error("Couldn't copy — your browser blocked clipboard access")
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title="Click to copy"
+      className={cn(
+        "hover:text-primary inline-flex max-w-full items-center gap-1.5 text-left transition-colors",
+        muted && "text-muted-foreground",
+        className
+      )}
+    >
+      <span className="truncate">{value}</span>
+      {copied ? (
+        <Check className="h-3.5 w-3.5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+      ) : (
+        <Copy className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
+      )}
+    </button>
+  )
 }
 
 function displayName(row: DirectoryRow): string {
@@ -92,13 +143,16 @@ export function DirectoryContent() {
     [rows]
   )
 
+  // Stats follow what the table is actually showing, so the headline count doesn't claim
+  // people the default staff-type filter has hidden.
   const stats = useMemo(() => {
-    const total = rows.length
-    const departments = new Set(rows.map((r) => r.department).filter(Boolean)).size
-    const leads = rows.filter((r) => r.is_department_lead).length
-    const offices = new Set(rows.map((r) => r.office_location).filter(Boolean)).size
+    const source = processedRows.length ? processedRows : rows
+    const total = source.length
+    const departments = new Set(source.map((r) => r.department).filter(Boolean)).size
+    const leads = source.filter((r) => r.is_department_lead).length
+    const offices = new Set(source.map((r) => r.office_location).filter(Boolean)).size
     return { total, departments, leads, offices }
-  }, [rows])
+  }, [rows, processedRows])
 
   const columns = useMemo<DataTableColumn<DirectoryRow>[]>(
     () => [
@@ -108,9 +162,9 @@ export function DirectoryContent() {
         sortable: true,
         accessor: (r) => displayName(r),
         render: (r) => (
-          <div className="space-y-1">
+          <div className="group space-y-1">
             <div className="flex items-center gap-2">
-              <p className="font-medium">{displayName(r)}</p>
+              <CopyValue value={displayName(r)} className="font-medium" />
               {r.is_department_lead && (
                 <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400">
                   Lead
@@ -127,15 +181,9 @@ export function DirectoryContent() {
         sortable: true,
         accessor: (r) => r.company_email || "",
         render: (r) => (
-          <div className="space-y-0.5">
-            {r.company_email ? (
-              <a href={`mailto:${r.company_email}`} className="text-primary hover:underline">
-                {r.company_email}
-              </a>
-            ) : (
-              <span className="text-muted-foreground">-</span>
-            )}
-            {r.additional_email && <p className="text-muted-foreground text-xs">{r.additional_email}</p>}
+          <div className="group space-y-0.5">
+            <CopyValue value={r.company_email} />
+            {r.additional_email && <CopyValue value={r.additional_email} className="text-xs" muted />}
           </div>
         ),
       },
@@ -144,28 +192,33 @@ export function DirectoryContent() {
         label: "Department",
         sortable: true,
         accessor: (r) => r.department || "",
-        render: (r) => r.department || "-",
+        render: (r) => (
+          <div className="group">
+            <CopyValue value={r.department} />
+          </div>
+        ),
       },
       {
         key: "phone_number",
         label: "Phone",
         accessor: (r) => r.phone_number || "",
         hideOnMobile: true,
-        render: (r) =>
-          r.phone_number ? (
-            <a href={`tel:${r.phone_number}`} className="text-primary hover:underline">
-              {r.phone_number}
-            </a>
-          ) : (
-            "-"
-          ),
+        render: (r) => (
+          <div className="group">
+            <CopyValue value={r.phone_number} />
+          </div>
+        ),
       },
       {
         key: "office_location",
         label: "Office",
         accessor: (r) => r.office_location || "",
         hideOnMobile: true,
-        render: (r) => r.office_location || "-",
+        render: (r) => (
+          <div className="group">
+            <CopyValue value={r.office_location} />
+          </div>
+        ),
       },
     ],
     []
@@ -176,8 +229,23 @@ export function DirectoryContent() {
       { key: "department", label: "Department", options: departmentOptions },
       { key: "office_location", label: "Office", options: officeOptions },
       {
+        // Contract/field staff are hidden unless asked for: they have no office contact
+        // details, so they add ~46 empty rows to what is meant to be a lookup tool.
+        key: "staff_type",
+        label: "Staff type",
+        options: [
+          { value: "permanent", label: "Office staff" },
+          { value: "contract", label: "Contract staff" },
+        ],
+        defaultValues: ["permanent"],
+        mode: "custom",
+        filterFn: (row, values) => values.includes(isContractStaff(row) ? "contract" : "permanent"),
+      },
+      {
+        // Not "Role" — that means the system role (admin/employee) on the HR employees page,
+        // and using the same word for two different things made the two pages read alike.
         key: "is_department_lead",
-        label: "Role",
+        label: "Position",
         options: [
           { value: "lead", label: "Department leads" },
           { value: "member", label: "Team members" },
@@ -285,20 +353,36 @@ export function DirectoryContent() {
         expandable={{
           render: (r) => (
             <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-lg border p-4">
+              <div className="group rounded-lg border p-4">
                 <p className="text-muted-foreground text-xs tracking-wide uppercase">Email</p>
-                <p className="mt-2 text-sm">{r.company_email || "-"}</p>
-                {r.additional_email && <p className="text-muted-foreground mt-1 text-sm">{r.additional_email}</p>}
+                <div className="mt-2 text-sm">
+                  <CopyValue value={r.company_email} />
+                </div>
+                {r.additional_email && (
+                  <div className="mt-1 text-sm">
+                    <CopyValue value={r.additional_email} muted />
+                  </div>
+                )}
               </div>
-              <div className="rounded-lg border p-4">
+              <div className="group rounded-lg border p-4">
                 <p className="text-muted-foreground text-xs tracking-wide uppercase">Phone</p>
-                <p className="mt-2 text-sm">{r.phone_number || "-"}</p>
-                {r.additional_phone && <p className="text-muted-foreground mt-1 text-sm">{r.additional_phone}</p>}
+                <div className="mt-2 text-sm">
+                  <CopyValue value={r.phone_number} />
+                </div>
+                {r.additional_phone && (
+                  <div className="mt-1 text-sm">
+                    <CopyValue value={r.additional_phone} muted />
+                  </div>
+                )}
               </div>
-              <div className="rounded-lg border p-4">
+              <div className="group rounded-lg border p-4">
                 <p className="text-muted-foreground text-xs tracking-wide uppercase">Department &amp; Office</p>
-                <p className="mt-2 text-sm">{r.department || "-"}</p>
-                <p className="text-muted-foreground mt-1 text-sm">{r.office_location || "-"}</p>
+                <div className="mt-2 text-sm">
+                  <CopyValue value={r.department} />
+                </div>
+                <div className="mt-1 text-sm">
+                  <CopyValue value={r.office_location} muted />
+                </div>
                 {r.is_department_lead && (r.lead_departments?.length ?? 0) > 0 && (
                   <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
                     Leads: {r.lead_departments?.join(", ")}
@@ -310,10 +394,10 @@ export function DirectoryContent() {
         }}
         viewToggle
         cardRenderer={(r) => (
-          <div className="space-y-3 rounded-xl border p-4">
+          <div className="group space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <p className="font-medium">{displayName(r)}</p>
+                <CopyValue value={displayName(r)} className="font-medium" />
                 {r.designation && <p className="text-muted-foreground text-sm">{r.designation}</p>}
               </div>
               {r.is_department_lead && (
@@ -324,20 +408,20 @@ export function DirectoryContent() {
             </div>
             <div className="grid gap-1 text-sm">
               <div className="flex items-center gap-2">
-                <Mail className="text-muted-foreground h-3.5 w-3.5" />
-                <span className="truncate">{r.company_email || "-"}</span>
+                <Mail className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                <CopyValue value={r.company_email} />
               </div>
               <div className="flex items-center gap-2">
-                <Phone className="text-muted-foreground h-3.5 w-3.5" />
-                <span>{r.phone_number || "-"}</span>
+                <Phone className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                <CopyValue value={r.phone_number} />
               </div>
               <div className="flex items-center gap-2">
-                <Building2 className="text-muted-foreground h-3.5 w-3.5" />
-                <span>{r.department || "-"}</span>
+                <Building2 className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                <CopyValue value={r.department} />
               </div>
               <div className="flex items-center gap-2">
-                <MapPin className="text-muted-foreground h-3.5 w-3.5" />
-                <span>{r.office_location || "-"}</span>
+                <MapPin className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                <CopyValue value={r.office_location} />
               </div>
             </div>
           </div>

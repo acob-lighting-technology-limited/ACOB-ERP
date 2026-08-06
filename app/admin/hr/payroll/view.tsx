@@ -22,6 +22,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { FileText, Plus, DollarSign, Calendar, ClipboardList } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-client"
 
 export interface PayrollPeriod {
   id: string
@@ -204,9 +205,7 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
       label: "Net Pay",
       accessor: (e: DbPayrollEntry) => Number(e.net_salary || 0),
       sortable: true,
-      render: (e: DbPayrollEntry) => (
-        <span className="font-semibold text-emerald-600">{money(e.net_salary)}</span>
-      ),
+      render: (e: DbPayrollEntry) => <span className="font-semibold text-emerald-600">{money(e.net_salary)}</span>,
     },
     {
       key: "status",
@@ -276,7 +275,7 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
 
     setLoading(true)
     try {
-      const res = await fetch("/api/admin/hr/payroll/periods", {
+      const res = await apiFetch("/api/admin/hr/payroll/periods", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(periodForm),

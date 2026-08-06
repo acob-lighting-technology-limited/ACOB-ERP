@@ -391,7 +391,7 @@ export async function POST(request: NextRequest) {
     try {
       await sendHelpDeskMail({
         userIds: [user.id, firstApprover?.id].filter(Boolean) as string[],
-        subject: `Help Desk Ticket Created: ${created.ticket_number}`,
+        subject: `Help Desk Ticket Created — ${created.ticket_number}`,
         title: "New Help Desk Ticket Submitted",
         message: `${created.title} (${created.service_department}) has been submitted with ${created.priority} priority.`,
         ticketNumber: created.ticket_number,

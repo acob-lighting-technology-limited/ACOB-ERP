@@ -17,6 +17,7 @@ import { numberToNairaWords } from "@/lib/requisitions/number-to-words"
 import type { BeneficiaryDetail, RequisitionAttachment } from "@/lib/requisitions/types"
 import { Plus, Trash2, Upload, FileText, Loader2, AlertCircle } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
+import { apiFetch } from "@/lib/api-client"
 
 interface NewRequisitionDialogProps {
   open: boolean
@@ -154,7 +155,7 @@ export function NewRequisitionDialog({ open, onOpenChange, userDepartment, onSuc
     setIsSubmitting(true)
 
     try {
-      const res = await fetch("/api/requisitions", {
+      const res = await apiFetch("/api/requisitions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

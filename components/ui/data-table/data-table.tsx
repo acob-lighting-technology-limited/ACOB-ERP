@@ -1,6 +1,15 @@
 "use client"
 
-import { Fragment, useState, useMemo, useCallback, useEffect, useRef, type KeyboardEvent } from "react"
+import {
+  Fragment,
+  useState,
+  useMemo,
+  useCallback,
+  useEffect,
+  useRef,
+  type KeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
+} from "react"
 import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import {
   DndContext,
@@ -622,6 +631,18 @@ export function DataTable<TData>({
     [expandable, toggleExpand]
   )
 
+  // Where the pointer went down on a row, so a click that was really a text-selection
+  // drag doesn't get treated as "expand this row".
+  const rowPointerDownRef = useRef<{ x: number; y: number } | null>(null)
+
+  /** True when the click was a drag or left text highlighted — i.e. the user was copying. */
+  const clickWasTextSelection = useCallback((e: ReactMouseEvent<HTMLElement>) => {
+    const origin = rowPointerDownRef.current
+    rowPointerDownRef.current = null
+    if (origin && Math.hypot(e.clientX - origin.x, e.clientY - origin.y) > 4) return true
+    return Boolean(window.getSelection()?.toString().trim())
+  }, [])
+
   const selectedItems = useMemo(
     () => data.filter((row) => selectedRows.has(getRowId(row))),
     [data, selectedRows, getRowId]
@@ -943,6 +964,9 @@ export function DataTable<TData>({
                       data-row-id={rowId}
                       tabIndex={0}
                       onKeyDown={(e) => handleRowKeyDown(e, rowId)}
+                      onMouseDown={(e) => {
+                        rowPointerDownRef.current = { x: e.clientX, y: e.clientY }
+                      }}
                       onClick={(e) => {
                         const target = e.target as HTMLElement
                         if (
@@ -955,6 +979,8 @@ export function DataTable<TData>({
                         ) {
                           return
                         }
+                        // Highlighting text inside a row must not expand it.
+                        if (clickWasTextSelection(e)) return
                         if (canExpand) {
                           toggleExpand(rowId)
                         }
@@ -962,7 +988,7 @@ export function DataTable<TData>({
                       className={cn(
                         isExpanded && "border-b-0",
                         selectedRows.has(rowId) && "bg-muted/50",
-                        canExpand && "hover:bg-muted/30 cursor-pointer select-none",
+                        canExpand && "hover:bg-muted/30 cursor-pointer",
                         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
                       )}
                     >

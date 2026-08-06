@@ -1,7 +1,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 import { sendEmail } from "../_shared/email.ts"
-import { EDGE_SENDERS } from "../_shared/senders.ts"
+import { EDGE_MAIL_ROUTING, EDGE_SENDERS } from "../_shared/senders.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
@@ -280,7 +280,7 @@ function renderReportHtml(dateIso: string, rows: ReportRow[], summary: Record<st
     '<tr><td align="center" style="padding:20px;background:#000000 !important;background-color:#000000 !important;background-image:linear-gradient(#000000,#000000) !important;font-size:11px;color:#d1d5db;">' +
     '<strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>' +
     '<span style="color:#16a34a;font-weight:600;">Attendance Reports System</span><br><br>' +
-    '<i style="color:#9ca3af;">This is an automated system notification. Please do not reply directly to this email.</i>' +
+    '<i style="color:#9ca3af;">This is an automated notification, but replies are read — reply to this email and it reaches the team that sent it.</i>' +
     "</td></tr></table>" +
     "</div></body></html>"
   )
@@ -528,7 +528,8 @@ serve(async (req) => {
           to,
           subject: `Daily Attendance Report — ${dateLabelShort}`,
           html,
-          from: EDGE_SENDERS.hr,
+          from: EDGE_SENDERS.system,
+          ...EDGE_MAIL_ROUTING.attendance,
           traceLabel: `attendance-daily-report:${index + 1}/${recipientEmails.length}:${to}`,
         })
         results.push({ to, success: true, emailId: data.id })

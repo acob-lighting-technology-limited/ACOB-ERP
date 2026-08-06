@@ -2,11 +2,11 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 import { sendEmail } from "../_shared/email.ts"
 import { writeEdgeAuditLog } from "../_shared/audit.ts"
-import { EDGE_SENDERS } from "../_shared/senders.ts"
+import { EDGE_MAIL_ROUTING, EDGE_SENDERS } from "../_shared/senders.ts"
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-const DEFAULT_SENDER = EDGE_SENDERS.birthday
+const DEFAULT_SENDER = EDGE_SENDERS.system
 const TIME_ZONE = "Africa/Lagos"
 
 const corsHeaders = {
@@ -83,7 +83,7 @@ function buildBirthdayHtml(firstName: string): string {
     '<span style="color:#f3f4f6;">Admin &amp; HR Department</span><br>' +
     '<strong style="color:#fff;">ACOB Lighting Technology Limited</strong><br>' +
     '<span style="color:#16a34a;font-weight:600;">Employee Management System</span><br><br>' +
-    '<i style="color:#9ca3af;font-style:italic;">This is an automated message. Please do not reply directly to this email.</i>' +
+    '<i style="color:#9ca3af;font-style:italic;">This is an automated notification, but replies are read — reply to this email and it reaches the team that sent it.</i>' +
     "</td></tr></table></div></body></html>"
   )
 }
@@ -110,6 +110,7 @@ serve(async (req) => {
     if (testEmail) {
       const data = await sendEmail({
         from: DEFAULT_SENDER,
+        ...EDGE_MAIL_ROUTING.birthday,
         to: testEmail,
         cc: normEmail(body?.testCc) || undefined,
         subject: "Happy Birthday from ACOB Lighting!",
@@ -154,6 +155,7 @@ serve(async (req) => {
       try {
         const data = await sendEmail({
           from: DEFAULT_SENDER,
+          ...EDGE_MAIL_ROUTING.birthday,
           to: recipient,
           cc: ccAddr,
           subject: "Happy Birthday from ACOB Lighting!",

@@ -172,6 +172,23 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    // Gender is mandatory, not cosmetic: leave eligibility is gender-gated (maternity is
+    // female-only, paternity male-only), so a profile created without it silently gets the
+    // wrong leave entitlement. The UI forms already require it — this closes the API, which
+    // scripted/bulk creation goes through.
+    const normalizedGender = String(gender || "")
+      .trim()
+      .toLowerCase()
+    if (normalizedGender !== "male" && normalizedGender !== "female") {
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Gender is required and must be either 'male' or 'female'",
+        },
+        { status: 400 }
+      )
+    }
+
     // Generate employee number server-side
     const { data: employeeNumber, error: genError } = await serviceSupabase.rpc("generate_staff_number", {
       p_type: resolvedEmploymentType,
@@ -260,7 +277,7 @@ export async function PATCH(request: NextRequest) {
         other_names: otherNames || "",
         department: department,
         phone_number: phoneNumber || "",
-        gender: gender || "",
+        gender: normalizedGender,
         date_of_birth: dateOfBirth || "",
         residential_address: residentialAddress || "",
         office_location: officeLocation || "",
@@ -296,7 +313,7 @@ export async function PATCH(request: NextRequest) {
         employee_number: employeeNumber || null, // Employee number (ACOB/YEAR/NUMBER)
         employment_type: resolvedEmploymentType,
         contract_category_id: contractCategoryId,
-        gender: gender || null,
+        gender: normalizedGender,
         date_of_birth: dateOfBirth || null,
         additional_phone: additionalPhone || null,
         residential_address: residentialAddress || null,
@@ -316,6 +333,9 @@ export async function PATCH(request: NextRequest) {
         { status: 500 }
       )
     }
+
+    // No leave records to create: entitlement is derived from the leave type's allowance minus
+    // the employee's own requests, so a new joiner has their full allowance immediately.
 
     await writeAuditLog(
       supabase,

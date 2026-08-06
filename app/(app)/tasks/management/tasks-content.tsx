@@ -179,7 +179,10 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
         body: JSON.stringify(body),
       })
 
-      if (!response.ok) throw new Error("Failed to update task")
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        throw new Error(payload?.error || "Failed to update task")
+      }
 
       toast.success("Task updated")
       await loadTasks()
@@ -187,8 +190,8 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
       if (options?.closeDialog) {
         setIsDetailsOpen(false)
       }
-    } catch (_error) {
-      toast.error("Failed to update status")
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update status")
     } finally {
       setIsSaving(false)
     }

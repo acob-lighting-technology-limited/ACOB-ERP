@@ -699,25 +699,28 @@ function formatLeaveReference(entityId?: string) {
 
 function buildLeaveEmailSubject(event: LeaveEmailEvent, entityId?: string) {
   const ref = formatLeaveReference(entityId)
-  const suffix = ref ? ` - ${ref}` : ""
+  const suffix = ref ? ` — ${ref}` : ""
 
+  // Every subject names the module. These used to read "Approved - LR-0042",
+  // which said nothing about leave once the sender became the generic org
+  // identity — the recipient had to open the mail to find out what it was.
   switch (event) {
     case "approval_required":
-      return `Approval Required${suffix}`
+      return `Leave Request Awaiting Your Approval${suffix}`
     case "approved":
-      return `Approved${suffix}`
+      return `Leave Request Approved${suffix}`
     case "rejected":
-      return `Rejected${suffix}`
+      return `Leave Request Rejected${suffix}`
     case "ready_for_approval":
-      return `Ready for Approval${suffix}`
+      return `Leave Request Ready for Approval${suffix}`
     case "sla_reminder":
-      return `Approval SLA Reminder${suffix}`
+      return `Leave Approval SLA Reminder${suffix}`
     case "sla_breached":
-      return `Approval SLA Breached${suffix}`
+      return `Leave Approval SLA Breached${suffix}`
     case "lapsed":
-      return `Request Lapsed${suffix}`
+      return `Leave Request Lapsed${suffix}`
     default:
-      return `Notification${suffix}`
+      return `Leave Notification${suffix}`
   }
 }
 

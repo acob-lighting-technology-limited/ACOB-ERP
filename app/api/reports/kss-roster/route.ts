@@ -142,8 +142,8 @@ export async function GET(request: Request) {
 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const scope = await resolveAdminScope(supabase as ReportsClient, user.id)
-    if (!scope) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    // Read access is open to every authenticated staff member — the roster is shown
+    // read-only on the employee dashboard. Writes stay gated below.
     const dataClient = getServiceRoleClientOrFallback(supabase as ReportsClient)
 
     const { searchParams } = new URL(request.url)

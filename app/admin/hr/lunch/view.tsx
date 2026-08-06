@@ -37,6 +37,7 @@ import {
   CalendarDays,
 } from "lucide-react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-client"
 
 export interface LunchEmployee {
   id: string
@@ -304,7 +305,7 @@ export function LunchRegisterPage({
     setAteUserIds(updatedAteUserIds)
 
     try {
-      const res = await fetch("/api/admin/hr/lunch", {
+      const res = await apiFetch("/api/admin/hr/lunch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -329,7 +330,7 @@ export function LunchRegisterPage({
     e.preventDefault()
     setLoading(true)
     try {
-      const res = await fetch("/api/admin/hr/lunch/settings", {
+      const res = await apiFetch("/api/admin/hr/lunch/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(settingsForm),

@@ -1,4 +1,5 @@
 import { saveAs } from "file-saver"
+import { apiFetch } from "@/lib/api-client"
 import type { ActionItem } from "@/lib/export-utils"
 
 const inFlightActionPointDownloads = new Set<string>()
@@ -11,20 +12,13 @@ async function downloadActionPointsExport(
   meetingDate?: string,
   department?: string
 ) {
-  const exportKey = [
-    format,
-    week,
-    year,
-    meetingDate || "",
-    department || "all",
-    actions.length,
-  ].join(":")
+  const exportKey = [format, week, year, meetingDate || "", department || "all", actions.length].join(":")
 
   if (inFlightActionPointDownloads.has(exportKey)) return
   inFlightActionPointDownloads.add(exportKey)
 
   try {
-    const response = await fetch("/api/reports/action-points-export", {
+    const response = await apiFetch("/api/reports/action-points-export", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

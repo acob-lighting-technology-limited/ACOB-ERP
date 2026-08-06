@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 import { encodeBase64 } from "https://deno.land/std@0.224.0/encoding/base64.ts"
 import { Document, Packer, Paragraph, TextRun } from "npm:docx@8.5.0"
 import { sendEmail } from "../_shared/email.ts"
-import { EDGE_SENDERS } from "../_shared/senders.ts"
+import { EDGE_MAIL_ROUTING, EDGE_SENDERS } from "../_shared/senders.ts"
 import { buildArtifactEmailHtml } from "../_shared/artifact-email.ts"
 import {
   getCurrentOfficeWeek,
@@ -518,8 +518,9 @@ async function processSource(
             try {
               const data = await sendEmail({
                 to,
-                from: EDGE_SENDERS.meeting,
-                subject: `${source.label} — ${label}`,
+                from: EDGE_SENDERS.system,
+                ...EDGE_MAIL_ROUTING.meetings,
+                subject: `Meeting Documents — ${source.label} (${label})`,
                 html: buildArtifactEmailHtml({
                   meetingLabel: source.label,
                   files: attachments.map((a) => a.filename),
@@ -645,8 +646,9 @@ async function sendStoredArtifacts(
     try {
       const data = await sendEmail({
         to,
-        from: EDGE_SENDERS.meeting,
-        subject: `${source.label} — ${artifactTypesLabel(types)}`,
+        from: EDGE_SENDERS.system,
+        ...EDGE_MAIL_ROUTING.meetings,
+        subject: `Meeting Documents — ${source.label} (${artifactTypesLabel(types)})`,
         html: buildArtifactEmailHtml({
           meetingLabel: source.label,
           files: attachments.map((a) => a.filename),
