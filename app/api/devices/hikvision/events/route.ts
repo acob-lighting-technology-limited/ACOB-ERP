@@ -93,6 +93,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
   if (!existing?.clock_in && time < AFTER_MIDNIGHT_ROLLBACK_CUTOFF) {
     const prevDateObj = new Date(`${date}T00:00:00Z`)
     prevDateObj.setUTCDate(prevDateObj.getUTCDate() - 1)
+    // eslint-disable-next-line no-restricted-syntax
     const prevDate = prevDateObj.toISOString().slice(0, 10)
 
     const { data: prev } = await supabase

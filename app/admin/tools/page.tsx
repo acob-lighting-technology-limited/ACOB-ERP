@@ -1,6 +1,6 @@
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Wrench, ArrowRight, FileSignature, Droplet } from "lucide-react"
+import { Wrench, ArrowRight, FileSignature, Droplet, Video } from "lucide-react"
 import { AdminTablePage } from "@/components/admin/admin-table-page"
 
 const tools = [
@@ -27,6 +27,14 @@ const tools = [
     icon: Droplet,
     color: "text-teal-500",
     bgColor: "bg-teal-50 dark:bg-teal-950/30",
+  },
+  {
+    name: "Media & PDF Suite",
+    description: "Download, convert, compress media, and manage PDF documents",
+    href: "/tools/test",
+    icon: Video,
+    color: "text-indigo-500",
+    bgColor: "bg-indigo-50 dark:bg-indigo-950/30",
   },
 ]
 
