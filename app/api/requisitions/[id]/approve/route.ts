@@ -41,6 +41,12 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
 
     const { action, comments } = parsed.data
+
+    // A rejection has to explain itself — the requester needs to know what to fix.
+    if (action === "reject" && !comments?.trim()) {
+      return apiError("A reason is required when rejecting a requisition", ApiErrorCode.VALIDATION_ERROR, 400)
+    }
+
     const adminClient = getAdminClient() || supabase
 
     // Get current requisition status
@@ -70,7 +76,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     if (action === "reject") {
       updatePayload.status = "rejected"
       updatePayload.current_stage_code = "rejected"
-      updatePayload.rejection_reason = comments || "No rejection reason provided"
+      updatePayload.rejection_reason = comments!.trim()
       updatePayload.rejected_by = user.id
       updatePayload.rejected_at = now
     } else {

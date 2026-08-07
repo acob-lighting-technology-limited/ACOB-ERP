@@ -187,6 +187,20 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
     const decision = parsed.data.decision
     const comments = parsed.data.comments ? String(parsed.data.comments).trim() : null
+
+    // Rejecting or sending back for correction must say why, so the originator
+    // knows what to change. Approvals need no justification.
+    if (decision !== "approved" && !comments) {
+      return NextResponse.json(
+        {
+          error:
+            decision === "rejected"
+              ? "A reason is required when rejecting correspondence"
+              : "A reason is required when returning correspondence for correction",
+        },
+        { status: 400 }
+      )
+    }
     const now = new Date().toISOString()
 
     if (record.status !== "under_review") {

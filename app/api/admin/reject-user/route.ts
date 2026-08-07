@@ -7,6 +7,8 @@ import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const RejectUserSchema = z.object({
   pendingUserId: z.string().trim().min(1, "Missing pendingUserId"),
+  // A rejected applicant is told why, so this is mandatory rather than optional.
+  rejectionReason: z.string().trim().min(1, "A reason is required when rejecting a signup"),
 })
 
 type CallerProfile = {
@@ -83,7 +85,11 @@ export async function POST(req: Request) {
 
   const { error: rejectError } = await supabaseAdmin
     .from("pending_users")
-    .update({ status: "rejected", updated_at: new Date().toISOString() })
+    .update({
+      status: "rejected",
+      rejection_reason: parsed.data.rejectionReason,
+      updated_at: new Date().toISOString(),
+    })
     .eq("id", parsed.data.pendingUserId)
   if (rejectError) {
     return NextResponse.json({ error: rejectError.message }, { status: 500 })

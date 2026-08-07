@@ -43,6 +43,11 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     const action = parsed.data.action
     const adminNote = String(parsed.data.admin_note || "").trim() || null
 
+    // Turning down a booking must say why — the requester has to plan around it.
+    if (action === "reject" && !adminNote) {
+      return NextResponse.json({ error: "A reason is required when rejecting a booking" }, { status: 400 })
+    }
+
     const { data: booking, error: bookingError } = await dataClient
       .from("fleet_bookings")
       .select("id, resource_id, start_at, end_at, status")

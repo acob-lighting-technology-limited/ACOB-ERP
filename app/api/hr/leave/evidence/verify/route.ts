@@ -43,6 +43,12 @@ export async function PATCH(request: NextRequest) {
     }
     const { evidence_id, status, notes } = parsed.data
 
+    // Rejecting someone's sick note or evidence must say why — they need to know
+    // what to re-submit.
+    if (status === "rejected" && !notes?.trim()) {
+      return NextResponse.json({ error: "A reason is required when rejecting evidence" }, { status: 400 })
+    }
+
     const { data, error } = await supabase
       .from("leave_evidence")
       .update({ status, notes: notes || null, verified_by: user.id, verified_at: new Date().toISOString() })

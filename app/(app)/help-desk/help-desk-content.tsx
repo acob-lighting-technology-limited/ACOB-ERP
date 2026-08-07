@@ -470,6 +470,14 @@ export function HelpDeskContent({
 
   async function updateTicketStatusFromModal(status: string) {
     if (!selectedTicketId) return
+
+    // The API requires a reason on rejection; catch it here so the user is told
+    // what to do before the round-trip rather than after it.
+    if (status === "rejected" && !detailComment.trim()) {
+      toast.error("Add a comment explaining why this ticket is being rejected.")
+      return
+    }
+
     setSelectedTicketStatus(status)
     setIsDetailSaving(true)
     try {
