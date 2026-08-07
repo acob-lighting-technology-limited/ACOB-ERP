@@ -1,18 +1,43 @@
 "use client"
 
 import React, { useState, useEffect, useCallback } from "react"
-import { DataTablePage, DataTable, type DataTableColumn, type DataTableFilter } from "@/components/ui/data-table"
+import {
+  DataTablePage,
+  DataTable,
+  type DataTableColumn,
+  type DataTableFilter,
+  type DataTableTab,
+} from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { Button } from "@/components/ui/button"
-import { FileCheck2, Clock, CheckCircle2, AlertCircle, Eye, RefreshCw } from "lucide-react"
-import type { Requisition } from "@/lib/requisitions/types"
+import { Badge } from "@/components/ui/badge"
+import { FileCheck2, Clock, CheckCircle2, AlertCircle, Eye, RefreshCw, Siren, Wallet, Plus } from "lucide-react"
+import type { Requisition, RequisitionFundingCategory } from "@/lib/requisitions/types"
 import { getStageLabel } from "@/lib/requisitions/workflow"
+import { apiFetch } from "@/lib/api-client"
+import { FundingCategoryDialog } from "./_components/funding-category-dialog"
 import Link from "next/link"
 
+const TABS: DataTableTab[] = [
+  { key: "requisitions", label: "Requisitions", icon: FileCheck2 },
+  { key: "funding", label: "Funding Categories", icon: Wallet },
+]
+
 export default function AdminRequisitionsPage() {
+  const [tab, setTab] = useState<string>("requisitions")
+
   const [rows, setRows] = useState<Requisition[]>([])
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
+
+  const [fundingCategories, setFundingCategories] = useState<RequisitionFundingCategory[]>([])
+  const [isLoadingFunding, setIsLoadingFunding] = useState<boolean>(true)
+  const [fundingError, setFundingError] = useState<string | null>(null)
+
+  const [isFundingDialogOpen, setIsFundingDialogOpen] = useState<boolean>(false)
+  const [editingCategory, setEditingCategory] = useState<RequisitionFundingCategory | null>(null)
+  const [isSavingCategory, setIsSavingCategory] = useState<boolean>(false)
+  const [saveCategoryError, setSaveCategoryError] = useState<string | null>(null)
 
   const fetchRequisitions = useCallback(async () => {
     setIsLoading(true)
@@ -33,14 +58,86 @@ export default function AdminRequisitionsPage() {
     }
   }, [])
 
+  const fetchFundingCategories = useCallback(async () => {
+    setIsLoadingFunding(true)
+    setFundingError(null)
+    try {
+      const res = await apiFetch("/api/requisitions/funding-categories?include_inactive=true")
+      const json = await res.json()
+
+      if (!res.ok) {
+        throw new Error(json.error || json.message || "Failed to load funding categories")
+      }
+
+      setFundingCategories(json.data || [])
+    } catch (err: any) {
+      setFundingError(err.message || "Failed to fetch funding categories")
+    } finally {
+      setIsLoadingFunding(false)
+    }
+  }, [])
+
   useEffect(() => {
     fetchRequisitions()
-  }, [fetchRequisitions])
+    fetchFundingCategories()
+  }, [fetchRequisitions, fetchFundingCategories])
 
   const totalCount = rows.length
   const pendingCount = rows.filter((r) => r.status === "pending").length
   const approvedCount = rows.filter((r) => r.status === "approved").length
+  const emergencyCount = rows.filter((r) => r.is_emergency).length
   const totalAmount = rows.reduce((acc, r) => acc + (Number(r.amount) || 0), 0)
+
+  const saveCategory = async (payload: { name: string; description: string; sort_order: number }) => {
+    setIsSavingCategory(true)
+    setSaveCategoryError(null)
+    try {
+      const res = await apiFetch("/api/requisitions/funding-categories", {
+        method: editingCategory ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          editingCategory
+            ? {
+                id: editingCategory.id,
+                name: payload.name,
+                description: payload.description || undefined,
+                sort_order: payload.sort_order,
+              }
+            : {
+                name: payload.name,
+                description: payload.description || undefined,
+                sort_order: payload.sort_order,
+              }
+        ),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || json.message || "Failed to save funding category")
+
+      setIsFundingDialogOpen(false)
+      setEditingCategory(null)
+      await fetchFundingCategories()
+    } catch (err: any) {
+      setSaveCategoryError(err.message || "Failed to save funding category")
+    } finally {
+      setIsSavingCategory(false)
+    }
+  }
+
+  const toggleCategoryActive = async (category: RequisitionFundingCategory) => {
+    setFundingError(null)
+    try {
+      const res = await apiFetch("/api/requisitions/funding-categories", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: category.id, is_active: !category.is_active }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || json.message || "Failed to update funding category")
+      await fetchFundingCategories()
+    } catch (err: any) {
+      setFundingError(err.message || "Failed to update funding category")
+    }
+  }
 
   const columns: DataTableColumn<Requisition>[] = [
     {
@@ -49,12 +146,19 @@ export default function AdminRequisitionsPage() {
       sortable: true,
       accessor: (r) => r.requisition_number,
       render: (r) => (
-        <Link
-          href={`/requisition/${r.id}`}
-          className="font-mono font-bold text-emerald-700 hover:underline dark:text-emerald-400"
-        >
-          {r.requisition_number}
-        </Link>
+        <div className="flex flex-col gap-0.5">
+          <Link
+            href={`/requisition/${r.id}`}
+            className="font-mono font-bold text-emerald-700 hover:underline dark:text-emerald-400"
+          >
+            {r.requisition_number}
+          </Link>
+          {r.is_emergency && (
+            <span className="inline-flex w-fit items-center gap-1 rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
+              <Siren className="h-2.5 w-2.5" /> Emergency
+            </span>
+          )}
+        </div>
       ),
       initialWidth: 140,
     },
@@ -78,6 +182,15 @@ export default function AdminRequisitionsPage() {
       accessor: (r) => r.project_name,
       render: (r) => <span className="text-xs font-medium">{r.project_name}</span>,
       initialWidth: 160,
+    },
+    {
+      key: "funding_category_name",
+      label: "Funding",
+      sortable: true,
+      accessor: (r) => r.funding_category_name || "",
+      render: (r) => <span className="text-xs">{r.funding_category_name || "—"}</span>,
+      initialWidth: 150,
+      hideOnMobile: true,
     },
     {
       key: "amount",
@@ -170,16 +283,100 @@ export default function AdminRequisitionsPage() {
         { value: "completed", label: "Completed" },
       ],
     },
+    {
+      key: "funding_category_name",
+      label: "Funding",
+      mode: "custom",
+      options: fundingCategories.map((category) => ({ value: category.name, label: category.name })),
+      filterFn: (row, selected) => selected.includes(row.funding_category_name || ""),
+    },
+    {
+      key: "route",
+      label: "Route",
+      mode: "custom",
+      options: [
+        { value: "emergency", label: "Emergency" },
+        { value: "standard", label: "Standard" },
+      ],
+      filterFn: (row, selected) => selected.includes(row.is_emergency ? "emergency" : "standard"),
+    },
+  ]
+
+  const fundingColumns: DataTableColumn<RequisitionFundingCategory>[] = [
+    {
+      key: "name",
+      label: "Funding Category",
+      sortable: true,
+      accessor: (c) => c.name,
+      render: (c) => (
+        <div className="flex flex-col">
+          <span className="text-xs font-semibold">{c.name}</span>
+          {c.description && <span className="text-muted-foreground text-[10px]">{c.description}</span>}
+        </div>
+      ),
+      initialWidth: 260,
+    },
+    {
+      key: "code",
+      label: "Code",
+      sortable: true,
+      accessor: (c) => c.code,
+      render: (c) => <span className="font-mono text-xs">{c.code}</span>,
+      initialWidth: 140,
+      hideOnMobile: true,
+    },
+    {
+      key: "usage",
+      label: "Requisitions",
+      sortable: true,
+      accessor: (c) => rows.filter((r) => r.funding_category_id === c.id).length,
+      render: (c) => <span className="text-xs">{rows.filter((r) => r.funding_category_id === c.id).length}</span>,
+      initialWidth: 120,
+      hideOnMobile: true,
+    },
+    {
+      key: "is_active",
+      label: "Status",
+      sortable: true,
+      accessor: (c) => String(c.is_active),
+      render: (c) => <Badge variant={c.is_active ? "default" : "outline"}>{c.is_active ? "Active" : "Inactive"}</Badge>,
+      initialWidth: 110,
+    },
+    {
+      key: "sort_order",
+      label: "Order",
+      sortable: true,
+      accessor: (c) => c.sort_order,
+      render: (c) => <span className="text-muted-foreground text-xs">{c.sort_order}</span>,
+      initialWidth: 90,
+      hideOnMobile: true,
+    },
+  ]
+
+  const fundingFilters: DataTableFilter<RequisitionFundingCategory>[] = [
+    {
+      key: "is_active",
+      label: "Status",
+      mode: "custom",
+      options: [
+        { value: "true", label: "Active" },
+        { value: "false", label: "Inactive" },
+      ],
+      filterFn: (row, selected) => selected.includes(String(row.is_active)),
+    },
   ]
 
   return (
     <DataTablePage
       title="Company Requisitions (Finance Overview)"
-      description="Manage, review, and audit company payment request forms and approvals."
+      description="Manage, review, and audit company payment request forms, funding lines, and approvals."
       icon={FileCheck2}
       backLink={{ href: "/admin/finance", label: "Back to Finance" }}
+      tabs={TABS}
+      activeTab={tab}
+      onTabChange={setTab}
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
           <StatCard
             title="Total Requisitions"
             value={totalCount}
@@ -202,6 +399,13 @@ export default function AdminRequisitionsPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            title="Emergency Route"
+            value={emergencyCount}
+            icon={Siren}
+            iconBgColor="bg-red-500/10"
+            iconColor="text-red-500"
+          />
+          <StatCard
             title="Total Amount (₦)"
             value={`₦${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 0 })}`}
             icon={FileCheck2}
@@ -211,27 +415,96 @@ export default function AdminRequisitionsPage() {
         </div>
       }
       actions={
-        <Button variant="outline" size="sm" onClick={fetchRequisitions} className="gap-1 text-xs">
-          <RefreshCw className="h-3.5 w-3.5" /> Refresh Data
-        </Button>
+        tab === "funding" ? (
+          <Button
+            size="sm"
+            onClick={() => {
+              setEditingCategory(null)
+              setSaveCategoryError(null)
+              setIsFundingDialogOpen(true)
+            }}
+            className="gap-1 text-xs"
+          >
+            <Plus className="h-4 w-4" /> New Funding Category
+          </Button>
+        ) : (
+          <Button variant="outline" size="sm" onClick={fetchRequisitions} className="gap-1 text-xs">
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh Data
+          </Button>
+        )
       }
     >
-      <DataTable<Requisition>
-        data={rows}
-        columns={columns}
-        getRowId={(r) => r.id}
-        searchPlaceholder="Search requisition #, requester, project, department..."
-        searchFn={(row, q) =>
-          row.requisition_number.toLowerCase().includes(q) ||
-          row.project_name.toLowerCase().includes(q) ||
-          (row.requester?.full_name || "").toLowerCase().includes(q) ||
-          row.department.toLowerCase().includes(q)
-        }
-        filters={filters}
-        isLoading={isLoading}
-        error={error}
-        onRetry={fetchRequisitions}
-        pagination={{ pageSize: 25 }}
+      {tab === "requisitions" ? (
+        <DataTable<Requisition>
+          data={rows}
+          columns={columns}
+          getRowId={(r) => r.id}
+          searchPlaceholder="Search requisition #, requester, project, funding, department..."
+          searchFn={(row, q) =>
+            row.requisition_number.toLowerCase().includes(q) ||
+            row.project_name.toLowerCase().includes(q) ||
+            (row.requester?.full_name || "").toLowerCase().includes(q) ||
+            (row.funding_category_name || "").toLowerCase().includes(q) ||
+            row.department.toLowerCase().includes(q)
+          }
+          filters={filters}
+          isLoading={isLoading}
+          error={error}
+          onRetry={fetchRequisitions}
+          pagination={{ pageSize: 25 }}
+        />
+      ) : (
+        <DataTable<RequisitionFundingCategory>
+          data={fundingCategories}
+          columns={fundingColumns}
+          getRowId={(c) => c.id}
+          searchPlaceholder="Search funding categories..."
+          searchFn={(row, q) => row.name.toLowerCase().includes(q) || row.code.toLowerCase().includes(q)}
+          filters={fundingFilters}
+          isLoading={isLoadingFunding}
+          error={fundingError}
+          onRetry={fetchFundingCategories}
+          pagination={{ pageSize: 25 }}
+          emptyTitle="No funding categories"
+          emptyDescription="Add the project funding lines requisitions are drawn against."
+          emptyIcon={Wallet}
+          rowActions={[
+            {
+              label: "Edit",
+              onClick: (row) => {
+                setEditingCategory(row)
+                setSaveCategoryError(null)
+                setIsFundingDialogOpen(true)
+              },
+            },
+            {
+              label: "Activate",
+              onClick: (row) => {
+                void toggleCategoryActive(row)
+              },
+              hidden: (row) => row.is_active,
+            },
+            {
+              label: "Deactivate",
+              onClick: (row) => {
+                void toggleCategoryActive(row)
+              },
+              hidden: (row) => !row.is_active,
+            },
+          ]}
+        />
+      )}
+
+      <FundingCategoryDialog
+        open={isFundingDialogOpen}
+        onOpenChange={(open) => {
+          setIsFundingDialogOpen(open)
+          if (!open) setEditingCategory(null)
+        }}
+        category={editingCategory}
+        onSave={saveCategory}
+        isSaving={isSavingCategory}
+        error={saveCategoryError}
       />
     </DataTablePage>
   )

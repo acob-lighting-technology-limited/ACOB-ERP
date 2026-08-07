@@ -59,7 +59,7 @@ export async function GET(request: NextRequest) {
     } = await supabase
       .from("fleet_bookings")
       .select(
-        "id, resource_id, requester_id, start_at, end_at, reason, status, admin_note, reviewed_by, reviewed_at, created_at, updated_at, resource:fleet_resources(id, name, resource_type, is_active), reviewer:profiles!fleet_bookings_reviewed_by_fkey(id, full_name)",
+        "id, resource_id, requester_id, start_at, end_at, reason, status, admin_note, reviewed_by, reviewed_at, created_at, updated_at, resource:fleet_resources(id, name, resource_type, is_active), reviewer:profiles!fleet_bookings_reviewed_by_fkey(id, full_name, department, designation)",
         { count: "exact" }
       )
       .eq("requester_id", user.id)

@@ -22,6 +22,15 @@ export interface RequisitionAttachment {
   file_size?: number
 }
 
+export interface RequisitionFundingCategory {
+  id: string
+  code: string
+  name: string
+  description?: string | null
+  is_active: boolean
+  sort_order: number
+}
+
 export interface RequisitionApproverProfile {
   id: string
   full_name: string
@@ -42,6 +51,15 @@ export interface Requisition {
   attachments: RequisitionAttachment[]
   current_stage_code: RequisitionStageCode
   status: RequisitionStatus
+
+  funding_category_id?: string | null
+  funding_category_name?: string | null
+  funding_category?: RequisitionFundingCategory | null
+
+  is_emergency: boolean
+  emergency_justification?: string | null
+  /** Stage codes skipped by the expedited emergency route. */
+  bypassed_stages?: string[] | null
 
   reviewed_by?: string | null
   reviewed_at?: string | null
@@ -87,6 +105,9 @@ export interface CreateRequisitionPayload {
   purpose: string
   beneficiary_details: BeneficiaryDetail[]
   attachments: RequisitionAttachment[]
+  funding_category_id: string
+  is_emergency?: boolean
+  emergency_justification?: string
 }
 
 export interface ApproveRequisitionPayload {

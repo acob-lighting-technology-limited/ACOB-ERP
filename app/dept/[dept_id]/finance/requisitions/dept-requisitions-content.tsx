@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from "react"
 import { DataTablePage, DataTable, type DataTableColumn, type DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { Button } from "@/components/ui/button"
-import { Plus, FileCheck2, Clock, CheckCircle2, AlertCircle, Eye, RefreshCw } from "lucide-react"
+import { Plus, FileCheck2, Clock, CheckCircle2, AlertCircle, Eye, RefreshCw, Siren } from "lucide-react"
 import type { Requisition } from "@/lib/requisitions/types"
 import { getStageLabel } from "@/lib/requisitions/workflow"
 import { NewRequisitionDialog } from "@/app/(app)/requisition/_components/new-requisition-dialog"
@@ -61,9 +61,16 @@ export function DeptRequisitionsContent({ deptId, deptName, userId }: DeptRequis
       sortable: true,
       accessor: (r) => r.requisition_number,
       render: (r) => (
-        <Link href={`/requisition/${r.id}`} className="text-primary font-mono font-bold hover:underline">
-          {r.requisition_number}
-        </Link>
+        <div className="flex flex-col gap-0.5">
+          <Link href={`/requisition/${r.id}`} className="text-primary font-mono font-bold hover:underline">
+            {r.requisition_number}
+          </Link>
+          {r.is_emergency && (
+            <span className="inline-flex w-fit items-center gap-1 rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-red-600">
+              <Siren className="h-2.5 w-2.5" /> Emergency
+            </span>
+          )}
+        </div>
       ),
       initialWidth: 140,
     },
@@ -82,6 +89,15 @@ export function DeptRequisitionsContent({ deptId, deptName, userId }: DeptRequis
       accessor: (r) => r.project_name,
       render: (r) => <span className="text-xs font-medium">{r.project_name}</span>,
       initialWidth: 160,
+    },
+    {
+      key: "funding_category_name",
+      label: "Funding",
+      sortable: true,
+      accessor: (r) => r.funding_category_name || "",
+      render: (r) => <span className="text-xs">{r.funding_category_name || "—"}</span>,
+      initialWidth: 150,
+      hideOnMobile: true,
     },
     {
       key: "amount",
@@ -174,6 +190,25 @@ export function DeptRequisitionsContent({ deptId, deptName, userId }: DeptRequis
         { value: "completed", label: "Completed" },
       ],
     },
+    {
+      key: "funding_category_name",
+      label: "Funding",
+      mode: "custom",
+      options: Array.from(new Set(rows.map((r) => r.funding_category_name).filter((v): v is string => Boolean(v)))).map(
+        (name) => ({ value: name, label: name })
+      ),
+      filterFn: (row, selected) => selected.includes(row.funding_category_name || ""),
+    },
+    {
+      key: "route",
+      label: "Route",
+      mode: "custom",
+      options: [
+        { value: "emergency", label: "Emergency" },
+        { value: "standard", label: "Standard" },
+      ],
+      filterFn: (row, selected) => selected.includes(row.is_emergency ? "emergency" : "standard"),
+    },
   ]
 
   return (
@@ -233,7 +268,8 @@ export function DeptRequisitionsContent({ deptId, deptName, userId }: DeptRequis
         searchFn={(row, q) =>
           row.requisition_number.toLowerCase().includes(q) ||
           row.project_name.toLowerCase().includes(q) ||
-          (row.requester?.full_name || "").toLowerCase().includes(q)
+          (row.requester?.full_name || "").toLowerCase().includes(q) ||
+          (row.funding_category_name || "").toLowerCase().includes(q)
         }
         filters={filters}
         isLoading={isLoading}

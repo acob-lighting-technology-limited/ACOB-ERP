@@ -49,8 +49,15 @@ type FleetBooking = {
   status: "pending" | "approved" | "rejected" | "cancelled"
   admin_note?: string | null
   created_at: string
+  /** When the approver decided (approved or rejected). */
+  reviewed_at?: string | null
   resource?: FleetResource | null
-  reviewer?: { id: string; full_name?: string | null } | null
+  reviewer?: {
+    id: string
+    full_name?: string | null
+    department?: string | null
+    designation?: string | null
+  } | null
   attachments?: FleetAttachment[]
 }
 
@@ -273,10 +280,19 @@ export function FleetContent() {
       },
       {
         key: "reviewer",
-        label: "Approver",
+        label: "Decision By",
         sortable: true,
         accessor: (row) => row.reviewer?.full_name || "-",
-        render: (row) => row.reviewer?.full_name || "-",
+        render: (row) =>
+          row.reviewer?.full_name ? (
+            <div className="text-xs">
+              <p className="font-medium">{row.reviewer.full_name}</p>
+              {row.reviewer.department ? <p className="text-muted-foreground">{row.reviewer.department}</p> : null}
+              {row.reviewed_at ? <p className="text-muted-foreground">{formatDateTime(row.reviewed_at)}</p> : null}
+            </div>
+          ) : (
+            <span className="text-muted-foreground text-xs">Not yet reviewed</span>
+          ),
         hideOnMobile: true,
       },
     ],
@@ -396,8 +412,22 @@ export function FleetContent() {
                 <p className="text-sm">{row.admin_note || "-"}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-xs uppercase">Approver</p>
-                <p className="text-sm">{row.reviewer?.full_name || "-"}</p>
+                <p className="text-muted-foreground text-xs uppercase">
+                  {row.status === "rejected" ? "Rejected By" : "Approved By"}
+                </p>
+                {row.reviewer?.full_name ? (
+                  <>
+                    <p className="text-sm">
+                      {row.reviewer.full_name}
+                      {row.reviewer.department ? ` — ${row.reviewer.department}` : ""}
+                    </p>
+                    <p className="text-muted-foreground text-xs">
+                      {row.reviewed_at ? formatDateTime(row.reviewed_at) : "Time not recorded"}
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-sm">Not yet reviewed</p>
+                )}
               </div>
               <div>
                 <p className="text-muted-foreground text-xs uppercase">Attachments</p>

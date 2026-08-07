@@ -3,6 +3,12 @@ import { createClient } from "@/lib/supabase/server"
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { z } from "zod"
 import { numberToNairaWords } from "@/lib/requisitions/number-to-words"
+import {
+  EMERGENCY_BYPASSED_STAGES,
+  EMERGENCY_JUSTIFICATION_MIN_LENGTH,
+  getInitialStage,
+  getStageLabel,
+} from "@/lib/requisitions/workflow"
 import { logger } from "@/lib/logger"
 import { apiError, ApiErrorCode } from "@/lib/api/errors"
 
@@ -30,6 +36,9 @@ const CreateRequisitionSchema = z.object({
   purpose: z.string().trim().min(3, "Purpose must be at least 3 characters"),
   beneficiary_details: z.array(BeneficiarySchema).min(1, "At least one beneficiary is required"),
   attachments: z.array(AttachmentSchema).min(1, "At least one supporting receipt/document is required"),
+  funding_category_id: z.string().uuid("Select the project funding category"),
+  is_emergency: z.boolean().optional(),
+  emergency_justification: z.string().trim().optional(),
 })
 
 function getAdminClient() {
@@ -117,6 +126,36 @@ export async function POST(request: NextRequest) {
 
     const adminClient = getAdminClient() || supabase
 
+    const isEmergency = payload.is_emergency === true
+    const emergencyJustification = payload.emergency_justification?.trim() || ""
+
+    if (isEmergency && emergencyJustification.length < EMERGENCY_JUSTIFICATION_MIN_LENGTH) {
+      return apiError(
+        `An emergency requisition needs a written justification of at least ${EMERGENCY_JUSTIFICATION_MIN_LENGTH} characters.`,
+        ApiErrorCode.VALIDATION_ERROR,
+        400
+      )
+    }
+
+    // Resolve the funding category and snapshot its label onto the requisition so
+    // the printed form stays accurate if the category is renamed later.
+    const { data: fundingCategory, error: fundingError } = await adminClient
+      .from("requisition_funding_categories")
+      .select("id, name, is_active")
+      .eq("id", payload.funding_category_id)
+      .maybeSingle()
+
+    if (fundingError) {
+      log.error("Failed to resolve funding category:", fundingError)
+      return apiError("Failed to validate funding category", ApiErrorCode.INTERNAL_ERROR, 500)
+    }
+
+    if (!fundingCategory || !fundingCategory.is_active) {
+      return apiError("Selected funding category is unavailable", ApiErrorCode.VALIDATION_ERROR, 400)
+    }
+
+    const initialStage = getInitialStage(isEmergency)
+
     // Create the requisition row
     const { data: newReq, error } = await adminClient
       .from("requisitions")
@@ -129,7 +168,12 @@ export async function POST(request: NextRequest) {
         purpose: payload.purpose,
         beneficiary_details: payload.beneficiary_details,
         attachments: payload.attachments,
-        current_stage_code: "pending_reviewed_by",
+        funding_category_id: fundingCategory.id,
+        funding_category_name: fundingCategory.name,
+        is_emergency: isEmergency,
+        emergency_justification: isEmergency ? emergencyJustification : null,
+        bypassed_stages: isEmergency ? EMERGENCY_BYPASSED_STAGES : [],
+        current_stage_code: initialStage,
         status: "pending",
       })
       .select()
@@ -140,7 +184,9 @@ export async function POST(request: NextRequest) {
       return apiError(error?.message || "Failed to create requisition", ApiErrorCode.INTERNAL_ERROR, 500)
     }
 
-    // Trigger notification to Admin & HR Lead for Stage 1
+    // Notify the approver pool for whichever stage this requisition enters at.
+    // Emergency requisitions skip straight to MD / Executive approval, so they go
+    // out as urgent.
     try {
       const { data: adminHrProfiles } = await adminClient
         .from("profiles")
@@ -148,14 +194,19 @@ export async function POST(request: NextRequest) {
         .or("role.eq.super_admin,role.eq.admin,is_department_lead.eq.true")
 
       if (adminHrProfiles && adminHrProfiles.length > 0) {
+        const title = isEmergency ? "EMERGENCY Requisition — Immediate Approval Needed" : "New Requisition for Review"
+        const message = isEmergency
+          ? `Emergency requisition ${newReq.requisition_number} (₦${payload.amount.toLocaleString()}) bypassed review, authorization and verification and is awaiting MD / Executive approval.`
+          : `Requisition ${newReq.requisition_number} (₦${payload.amount.toLocaleString()}) submitted for ${getStageLabel(initialStage).replace(/^Pending /, "")}.`
+
         for (const target of adminHrProfiles) {
           await adminClient.rpc("create_notification", {
             p_user_id: target.id,
-            p_type: "requisition_submitted",
+            p_type: "approval_request",
             p_category: "approvals",
-            p_title: "New Requisition for Review",
-            p_message: `Requisition ${newReq.requisition_number} (₦${payload.amount.toLocaleString()}) submitted for Admin & HR review.`,
-            p_priority: "normal",
+            p_title: title,
+            p_message: message,
+            p_priority: isEmergency ? "urgent" : "normal",
             p_link_url: `/requisition/${newReq.id}`,
             p_actor_id: user.id,
             p_entity_type: "requisition",
