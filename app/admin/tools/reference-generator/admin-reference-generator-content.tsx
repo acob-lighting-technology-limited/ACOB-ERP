@@ -50,6 +50,12 @@ export function AdminReferenceGeneratorContent({
   const [tabCounts, setTabCounts] = useState({ all: initialRecords.length, external: 0, internal: 0 })
   const [globalCounts, setGlobalCounts] = useState({ total: 0, underReview: 0, approved: 0, rejected: 0 })
   const [departmentFilter, setDepartmentFilter] = useState("")
+  // This table is server-paginated, so the DataTable cannot filter rows itself —
+  // every active filter has to be forwarded to the API or it does nothing.
+  const [statusFilter, setStatusFilter] = useState("")
+  const [letterTypeFilter, setLetterTypeFilter] = useState("")
+  const [yearFilter, setYearFilter] = useState("")
+
   const recordsUrl = useCallback(
     (params: URLSearchParams) => {
       if (lockedDepartment) params.set("department", lockedDepartment)
@@ -57,6 +63,21 @@ export function AdminReferenceGeneratorContent({
       return `/api/correspondence/records?${params.toString()}`
     },
     [lockedDepartment, departmentFilter]
+  )
+
+  /** Applies the filter-bar selections that the server understands. */
+  const applyServerFilters = useCallback(
+    (params: URLSearchParams) => {
+      // An explicit Type filter overrides the active tab.
+      if (letterTypeFilter) params.set("letter_type", letterTypeFilter)
+      if (statusFilter) params.set("status", statusFilter)
+      if (yearFilter) {
+        params.set("date_from", `${yearFilter}-01-01`)
+        params.set("date_to", `${yearFilter}-12-31T23:59:59.999Z`)
+      }
+      return params
+    },
+    [letterTypeFilter, statusFilter, yearFilter]
   )
 
   const [decisionPrompt, setDecisionPrompt] = useState<{
@@ -147,6 +168,7 @@ export function AdminReferenceGeneratorContent({
       })
       if (activeTab !== "all") params.set("letter_type", activeTab)
       if (searchQuery.trim()) params.set("search", searchQuery.trim())
+      applyServerFilters(params)
 
       const res = await apiFetch(recordsUrl(params), { cache: "no-store" })
       const json = await res.json()
@@ -183,6 +205,7 @@ export function AdminReferenceGeneratorContent({
         })
         if (activeTab !== "all") params.set("letter_type", activeTab)
         if (searchQuery.trim()) params.set("search", searchQuery.trim())
+        applyServerFilters(params)
 
         const res = await apiFetch(recordsUrl(params), { cache: "no-store" })
         const json = await res.json()
@@ -196,7 +219,7 @@ export function AdminReferenceGeneratorContent({
     }
 
     void loadRecords()
-  }, [page, searchQuery, activeTab, recordsUrl])
+  }, [page, searchQuery, activeTab, recordsUrl, applyServerFilters])
 
   async function decide(recordId: string, decision: "approved" | "rejected" | "returned_for_correction") {
     setDecisionPrompt({ recordId, decision })
@@ -358,6 +381,10 @@ export function AdminReferenceGeneratorContent({
         { value: "sent", label: "Sent" },
         { value: "filed", label: "Filed" },
       ],
+      multi: false,
+      // Server does the actual filtering (see onFilterChange -> statusFilter).
+      mode: "custom",
+      filterFn: () => true,
     },
     {
       key: "letter_type",
@@ -366,20 +393,29 @@ export function AdminReferenceGeneratorContent({
         { value: "internal", label: "Internal" },
         { value: "external", label: "External" },
       ],
+      multi: false,
+      // Server does the actual filtering (see onFilterChange -> letterTypeFilter).
+      mode: "custom",
+      filterFn: () => true,
     },
     {
       key: "year",
       label: "Year",
+      multi: false,
+      // Dedupe the years themselves — a Set of freshly-built objects never
+      // collapses duplicates, so every record used to add its own option.
       options: Array.from(
         new Set(
           records
             .map((record) => new Date(record.created_at || "").getFullYear())
             .filter((year) => Number.isFinite(year))
-            .map((year) => ({ value: String(year), label: String(year) }))
         )
-      ),
+      )
+        .sort((a, b) => b - a)
+        .map((year) => ({ value: String(year), label: String(year) })),
+      // Server does the actual filtering (see onFilterChange → yearFilter).
       mode: "custom",
-      filterFn: (row, selected) => selected.includes(String(new Date(row.created_at || "").getFullYear())),
+      filterFn: () => true,
     },
     // Department filter is server-side (see onFilterChange → departmentFilter).
     // Hidden when the page is already locked to a single department.
@@ -474,10 +510,24 @@ export function AdminReferenceGeneratorContent({
         onSearchChange={setSearchQuery}
         onFilterChange={(f) => {
           const dept = f.department?.[0] ?? ""
-          if (dept !== departmentFilter) {
-            setDepartmentFilter(dept)
-            setPage(1)
+          const status = f.status?.[0] ?? ""
+          const letterType = f.letter_type?.[0] ?? ""
+          const year = f.year?.[0] ?? ""
+
+          if (
+            dept === departmentFilter &&
+            status === statusFilter &&
+            letterType === letterTypeFilter &&
+            year === yearFilter
+          ) {
+            return
           }
+
+          setDepartmentFilter(dept)
+          setStatusFilter(status)
+          setLetterTypeFilter(letterType)
+          setYearFilter(year)
+          setPage(1)
         }}
         rowActions={[
           {
