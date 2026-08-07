@@ -8,7 +8,7 @@ import type { ClientAdminScope } from "@/components/admin-scope-context"
 import type { UserRole } from "@/types/database"
 
 export const metadata: Metadata = {
-  title: "Dept Console | ACOB Lighting Technology Limited",
+  title: "My Department | ACOB Lighting Technology Limited",
   description: "Department lead console — manage your team, approvals, and operations.",
 }
 

@@ -6,7 +6,7 @@ import { normalizeDepartmentName } from "@/lib/admin/rbac"
 import { logger } from "@/lib/logger"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
-import { canMutateV2 } from "@/lib/admin/policy-v2"
+import { canMutateV2, type AccessContextV2 } from "@/lib/admin/policy-v2"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("api-reports-weekly-reports")
@@ -95,13 +95,26 @@ export async function PATCH(request: Request) {
 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
+    // Department leads and admins get full RBAC-scoped access. Plain employees
+    // (not leads, not admin-like) aren't covered by the admin-scope machinery
+    // at all, but they may still submit their own department's weekly report —
+    // resolve that narrowly here rather than widening the shared admin scope.
     const contextResult = await requireAccessContextV2()
-    if (!contextResult.ok) {
-      return contextResult.response
-    }
-    const routeAccess = enforceRouteAccessV2(contextResult.context, "reports.weekly")
-    if (!routeAccess.ok) {
-      return routeAccess.response
+    let accessContext: AccessContextV2 | null = null
+    let employeeOwnDepartment: string | null = null
+
+    if (contextResult.ok) {
+      const routeAccess = enforceRouteAccessV2(contextResult.context, "reports.weekly")
+      if (!routeAccess.ok) {
+        return routeAccess.response
+      }
+      accessContext = contextResult.context
+    } else {
+      const { data: profile } = await supabase.from("profiles").select("department").eq("id", user.id).maybeSingle()
+      employeeOwnDepartment = profile?.department ? normalizeDepartmentName(profile.department) : null
+      if (!employeeOwnDepartment) {
+        return contextResult.response
+      }
     }
 
     const dataClient = getServiceRoleClientOrFallback(supabase as ReportsClient)
@@ -123,16 +136,19 @@ export async function PATCH(request: Request) {
     const status = parsed.data.status || "submitted"
     const reportId = String(parsed.data.id || "").trim()
 
-    const canWriteDepartment = canMutateV2(contextResult.context, "reports.weekly", normalizedDepartment)
+    const canWriteDepartment = accessContext
+      ? canMutateV2(accessContext, "reports.weekly", normalizedDepartment)
+      : normalizedDepartment === employeeOwnDepartment
     if (!canWriteDepartment) {
       log.warn(
         {
           department,
           normalizedDepartment,
-          managedDepartments: contextResult.context.managedDepartments,
+          managedDepartments:
+            accessContext?.managedDepartments ?? (employeeOwnDepartment ? [employeeOwnDepartment] : []),
           userId: user.id,
-          role: contextResult.context.baseRole,
-          actingContext: contextResult.context.actingContext,
+          role: accessContext?.baseRole ?? "employee",
+          actingContext: accessContext?.actingContext ?? "employee_self",
         },
         "Weekly report save forbidden by department scope"
       )
@@ -194,7 +210,7 @@ export async function PATCH(request: Request) {
     log.info(
       {
         userId: user.id,
-        role: contextResult.context.baseRole,
+        role: accessContext?.baseRole ?? "employee",
         department,
         normalizedDepartment,
         weekNumber,
@@ -203,7 +219,7 @@ export async function PATCH(request: Request) {
         existingId: targetExisting?.id || null,
         existingUserId: targetExisting?.user_id || null,
         isWeekMutable,
-        actingContext: contextResult.context.actingContext,
+        actingContext: accessContext?.actingContext ?? "employee_self",
       },
       "Weekly report save pre-write state"
     )
@@ -243,9 +259,10 @@ export async function PATCH(request: Request) {
       )
     }
 
-    const isGlobalReportsEditor =
-      contextResult.context.actingContext === "global_admin" &&
-      ["developer", "super_admin", "admin"].includes(contextResult.context.baseRole)
+    const isGlobalReportsEditor = Boolean(
+      accessContext?.actingContext === "global_admin" &&
+        ["developer", "super_admin", "admin"].includes(accessContext.baseRole)
+    )
 
     if (!isGlobalReportsEditor && targetExisting?.user_id && targetExisting.user_id !== user.id) {
       log.warn(

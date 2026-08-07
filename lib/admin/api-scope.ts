@@ -2,7 +2,7 @@ import { NextResponse } from "next/server"
 import { headers } from "next/headers"
 import { createClient } from "@/lib/supabase/server"
 import { resolveAdminScope, expandDepartmentScopeForQuery, type AdminScope } from "@/lib/admin/rbac"
-import type { DeptScope } from "@/lib/dept/scope"
+import { resolveDeptScope, type DeptScope } from "@/lib/dept/scope"
 import { logger } from "@/lib/logger"
 
 const log = logger("admin-api-scope")
@@ -36,20 +36,71 @@ function adminScopeFromDeptScope(deptScope: DeptScope): AdminScope {
 }
 
 /**
- * Reads the AdminScope injected by middleware (x-admin-scope header).
- * This is the PRIMARY way for API route handlers to get scope —
- * no extra DB round-trip.
+ * Extracts the department console the caller is sitting in, if any.
  *
- * Falls back to x-dept-scope (injected for /dept/ and /api/dept/ paths),
- * synthesising a compatible AdminScope so existing admin API handlers work
- * for dept leads without any changes.
+ * Prefers the explicit x-dept-context header set by apiFetch(); falls back to
+ * parsing the Referer, which the browser sends in full for same-origin requests
+ * under our strict-origin-when-cross-origin policy. The fallback covers the
+ * call sites that still use raw fetch() instead of apiFetch().
  *
- * Falls back to resolveApiAdminScope() if both headers are absent (e.g. local
- * dev without middleware, or uncovered paths).
+ * The returned id is untrusted input — callers MUST re-resolve lead membership
+ * against the database before granting anything on the strength of it.
+ */
+export function readDeptContextId(h: Headers): string | null {
+  const explicit = h.get("x-dept-context")?.trim()
+  if (explicit) return explicit
+
+  // Referer on a *navigation* is the page you came FROM, not the page being
+  // rendered — using it there would scope an /admin page to the dept console
+  // you just navigated away from. Skip both full document loads and Next.js
+  // client-side RSC navigations (which look like XHR but are navigations).
+  // Only plain fetch/XHR remains, where Referer is the page making the call.
+  if (h.get("sec-fetch-dest") === "document") return null
+  if (h.get("rsc") === "1" || h.has("next-router-prefetch") || h.has("next-router-state-tree")) return null
+
+  const referer = h.get("referer")
+  if (!referer) return null
+  try {
+    const match = new URL(referer).pathname.match(/^\/dept\/([^/]+)/)
+    return match ? decodeURIComponent(match[1]) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Resolves the caller's AdminScope for API route handlers.
+ *
+ * Resolution order:
+ *  1. Department console context (x-dept-context / Referer) — narrows to the
+ *     single department whose console the caller is in, re-verified against
+ *     the DB. Takes precedence so the dept surface never serves global data.
+ *  2. The AdminScope injected by middleware (x-admin-scope) — no extra DB hit.
+ *  3. x-dept-scope, injected for /dept/ and /api/dept/ paths.
+ *  4. resolveApiAdminScope(), for paths middleware does not cover.
  */
 export async function getRequestScope(): Promise<AdminScope | null> {
   try {
     const h = await headers()
+
+    // Department console takes precedence over any global admin scope. Dept
+    // pages reuse the admin view components, so without this an admin who also
+    // leads a department would be served every department's data while sitting
+    // in one department's console. Membership is re-resolved from the DB below,
+    // so the (spoofable) dept id can only ever narrow access, never widen it.
+    const deptContextId = readDeptContextId(h)
+    if (deptContextId) {
+      const supabase = await createClient()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return null
+      const deptScope = await resolveDeptScope(supabase, user.id, deptContextId)
+      // Not a lead of this department — deny rather than falling back to a
+      // wider scope, which is what leaked data in the first place.
+      return deptScope ? adminScopeFromDeptScope(deptScope) : null
+    }
+
     const raw = h.get("x-admin-scope")
     if (raw) {
       return JSON.parse(Buffer.from(raw, "base64").toString("utf-8")) as AdminScope

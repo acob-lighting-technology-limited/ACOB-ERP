@@ -532,7 +532,7 @@ export function Sidebar({ user, profile, canAccessAdmin, deptConsoleHref }: Side
               <DropdownMenuItem asChild>
                 <Link href={deptConsoleHref} className="flex w-full items-center gap-2">
                   <ShieldCheck className="h-4 w-4" />
-                  Dept Console
+                  Go to Dept
                 </Link>
               </DropdownMenuItem>
             )}

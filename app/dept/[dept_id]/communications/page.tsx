@@ -8,5 +8,5 @@ interface Props {
 export default async function DeptCommunicationsPage({ params }: Props) {
   const { dept_id } = await params
   await requireDeptScope(dept_id)
-  return <AdminCommunicationsPage basePath={`/dept/${dept_id}`} />
+  return <AdminCommunicationsPage basePath={`/dept/${dept_id}`} showMeetings={false} />
 }
