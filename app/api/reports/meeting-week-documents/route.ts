@@ -73,6 +73,20 @@ function hasGlobalReportsWriteAccess(scope: NonNullable<Awaited<ReturnType<typeo
   return getDepartmentScope(scope, "general") === null
 }
 
+/**
+ * Document types every authenticated staff member may read.
+ *
+ * These are the two the employee General Meeting surface links to —
+ * /reports/kss and /reports/minutes-of-meeting, both rendered read-only.
+ * Attendance and transcripts have no employee page and stay admin-only.
+ * Writes are gated separately in POST/PATCH/DELETE for all types.
+ */
+const STAFF_READABLE_DOCUMENT_TYPES: DocumentType[] = ["knowledge_sharing_session", "minutes"]
+
+function isStaffReadableDocumentType(value: unknown): boolean {
+  return STAFF_READABLE_DOCUMENT_TYPES.includes(value as DocumentType)
+}
+
 function parseDocumentType(value: unknown): DocumentType | null {
   if (
     value === "knowledge_sharing_session" ||
@@ -163,13 +177,11 @@ export async function GET(request: Request) {
     const currentOnly = searchParams.get("currentOnly") === "true"
     const mode = searchParams.get("mode")
 
-    // Knowledge Sharing Session material is shown read-only on the employee
-    // dashboard (/reports/kss), so every authenticated staff member may read it —
-    // matching the KSS roster GET. Minutes, attendance and transcripts stay
-    // admin-only. Writes are gated in POST/PATCH/DELETE regardless.
+    // KSS and Minutes are shown read-only on the employee General Meeting pages,
+    // so every authenticated staff member may read them. Attendance and
+    // transcripts stay admin-only. Writes are gated in POST/PATCH/DELETE.
     const scope = await resolveAdminScope(supabase as ReportsClient, user.id)
-    const isStaffReadableRequest = docType === "knowledge_sharing_session"
-    if (!scope && !isStaffReadableRequest) {
+    if (!scope && !isStaffReadableDocumentType(docType)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -181,7 +193,7 @@ export async function GET(request: Request) {
         .single()
 
       if (rowError || !row) return NextResponse.json({ error: "Document not found" }, { status: 404 })
-      if (!scope && row.document_type !== "knowledge_sharing_session") {
+      if (!scope && !isStaffReadableDocumentType(row.document_type)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }
 
@@ -224,7 +236,7 @@ export async function GET(request: Request) {
         .single()
 
       if (rowError || !row) return NextResponse.json({ error: "Document not found" }, { status: 404 })
-      if (!scope && row.document_type !== "knowledge_sharing_session") {
+      if (!scope && !isStaffReadableDocumentType(row.document_type)) {
         return NextResponse.json({ error: "Forbidden" }, { status: 403 })
       }
 
@@ -265,8 +277,8 @@ export async function GET(request: Request) {
     if (Number.isFinite(week) && week > 0) query = query.eq("meeting_week", week)
     if (Number.isFinite(year) && year > 0) query = query.eq("meeting_year", year)
     if (docType) query = query.eq("document_type", docType)
-    // Non-admin staff only ever see KSS material, whatever they ask for.
-    if (!scope) query = query.eq("document_type", "knowledge_sharing_session")
+    // Non-admin staff only ever see the staff-readable types, whatever they ask for.
+    if (!scope) query = query.in("document_type", STAFF_READABLE_DOCUMENT_TYPES)
     if (currentOnly) query = query.eq("is_current", true)
 
     const { data, error } = await query
