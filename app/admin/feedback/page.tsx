@@ -27,7 +27,13 @@ export default async function AdminFeedbackPage() {
   const departmentScope = getDepartmentScope(scope, "general")
   const queryDepartmentScope = departmentScope ? expandDepartmentScopeForQuery(departmentScope) : null
 
-  let feedbackQuery = dataClient.from("feedback").select("*").order("created_at", { ascending: false })
+  // A lead must never read the anonymous feedback written about them, even when
+  // that lead also holds an admin role.
+  let feedbackQuery = dataClient
+    .from("feedback")
+    .select("*")
+    .or(`target_lead_id.is.null,target_lead_id.neq.${data.user.id}`)
+    .order("created_at", { ascending: false })
   if (departmentScope) {
     const { data: scopedUsers } =
       queryDepartmentScope && queryDepartmentScope.length > 0
@@ -79,10 +85,29 @@ export default async function AdminFeedbackPage() {
       profilesData = data || []
     }
 
+    // Lead-directed feedback names the lead it is about (never the submitter).
+    const targetLeadIds = Array.from(new Set(feedbackData.map((f) => f.target_lead_id).filter(Boolean)))
+    const { data: targetLeads } =
+      targetLeadIds.length > 0
+        ? await dataClient
+            .from("profiles")
+            .select("id, first_name, last_name, company_email, department")
+            .in("id", targetLeadIds)
+        : {
+            data: [] as {
+              id: string
+              first_name: string | null
+              last_name: string | null
+              company_email: string | null
+              department: string | null
+            }[],
+          }
+
     feedbackWithProfiles = feedbackData.map((fb) => ({
       ...fb,
       user_id: fb.is_anonymous ? null : fb.user_id,
       profiles: fb.is_anonymous ? null : profilesData?.find((p) => p.id === fb.user_id) || null,
+      target_lead: fb.target_lead_id ? targetLeads?.find((p) => p.id === fb.target_lead_id) || null : null,
     })) as FeedbackRecord[]
   }
 

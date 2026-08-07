@@ -20,6 +20,10 @@ export interface FeedbackRecord {
   created_at: string
   updated_at: string
   profiles?: FeedbackProfileSummary | null
+  /** Set when this feedback is about a department lead (always fully anonymous). */
+  target_lead_id?: string | null
+  target_department?: string | null
+  target_lead?: FeedbackProfileSummary | null
 }
 
 export type EditableFeedbackRecord = Pick<

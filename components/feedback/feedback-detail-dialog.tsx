@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { formatName } from "@/lib/utils"
-import { formatWATDateTime } from "@/lib/utils/date"
+import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import type { FeedbackRecord } from "@/components/feedback/types"
 
 function getTypeColor(type: string): string {
@@ -64,6 +64,24 @@ export function FeedbackDetailDialog({
 
         {feedback && (
           <div className="space-y-6">
+            {feedback.target_lead_id && (
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Feedback About (Department Lead)</Label>
+                <div className="border-primary/30 bg-primary/5 rounded-lg border p-4">
+                  <p className="text-lg font-medium">
+                    {formatName(feedback.target_lead?.first_name)} {formatName(feedback.target_lead?.last_name)}
+                  </p>
+                  <p className="text-muted-foreground text-sm">
+                    {feedback.target_department || feedback.target_lead?.department || "—"}
+                  </p>
+                  <p className="text-muted-foreground mt-2 border-t pt-2 text-xs">
+                    Fully anonymous upward feedback. The submitter is not recorded anywhere, and this record is never
+                    shown to the lead named above.
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Submitted By</Label>
               <div className="bg-muted/50 rounded-lg border p-4">
@@ -79,7 +97,13 @@ export function FeedbackDetailDialog({
                   <p className="text-muted-foreground text-lg font-medium italic">Anonymous Submission</p>
                 )}
                 <div className="mt-2 border-t pt-2">
-                  <p className="text-muted-foreground text-xs">Submitted: {formatWATDateTime(feedback.created_at)}</p>
+                  {/* Lead feedback is stamped to the day only — showing a clock time here would imply a precision that is deliberately not recorded. */}
+                  <p className="text-muted-foreground text-xs">
+                    Submitted:{" "}
+                    {feedback.target_lead_id
+                      ? `${formatWATDate(feedback.created_at)} (date only — submission time is not recorded)`
+                      : formatWATDateTime(feedback.created_at)}
+                  </p>
                   {feedback.updated_at !== feedback.created_at && (
                     <p className="text-muted-foreground text-xs">Updated: {formatWATDateTime(feedback.updated_at)}</p>
                   )}

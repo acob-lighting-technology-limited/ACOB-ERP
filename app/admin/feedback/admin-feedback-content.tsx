@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation"
 import { useQuery } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { toast } from "sonner"
-import { MessageSquare, AlertCircle, Clock, XCircle, Eye, ShieldCheck, Mail } from "lucide-react"
+import { MessageSquare, AlertCircle, Clock, XCircle, Eye, ShieldCheck, Mail, UserCog } from "lucide-react"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
-import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
+import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -67,6 +67,22 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
   const [selectedFeedback, setSelectedFeedback] = useState<FeedbackRecord | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [activeTab, setActiveTab] = useState<"general" | "leads">("general")
+
+  // Lead-directed feedback is fully anonymous upward feedback about a department
+  // lead. It is kept in its own tab and never reaches the lead it names.
+  const leadFeedback = useMemo(() => feedback.filter((f) => Boolean(f.target_lead_id)), [feedback])
+  const generalFeedback = useMemo(() => feedback.filter((f) => !f.target_lead_id), [feedback])
+  const hasLeadFeedback = leadFeedback.length > 0
+  const visibleFeedback = hasLeadFeedback && activeTab === "leads" ? leadFeedback : generalFeedback
+
+  const tabs: DataTableTab[] = useMemo(
+    () => [
+      { key: "general", label: `General (${generalFeedback.length})` },
+      { key: "leads", label: `About Leads (${leadFeedback.length})` },
+    ],
+    [generalFeedback.length, leadFeedback.length]
+  )
 
   const { data: filterData } = useQuery({
     queryKey: QUERY_KEYS.feedbackViewer(),
@@ -95,6 +111,8 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
       setIsUpdating(false)
     }
   }
+
+  const showingLeadFeedback = hasLeadFeedback && activeTab === "leads"
 
   const columns: DataTableColumn<FeedbackRecord>[] = useMemo(
     () => [
@@ -145,6 +163,32 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
           </div>
         ),
       },
+      ...(showingLeadFeedback
+        ? [
+            {
+              key: "target_lead",
+              label: "About Lead",
+              sortable: true,
+              resizable: true,
+              initialWidth: 220,
+              accessor: (r: FeedbackRecord) =>
+                `${r.target_lead?.first_name || ""} ${r.target_lead?.last_name || ""}`.trim() || "Unknown lead",
+              render: (r: FeedbackRecord) => (
+                <div className="flex items-center gap-2">
+                  <UserCog className="text-muted-foreground h-3.5 w-3.5" />
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">
+                      {`${r.target_lead?.first_name || ""} ${r.target_lead?.last_name || ""}`.trim() || "Unknown lead"}
+                    </span>
+                    <span className="text-muted-foreground text-[10px]">
+                      {r.target_department || r.target_lead?.department || "—"}
+                    </span>
+                  </div>
+                </div>
+              ),
+            } satisfies DataTableColumn<FeedbackRecord>,
+          ]
+        : []),
       {
         key: "department",
         label: "Department",
@@ -189,7 +233,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
         render: (r) => <span className="text-muted-foreground text-xs">{formatWATDate(r.created_at)}</span>,
       },
     ],
-    []
+    [showingLeadFeedback]
   )
 
   const filters: DataTableFilter<FeedbackRecord>[] = useMemo(
@@ -219,6 +263,9 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
       description="Centralized portal for managing employee concerns, suggestions and system praise."
       icon={MessageSquare}
       backLink={{ href: "/admin", label: "Back to Admin" }}
+      tabs={hasLeadFeedback ? tabs : undefined}
+      activeTab={hasLeadFeedback ? activeTab : undefined}
+      onTabChange={(tab) => setActiveTab(tab as "general" | "leads")}
       stats={
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
           <StatCard
@@ -260,13 +307,13 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
       }
     >
       <DataTable<FeedbackRecord>
-        data={feedback}
+        data={visibleFeedback}
         columns={columns}
         getRowId={(r) => r.id}
         pagination={{ pageSize: 50 }}
         searchPlaceholder="Search ref #, title, requester name or email..."
         searchFn={(r, q) =>
-          `${r.id} ${r.title} ${r.is_anonymous ? "anonymous" : ""} ${r.profiles?.first_name || ""} ${r.profiles?.last_name || ""} ${r.profiles?.company_email || ""}`
+          `${r.id} ${r.title} ${r.is_anonymous ? "anonymous" : ""} ${r.profiles?.first_name || ""} ${r.profiles?.last_name || ""} ${r.profiles?.company_email || ""} ${r.target_lead?.first_name || ""} ${r.target_lead?.last_name || ""} ${r.target_department || ""}`
             .toLowerCase()
             .includes(q)
         }
