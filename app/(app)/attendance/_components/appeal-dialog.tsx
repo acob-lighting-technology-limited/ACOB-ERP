@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { apiFetch } from "@/lib/api-client"
 import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
@@ -36,17 +37,35 @@ interface AppealDialogProps {
   editAppeal?: { id: string; appeal_reason: string } | null
 }
 
-function getRequestedStatus(status: UnifiedAttendanceStatus): "absent_with_permission" | "lateness_with_permission" {
-  return status === "absent" ? "absent_with_permission" : "lateness_with_permission"
+type RequestedStatus = "absent_with_permission" | "lateness_with_permission" | "out_of_station"
+
+const REQUESTED_LABELS: Record<RequestedStatus, string> = {
+  absent_with_permission: "AWP — Absent With Permission",
+  lateness_with_permission: "LWP — Lateness With Permission",
+  out_of_station: "OOS — Out of Station",
 }
 
-function getRequestedLabel(status: UnifiedAttendanceStatus): string {
-  return status === "absent" ? "AWP — Absent With Permission" : "LWP — Lateness With Permission"
+const REQUESTED_HINTS: Record<RequestedStatus, string> = {
+  absent_with_permission: "You were away with prior permission.",
+  lateness_with_permission: "You arrived late with prior permission.",
+  out_of_station: "You were away on company business — a site visit, field work or travel.",
+}
+
+/**
+ * Which statuses this day may be appealed as. The permission status depends on what the day
+ * came out as; out of station applies to any of them, since being away on company business can
+ * leave no punch at all or a late one on the way back.
+ */
+function getRequestedOptions(status: UnifiedAttendanceStatus): RequestedStatus[] {
+  const permission: RequestedStatus = status === "absent" ? "absent_with_permission" : "lateness_with_permission"
+  return [permission, "out_of_station"]
 }
 
 export function AppealDialog({ row, open, onClose, onSuccess, editAppeal }: AppealDialogProps) {
   const [reason, setReason] = useState("")
   const [submitting, setSubmitting] = useState(false)
+  const options = getRequestedOptions(row.normalizedStatus)
+  const [requestedStatus, setRequestedStatus] = useState<RequestedStatus>(options[0])
 
   // Sync reason state when editing changes or dialog opens
   useEffect(() => {
@@ -55,10 +74,10 @@ export function AppealDialog({ row, open, onClose, onSuccess, editAppeal }: Appe
     } else {
       setReason("")
     }
-  }, [editAppeal, open])
+    // Default back to the permission status each time; OOS is the deliberate choice.
+    setRequestedStatus(getRequestedOptions(row.normalizedStatus)[0])
+  }, [editAppeal, open, row.normalizedStatus])
 
-  const requestedStatus = getRequestedStatus(row.normalizedStatus)
-  const requestedLabel = getRequestedLabel(row.normalizedStatus)
   const isValid = reason.trim().length >= 10
 
   async function handleSubmit() {
@@ -131,11 +150,36 @@ export function AppealDialog({ row, open, onClose, onSuccess, editAppeal }: Appe
             </div>
           </div>
 
-          {/* Requested status */}
-          <div className="rounded-lg border-2 border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/30">
-            <p className="text-muted-foreground mb-1 text-xs font-medium tracking-wide uppercase">Requesting</p>
-            <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">{requestedLabel}</p>
-          </div>
+          {/* Requested status — editing an appeal only changes the reason, so it is fixed there */}
+          {editAppeal ? (
+            <div className="rounded-lg border-2 border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/30">
+              <p className="text-muted-foreground mb-1 text-xs font-medium tracking-wide uppercase">Requesting</p>
+              <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">
+                {REQUESTED_LABELS[requestedStatus]}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label htmlFor="requested-status">Requesting</Label>
+              <Select
+                value={requestedStatus}
+                onValueChange={(v) => setRequestedStatus(v as RequestedStatus)}
+                disabled={submitting}
+              >
+                <SelectTrigger id="requested-status">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {REQUESTED_LABELS[option]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-muted-foreground text-xs">{REQUESTED_HINTS[requestedStatus]}</p>
+            </div>
+          )}
 
           {/* Reason */}
           <div className="space-y-2">

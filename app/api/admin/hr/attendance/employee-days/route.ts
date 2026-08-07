@@ -167,6 +167,7 @@ export async function GET(request: NextRequest) {
           record: rec,
           isHoliday: ctx.isHoliday(date),
           isOnLeave: ctx.isOnLeave(userId, date),
+          isOnUnpaidLeave: ctx.isOnUnpaidLeave(userId, date),
           isExempted: exemptHint || Boolean(profile?.attendance_exempt) || ctx.isExempt(userId, date),
           recordDate: date,
           earlyClosure: closeTime ? { closeTime } : null,

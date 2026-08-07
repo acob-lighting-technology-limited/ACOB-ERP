@@ -291,7 +291,6 @@ const adminNavigation: NavItem[] = [
           { name: "Attendance", href: "/admin/hr/pms/attendance" },
         ],
       },
-      { name: "Performance", href: "/admin/hr/performance" },
       { name: "Office Location", href: "/admin/hr/office-location" },
     ],
   },

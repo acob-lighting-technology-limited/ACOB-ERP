@@ -25,6 +25,7 @@ import {
   Ticket,
   User,
   Users,
+  Utensils,
   Wrench,
   FolderKanban,
 } from "lucide-react"
@@ -133,6 +134,7 @@ const NAV_ROUTE_ALIASES: Record<string, string[]> = {
 const hrNavigation: NavItemDef[] = [
   { name: "Leave", href: "/leave", icon: Calendar },
   { name: "Attendance", href: "/attendance", icon: Clock },
+  { name: "Lunch", href: "/lunch", icon: Utensils },
   { name: "Shared Resources", href: "/resources", icon: Car },
   { name: "Payroll", href: "/payroll", icon: FileText },
   {

@@ -37,6 +37,12 @@ export type LeaveEntitlement = {
   pendingDays: number
   /** entitlementDays − usedDays − pendingDays, floored at zero. */
   remainingDays: number
+  /**
+   * True for types with no policy rules — granted case by case rather than allocated yearly
+   * (LWOP). Selectable like any other type; there is simply no annual allowance to count down,
+   * so `remainingDays` is not a meaningful figure to show.
+   */
+  uncapped: boolean
   /** Policy requires documents the employee has not supplied. */
   needsEvidence: boolean
 }
@@ -94,11 +100,12 @@ function inclusiveDays(start: string, end: string): number {
 }
 
 /**
- * Every leave type this employee is entitled to, with days used and remaining.
+ * Every leave type available to this employee, with days used and remaining.
  *
- * Only types with an active policy are entitlements — that is what separates real allocations
- * from types like LWOP, which is granted case by case and never carries a balance. Types the
- * employee is not eligible for are omitted, so men get no maternity and women no paternity.
+ * Types the employee is not eligible for are omitted, so men get no maternity and women no
+ * paternity. Types with no policy rules (LWOP) are still listed — they are real leave people
+ * take — but flagged `uncapped`, because they are granted case by case rather than allocated
+ * as a yearly allowance.
  */
 export async function getLeaveEntitlements(
   client: SupabaseClient,
@@ -133,7 +140,7 @@ export async function getLeaveEntitlements(
   const entitlements: LeaveEntitlement[] = []
 
   for (const lt of (leaveTypes ?? []) as LeaveTypeRow[]) {
-    if (!allocatable.has(lt.id)) continue
+    const uncapped = !allocatable.has(lt.id)
 
     let needsEvidence = false
     try {
@@ -164,6 +171,7 @@ export async function getLeaveEntitlements(
       usedDays: totals.used,
       pendingDays: totals.pending,
       remainingDays: Math.max(0, entitlementDays - totals.used - totals.pending),
+      uncapped,
       needsEvidence,
     })
   }
@@ -180,11 +188,22 @@ export async function getRemainingDays(
 ): Promise<number> {
   const year = options?.year ?? new Date().getUTCFullYear()
 
-  const [{ data: leaveType }, committed] = await Promise.all([
+  const [{ data: leaveType }, { data: policy }, committed] = await Promise.all([
     client.from("leave_types").select("max_days").eq("id", leaveTypeId).maybeSingle<{ max_days: number | null }>(),
+    client
+      .from("leave_policies")
+      .select("leave_type_id")
+      .eq("leave_type_id", leaveTypeId)
+      .eq("is_active", true)
+      .maybeSingle(),
     getCommittedDays(client, userId, year, { excludeRequestId: options?.excludeRequestId }),
   ])
 
+  const maxDays = Number(leaveType?.max_days ?? 0)
+  // Uncapped types (LWOP) have no yearly allowance to exhaust — only the type's own per-request
+  // ceiling applies, so the request check must not reject on days already taken.
+  if (!policy) return maxDays
+
   const totals = committed.get(leaveTypeId) ?? { used: 0, pending: 0 }
-  return Math.max(0, Number(leaveType?.max_days ?? 0) - totals.used - totals.pending)
+  return Math.max(0, maxDays - totals.used - totals.pending)
 }

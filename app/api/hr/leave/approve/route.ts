@@ -348,11 +348,10 @@ export async function PATCH(request: NextRequest) {
         )
       }
 
-      await supabaseAdmin.rpc("update_leave_balance", {
-        p_user_id: leaveRequest.user_id,
-        p_leave_type_id: typedLeaveRequest.leave_type_id,
-        p_days: typedLeaveRequest.days_count,
-      })
+      // No balance write here on purpose: entitlements are derived from
+      // leave_requests (see COMMITTED_LEAVE_STATUSES in lib/hr/leave-entitlement.ts),
+      // so approving the request is itself what consumes the balance. The legacy
+      // leave_balances table is read by nothing.
 
       await syncAttendanceForApprovedLeave(
         supabaseAdmin,

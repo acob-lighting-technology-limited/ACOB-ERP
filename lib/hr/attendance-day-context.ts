@@ -15,6 +15,12 @@ import { toLocalISODate } from "@/lib/hr/attendance-utils"
 export interface DayContext {
   isHoliday(date: string): boolean
   isOnLeave(userId: string, date: string): boolean
+  /**
+   * On leave of a type flagged `is_paid = false` (LWOP). A subset of isOnLeave: these days
+   * are still leave, but unearned and unpaid, so they show as their own attendance status and
+   * count against the employee rather than being covered like annual or sick leave.
+   */
+  isOnUnpaidLeave(userId: string, date: string): boolean
   /** Period-based exemption only — does NOT include the profile.attendance_exempt flag. */
   isExempt(userId: string, date: string): boolean
   /** Org-wide early-closure time (HH:MM) for the date, or null if not a closure day. */
@@ -37,6 +43,7 @@ export async function loadDayContext(
 
   const holidayDates = new Set<string>()
   const leaveByUser = new Map<string, Set<string>>()
+  const unpaidLeaveByUser = new Map<string, Set<string>>()
   const exemptByUser = new Map<string, Set<string>>()
   const closureByDate = new Map<string, string>()
   const resumptionByDate = new Map<string, string>()
@@ -76,7 +83,7 @@ export async function loadDayContext(
       client.from("holiday_calendar").select("holiday_date").gte("holiday_date", start).lte("holiday_date", end),
       client
         .from("leave_requests")
-        .select("user_id, start_date, end_date")
+        .select("user_id, start_date, end_date, leave_type:leave_types!leave_requests_leave_type_id_fkey(is_paid)")
         .in("user_id", userIds)
         .eq("status", "approved")
         .lte("start_date", end)
@@ -91,9 +98,22 @@ export async function loadDayContext(
 
     for (const h of (holidays ?? []) as Array<{ holiday_date: string }>) holidayDates.add(h.holiday_date)
 
-    for (const lr of (leaves ?? []) as Array<{ user_id: string; start_date: string; end_date: string }>) {
+    type LeaveRow = {
+      user_id: string
+      start_date: string
+      end_date: string
+      leave_type?: { is_paid?: boolean | null } | null
+    }
+    for (const lr of (leaves ?? []) as unknown as LeaveRow[]) {
       if (!leaveByUser.has(lr.user_id)) leaveByUser.set(lr.user_id, new Set())
       expandInto(leaveByUser.get(lr.user_id)!, lr.start_date, lr.end_date)
+
+      // Only an explicit is_paid = false marks leave unpaid; a missing flag stays paid so a
+      // data gap can never silently penalise someone.
+      if (lr.leave_type?.is_paid === false) {
+        if (!unpaidLeaveByUser.has(lr.user_id)) unpaidLeaveByUser.set(lr.user_id, new Set())
+        expandInto(unpaidLeaveByUser.get(lr.user_id)!, lr.start_date, lr.end_date)
+      }
     }
 
     for (const ep of (periods ?? []) as Array<{ user_id: string; start_date: string; end_date: string }>) {
@@ -105,6 +125,7 @@ export async function loadDayContext(
   return {
     isHoliday: (date) => holidayDates.has(date),
     isOnLeave: (userId, date) => leaveByUser.get(userId)?.has(date) ?? false,
+    isOnUnpaidLeave: (userId, date) => unpaidLeaveByUser.get(userId)?.has(date) ?? false,
     isExempt: (userId, date) => exemptByUser.get(userId)?.has(date) ?? false,
     earlyCloseTime: (date) => closureByDate.get(date) ?? null,
     lateResumptionTime: (date) => resumptionByDate.get(date) ?? null,

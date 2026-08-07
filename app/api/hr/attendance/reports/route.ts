@@ -208,6 +208,15 @@ export async function GET(request: NextRequest) {
           holiday_days++
           continue
         }
+        // Unpaid leave (LWOP) is checked before paid leave: it is unearned time away, so it
+        // scores against the employee like an absence instead of being covered. Payroll is
+        // unaffected — the day is charged there as unpaidLeaveDeduction, not as an absence.
+        if (ctx.isOnUnpaidLeave(profile.id, workday)) {
+          available_days++
+          absent_days++
+          total_missed_hours += policy.totalCredits ?? 10
+          continue
+        }
         if (ctx.isOnLeave(profile.id, workday)) {
           leave_days++
           continue

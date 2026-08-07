@@ -275,12 +275,19 @@ export function calculatePayroll({
   }
 }
 
-/** Attendance statuses that exempt an employee from lateness/absence payroll surcharges. */
+/**
+ * Attendance statuses that exempt an employee from lateness/absence payroll surcharges.
+ *
+ * `lwop` is exempt from the *surcharge* but is not forgiven: unpaid leave is charged
+ * separately as `unpaidLeaveDeduction`, a full day's gross per day. Treating it as an absence
+ * here as well would deduct for the same day twice.
+ */
 export function isCoveredPayrollStatus(status: string): boolean {
   return (
     status === "waiver" ||
     status === "exempted" ||
     status === "on_leave" ||
+    status === "lwop" ||
     status === "holiday" ||
     status === "out_of_station" ||
     status === "absent_with_permission" ||
@@ -291,6 +298,8 @@ export function isCoveredPayrollStatus(status: string): boolean {
 export interface PayrollDayContext {
   isHoliday(date: string): boolean
   isOnLeave(userId: string, date: string): boolean
+  /** Optional so existing hand-built contexts keep compiling; absent means "all leave paid". */
+  isOnUnpaidLeave?(userId: string, date: string): boolean
   isExempt(userId: string, date: string): boolean
   earlyCloseTime(date: string): string | null
   lateResumptionTime(date: string): string | null
@@ -331,6 +340,7 @@ export function derivePayrollAttendance(params: {
         record: rec,
         isHoliday: ctx.isHoliday(date),
         isOnLeave: ctx.isOnLeave(userId, date),
+        isOnUnpaidLeave: ctx.isOnUnpaidLeave?.(userId, date) ?? false,
         isExempted: attendanceExempt || ctx.isExempt(userId, date),
         recordDate: date,
         earlyClosure: closeTime ? { closeTime } : null,
