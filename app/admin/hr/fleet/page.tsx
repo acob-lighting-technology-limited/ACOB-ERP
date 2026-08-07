@@ -248,10 +248,20 @@ export default function AdminFleetPage() {
       },
       {
         key: "reviewer",
-        label: "Approver",
+        label: "Decision By",
         accessor: (r) => r.reviewer?.full_name || "-",
         hideOnMobile: true,
-        render: (r) => <span className="text-xs">{r.reviewer?.full_name || "-"}</span>,
+        initialWidth: 200,
+        render: (r) =>
+          r.reviewer?.full_name ? (
+            <div className="text-xs">
+              <p className="font-medium">{r.reviewer.full_name}</p>
+              {r.reviewer.department && <p className="text-muted-foreground">{r.reviewer.department}</p>}
+              {r.reviewed_at && <p className="text-muted-foreground">{formatDateTime(r.reviewed_at)}</p>}
+            </div>
+          ) : (
+            <span className="text-muted-foreground text-xs">Not yet reviewed</span>
+          ),
       },
     ],
     []

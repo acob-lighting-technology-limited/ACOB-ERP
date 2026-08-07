@@ -55,7 +55,7 @@ export function NotFoundContent() {
                 </div>
               </Link>
 
-              <Link href="/admin/users" className="group">
+              <Link href="/admin/hr/employees" className="group">
                 <div className="bg-muted/50 hover:bg-muted border-border rounded-lg border p-3 transition-colors">
                   <div className="bg-primary mx-auto mb-2 flex h-8 w-8 items-center justify-center rounded-md">
                     <Users className="text-primary-foreground h-4 w-4" />

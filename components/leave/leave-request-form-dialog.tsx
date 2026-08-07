@@ -378,7 +378,9 @@ export function LeaveRequestFormDialog({
           )}
 
           <div className="space-y-2">
-            <Label>Reliever</Label>
+            <Label>
+              Reliever <span className="text-destructive">*</span>
+            </Label>
             <SearchableSelect
               value={formData.reliever_identifier}
               onValueChange={(value) => setFormData((prev) => ({ ...prev, reliever_identifier: value }))}
@@ -389,7 +391,9 @@ export function LeaveRequestFormDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Reason</Label>
+            <Label>
+              Reason <span className="text-destructive">*</span>
+            </Label>
             <Textarea
               rows={3}
               value={formData.reason}
@@ -399,13 +403,16 @@ export function LeaveRequestFormDialog({
           </div>
 
           <div className="space-y-2">
-            <Label>Handover Note</Label>
+            <Label>
+              Handover Note <span className="text-destructive">*</span>
+            </Label>
             <Textarea
               rows={3}
               value={formData.handover_note}
               onChange={(event) => setFormData((prev) => ({ ...prev, handover_note: event.target.value }))}
               placeholder="Summarize duties and handover details"
             />
+            <p className="text-muted-foreground text-xs">What your reliever needs to pick up while you are away.</p>
           </div>
 
           <div className="space-y-2">

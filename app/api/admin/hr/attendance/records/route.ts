@@ -185,6 +185,7 @@ export async function GET(request: NextRequest) {
           record: r,
           isHoliday: ctx.isHoliday(r.date),
           isOnLeave: ctx.isOnLeave(r.user_id, r.date),
+          isOnUnpaidLeave: ctx.isOnUnpaidLeave(r.user_id, r.date),
           isExempted: Boolean(p?.attendance_exempt) || ctx.isExempt(r.user_id, r.date),
           recordDate: r.date,
           earlyClosure: closeTime ? { closeTime } : null,
@@ -253,7 +254,7 @@ export async function GET(request: NextRequest) {
             .then((r) => r.data ?? []),
           dataClient
             .from("leave_requests")
-            .select("user_id")
+            .select("user_id, leave_type:leave_types!leave_requests_leave_type_id_fkey(is_paid)")
             .in("user_id", missingIds)
             .eq("status", "approved")
             .lte("start_date", day)
@@ -268,7 +269,10 @@ export async function GET(request: NextRequest) {
             .then((r) => r.data ?? []),
         ])
         const isHoliday = dayHolidayRows.length > 0
-        const onLeaveSet = new Set((dayLeaveRows as { user_id: string }[]).map((r) => r.user_id))
+        type DayLeaveRow = { user_id: string; leave_type?: { is_paid?: boolean | null } | null }
+        const dayLeaves = dayLeaveRows as unknown as DayLeaveRow[]
+        const onLeaveSet = new Set(dayLeaves.map((r) => r.user_id))
+        const onUnpaidLeaveSet = new Set(dayLeaves.filter((r) => r.leave_type?.is_paid === false).map((r) => r.user_id))
         const exemptPeriodSet = new Set((dayExemptRows as { user_id: string }[]).map((r) => r.user_id))
 
         const closeTime = ctx.earlyCloseTime(day)
@@ -281,6 +285,7 @@ export async function GET(request: NextRequest) {
               record: null,
               isHoliday,
               isOnLeave: onLeaveSet.has(p.id),
+              isOnUnpaidLeave: onUnpaidLeaveSet.has(p.id),
               isExempted: Boolean(p.attendance_exempt) || exemptPeriodSet.has(p.id),
               recordDate: day,
               earlyClosure: closeTime ? { closeTime } : null,

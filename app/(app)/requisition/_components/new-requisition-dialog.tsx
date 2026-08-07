@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useCallback, useEffect, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -13,9 +13,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
 import { numberToNairaWords } from "@/lib/requisitions/number-to-words"
-import type { BeneficiaryDetail, RequisitionAttachment } from "@/lib/requisitions/types"
-import { Plus, Trash2, Upload, FileText, Loader2, AlertCircle } from "lucide-react"
+import type { BeneficiaryDetail, RequisitionAttachment, RequisitionFundingCategory } from "@/lib/requisitions/types"
+import { EMERGENCY_JUSTIFICATION_MIN_LENGTH } from "@/lib/requisitions/workflow"
+import { Plus, Trash2, Upload, FileText, Loader2, AlertCircle, Siren } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { apiFetch } from "@/lib/api-client"
 
@@ -39,6 +42,26 @@ export function NewRequisitionDialog({ open, onOpenChange, userDepartment, onSuc
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  const [fundingCategories, setFundingCategories] = useState<RequisitionFundingCategory[]>([])
+  const [fundingCategoryId, setFundingCategoryId] = useState<string>("")
+  const [isEmergency, setIsEmergency] = useState(false)
+  const [emergencyJustification, setEmergencyJustification] = useState("")
+
+  const loadFundingCategories = useCallback(async () => {
+    try {
+      const res = await apiFetch("/api/requisitions/funding-categories")
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to load funding categories")
+      setFundingCategories(json.data || [])
+    } catch (err: any) {
+      setErrorMsg(err.message || "Failed to load funding categories")
+    }
+  }, [])
+
+  useEffect(() => {
+    if (open) loadFundingCategories()
+  }, [open, loadFundingCategories])
 
   // Update amount in words when numeric amount changes
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -138,6 +161,18 @@ export function NewRequisitionDialog({ open, onOpenChange, userDepartment, onSuc
       return
     }
 
+    if (!fundingCategoryId) {
+      setErrorMsg("Please select the project funding category this request is drawn against.")
+      return
+    }
+
+    if (isEmergency && emergencyJustification.trim().length < EMERGENCY_JUSTIFICATION_MIN_LENGTH) {
+      setErrorMsg(
+        `An emergency requisition needs a written justification of at least ${EMERGENCY_JUSTIFICATION_MIN_LENGTH} characters.`
+      )
+      return
+    }
+
     // Check beneficiary validation
     for (const b of beneficiaries) {
       if (!b.account_name.trim() || !b.account_number.trim() || !b.bank_name.trim()) {
@@ -166,6 +201,9 @@ export function NewRequisitionDialog({ open, onOpenChange, userDepartment, onSuc
           purpose,
           beneficiary_details: beneficiaries,
           attachments,
+          funding_category_id: fundingCategoryId,
+          is_emergency: isEmergency,
+          emergency_justification: isEmergency ? emergencyJustification.trim() : undefined,
         }),
       })
 
@@ -226,6 +264,23 @@ export function NewRequisitionDialog({ open, onOpenChange, userDepartment, onSuc
             </div>
           </div>
 
+          <div>
+            <Label className="text-xs font-semibold">Project Funding Category</Label>
+            <Select value={fundingCategoryId} onValueChange={setFundingCategoryId}>
+              <SelectTrigger className="mt-1 text-xs">
+                <SelectValue placeholder="Select funding source (e.g. Citibank, AfDB)" />
+              </SelectTrigger>
+              <SelectContent>
+                {fundingCategories.map((category) => (
+                  <SelectItem key={category.id} value={category.id} className="text-xs">
+                    {category.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground mt-1 text-[10px]">Which funding line this payment is drawn against.</p>
+          </div>
+
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
               <Label className="text-xs font-semibold">Amount (₦)</Label>
@@ -263,6 +318,49 @@ export function NewRequisitionDialog({ open, onOpenChange, userDepartment, onSuc
               required
               className="mt-1 text-xs"
             />
+          </div>
+
+          {/* Emergency (expedited) route */}
+          <div className="space-y-2 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-0.5">
+                <Label
+                  htmlFor="requisition-emergency"
+                  className="flex items-center gap-1.5 text-xs font-bold text-red-700 dark:text-red-400"
+                >
+                  <Siren className="h-3.5 w-3.5" /> Emergency Requisition
+                </Label>
+                <p className="text-muted-foreground text-[10px]">
+                  For urgent site needs only. Skips Admin &amp; HR review, Corporate Services authorization and Accounts
+                  verification — it goes straight to the MD / Executive Management for a single decision.
+                </p>
+              </div>
+              <Switch
+                id="requisition-emergency"
+                checked={isEmergency}
+                onCheckedChange={(checked) => {
+                  setIsEmergency(checked)
+                  if (!checked) setEmergencyJustification("")
+                }}
+              />
+            </div>
+
+            {isEmergency && (
+              <div className="space-y-1">
+                <Label className="text-xs font-semibold">Why is this an emergency? (required)</Label>
+                <Textarea
+                  value={emergencyJustification}
+                  onChange={(e) => setEmergencyJustification(e.target.value)}
+                  placeholder="e.g. Generator failure at the Kaduna site is holding installation — fuel and spares needed today."
+                  rows={2}
+                  className="text-xs"
+                />
+                <p className="text-muted-foreground text-[10px]">
+                  Minimum {EMERGENCY_JUSTIFICATION_MIN_LENGTH} characters. This is recorded on the form and shown to the
+                  approver.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Beneficiary Details Dynamic Table */}

@@ -27,7 +27,7 @@ export async function GET() {
     }
 
     // Call the database function to get the next serial
-    const { data, error } = await supabase.rpc("get_next_employee_serial")
+    const { data, error } = await supabase.rpc("next_employee_number")
 
     if (error) {
       log.error({ err: String(error) }, "Error fetching next serial:")

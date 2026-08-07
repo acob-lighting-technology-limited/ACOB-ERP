@@ -48,7 +48,7 @@ export async function GET(request: NextRequest) {
         updated_at,
         resource:fleet_resources(id, name, resource_type),
         requester:profiles!fleet_bookings_requester_id_fkey(id, full_name, company_email, department),
-        reviewer:profiles!fleet_bookings_reviewed_by_fkey(id, full_name)
+        reviewer:profiles!fleet_bookings_reviewed_by_fkey(id, full_name, department, designation)
       `
       )
       .order("start_at", { ascending: false })

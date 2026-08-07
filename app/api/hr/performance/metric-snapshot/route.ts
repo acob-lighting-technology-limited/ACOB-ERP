@@ -318,7 +318,10 @@ export async function GET(request: NextRequest) {
 
             for (const day of workdays) {
               if (ctx.isHoliday(day)) continue
-              if (ctx.isOnLeave(userId, day)) continue
+              // Unpaid leave is scored, not skipped — it counts against the employee like an
+              // absence. Paid leave is still excluded from the rate entirely.
+              const onUnpaidLeave = ctx.isOnUnpaidLeave(userId, day)
+              if (!onUnpaidLeave && ctx.isOnLeave(userId, day)) continue
               if (exemptSet.has(userId) || ctx.isExempt(userId, day)) continue
 
               const rec = empRecords.get(day) ?? null
@@ -326,6 +329,7 @@ export async function GET(request: NextRequest) {
               if (day === todayIso && rec?.clock_in && !rec?.clock_out) continue
 
               scorableDays++
+              if (onUnpaidLeave) continue // zero credit for the day
               const status = deriveUnifiedAttendanceStatus({ record: rec ?? undefined, recordDate: day }, policy)
               creditSum += dayCredit(status, rec?.clock_in ?? undefined, rec?.clock_out ?? undefined, policy)
             }

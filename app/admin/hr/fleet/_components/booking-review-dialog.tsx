@@ -52,6 +52,21 @@ export function BookingReviewDialog({
               <p className="mt-2 text-sm">{selectedBooking.reason}</p>
             </div>
 
+            {selectedBooking.status !== "pending" && (
+              <div className="bg-muted/30 space-y-1 rounded border p-3 text-sm">
+                <p className="text-muted-foreground text-xs uppercase">
+                  {selectedBooking.status === "rejected" ? "Rejected by" : "Decision by"}
+                </p>
+                <p className="font-medium">
+                  {selectedBooking.reviewer?.full_name || "Unknown"}
+                  {selectedBooking.reviewer?.department ? ` — ${selectedBooking.reviewer.department}` : ""}
+                </p>
+                <p className="text-muted-foreground text-xs">
+                  {selectedBooking.reviewed_at ? formatDateTime(selectedBooking.reviewed_at) : "Time not recorded"}
+                </p>
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Attachments</Label>
               {attachments.length === 0 ? (

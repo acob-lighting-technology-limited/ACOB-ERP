@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { DataTablePage, DataTable } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
@@ -35,9 +35,19 @@ import {
   Users,
   Award,
   CalendarDays,
+  Plus,
+  Vote,
 } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-client"
+import { LunchMenuBuilderDialog } from "./_components/lunch-menu-builder-dialog"
+import {
+  DEFAULT_LUNCH_SETTINGS,
+  type LunchMenu,
+  type LunchOptionTally,
+  type LunchVoteRecord,
+} from "@/lib/hr/lunch-voting"
+import { formatWATDate, formatWATTime } from "@/lib/utils/date"
 
 export interface LunchEmployee {
   id: string
@@ -50,6 +60,15 @@ export interface LunchSettings {
   cost: number
   subsidy_percent: number
   eating_days?: string[]
+  voting_deadline?: string
+}
+
+/** A menu row as returned by /api/admin/hr/lunch/menus — hydrated with votes. */
+export interface AdminLunchMenu extends LunchMenu {
+  votes: LunchVoteRecord[]
+  tallies: LunchOptionTally[]
+  votingOpen: boolean
+  resolvedDeadline: string
 }
 
 export interface LunchSummaryRow {
@@ -74,9 +93,10 @@ interface LunchRegisterPageProps {
   todayDate: string
 }
 
-type LunchTab = "daily" | "summary" | "leaderboard" | "calendar"
+type LunchTab = "menus" | "daily" | "summary" | "leaderboard" | "calendar"
 
 const LUNCH_TABS: DataTableTab[] = [
+  { key: "menus", label: "Menu & Votes" },
   { key: "daily", label: "Daily Roster" },
   { key: "summary", label: "Summary" },
   { key: "leaderboard", label: "Leaderboard" },
@@ -113,7 +133,7 @@ export function LunchRegisterPage({
   todayDate,
 }: LunchRegisterPageProps) {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState<LunchTab>("daily")
+  const [activeTab, setActiveTab] = useState<LunchTab>("menus")
   const [employees] = useState<LunchEmployee[]>(initialEmployees)
   // Rows currently visible in each table (after search + filters + sort).
   const [processedDailyRows, setProcessedDailyRows] = useState<{ id: string; employee: LunchEmployee }[]>([])
@@ -151,7 +171,15 @@ export function LunchRegisterPage({
     cost: initialSettings.cost,
     subsidy_percent: initialSettings.subsidy_percent,
     eating_days: initialSettings.eating_days || ["Monday", "Wednesday", "Friday"],
+    voting_deadline: initialSettings.voting_deadline || DEFAULT_LUNCH_SETTINGS.voting_deadline,
   })
+
+  // Menu & Votes tab states
+  const [menus, setMenus] = useState<AdminLunchMenu[]>([])
+  const [fetchingMenus, setFetchingMenus] = useState(false)
+  const [menusError, setMenusError] = useState<string | null>(null)
+  const [openMenuBuilder, setOpenMenuBuilder] = useState(false)
+  const [editingMenu, setEditingMenu] = useState<AdminLunchMenu | null>(null)
 
   // Export states
   const [openExport, setOpenExport] = useState(false)
@@ -194,6 +222,7 @@ export function LunchRegisterPage({
             cost: data.settings.cost,
             subsidy_percent: data.settings.subsidy_percent,
             eating_days: data.settings.eating_days || ["Monday", "Wednesday", "Friday"],
+            voting_deadline: data.settings.voting_deadline || DEFAULT_LUNCH_SETTINGS.voting_deadline,
           })
         }
       } catch (err) {
@@ -209,7 +238,7 @@ export function LunchRegisterPage({
 
   // Fetch monthly summary logs (and raw logs) when month or tab changes
   useEffect(() => {
-    if (activeTab === "daily" || activeTab === "leaderboard") return
+    if (activeTab !== "summary" && activeTab !== "calendar") return
 
     async function loadMonthlyData() {
       setFetchingSummary(true)
@@ -226,6 +255,7 @@ export function LunchRegisterPage({
             cost: data.settings.cost,
             subsidy_percent: data.settings.subsidy_percent,
             eating_days: data.settings.eating_days || ["Monday", "Wednesday", "Friday"],
+            voting_deadline: data.settings.voting_deadline || DEFAULT_LUNCH_SETTINGS.voting_deadline,
           })
         }
       } catch (err) {
@@ -269,6 +299,72 @@ export function LunchRegisterPage({
 
     void loadLeaderboardData()
   }, [activeTab, leaderboardPeriodMode, leaderboardMonth, leaderboardYear])
+
+  // Load published/draft menus with their live vote tallies
+  const loadMenus = useCallback(async () => {
+    setFetchingMenus(true)
+    setMenusError(null)
+    try {
+      const res = await fetch("/api/admin/hr/lunch/menus")
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to load menus")
+      setMenus((data.menus || []) as AdminLunchMenu[])
+      if (data.settings) {
+        setSettings(data.settings)
+        setSettingsForm({
+          cost: data.settings.cost,
+          subsidy_percent: data.settings.subsidy_percent,
+          eating_days: data.settings.eating_days || ["Monday", "Wednesday", "Friday"],
+          voting_deadline: data.settings.voting_deadline || DEFAULT_LUNCH_SETTINGS.voting_deadline,
+        })
+      }
+    } catch (err) {
+      setMenusError(err instanceof Error ? err.message : "Failed to load menus")
+    } finally {
+      setFetchingMenus(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab !== "menus") return
+    void loadMenus()
+  }, [activeTab, loadMenus])
+
+  // Publish / close / reopen a menu
+  async function updateMenuStatus(menu: AdminLunchMenu, status: "draft" | "published" | "closed") {
+    try {
+      const res = await apiFetch(`/api/admin/hr/lunch/menus/${menu.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to update menu")
+
+      toast.success(
+        status === "published"
+          ? "Menu published — staff can vote now."
+          : status === "closed"
+            ? "Voting closed."
+            : "Menu moved back to draft."
+      )
+      void loadMenus()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update menu")
+    }
+  }
+
+  async function deleteMenu(menu: AdminLunchMenu) {
+    try {
+      const res = await apiFetch(`/api/admin/hr/lunch/menus/${menu.id}`, { method: "DELETE" })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to delete menu")
+      toast.success("Menu deleted.")
+      void loadMenus()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete menu")
+    }
+  }
 
   // Pricing calculations
   const cost = Number(settings.cost)
@@ -527,6 +623,113 @@ export function LunchRegisterPage({
     },
   ]
 
+  // Menu & Votes columns
+  const menuColumns: DataTableColumn<AdminLunchMenu>[] = [
+    {
+      key: "date",
+      label: "Date",
+      sortable: true,
+      accessor: (row) => row.date,
+      render: (row) => (
+        <div>
+          <span className="text-foreground font-semibold">
+            {formatWATDate(row.date, { day: "numeric", month: "short", year: "numeric" })}
+          </span>
+          <div className="text-muted-foreground text-xs">{formatWATDate(row.date, { weekday: "long" })}</div>
+        </div>
+      ),
+    },
+    {
+      key: "title",
+      label: "Menu",
+      accessor: (row) => row.title || "",
+      render: (row) => (
+        <div>
+          <span className="font-medium">{row.title || "Untitled menu"}</span>
+          <div className="text-muted-foreground text-xs">
+            {row.groups.map((g) => `${g.name} (${g.options.length})`).join(" · ") || "No options"}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      label: "Status",
+      accessor: (row) => row.status,
+      render: (row) => {
+        const tone =
+          row.status === "published" && row.votingOpen
+            ? "border-0 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
+            : row.status === "draft"
+              ? "border bg-gray-100 text-gray-500 hover:bg-gray-100/80"
+              : "border-0 bg-red-500/10 text-red-500 hover:bg-red-500/20"
+        const label =
+          row.status === "draft"
+            ? "Draft"
+            : row.status === "closed"
+              ? "Closed"
+              : row.votingOpen
+                ? "Voting open"
+                : "Deadline passed"
+        return <Badge className={tone}>{label}</Badge>
+      },
+    },
+    {
+      key: "deadline",
+      label: "Voting Closes",
+      accessor: (row) => row.resolvedDeadline,
+      render: (row) => (
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-xs">{formatWATTime(row.resolvedDeadline)}</span>
+          {/* A stored value means this day was deliberately overridden; the
+              rest simply follow the lunch settings deadline. */}
+          {row.voting_deadline && (
+            <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+              custom
+            </Badge>
+          )}
+        </div>
+      ),
+      hideOnMobile: true,
+    },
+    {
+      key: "votes",
+      label: "Votes",
+      sortable: true,
+      accessor: (row) => row.votes.length,
+      render: (row) => (
+        <Badge variant="outline" className="border-2 px-2.5 py-0.5 font-semibold">
+          {row.votes.length}
+        </Badge>
+      ),
+    },
+  ]
+
+  const menuFilters: DataTableFilter<AdminLunchMenu>[] = [
+    {
+      key: "status",
+      label: "Status",
+      options: [
+        { value: "draft", label: "Draft" },
+        { value: "published", label: "Published" },
+        { value: "closed", label: "Closed" },
+      ],
+    },
+    {
+      key: "has_votes",
+      label: "Votes",
+      options: [
+        { value: "with", label: "Has votes" },
+        { value: "without", label: "No votes yet" },
+      ],
+      mode: "custom" as const,
+      filterFn: (row, selectedValues) => {
+        if (selectedValues.length === 0) return true
+        return selectedValues.includes(row.votes.length > 0 ? "with" : "without")
+      },
+    },
+  ]
+
   // Monthly summary columns
   const summaryColumns: DataTableColumn<LunchSummaryRow>[] = [
     {
@@ -718,6 +921,18 @@ export function LunchRegisterPage({
       }
       actions={
         <div className="flex items-center gap-2">
+          {activeTab === "menus" && (
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditingMenu(null)
+                setOpenMenuBuilder(true)
+              }}
+            >
+              <Plus className="mr-2 h-4 w-4" /> New Menu
+            </Button>
+          )}
+
           {/* Settings Dialog */}
           <Dialog open={openSettings} onOpenChange={setOpenSettings}>
             <DialogTrigger asChild>
@@ -760,6 +975,20 @@ export function LunchRegisterPage({
                       }
                       required
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="voting-deadline">Voting Deadline</Label>
+                    <Input
+                      id="voting-deadline"
+                      type="time"
+                      value={settingsForm.voting_deadline}
+                      onChange={(e) => setSettingsForm({ ...settingsForm, voting_deadline: e.target.value })}
+                      required
+                    />
+                    <p className="text-muted-foreground text-xs">
+                      Default cut-off for staff to vote on each day&apos;s menu. Individual menus can override it.
+                    </p>
                   </div>
 
                   <div className="space-y-2">
@@ -824,6 +1053,88 @@ export function LunchRegisterPage({
         </div>
       }
     >
+      {activeTab === "menus" && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <StatCard
+              title="Menus Published"
+              value={menus.filter((m) => m.status !== "draft").length}
+              icon={Utensils}
+              iconBgColor="bg-blue-500/10"
+              iconColor="text-blue-500"
+            />
+            <StatCard
+              title="Open for Voting"
+              value={menus.filter((m) => m.votingOpen).length}
+              icon={Vote}
+              iconBgColor="bg-emerald-500/10"
+              iconColor="text-emerald-500"
+            />
+            <StatCard
+              title="Drafts"
+              value={menus.filter((m) => m.status === "draft").length}
+              icon={CalendarDays}
+              iconBgColor="bg-amber-500/10"
+              iconColor="text-amber-500"
+            />
+            <StatCard
+              title="Votes Cast"
+              value={menus.reduce((sum, m) => sum + m.votes.length, 0)}
+              icon={Users}
+              iconBgColor="bg-violet-500/10"
+              iconColor="text-violet-500"
+            />
+          </div>
+
+          <DataTable<AdminLunchMenu>
+            data={menus}
+            columns={menuColumns}
+            getRowId={(row) => row.id}
+            searchPlaceholder="Search menu title or option…"
+            searchFn={(row, q) => {
+              const needle = q.toLowerCase()
+              return (
+                (row.title || "").toLowerCase().includes(needle) ||
+                row.groups.some((g) => g.options.some((o) => o.name.toLowerCase().includes(needle)))
+              )
+            }}
+            filters={menuFilters}
+            isLoading={fetchingMenus}
+            error={menusError}
+            onRetry={() => void loadMenus()}
+            expandable={{ render: (row) => <MenuVotesPanel menu={row} /> }}
+            rowActions={[
+              {
+                // Structural edits are refused once votes exist — they would
+                // orphan every selection already cast.
+                label: "Edit menu",
+                hidden: (row) => row.votes.length > 0,
+                onClick: (row) => {
+                  setEditingMenu(row)
+                  setOpenMenuBuilder(true)
+                },
+              },
+              {
+                label: "Publish for voting",
+                hidden: (row) => row.status === "published",
+                onClick: (row) => void updateMenuStatus(row, "published"),
+              },
+              {
+                label: "Close voting now",
+                hidden: (row) => row.status !== "published",
+                onClick: (row) => void updateMenuStatus(row, "closed"),
+              },
+              {
+                label: "Delete menu",
+                variant: "destructive",
+                hidden: (row) => row.votes.length > 0,
+                onClick: (row) => void deleteMenu(row),
+              },
+            ]}
+          />
+        </div>
+      )}
+
       {activeTab === "daily" && (
         <div className="space-y-4">
           {/* Daily Stats Cards (Always Visible) */}
@@ -1276,6 +1587,15 @@ export function LunchRegisterPage({
             </div>
           </div>
         ))}
+      <LunchMenuBuilderDialog
+        open={openMenuBuilder}
+        onOpenChange={setOpenMenuBuilder}
+        menu={editingMenu}
+        defaultDate={selectedDate}
+        defaultDeadline={settings.voting_deadline || DEFAULT_LUNCH_SETTINGS.voting_deadline}
+        onSaved={() => void loadMenus()}
+      />
+
       <ExportOptionsDialog
         open={openExport}
         onOpenChange={setOpenExport}
@@ -1343,6 +1663,62 @@ export function LunchRegisterPage({
         </DialogContent>
       </Dialog>
     </DataTablePage>
+  )
+}
+
+/**
+ * Per-menu breakdown: the tally for every option with the staff behind it,
+ * plus anyone who has not voted yet on a menu that is still open.
+ */
+function MenuVotesPanel({ menu }: { menu: AdminLunchMenu }) {
+  const total = menu.votes.length
+
+  return (
+    <div className="bg-muted/20 space-y-4 border-b px-6 py-4">
+      {menu.groups.length === 0 ? (
+        <p className="text-muted-foreground text-xs">This menu has no options yet.</p>
+      ) : (
+        menu.groups.map((group) => {
+          const groupTallies = menu.tallies
+            .filter((t) => t.group_id === group.id)
+            .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+
+          return (
+            <div key={group.id} className="space-y-2">
+              <p className="text-muted-foreground text-[10px] font-bold tracking-wider uppercase">{group.name}</p>
+              {groupTallies.map((tally) => {
+                const percent = total > 0 ? Math.round((tally.count / total) * 100) : 0
+                return (
+                  <div key={tally.option_id} className="space-y-1">
+                    <div className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-foreground font-semibold">{tally.name}</span>
+                      <span className="text-muted-foreground font-mono">
+                        {tally.count} · {percent}%
+                      </span>
+                    </div>
+                    {tally.voters.length > 0 && (
+                      <div className="flex flex-wrap gap-1">
+                        {tally.voters.map((voter) => (
+                          <Badge key={voter.user_id} variant="outline" className="px-1.5 py-0 text-[10px]">
+                            {voter.full_name}
+                          </Badge>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )
+        })
+      )}
+
+      <div className="text-muted-foreground border-t pt-2 text-xs">
+        {total === 0
+          ? "No votes cast yet."
+          : `${total} ${total === 1 ? "person has" : "people have"} voted. Each vote already writes the day's lunch register entry.`}
+      </div>
+    </div>
   )
 }
 

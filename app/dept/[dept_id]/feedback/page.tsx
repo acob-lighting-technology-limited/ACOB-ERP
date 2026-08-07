@@ -27,9 +27,16 @@ export default async function DeptFeedbackPage({ params }: Props) {
 
   const userIds = (deptUsers || []).map((u) => u.id)
 
+  // Explicitly exclude lead-directed feedback: it is HR-only and must never
+  // surface in a department lead's view (their own team writes it about them).
   const { data: feedbackData } =
     userIds.length > 0
-      ? await dataClient.from("feedback").select("*").in("user_id", userIds).order("created_at", { ascending: false })
+      ? await dataClient
+          .from("feedback")
+          .select("*")
+          .in("user_id", userIds)
+          .is("target_lead_id", null)
+          .order("created_at", { ascending: false })
       : { data: [] }
 
   let feedbackWithProfiles: FeedbackRecord[] = []

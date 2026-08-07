@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { useSearchParams } from "next/navigation"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
@@ -12,7 +13,6 @@ import { AppealsView } from "./_components/appeals-view"
 import { LeaderboardView } from "./_components/leaderboard-view"
 import { AttendanceManagerDialog } from "./_components/attendance-manager-dialog"
 import { AttendanceReportDialog } from "./_components/attendance-report-dialog"
-import { AttendanceLunchExportDialog } from "./_components/attendance-lunch-export-dialog"
 import { AttendanceExportDialog } from "./_components/attendance-export-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { StatCard } from "@/components/ui/stat-card"
@@ -762,7 +762,12 @@ export function AttendanceReportsPage({
   backLinkHref,
   lockedDepartment,
 }: { backLinkHref?: string; lockedDepartment?: string } = {}) {
-  const [activeTab, setActiveTab] = useState<AttendanceTab>("daily")
+  const searchParams = useSearchParams()
+  // Notifications deep-link straight to a tab (e.g. appeal alerts → ?tab=appeals).
+  const requestedTab = searchParams.get("tab")
+  const [activeTab, setActiveTab] = useState<AttendanceTab>(
+    ATTENDANCE_TABS.some((t) => t.key === requestedTab) ? (requestedTab as AttendanceTab) : "daily"
+  )
   const [loading, setLoading] = useState(false)
   const [reports, setReports] = useState<AttendanceReport[]>([])
   // Rows currently visible in the table (after search + filters + sort).
@@ -778,7 +783,6 @@ export function AttendanceReportsPage({
   // Unified Attendance Manager dialog
   const [managerOpen, setManagerOpen] = useState(false)
   const [reportDialogOpen, setReportDialogOpen] = useState(false)
-  const [lunchExportOpen, setLunchExportOpen] = useState(false)
 
   const refreshSingleEmployeeSummary = useCallback(
     async (userId: string) => {
@@ -864,7 +868,6 @@ export function AttendanceReportsPage({
   useEffect(() => {
     void loadHolidays()
   }, [loadHolidays])
-
 
   const departmentOptions = useMemo(() => departments.map((d) => ({ value: d, label: d })), [departments])
 
@@ -1119,10 +1122,6 @@ export function AttendanceReportsPage({
             <Download className="mr-2 h-4 w-4" />
             Export
           </Button>
-          <Button variant="outline" onClick={() => setLunchExportOpen(true)} size="sm">
-            <FileText className="mr-2 h-4 w-4" />
-            Attendance & Lunch Report
-          </Button>
         </div>
       }
       stats={
@@ -1208,13 +1207,6 @@ export function AttendanceReportsPage({
       />
 
       <AttendanceReportDialog open={reportDialogOpen} onOpenChange={setReportDialogOpen} />
-
-      <AttendanceLunchExportDialog
-        open={lunchExportOpen}
-        onOpenChange={setLunchExportOpen}
-        department={lockedDepartment}
-        monthOptions={monthOptions}
-      />
     </DataTablePage>
   )
 }

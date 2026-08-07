@@ -28,6 +28,7 @@ export type UnifiedAttendanceStatus =
   | "absent_with_permission"
   | "out_of_station"
   | "on_leave"
+  | "lwop"
   | "weekend"
   | "no_record"
   | "half_day"
@@ -58,6 +59,8 @@ export const ATTENDANCE_STATUS_COLORS: Record<UnifiedAttendanceStatus, string> =
     "bg-violet-100 text-violet-700 dark:bg-violet-950/40 dark:text-violet-300 border-violet-200 dark:border-violet-800",
   on_leave:
     "bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300 border-purple-200 dark:border-purple-800",
+  // Deliberately not purple like paid leave — an unpaid day should not read as a benefit.
+  lwop: "bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border-rose-200 dark:border-rose-800",
   holiday: "bg-sky-100 text-sky-700 dark:bg-sky-950/40 dark:text-sky-300 border-sky-200 dark:border-sky-800",
   weekend: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-200 dark:border-slate-700",
   no_record: "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300 border-gray-200 dark:border-gray-700",
@@ -83,6 +86,7 @@ export const ATTENDANCE_STATUS_LABELS: Record<UnifiedAttendanceStatus, string> =
   waived: "Waiver",
   exempted: "Exempted",
   on_leave: "On Leave",
+  lwop: "LWOP",
   holiday: "Holiday",
   weekend: "Weekend",
   no_record: "No Record",
@@ -237,6 +241,8 @@ export function deriveUnifiedAttendanceStatus(
     record?: AttendanceLike | null
     isHoliday?: boolean
     isOnLeave?: boolean
+    /** Leave of an unpaid type (LWOP) — takes precedence over isOnLeave. */
+    isOnUnpaidLeave?: boolean
     isExempted?: boolean
     recordDate?: string
     /** Org-wide early-closure context for this date, if any. */
@@ -247,6 +253,9 @@ export function deriveUnifiedAttendanceStatus(
   policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY
 ): UnifiedAttendanceStatus {
   if (input.isHoliday) return "holiday"
+  // Unpaid leave is checked first: it is still leave, but it must not present as the covered,
+  // benign "On Leave" that paid leave gets.
+  if (input.isOnUnpaidLeave) return "lwop"
   if (input.isOnLeave) return "on_leave"
   if (input.isExempted) return "exempted"
   const rec = input.record

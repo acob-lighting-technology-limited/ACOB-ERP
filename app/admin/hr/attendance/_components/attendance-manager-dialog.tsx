@@ -1975,9 +1975,10 @@ interface LeaveTypeOption {
 
 /** Mirrors the leave module's option label: "Annual Leave (12 days left, max 15)". */
 function leaveTypeLabel(t: LeaveTypeOption): string {
-  const left = t.remaining == null ? "no balance set" : `${t.remaining} day${t.remaining === 1 ? "" : "s"} left`
+  // Uncapped types (LWOP) have no yearly allowance, so a "days left" figure would be a fiction.
+  if (t.remaining == null) return `${t.name} (no annual limit — granted case by case)`
   const max = t.maxDays == null ? null : `max ${t.maxDays}`
-  return `${t.name} (${[left, max].filter(Boolean).join(", ")})`
+  return `${t.name} (${[`${t.remaining} day${t.remaining === 1 ? "" : "s"} left`, max].filter(Boolean).join(", ")})`
 }
 
 function daysInclusive(start: string, end: string): number | null {
@@ -2291,8 +2292,8 @@ function LeaveTab({ reports, onDone }: { reports: AttendanceReport[]; onDone: ()
         />
       </div>
       <p className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-        ⚠ If the employee clocked in on these days, the leave takes precedence in the roster. Their attendance is kept —
-        removing the leave restores it.
+        ⚠ If the employee clocked in on these days, the leave takes precedence in the roster. Their attendance is kept
+        — removing the leave restores it.
       </p>
       <Button
         type="button"

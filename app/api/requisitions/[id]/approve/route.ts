@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server"
 import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { z } from "zod"
 import { getNextStage } from "@/lib/requisitions/workflow"
+import { canApproveEmergencyRequisition } from "@/lib/requisitions/authorization"
+import { writeAuditLog } from "@/lib/audit/write-audit"
 import { logger } from "@/lib/logger"
 import { apiError, ApiErrorCode } from "@/lib/api/errors"
 
@@ -50,6 +52,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
 
     if (req.status !== "pending") {
       return apiError(`Requisition is already ${req.status}`, ApiErrorCode.VALIDATION_ERROR, 400)
+    }
+
+    // The emergency route collapses four sign-offs into one, so that one has to be
+    // an executive/admin — a normal employee must not be able to clear it.
+    if (req.is_emergency && !(await canApproveEmergencyRequisition(supabase, user.id))) {
+      return apiError(
+        "Only Executive Management or an administrator can decide an emergency requisition.",
+        ApiErrorCode.FORBIDDEN,
+        403
+      )
     }
 
     const now = new Date().toISOString()
@@ -110,6 +122,23 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       return apiError("Failed to update requisition status", ApiErrorCode.INTERNAL_ERROR, 500)
     }
 
+    await writeAuditLog(
+      supabase,
+      {
+        action: action === "approve" ? "approve" : "reject",
+        entityType: "requisition",
+        entityId: id,
+        newValues: {
+          status: updatedReq.status,
+          current_stage_code: updatedReq.current_stage_code,
+          is_emergency: Boolean(req.is_emergency),
+          bypassed_stages: req.bypassed_stages || [],
+        },
+        context: { actorId: user.id, source: "api", route: `/api/requisitions/${id}/approve` },
+      },
+      { failOpen: true }
+    )
+
     // Send notifications
     try {
       if (action === "reject") {
@@ -131,7 +160,9 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           p_type: "requisition_approved",
           p_category: "approvals",
           p_title: "Requisition Fully Approved",
-          p_message: `Your requisition ${req.requisition_number} (₦${req.amount.toLocaleString()}) has been fully approved by Executive Management.`,
+          p_message: req.is_emergency
+            ? `Your emergency requisition ${req.requisition_number} (₦${req.amount.toLocaleString()}) has been approved by Executive Management via the expedited route.`
+            : `Your requisition ${req.requisition_number} (₦${req.amount.toLocaleString()}) has been fully approved by Executive Management.`,
           p_priority: "high",
           p_link_url: `/requisition/${req.id}`,
           p_actor_id: user.id,

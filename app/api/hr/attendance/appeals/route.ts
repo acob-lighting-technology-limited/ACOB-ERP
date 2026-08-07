@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic"
 const APPEALABLE_STATUSES = ["absent", "late", "incomplete"] as const
 type AppealableStatus = (typeof APPEALABLE_STATUSES)[number]
 
-const ALLOWED_REQUESTED_STATUSES = ["absent_with_permission", "lateness_with_permission"] as const
+const ALLOWED_REQUESTED_STATUSES = ["absent_with_permission", "lateness_with_permission", "out_of_station"] as const
 type AllowedRequestedStatus = (typeof ALLOWED_REQUESTED_STATUSES)[number]
 
 function isAppealableStatus(s: string): s is AppealableStatus {
@@ -23,13 +23,23 @@ function isAllowedRequestedStatus(s: string): s is AllowedRequestedStatus {
   return (ALLOWED_REQUESTED_STATUSES as readonly string[]).includes(s)
 }
 
-/** Returns the two allowed year-months: current and previous. */
-function getAllowedMonths(): [string, string] {
+/**
+ * How far back an appeal may reach, in whole months including the current one.
+ *
+ * Permission appeals stay at 2 (current + previous): they justify a normal late or absent day,
+ * and payroll for older months has already run. Out-of-station reaches 6, because a long site
+ * posting can end well after the days it covers — the case the 2-month window blocked entirely.
+ */
+const APPEAL_WINDOW_MONTHS: Record<AllowedRequestedStatus, number> = {
+  absent_with_permission: 2,
+  lateness_with_permission: 2,
+  out_of_station: 6,
+}
+
+/** Earliest year-month (YYYY-MM) an appeal may target, given how many months back are allowed. */
+function earliestAllowedMonth(monthsBack: number): string {
   const now = new Date()
-  const current = toLocalYearMonth(now)
-  const prev = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-  const previous = toLocalYearMonth(prev)
-  return [current, previous]
+  return toLocalYearMonth(new Date(now.getFullYear(), now.getMonth() - (monthsBack - 1), 1))
 }
 
 export async function GET(request: NextRequest) {
@@ -104,17 +114,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "appeal_date must be in YYYY-MM-DD format" }, { status: 400 })
     }
 
-    // Validate appeal_date is within current or previous month
-    const [currentMonth, previousMonth] = getAllowedMonths()
-    const appealYearMonth = appealDate.slice(0, 7)
-    if (appealYearMonth !== currentMonth && appealYearMonth !== previousMonth) {
-      return NextResponse.json({ error: "Appeals are only allowed for the current or previous month" }, { status: 400 })
-    }
-
-    // Validate requested_status
+    // Validate requested_status first — it determines how far back the appeal may reach.
     if (!isAllowedRequestedStatus(requestedStatus)) {
       return NextResponse.json(
-        { error: "requested_status must be absent_with_permission or lateness_with_permission" },
+        {
+          error: "requested_status must be absent_with_permission, lateness_with_permission, or out_of_station",
+        },
+        { status: 400 }
+      )
+    }
+
+    // Validate appeal_date is inside the window for this kind of appeal.
+    const monthsBack = APPEAL_WINDOW_MONTHS[requestedStatus]
+    const appealYearMonth = appealDate.slice(0, 7)
+    const currentMonth = toLocalYearMonth(new Date())
+    const earliestMonth = earliestAllowedMonth(monthsBack)
+    if (appealYearMonth > currentMonth || appealYearMonth < earliestMonth) {
+      return NextResponse.json(
+        {
+          error:
+            monthsBack <= 2
+              ? "Appeals are only allowed for the current or previous month"
+              : `Out-of-station appeals are only allowed for the last ${monthsBack} months (from ${earliestMonth})`,
+        },
         { status: 400 }
       )
     }
@@ -143,10 +165,13 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     // Derive the current unified status
-    const currentStatus = deriveUnifiedAttendanceStatus({
-      record: attendanceRecord ?? null,
-      recordDate: appealDate,
-    }, policy)
+    const currentStatus = deriveUnifiedAttendanceStatus(
+      {
+        record: attendanceRecord ?? null,
+        recordDate: appealDate,
+      },
+      policy
+    )
 
     // Validate it's an appealable status
     if (!isAppealableStatus(currentStatus)) {
@@ -158,22 +183,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate requested_status matches the rule
-    // absent → AWP only; late/incomplete → LWP only
-    if (currentStatus === "absent" && requestedStatus !== "absent_with_permission") {
-      return NextResponse.json(
-        { error: "Absent days can only be appealed as absent_with_permission (AWP)" },
-        { status: 422 }
-      )
-    }
-    if (
-      (currentStatus === "late" || currentStatus === "incomplete") &&
-      requestedStatus !== "lateness_with_permission"
-    ) {
-      return NextResponse.json(
-        { error: "Late or incomplete days can only be appealed as lateness_with_permission (LWP)" },
-        { status: 422 }
-      )
+    // Validate requested_status matches the rule.
+    // absent → AWP; late/incomplete → LWP. Out of station explains any of the three — being
+    // away on company business can leave no punch at all, or a late one on the way back — so
+    // it is offered alongside whichever permission status fits the day.
+    if (requestedStatus !== "out_of_station") {
+      if (currentStatus === "absent" && requestedStatus !== "absent_with_permission") {
+        return NextResponse.json(
+          { error: "Absent days can only be appealed as absent_with_permission (AWP) or out_of_station (OOS)" },
+          { status: 422 }
+        )
+      }
+      if (
+        (currentStatus === "late" || currentStatus === "incomplete") &&
+        requestedStatus !== "lateness_with_permission"
+      ) {
+        return NextResponse.json(
+          {
+            error:
+              "Late or incomplete days can only be appealed as lateness_with_permission (LWP) or out_of_station (OOS)",
+          },
+          { status: 422 }
+        )
+      }
     }
 
     // Insert the appeal
@@ -261,7 +293,7 @@ export async function POST(request: NextRequest) {
             p_title: "Attendance Appeal Submitted",
             p_message: `${employeeName} has submitted an attendance appeal for ${appealDate} (${currentStatus} → ${requestedStatus}).`,
             p_priority: "normal",
-            p_link_url: "/admin/hr/attendance/appeals",
+            p_link_url: "/admin/hr/employees/attendance?tab=appeals",
             p_actor_id: user.id,
             p_entity_type: "attendance_appeal",
             p_entity_id: appeal.id,

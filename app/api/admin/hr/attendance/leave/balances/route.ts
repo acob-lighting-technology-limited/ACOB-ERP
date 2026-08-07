@@ -50,7 +50,9 @@ export async function GET(request: NextRequest) {
       leave_type_id: e.leaveTypeId,
       leave_type: { id: e.leaveTypeId, name: e.name, max_days: e.entitlementDays },
       eligibility_status: e.needsEvidence ? "missing_evidence" : "eligible",
-      has_balance: true,
+      // Uncapped types have no yearly allowance, so the caller shows no "days left" figure.
+      has_balance: !e.uncapped,
+      uncapped: e.uncapped,
       allocated_days: e.entitlementDays,
       used_days: e.usedDays,
       pending_days: e.pendingDays,

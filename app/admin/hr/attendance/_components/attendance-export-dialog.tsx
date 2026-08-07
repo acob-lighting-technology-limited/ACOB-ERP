@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Checkbox } from "@/components/ui/checkbox"
 import { ExportPeriodFields, useExportPeriod } from "./export-period-picker"
 import { logger } from "@/lib/logger"
 import { apiFetch } from "@/lib/api-client"
@@ -50,6 +51,16 @@ type AttendanceRow = {
   attendance_credits?: number
   attendance_rate?: number
 }
+
+type LunchRow = {
+  full_name: string
+  employee_number: string
+  department: string | null
+  lunch_count: number
+  total_deduction: number
+}
+
+const LUNCH_HEADERS = ["S/N", "Name", "Employee No", "Department", "Lunch Count", "Grand Total", "Net Deduction"]
 
 const HEADERS = [
   "Name",
@@ -106,7 +117,13 @@ function toRow(r: AttendanceRow): (string | number)[] {
 export function AttendanceExportDialog({ open, onOpenChange, department, monthOptions }: Props) {
   const picker = useExportPeriod()
   const [format, setFormat] = useState<ExportFormat>("xlsx")
+  const [includeLunch, setIncludeLunch] = useState(false)
   const [exporting, setExporting] = useState(false)
+
+  // The lunch report is a second worksheet, which only Excel can carry — CSV and PDF are
+  // single-table formats, so the option is unavailable there rather than silently ignored.
+  const lunchAvailable = format === "xlsx"
+  const withLunch = includeLunch && lunchAvailable
 
   async function handleExport() {
     const range = picker.resolve()
@@ -148,13 +165,45 @@ export function AttendanceExportDialog({ open, onOpenChange, department, monthOp
       } else if (format === "xlsx") {
         const XLSX = await import("@e965/xlsx")
         const { saveAs } = await import("file-saver")
-        const sheet = XLSX.utils.aoa_to_sheet([HEADERS, ...rows])
         const workbook = XLSX.utils.book_new()
-        XLSX.utils.book_append_sheet(workbook, sheet, "Attendance")
+        XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([HEADERS, ...rows]), "Attendance")
+
+        if (withLunch) {
+          const lunchParams = new URLSearchParams({ start_date: range.start, end_date: range.end })
+          const lunchRes = await apiFetch(`/api/admin/hr/lunch?${lunchParams.toString()}`, { cache: "no-store" })
+          const lunchPayload = (await lunchRes.json().catch(() => null)) as {
+            summary?: LunchRow[]
+            settings?: { subsidy_percent?: number }
+          } | null
+          if (!lunchRes.ok) throw new Error("Failed to load lunch data")
+
+          const lunchRows = (lunchPayload?.summary ?? []).filter((r) => r.lunch_count > 0)
+          const subsidyPercent = Number(lunchPayload?.settings?.subsidy_percent ?? 50)
+          const deductionShare = Math.max(0.01, (100 - subsidyPercent) / 100)
+
+          const lunchSheet = XLSX.utils.aoa_to_sheet([
+            LUNCH_HEADERS,
+            ...lunchRows.map((r, i) => {
+              const netDeduction = Number(r.total_deduction ?? 0)
+              const grandTotal = Math.round(netDeduction / deductionShare)
+              return [
+                i + 1,
+                r.full_name,
+                r.employee_number,
+                r.department ?? "",
+                r.lunch_count,
+                grandTotal,
+                netDeduction,
+              ]
+            }),
+          ])
+          XLSX.utils.book_append_sheet(workbook, lunchSheet, "Lunch")
+        }
+
         const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" })
         saveAs(
           new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
-          `attendance_${range.label}.xlsx`
+          `${withLunch ? "attendance_lunch" : "attendance"}_${range.label}.xlsx`
         )
       } else {
         const { jsPDF } = await import("jspdf")
@@ -172,7 +221,7 @@ export function AttendanceExportDialog({ open, onOpenChange, department, monthOp
         doc.save(`attendance_${range.label}.pdf`)
       }
 
-      toast.success("Attendance exported")
+      toast.success(withLunch ? "Attendance and lunch report exported" : "Attendance exported")
       onOpenChange(false)
     } catch (err) {
       log.error({ err: String(err) }, "Failed to export attendance report")
@@ -207,6 +256,25 @@ export function AttendanceExportDialog({ open, onOpenChange, department, monthOp
                 <SelectItem value="pdf">PDF (.pdf)</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="include-lunch"
+                checked={withLunch}
+                disabled={!lunchAvailable}
+                onCheckedChange={(checked) => setIncludeLunch(checked === true)}
+              />
+              <Label htmlFor="include-lunch" className={lunchAvailable ? "" : "text-muted-foreground"}>
+                Include lunch report
+              </Label>
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {lunchAvailable
+                ? "Adds a second worksheet with lunch counts and deductions for the same period."
+                : "Only available for Excel — CSV and PDF hold a single table."}
+            </p>
           </div>
         </div>
 

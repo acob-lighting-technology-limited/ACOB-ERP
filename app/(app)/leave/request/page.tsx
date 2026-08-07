@@ -87,6 +87,15 @@ export default function LeaveRequestPage() {
     return toLocalISODate(resume)
   })()
 
+  // Mirrors the API's required fields so a blank reliever, reason or handover note is caught
+  // here rather than coming back as a generic "Missing required fields" after submitting.
+  const canSubmit =
+    Boolean(formData.leave_type_id) &&
+    Boolean(formData.start_date) &&
+    formData.reliever_identifier.trim().length > 0 &&
+    formData.reason.trim().length > 0 &&
+    formData.handover_note.trim().length > 0
+
   const { mutate: submitRequest, isPending: loading } = useMutation({
     mutationFn: async (body: typeof formData) => {
       const response = await apiFetch("/api/hr/leave/requests", {
@@ -197,7 +206,7 @@ export default function LeaveRequestPage() {
               <p>Computed Resume Date: {previewResume || "-"}</p>
             </div>
 
-            <FormFieldGroup label="Reliever">
+            <FormFieldGroup label="Reliever" required>
               <SearchableSelect
                 value={formData.reliever_identifier}
                 onValueChange={(value) => setFormData((prev) => ({ ...prev, reliever_identifier: value }))}
@@ -207,7 +216,7 @@ export default function LeaveRequestPage() {
               />
             </FormFieldGroup>
 
-            <FormFieldGroup label="Reason">
+            <FormFieldGroup label="Reason" required>
               <Textarea
                 value={formData.reason}
                 onChange={(e) => setFormData((prev) => ({ ...prev, reason: e.target.value }))}
@@ -215,7 +224,11 @@ export default function LeaveRequestPage() {
               />
             </FormFieldGroup>
 
-            <FormFieldGroup label="Handover Note">
+            <FormFieldGroup
+              label="Handover Note"
+              required
+              description="What your reliever needs to pick up while you are away."
+            >
               <Textarea
                 value={formData.handover_note}
                 onChange={(e) => setFormData((prev) => ({ ...prev, handover_note: e.target.value }))}
@@ -223,7 +236,7 @@ export default function LeaveRequestPage() {
               />
             </FormFieldGroup>
 
-            <Button type="submit" disabled={loading || loadingTypes}>
+            <Button type="submit" disabled={loading || loadingTypes || !canSubmit}>
               {loading ? "Submitting..." : "Submit"}
             </Button>
           </form>
