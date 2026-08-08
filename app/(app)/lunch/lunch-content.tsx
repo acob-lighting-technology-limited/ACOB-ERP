@@ -455,11 +455,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
                   )}
 
                   <div className="bg-muted/40 rounded-lg border p-3 text-xs">
-                    Voting confirms your meal for the day —{" "}
-                    <span className="font-semibold text-red-600">{naira(data.pricing.employee_deduction)}</span> will be
-                    deducted from your salary and the company covers{" "}
-                    <span className="font-semibold text-emerald-600">{naira(data.pricing.company_subsidy)}</span>. You
-                    can change or withdraw your choice until the deadline.
+                    Voting confirms your meal for the day. You can change or withdraw your choice until the deadline.
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
