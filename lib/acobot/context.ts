@@ -130,8 +130,20 @@ function directoryIntent(q: string): boolean {
     /\bemail\b|\be-mail\b|\bphone\b|\bmobile\b|\bcontact\b|\breach\b|\bwhatsapp\b|\bextension\b|\bnumber\b/.test(q)
   // "who is …" person/role lookups — English plus Igbo/Yoruba/Hausa "who is".
   const whois = /\bwho is\b|\bwho's\b|\bwhos\b|kedu onye|tani\b|wane ne|wanene|ta ne /.test(q)
-  // Contact / who-is lookups for a colleague (not "my ..."), or any lead question.
-  return ((contact || whois) && !isAboutSelf(q)) || leadIntent(q)
+  // Asking for a person's directory entry without naming a specific field:
+  // "give me shirley's info", "tell me about ada", "what is john's designation".
+  // The directory holds only the org-wide contact and org-chart data that
+  // /directory already shows every employee, so these are answerable.
+  const askedForPerson =
+    /\binfo\b|\binformation\b|\bprofile\b|\bdetails?\b|\bdesignation\b|\bjob title\b|\brole\b|\bposition\b|\boffice\b|\bstaff\b|\bcolleague\b|\btell me about\b|\blook ?up\b|\bsearch for\b/.test(
+      q
+    )
+  // Only treat it as a lookup when something name-shaped survives stopword
+  // stripping. A stray hit is harmless — the lookup simply returns no match.
+  const namesAPerson = extractNameTokens(q).length > 0
+
+  // Contact / who-is / person lookups for a colleague (not "my ..."), or any lead question.
+  return ((contact || whois || (askedForPerson && namesAPerson)) && !isAboutSelf(q)) || leadIntent(q)
 }
 
 export function intentNeedsData(intent: AcobotIntent): boolean {
@@ -451,6 +463,21 @@ const DIRECTORY_STOPWORDS = new Set([
   "like",
   "want",
   "show",
+  // Words that describe the *request* rather than the person, so they must not
+  // be searched as names.
+  "info",
+  "information",
+  "profile",
+  "designation",
+  "role",
+  "position",
+  "title",
+  "about",
+  "staff",
+  "colleague",
+  "look",
+  "lookup",
+  "search",
 ])
 
 function extractNameTokens(q: string): string[] {
