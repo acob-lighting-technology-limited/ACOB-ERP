@@ -349,6 +349,7 @@ export function AdminDocumentationContent({
               lockToInitialPath={Boolean(departmentDocs.lockToInitialPath)}
               accessMode={departmentDocs.accessMode ?? "admin"}
               lockedDepartment={departmentDocs.lockedDepartment}
+              backLink={{ href: "/admin/documentation", label: "Back to Documentation" }}
             />
           ) : (
             <Card className="border-2">

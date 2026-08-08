@@ -352,6 +352,7 @@ export function DocumentationContent({
             rootLabel={departmentDocs.rootLabel}
             lockToInitialPath={departmentDocs.lockToInitialPath}
             accessMode={departmentDocs.accessMode}
+            backLink={{ href: backLinkHref, label: backLinkLabel }}
           />
         ) : (
           <Card className="border-2">
