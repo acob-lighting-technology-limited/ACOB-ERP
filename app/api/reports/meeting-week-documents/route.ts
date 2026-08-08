@@ -181,7 +181,13 @@ export async function GET(request: Request) {
     // so every authenticated staff member may read them. Attendance and
     // transcripts stay admin-only. Writes are gated in POST/PATCH/DELETE.
     const scope = await resolveAdminScope(supabase as ReportsClient, user.id)
-    if (!scope && !isStaffReadableDocumentType(docType)) {
+    // Only meaningful when the caller names a type. The id-based download and
+    // preview branches pass no documentType — they resolve the row first and
+    // check its own document_type below — and the list branch is constrained to
+    // STAFF_READABLE_DOCUMENT_TYPES further down. Rejecting a null docType here
+    // returned 403 to every non-admin download, which surfaced in the browser as
+    // "File wasn't available on site".
+    if (!scope && docType && !isStaffReadableDocumentType(docType)) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

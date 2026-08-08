@@ -138,8 +138,10 @@ export function MeetingDocumentTypeTable({
     queryKey: ["meeting-doc-uploaded-by", uploadedByIds],
     enabled: uploadedByIds.length > 0,
     queryFn: async () => {
+      // staff_directory, not profiles: profiles RLS hides other people from a
+      // plain employee, which rendered every uploader as "Unknown".
       const { data, error: uploadedByError } = await supabase
-        .from("profiles")
+        .from("staff_directory")
         .select("id, full_name")
         .in("id", uploadedByIds)
       if (uploadedByError) throw new Error(uploadedByError.message)

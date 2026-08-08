@@ -87,14 +87,22 @@ export default function ActionTrackerPortal() {
   const queryClient = useQueryClient()
   const supabase = createClient()
 
-  const [week] = useState(() => {
+  // Week/year drive a server-side refetch, so they are page state with their own
+  // controls rather than DataTable filters (which only narrow the rows already
+  // fetched for one week).
+  const [week, setWeek] = useState(() => {
     const w = searchParams.get("week")
     return w ? parseInt(w, 10) : currentOfficeWeek.week
   })
-  const [year] = useState(() => {
+  const [year, setYear] = useState(() => {
     const y = searchParams.get("year")
     return y ? parseInt(y, 10) : currentOfficeWeek.year
   })
+  const weekOptions = useMemo(() => Array.from({ length: 53 }, (_, i) => i + 1), [])
+  const yearOptions = useMemo(
+    () => [currentOfficeWeek.year - 1, currentOfficeWeek.year, currentOfficeWeek.year + 1],
+    [currentOfficeWeek.year]
+  )
   const [deptFilter] = useState(() => searchParams.get("dept") || "all")
   const [isCarryForwarding, setIsCarryForwarding] = useState(false)
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false)
@@ -332,6 +340,30 @@ export default function ActionTrackerPortal() {
       backLink={{ href: "/reports/general-meeting", label: "Back to General Meeting" }}
       actions={
         <div className="flex flex-wrap items-center gap-2">
+          <Select value={String(week)} onValueChange={(value) => setWeek(Number(value))}>
+            <SelectTrigger className="h-8 w-[130px]" aria-label="Week">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {weekOptions.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  Week {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={String(year)} onValueChange={(value) => setYear(Number(value))}>
+            <SelectTrigger className="h-8 w-[110px]" aria-label="Year">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {tasks.length > 0 ? (
             <Button
               variant="outline"

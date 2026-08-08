@@ -217,23 +217,41 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
   const loadGeneralDocumentation = useCallback(async () => {
     setIsLoadingGeneral(true)
     try {
+      // Author names come from staff_directory rather than an embedded
+      // profiles(...) join: the embed runs under profiles RLS, which limits a
+      // plain employee to their own row and left every other author unnamed.
       const { data, error } = await supabase
         .from("user_documentation")
-        .select("*, profiles(first_name, last_name)")
+        .select("*")
         .eq("visibility", "general")
         .eq("is_draft", false)
         .order("updated_at", { ascending: false })
 
       if (error) throw error
+
+      const rows = data || []
+      const authorIds = Array.from(
+        new Set(rows.map((row) => row.user_id).filter((id): id is string => Boolean(id)))
+      )
+
+      const authorNameById = new Map<string, string>()
+      if (authorIds.length > 0) {
+        const { data: authors, error: authorsError } = await supabase
+          .from("staff_directory")
+          .select("id, first_name, last_name")
+          .in("id", authorIds)
+        if (authorsError) throw authorsError
+        for (const author of authors || []) {
+          const name = `${author.first_name ?? ""} ${author.last_name ?? ""}`.trim()
+          if (name) authorNameById.set(String(author.id), name)
+        }
+      }
+
       setGeneralDocs(
-        (data || []).map((row: Record<string, unknown>) => {
-          const author = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
-          const named = author as { first_name?: string; last_name?: string } | null
-          return {
-            ...(row as unknown as Documentation),
-            author_name: named ? `${named.first_name ?? ""} ${named.last_name ?? ""}`.trim() : null,
-          }
-        })
+        rows.map((row: Record<string, unknown>) => ({
+          ...(row as unknown as Documentation),
+          author_name: (row.user_id ? authorNameById.get(String(row.user_id)) : null) ?? null,
+        }))
       )
     } catch (error) {
       log.error("Error loading general documentation:", error)

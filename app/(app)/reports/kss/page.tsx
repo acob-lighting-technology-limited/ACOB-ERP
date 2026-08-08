@@ -12,12 +12,18 @@ export default async function DashboardKssPage() {
 
   if (userError || !user) redirect("/auth/login")
 
+  // staff_directory, not profiles: RLS limits a plain employee to their own
+  // profile row, which left every presenter and submitter rendering "Unknown".
   const { data: employees } = await supabase
-    .from("profiles")
-    .select("id, full_name, department")
-    .eq("employment_status", "active")
+    .from("staff_directory")
+    .select("id, full_name, department, employment_status")
     .order("full_name")
-  const employeeRows = (employees || []) as Array<{ id: string; full_name: string; department: string | null }>
+  const employeeRows = (employees || []) as Array<{
+    id: string
+    full_name: string
+    department: string | null
+    employment_status: string | null
+  }>
 
   return (
     <KssRosterTable
@@ -25,6 +31,7 @@ export default async function DashboardKssPage() {
         id: e.id,
         full_name: e.full_name,
         department: e.department,
+        employment_status: e.employment_status,
       }))}
       backHref="/reports/general-meeting"
       backLabel="Back to General Meeting"
