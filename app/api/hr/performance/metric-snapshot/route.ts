@@ -139,7 +139,16 @@ export async function GET(request: NextRequest) {
     const context = { departments, users: users || [], cycles: cycles || [] }
 
     const metric = parsed.data.metric
-    const selectedCycleId = parsed.data.cycle_id || context.cycles[0]?.id || null
+    // Default to the cycle that actually contains today. Falling back to the
+    // newest cycle by start_date alone means that once the latest cycle ends,
+    // every metric is computed over a window that has already closed — which is
+    // why attendance renders blank for the current period.
+    const todayForCycle = toLocalISODate()
+    const currentCycle = context.cycles.find(
+      (cycle) =>
+        cycle.start_date && cycle.end_date && cycle.start_date <= todayForCycle && cycle.end_date >= todayForCycle
+    )
+    const selectedCycleId = parsed.data.cycle_id || currentCycle?.id || context.cycles[0]?.id || null
 
     const selectedCycle = context.cycles.find((cycle) => cycle.id === selectedCycleId) || null
     const userIds = context.users.map((entry) => entry.id)

@@ -8,13 +8,17 @@ function formatPercent(value: number | null | undefined) {
 
 export default async function PmsAttendancePage() {
   const { score, attendance } = await getCurrentUserPmsData()
-  const getCycleLabel = (dateValue: string) => {
+  // Every record belongs to a quarter, a half-year and a year at once, so each
+  // cadence is its own filterable value rather than one "cycle" column.
+  const getCadenceLabels = (dateValue: string) => {
     const date = new Date(dateValue)
+    const year = date.getFullYear()
     const quarter = Math.floor(date.getMonth() / 3) + 1
-    return `Q${quarter} ${date.getFullYear()}`
+    const half = date.getMonth() < 6 ? 1 : 2
+    return { cycle: `Q${quarter} ${year}`, half: `H${half} ${year}`, year: String(year) }
   }
   const rows = attendance.recent.map((record) => ({
-    cycle: getCycleLabel(record.date),
+    ...getCadenceLabels(record.date),
     month: formatWATDate(record.date, { month: "long" }),
     date: formatWATDate(record.date),
     clock_in: record.clock_in || "-",
@@ -48,8 +52,12 @@ export default async function PmsAttendancePage() {
       ]}
       searchPlaceholder="Search attendance records..."
       filterKey="cycle"
-      filterLabel="Cycle"
-      filterAllLabel="All Cycles"
+      filterLabel="Quarter"
+      filterAllLabel="All Quarters"
+      extraFilters={[
+        { key: "half", label: "Biannual", allLabel: "All Halves" },
+        { key: "year", label: "Annual", allLabel: "All Years" },
+      ]}
     />
   )
 }

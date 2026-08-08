@@ -30,6 +30,12 @@ interface PmsTablePageProps {
   filterKey?: string
   filterLabel?: string
   filterAllLabel?: string
+  /**
+   * Extra single-select filters, each driven by a row field. Used for the PMS
+   * cadence filters (quarter / half / year), which are separate row values
+   * rather than one column.
+   */
+  extraFilters?: { key: string; label: string; allLabel?: string }[]
   hideSecondaryFilter?: boolean
   cbtExpandable?: boolean
 }
@@ -63,6 +69,7 @@ export function PmsTablePage({
   filterKey = "department",
   filterLabel = "Department",
   filterAllLabel = "All Departments",
+  extraFilters,
   hideSecondaryFilter = false,
   cbtExpandable = false,
 }: PmsTablePageProps) {
@@ -142,8 +149,31 @@ export function PmsTablePage({
       multi: false,
     })
 
+    for (const extra of extraFilters ?? []) {
+      const options = Array.from(
+        new Set(rows.map((row) => normalizeCell(row[extra.key])).filter((value) => value !== "-"))
+      )
+        .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+        .map((value) => ({ value, label: value }))
+
+      activeFilters.push({
+        key: extra.key,
+        label: extra.label,
+        placeholder: extra.allLabel || `All ${extra.label}`,
+        options,
+        mode: "custom",
+        filterFn: (row, selected) => {
+          if (!selected || selected.length === 0 || selected.includes("all")) return true
+          return selected.includes(normalizeCell(row[extra.key]))
+        },
+        multi: false,
+      })
+    }
+
     return activeFilters
   }, [
+    extraFilters,
+    rows,
     filterAllLabel,
     filterKey,
     filterLabel,
