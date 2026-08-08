@@ -88,7 +88,7 @@ interface AdminSidebarProps {
    */
   deptId?: string
   /**
-   * When set (admin shell only), a "Dept Console" link is shown in the account
+   * When set (admin shell only), a "Go to Dept" link is shown in the account
    * dropdown for admin+lead users so they can jump to their dept shell.
    */
   deptConsoleHref?: string
@@ -179,7 +179,6 @@ function buildDeptNavigation(deptId: string): NavItem[] {
       href: `${base}/assets`,
       icon: Package,
       roles: [],
-      children: [{ name: "Issues", href: `${base}/assets/issues` }],
     },
     {
       section: "operations",
@@ -933,7 +932,7 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global", deptId,
               >
                 <Link href={deptConsoleHref} className="flex w-full items-center gap-2">
                   <Building2 className="h-4 w-4" />
-                  Dept Console
+                  Go to Dept
                 </Link>
               </DropdownMenuItem>
             )}

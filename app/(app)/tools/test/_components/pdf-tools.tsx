@@ -1,7 +1,8 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { toast } from "sonner"
+import { apiFetch } from "@/lib/api-client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -37,6 +38,9 @@ export function PdfTools() {
   const [toolType, setToolType] = useState<PdfToolType>("merge")
   const [pdfFiles, setPdfFiles] = useState<File[]>([])
   const [singlePdfFile, setSinglePdfFile] = useState<File | null>(null)
+  // Object URL for the selected PDF so the operator can see the document they
+  // are about to split, page-number it, and pick ranges with confidence.
+  const [singlePdfPreviewUrl, setSinglePdfPreviewUrl] = useState<string | null>(null)
   const [imageFiles, setImageFiles] = useState<File[]>([])
   const [splitPages, setSplitPages] = useState("")
   const [convertFormat, setConvertFormat] = useState("jpg")
@@ -82,11 +86,22 @@ export function PdfTools() {
     const file = e.target.files?.[0]
     if (file && file.type === "application/pdf") {
       setSinglePdfFile(file)
+      setSinglePdfPreviewUrl((previous) => {
+        if (previous) URL.revokeObjectURL(previous)
+        return URL.createObjectURL(file)
+      })
       toast.success("PDF file selected")
     } else {
       toast.error("Please select a PDF file")
     }
   }
+
+  // Release the last object URL when the component goes away.
+  useEffect(() => {
+    return () => {
+      if (singlePdfPreviewUrl) URL.revokeObjectURL(singlePdfPreviewUrl)
+    }
+  }, [singlePdfPreviewUrl])
 
   const handleImageFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || [])
@@ -113,7 +128,7 @@ export function PdfTools() {
       })
       formData.append("count", pdfFiles.length.toString())
 
-      const response = await fetch("/api/pdf/merge", { method: "POST", body: formData })
+      const response = await apiFetch("/api/pdf/merge", { method: "POST", body: formData })
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || "Merge failed")
@@ -152,7 +167,7 @@ export function PdfTools() {
       formData.append("pages", splitPages)
       formData.append("pageRanges", splitPages)
 
-      const response = await fetch("/api/pdf/split", { method: "POST", body: formData })
+      const response = await apiFetch("/api/pdf/split", { method: "POST", body: formData })
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || "Split failed")
@@ -203,7 +218,7 @@ export function PdfTools() {
         formData.append("percentage", percentage)
       }
 
-      const response = await fetch("/api/pdf/compress", { method: "POST", body: formData })
+      const response = await apiFetch("/api/pdf/compress", { method: "POST", body: formData })
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || "Compression failed")
@@ -237,7 +252,7 @@ export function PdfTools() {
       formData.append("file", singlePdfFile)
       formData.append("format", convertFormat)
 
-      const response = await fetch("/api/pdf/convert", { method: "POST", body: formData })
+      const response = await apiFetch("/api/pdf/convert", { method: "POST", body: formData })
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || "Conversion failed")
@@ -273,7 +288,7 @@ export function PdfTools() {
       })
       formData.append("count", imageFiles.length.toString())
 
-      const response = await fetch("/api/pdf/images-to-pdf", { method: "POST", body: formData })
+      const response = await apiFetch("/api/pdf/images-to-pdf", { method: "POST", body: formData })
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || "Conversion failed")
@@ -306,7 +321,7 @@ export function PdfTools() {
       const formData = new FormData()
       formData.append("file", singlePdfFile)
 
-      const response = await fetch("/api/pdf/extract-text", { method: "POST", body: formData })
+      const response = await apiFetch("/api/pdf/extract-text", { method: "POST", body: formData })
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || "Text extraction failed")
@@ -344,7 +359,7 @@ export function PdfTools() {
       formData.append("color", textColor)
       formData.append("position", textPosition)
 
-      const response = await fetch("/api/pdf/add-text", { method: "POST", body: formData })
+      const response = await apiFetch("/api/pdf/add-text", { method: "POST", body: formData })
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || "Failed to add text")
@@ -378,7 +393,7 @@ export function PdfTools() {
       formData.append("file", singlePdfFile)
       formData.append("format", "docx")
 
-      const response = await fetch("/api/pdf/to-doc", { method: "POST", body: formData })
+      const response = await apiFetch("/api/pdf/to-doc", { method: "POST", body: formData })
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || "Conversion failed")
@@ -433,7 +448,7 @@ export function PdfTools() {
         formData.append("y", watermarkY)
       }
 
-      const response = await fetch("/api/pdf/watermark", { method: "POST", body: formData })
+      const response = await apiFetch("/api/pdf/watermark", { method: "POST", body: formData })
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || "Watermarking failed")
@@ -472,7 +487,7 @@ export function PdfTools() {
       formData.append("action", passwordAction)
       formData.append("password", pdfPassword)
 
-      const response = await fetch("/api/pdf/password", { method: "POST", body: formData })
+      const response = await apiFetch("/api/pdf/password", { method: "POST", body: formData })
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || "Password operation failed")
@@ -513,7 +528,7 @@ export function PdfTools() {
       formData.append("file", singlePdfFile)
       formData.append("outputFormat", ocrOutputFormat)
 
-      const response = await fetch("/api/pdf/ocr", { method: "POST", body: formData })
+      const response = await apiFetch("/api/pdf/ocr", { method: "POST", body: formData })
       if (!response.ok) {
         const error = await response.json()
         throw new Error(error.error || "OCR failed")
@@ -609,6 +624,19 @@ export function PdfTools() {
                   <Input type="file" accept="application/pdf" onChange={handleSinglePdfChange} />
                   {singlePdfFile && <div className="text-muted-foreground text-xs">{singlePdfFile.name}</div>}
                 </div>
+                {singlePdfPreviewUrl && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Preview</label>
+                    <iframe
+                      src={singlePdfPreviewUrl}
+                      title={`Preview of ${singlePdfFile?.name || "selected PDF"}`}
+                      className="h-[420px] w-full rounded-md border"
+                    />
+                    <p className="text-muted-foreground text-xs">
+                      Scroll to find the pages you want, then enter their numbers below.
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Page Ranges</label>
                   <Input

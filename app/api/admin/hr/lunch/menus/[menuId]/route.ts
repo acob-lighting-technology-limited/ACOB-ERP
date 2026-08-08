@@ -16,7 +16,7 @@ import { logger } from "@/lib/logger"
 const log = logger("api-admin-hr-lunch-menu")
 export const dynamic = "force-dynamic"
 
-const MENU_COLUMNS = "id, date, title, status, voting_deadline, published_at, closed_at"
+const MENU_COLUMNS = "id, date, status, voting_deadline, published_at, closed_at"
 
 type RouteContext = { params: Promise<{ menuId: string }> }
 
@@ -26,7 +26,7 @@ async function countVotes(client: SupabaseClient, menuId: string) {
 }
 
 /**
- * Edits a menu: rename, publish, close, reopen, or replace its structure.
+ * Edits a menu: publish, close, reopen, or replace its structure.
  *
  * The voting cut-off normally comes from lunch_settings; passing
  * deadline_time overrides it for this one day, and null clears the override.
@@ -41,7 +41,6 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     if (!scope?.isAdminLike) return NextResponse.json({ error: "Forbidden" }, { status: 403 })
 
     const body = (await request.json()) as {
-      title?: string | null
       status?: LunchMenuStatus
       deadline_time?: string | null
       groups?: MenuGroupInput[]
@@ -52,8 +51,6 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
     if (!menu) return NextResponse.json({ error: "Menu not found" }, { status: 404 })
 
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
-
-    if (body.title !== undefined) updates.title = body.title?.trim() || null
 
     // null clears the override, sending the menu back to the settings time;
     // omitting the field entirely leaves whatever the menu already had.

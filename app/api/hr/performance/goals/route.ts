@@ -24,6 +24,7 @@ const UpdateGoalApprovalSchema = z.object({
   approval_status: z.enum(["approved", "rejected"], {
     errorMap: () => ({ message: "Goal ID and valid approval_status required" }),
   }),
+  rejection_reason: z.string().trim().optional().nullable(),
 })
 
 const UpdateGoalSchema = z.object({
@@ -263,6 +264,14 @@ export async function POST(request: NextRequest) {
         due_date,
         weight_pct: weight_pct ?? null,
         status: "in_progress",
+        // Goal creation is already restricted to department leads and admins
+        // (see canCreateForDepartment above) — the creator IS the approving
+        // authority, so there is nobody left to ask. Leaving these at the
+        // column default parked every lead-created goal at "pending approval"
+        // forever, and the weight check below only counts approved goals.
+        approval_status: "approved",
+        approved_by: user.id,
+        approved_at: new Date().toISOString(),
       })
       .select("*")
       .returns<GoalRow[]>()
@@ -333,6 +342,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
     }
     const { id, approval_status } = parsed.data
+    const rejectionReason = parsed.data.rejection_reason?.trim() || null
+
+    // A rejected goal must explain itself so the owner knows what to revise.
+    if (approval_status === "rejected" && !rejectionReason) {
+      return NextResponse.json({ error: "A reason is required when rejecting a goal" }, { status: 400 })
+    }
 
     const { data: goal, error } = await supabase
       .from("goals_objectives")
@@ -340,6 +355,7 @@ export async function PATCH(request: NextRequest) {
         approval_status,
         approved_by: user.id,
         approved_at: new Date().toISOString(),
+        rejection_reason: approval_status === "rejected" ? rejectionReason : null,
       })
       .eq("id", id)
       .select()

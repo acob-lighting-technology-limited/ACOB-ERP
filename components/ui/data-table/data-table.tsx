@@ -467,17 +467,35 @@ export function DataTable<TData>({
       const selected = filterValues[filter.key]
       if (!selected || selected.length === 0) continue
 
-      if (filter.mode === "custom" && filter.filterFn) {
+      // An explicit filterFn always wins, whether or not mode is "custom" —
+      // cross-column filters supply one without setting mode.
+      if (filter.filterFn) {
         result = result.filter((row) => filter.filterFn!(row, selected))
-      } else {
-        // Default: match against the column with the same key
-        const col = columns.find((c) => c.key === filter.key)
-        if (!col?.accessor) continue
-        result = result.filter((row) => {
-          const val = String(col.accessor!(row) ?? "")
-          return selected.includes(val)
-        })
+        continue
       }
+
+      // Otherwise match the column sharing this filter's key. Plenty of filters
+      // key off a field that is displayed via a custom `render` (so the column
+      // has no accessor) or is not shown as a column at all; for those, read the
+      // row's own property of that name rather than silently filtering nothing.
+      const col = columns.find((c) => c.key === filter.key)
+      const accessor = col?.accessor
+      const readValue = accessor
+        ? (row: TData) => accessor(row)
+        : (row: TData) => (row as Record<string, unknown> | null)?.[filter.key]
+
+      if (process.env.NODE_ENV !== "production" && !accessor) {
+        const resolvesOnRow = result.some((row) => (row as Record<string, unknown> | null)?.[filter.key] !== undefined)
+        if (!resolvesOnRow) {
+          console.warn(
+            `[DataTable] Filter "${filter.key}" matches no column accessor and no row property, ` +
+              `so selecting it will not filter anything. Add a column with this key and an ` +
+              `accessor, or give the filter a filterFn.`
+          )
+        }
+      }
+
+      result = result.filter((row) => selected.includes(String(readValue(row) ?? "")))
     }
 
     return result

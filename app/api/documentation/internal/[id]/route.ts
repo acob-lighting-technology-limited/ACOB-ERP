@@ -206,6 +206,9 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
     const category = parseString(formData.get("category")) || null
     const tags = normalizeDocumentationTags(parseString(formData.get("tags")))
     const isDraft = parseBoolean(formData.get("is_draft"))
+    // Only the author reaches this update (the query is scoped by user_id below),
+    // so publishing to the whole company stays the author's own decision.
+    const visibility = String(formData.get("visibility") ?? "") === "general" ? "general" : "private"
     const files = getUploadedFiles(formData)
 
     if (!title || !content) {
@@ -257,6 +260,7 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
       category,
       tags,
       is_draft: isDraft,
+      visibility,
       updated_at: updatedAt,
       sharepoint_folder_path: folderPath,
       sharepoint_text_file_path: textFilePath,

@@ -35,7 +35,9 @@ const CreateRequisitionSchema = z.object({
   amount_in_words: z.string().optional(),
   purpose: z.string().trim().min(3, "Purpose must be at least 3 characters"),
   beneficiary_details: z.array(BeneficiarySchema).min(1, "At least one beneficiary is required"),
-  attachments: z.array(AttachmentSchema).min(1, "At least one supporting receipt/document is required"),
+  // Supporting documents are optional — not every requisition has a receipt or
+  // invoice available at the time it is raised.
+  attachments: z.array(AttachmentSchema).optional().default([]),
   funding_category_id: z.string().uuid("Select the project funding category"),
   is_emergency: z.boolean().optional(),
   emergency_justification: z.string().trim().optional(),

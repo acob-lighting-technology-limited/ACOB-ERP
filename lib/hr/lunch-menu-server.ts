@@ -13,7 +13,6 @@ const log = logger("lunch-menu-server")
 type MenuRow = {
   id: string
   date: string
-  title: string | null
   status: LunchMenuStatus
   voting_deadline: string | null
   published_at: string | null
@@ -23,7 +22,7 @@ type MenuRow = {
 type GroupRow = {
   id: string
   menu_id: string
-  name: string
+  name: string | null
   position: number
   is_required: boolean
 }
@@ -51,7 +50,7 @@ type SelectionRow = {
   option_id: string
 }
 
-const MENU_COLUMNS = "id, date, title, status, voting_deadline, published_at, closed_at"
+const MENU_COLUMNS = "id, date, status, voting_deadline, published_at, closed_at"
 
 /** Attaches groups and their options to a bare menu row. */
 export async function hydrateMenu(client: SupabaseClient, menu: MenuRow): Promise<LunchMenu> {
@@ -157,15 +156,15 @@ export async function loadVotesForMenu(client: SupabaseClient, menuId: string): 
     .sort((a, b) => a.full_name.localeCompare(b.full_name))
 }
 
-/** One admin-named category, as submitted by the menu builder form. */
+/** One category, as submitted by the menu builder form. */
 export interface MenuGroupInput {
-  name?: string
+  name?: string | null
   is_required?: boolean
   options?: { name?: string; description?: string | null }[]
 }
 
 export interface NormalizedMenuGroup {
-  name: string
+  name: string | null
   is_required: boolean
   options: { name: string; description: string | null }[]
 }
@@ -173,18 +172,32 @@ export interface NormalizedMenuGroup {
 /**
  * Validates a submitted menu structure and strips the blank rows the builder
  * form sends for its empty inputs.
+ *
+ * Category names are only meaningful when a menu has several categories to
+ * tell apart. A single-category menu stores no name at all, so a fixed-meal
+ * day never has to invent a heading like "Today's Meal".
  */
 export function normalizeMenuGroups(
   input: MenuGroupInput[] | undefined
 ): { value: NormalizedMenuGroup[] } | { error: string } {
   if (!Array.isArray(input) || input.length === 0) {
-    return { error: "Add at least one category" }
+    return { error: "Add at least one dish" }
   }
 
+  const needsNames = input.length > 1
   const value: NormalizedMenuGroup[] = []
+  const seenNames = new Set<string>()
+
   for (const group of input) {
     const name = String(group?.name || "").trim()
-    if (!name) return { error: "Every category needs a name" }
+    if (needsNames && !name) {
+      return { error: "Name each category so staff can tell them apart (e.g. Soup, Swallow)" }
+    }
+    if (needsNames) {
+      const key = name.toLowerCase()
+      if (seenNames.has(key)) return { error: `Two categories are both called "${name}"` }
+      seenNames.add(key)
+    }
 
     const options = (Array.isArray(group.options) ? group.options : [])
       .map((option) => ({
@@ -193,16 +206,17 @@ export function normalizeMenuGroups(
       }))
       .filter((option) => option.name.length > 0)
 
-    if (options.length === 0) return { error: `"${name}" needs at least one option` }
+    const label = name || "This menu"
+    if (options.length === 0) return { error: `${label} needs at least one dish` }
 
     const seen = new Set<string>()
     for (const option of options) {
       const key = option.name.toLowerCase()
-      if (seen.has(key)) return { error: `"${name}" has duplicate option "${option.name}"` }
+      if (seen.has(key)) return { error: `${label} lists "${option.name}" twice` }
       seen.add(key)
     }
 
-    value.push({ name, is_required: group.is_required !== false, options })
+    value.push({ name: needsNames ? name : null, is_required: group.is_required !== false, options })
   }
 
   return { value }
@@ -220,7 +234,7 @@ export async function writeMenuGroups(client: SupabaseClient, menuId: string, gr
       .select("id")
       .single()
 
-    if (groupError || !groupRow) throw new Error(`Failed to create group "${group.name}": ${groupError?.message}`)
+    if (groupError || !groupRow) throw new Error(`Failed to create category ${index + 1}: ${groupError?.message}`)
 
     const { error: optionError } = await client.from("lunch_menu_options").insert(
       group.options.map((option, optionIndex) => ({
@@ -230,7 +244,7 @@ export async function writeMenuGroups(client: SupabaseClient, menuId: string, gr
         position: optionIndex,
       }))
     )
-    if (optionError) throw new Error(`Failed to add options to "${group.name}": ${optionError.message}`)
+    if (optionError) throw new Error(`Failed to add dishes to category ${index + 1}: ${optionError.message}`)
   }
 }
 

@@ -18,6 +18,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { PromptDialog } from "@/components/ui/prompt-dialog"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -397,14 +398,14 @@ export function ManageUsersDialog({
     }
   }
 
-  const handleReject = async () => {
+  const handleReject = async (rejectionReason: string) => {
     if (!selectedUser) return
     setIsProcessing(true)
     try {
       const res = await apiFetch("/api/admin/reject-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pendingUserId: selectedUser.id }),
+        body: JSON.stringify({ pendingUserId: selectedUser.id, rejectionReason }),
       })
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to reject")
@@ -1582,28 +1583,24 @@ export function ManageUsersDialog({
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Reject confirm */}
-      <AlertDialog open={pendingReject} onOpenChange={(v) => !v && setPendingReject(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reject Application</AlertDialogTitle>
-            <AlertDialogDescription>Are you sure? This cannot be undone.</AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              loading={isProcessing}
-              onClick={async () => {
-                await handleReject()
-                setPendingReject(false)
-              }}
-            >
-              Reject
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      {/* Reject — captures the reason that is recorded against the application */}
+      <PromptDialog
+        open={pendingReject}
+        onOpenChange={(v) => !v && setPendingReject(false)}
+        title="Reject Application"
+        description="This cannot be undone. The reason is recorded against the application."
+        label="Reason for rejection"
+        placeholder="e.g. Role has been filled"
+        inputType="textarea"
+        required
+        confirmLabel="Reject"
+        confirmLoadingLabel="Rejecting..."
+        confirmVariant="destructive"
+        onConfirm={async (reason) => {
+          await handleReject(reason)
+          setPendingReject(false)
+        }}
+      />
     </>
   )
 }

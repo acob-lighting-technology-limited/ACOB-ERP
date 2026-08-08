@@ -30,7 +30,13 @@ interface NewRequisitionDialogProps {
 }
 
 export function NewRequisitionDialog({ open, onOpenChange, userDepartment, onSuccess }: NewRequisitionDialogProps) {
-  const [department, setDepartment] = useState(userDepartment || "General")
+  // The requester's own department. Resolved asynchronously by the parent, so
+  // keep it in sync rather than only seeding initial state.
+  const [department, setDepartment] = useState(userDepartment || "")
+
+  useEffect(() => {
+    if (userDepartment) setDepartment(userDepartment)
+  }, [userDepartment])
   const [projectName, setProjectName] = useState("")
   const [amount, setAmount] = useState<string>("")
   const [amountInWords, setAmountInWords] = useState<string>("")
@@ -181,12 +187,6 @@ export function NewRequisitionDialog({ open, onOpenChange, userDepartment, onSuc
       }
     }
 
-    // MANDATORY RECEIPT VALIDATION
-    if (attachments.length === 0) {
-      setErrorMsg("Mandatory Requirement: You must attach at least one supporting receipt or invoice document.")
-      return
-    }
-
     setIsSubmitting(true)
 
     try {
@@ -245,10 +245,11 @@ export function NewRequisitionDialog({ open, onOpenChange, userDepartment, onSuc
               <Label className="text-xs font-semibold">Department</Label>
               <Input
                 value={department}
-                onChange={(e) => setDepartment(e.target.value)}
-                placeholder="e.g. Admin & HR"
+                readOnly
+                disabled
+                placeholder={userDepartment === null ? "Loading…" : "No department set on your profile"}
                 required
-                className="mt-1 text-xs"
+                className="bg-muted mt-1 cursor-not-allowed text-xs"
               />
             </div>
 
@@ -427,11 +428,11 @@ export function NewRequisitionDialog({ open, onOpenChange, userDepartment, onSuc
             ))}
           </div>
 
-          {/* Mandatory Supporting Document Attachment */}
+          {/* Supporting Document Attachment (optional) */}
           <div className="space-y-2 border-t pt-3">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-bold tracking-wider text-emerald-700 uppercase dark:text-emerald-400">
-                Attach Supporting Receipts / Documents * (Mandatory)
+                Attach Supporting Receipts / Documents (Optional)
               </Label>
               <span className="text-muted-foreground text-[10px]">PDF, PNG, JPG up to 10MB</span>
             </div>

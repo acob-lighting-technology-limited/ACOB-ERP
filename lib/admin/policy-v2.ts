@@ -183,7 +183,10 @@ export function getRoutePolicyV2(route: AdminRouteKeyV2): RoutePolicyV2 {
     case "hr.resources":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: "hr" }
     case "hr.pms.cbt.manage":
-      return { visibility: "none", mutations: "none", adminOnly: true, domain: "hr" }
+      // Department leads set their own team's CBT from /dept/[id]/hr/pms/cbt —
+      // they own the assessment for their department, so this is dept-scoped
+      // rather than admin-only. Global admins still reach it via PMS/HR grants.
+      return { visibility: "dept", mutations: "dept", adminOnly: false, domain: "hr" }
     case "hr.pms":
     case "hr.leave":
     case "hr.attendance":

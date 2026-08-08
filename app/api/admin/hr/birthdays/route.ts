@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
-import { requireApiAdminScope } from "@/lib/admin/api-scope"
+import { getScopedDepartments, requireApiAdminScope } from "@/lib/admin/api-scope"
 import { canAccessAdminSection } from "@/lib/admin/rbac"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getAvatarSignedUrls } from "@/lib/profile-photos"
@@ -37,11 +37,24 @@ export async function GET(request: NextRequest) {
 
   const dataClient = getServiceRoleClientOrFallback(supabase)
 
-  const { data: profiles, error } = await dataClient
+  // Department leads (and admins inside a department console) only see their
+  // own department's celebrants; global admins see everyone.
+  const scopedDepartments = getScopedDepartments(scope)
+  if (scopedDepartments !== null && scopedDepartments.length === 0) {
+    return NextResponse.json({ data: [] })
+  }
+
+  let profilesQuery = dataClient
     .from("profiles")
     .select("first_name, last_name, birthday, department, avatar_path")
     .eq("employment_status", "active")
     .not("birthday", "is", null)
+
+  if (scopedDepartments !== null) {
+    profilesQuery = profilesQuery.in("department", scopedDepartments)
+  }
+
+  const { data: profiles, error } = await profilesQuery
 
   if (error) {
     return NextResponse.json({ error: "Failed to load profiles" }, { status: 500 })

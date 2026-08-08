@@ -14,8 +14,8 @@ type LunchLogRow = {
   employee_deduction: number
 }
 
-type MenuRow = { id: string; date: string; title: string | null }
-type GroupRow = { id: string; menu_id: string; name: string; position: number }
+type MenuRow = { id: string; date: string }
+type GroupRow = { id: string; menu_id: string; name: string | null; position: number }
 type OptionRow = { id: string; name: string }
 type VoteRow = { id: string; menu_id: string }
 type SelectionRow = { vote_id: string; group_id: string; option_id: string }
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
         .gte("date", start)
         .lt("date", end)
         .order("date", { ascending: false }),
-      dataClient.from("lunch_menus").select("id, date, title").gte("date", start).lt("date", end),
+      dataClient.from("lunch_menus").select("id, date").gte("date", start).lt("date", end),
     ])
 
     const logs = (logRows || []) as LunchLogRow[]
@@ -60,6 +60,7 @@ export async function GET(request: NextRequest) {
 
     // Resolve what the user picked on each day that had a menu.
     const picksByDate = new Map<string, string[]>()
+    const menuIdByDate = new Map<string, string>()
     if (menus.length > 0) {
       const { data: voteRows } = await dataClient
         .from("lunch_votes")
@@ -104,6 +105,7 @@ export async function GET(request: NextRequest) {
         const optionName = new Map(((optionRows || []) as OptionRow[]).map((o) => [o.id, o.name]))
         const groupPosition = new Map(groups.map((g) => [g.id, g.position]))
         const menuDate = new Map(menus.map((m) => [m.id, m.date]))
+        for (const menu of menus) menuIdByDate.set(menu.date, menu.id)
 
         for (const vote of votes) {
           const date = menuDate.get(vote.menu_id)
@@ -118,14 +120,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    const menuTitle = new Map(menus.map((m) => [m.date, m.title]))
-
     return NextResponse.json({
       yearMonth,
       rows: logs.map((row) => ({
         ...row,
-        menu_title: menuTitle.get(row.date) || null,
         picks: picksByDate.get(row.date) || [],
+        // Lets the row offer a "Review this meal" action.
+        menu_id: menuIdByDate.get(row.date) || null,
       })),
     })
   } catch (error) {

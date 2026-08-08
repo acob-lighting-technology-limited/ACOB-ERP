@@ -5,7 +5,15 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Mail, Megaphone, ChevronRight } from "lucide-react"
 import Link from "next/link"
 
-export function CommunicationsPage({ basePath }: { basePath?: string } = {}) {
+export function CommunicationsPage({
+  basePath,
+  /**
+   * Meeting tools are admin-only (policy route "communications.meetings") and
+   * have no /dept/[id]/ equivalent, so the dept console hides the card rather
+   * than linking leads to a route that 404s.
+   */
+  showMeetings = true,
+}: { basePath?: string; showMeetings?: boolean } = {}) {
   const base = basePath ?? "/admin"
   const cards = [
     {
@@ -16,14 +24,18 @@ export function CommunicationsPage({ basePath }: { basePath?: string } = {}) {
       color: "text-orange-600 dark:text-orange-400",
       bgColor: "bg-orange-100 dark:bg-orange-900/30",
     },
-    {
-      title: "Meetings",
-      description: "Open meeting communication tools (mailings and reminders).",
-      href: `${base}/communications/meetings`,
-      icon: Mail,
-      color: "text-indigo-600 dark:text-indigo-400",
-      bgColor: "bg-indigo-100 dark:bg-indigo-900/30",
-    },
+    ...(showMeetings
+      ? [
+          {
+            title: "Meetings",
+            description: "Open meeting communication tools (mailings and reminders).",
+            href: `${base}/communications/meetings`,
+            icon: Mail,
+            color: "text-indigo-600 dark:text-indigo-400",
+            bgColor: "bg-indigo-100 dark:bg-indigo-900/30",
+          },
+        ]
+      : []),
   ]
 
   return (

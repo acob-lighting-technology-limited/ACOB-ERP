@@ -183,6 +183,29 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    // The listing is department-scoped but this decision was not, so a lead
+    // could approve an appeal outside their department by id alone. Department
+    // leads (including admins acting inside a dept console) may only review
+    // their own team's AWP/LWP appeals; global admins are unrestricted.
+    const scopedDepartments = getScopedDepartments(scope)
+    if (scopedDepartments !== null) {
+      if (scopedDepartments.length === 0) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+      const { data: appellant } = await dataClient
+        .from("profiles")
+        .select("department")
+        .eq("id", appeal.user_id)
+        .maybeSingle<{ department: string | null }>()
+
+      if (!appellant?.department || !scopedDepartments.includes(appellant.department)) {
+        return NextResponse.json(
+          { error: "You can only review attendance appeals for your own department" },
+          { status: 403 }
+        )
+      }
+    }
+
     const now = new Date().toISOString()
     const newStatus = action === "approve" ? "approved" : "rejected"
 

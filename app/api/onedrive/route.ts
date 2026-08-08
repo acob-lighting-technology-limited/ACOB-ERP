@@ -240,9 +240,23 @@ async function writeDepartmentDocumentAudit(
   )
 }
 
+/**
+ * What a request is trying to do, which decides who may perform it.
+ *
+ * - "read"      — anyone with scope over the path.
+ * - "additive"  — uploading a file or creating a folder. Open to every staff
+ *                 member inside their own department library; nothing existing
+ *                 is lost if they get it wrong.
+ * - "destructive" — deleting, renaming or moving. Restricted to admins and
+ *                 department leads (accessMode "admin", reached only from the
+ *                 /admin and /dept consoles), because these discard other
+ *                 people's work.
+ */
+type WriteLevel = "read" | "additive" | "destructive"
+
 async function getRequestContext(
   accessMode: string | null,
-  requireWrite = false,
+  writeLevel: WriteLevel = "read",
   department: string | null = null
 ): Promise<RequestContext> {
   const supabase = await createClient()
@@ -254,8 +268,13 @@ async function getRequestContext(
     return { response: NextResponse.json({ error: "Unauthorized" }, { status: 401 }) }
   }
 
-  if (requireWrite && accessMode !== "admin") {
-    return { response: NextResponse.json({ error: "Forbidden" }, { status: 403 }) }
+  if (writeLevel === "destructive" && accessMode !== "admin") {
+    return {
+      response: NextResponse.json(
+        { error: "Only department leads and administrators can delete or rename department documents" },
+        { status: 403 }
+      ),
+    }
   }
 
   const scope = department
@@ -283,7 +302,7 @@ async function getRequestContext(
 export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url)
-    const context = await getRequestContext(searchParams.get("accessMode"), false, searchParams.get("department"))
+    const context = await getRequestContext(searchParams.get("accessMode"), "read", searchParams.get("department"))
     if ("response" in context) {
       return context.response
     }
@@ -369,7 +388,7 @@ export async function POST(request: Request) {
     const formData = await request.formData()
     const accessMode = typeof formData.get("accessMode") === "string" ? String(formData.get("accessMode")) : null
     const department = typeof formData.get("department") === "string" ? String(formData.get("department")) : null
-    const context = await getRequestContext(accessMode, true, department)
+    const context = await getRequestContext(accessMode, "additive", department)
     if ("response" in context) {
       return context.response
     }
@@ -451,7 +470,7 @@ export async function PATCH(request: Request) {
     )
   try {
     const body = (await request.json()) as { path?: string; newName?: string; accessMode?: string; department?: string }
-    const context = await getRequestContext(body.accessMode ?? null, true, body.department ?? null)
+    const context = await getRequestContext(body.accessMode ?? null, "destructive", body.department ?? null)
     if ("response" in context) {
       return context.response
     }
@@ -499,7 +518,11 @@ export async function DELETE(request: Request) {
     )
   try {
     const { searchParams } = new URL(request.url)
-    const context = await getRequestContext(searchParams.get("accessMode"), true, searchParams.get("department"))
+    const context = await getRequestContext(
+      searchParams.get("accessMode"),
+      "destructive",
+      searchParams.get("department")
+    )
     if ("response" in context) {
       return context.response
     }

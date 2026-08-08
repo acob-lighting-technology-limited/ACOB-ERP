@@ -15,6 +15,13 @@ import {
   type DocumentationAttachment,
 } from "@/lib/documentation/sharepoint"
 
+/** private = author, their lead and admins. general = all authenticated staff. */
+type DocumentationVisibility = "private" | "general"
+
+function parseVisibility(value: FormDataEntryValue | null): DocumentationVisibility {
+  return String(value ?? "") === "general" ? "general" : "private"
+}
+
 type DocumentationInsertPayload = {
   id: string
   user_id: string
@@ -23,6 +30,7 @@ type DocumentationInsertPayload = {
   category: string | null
   tags: string[]
   is_draft: boolean
+  visibility: DocumentationVisibility
   sharepoint_folder_path: string
   sharepoint_text_file_path: string
   sharepoint_attachments: DocumentationAttachment[]
@@ -170,6 +178,7 @@ export async function POST(request: Request) {
     const category = parseString(formData.get("category")) || null
     const tags = normalizeDocumentationTags(parseString(formData.get("tags")))
     const isDraft = parseBoolean(formData.get("is_draft"))
+    const visibility = parseVisibility(formData.get("visibility"))
     const files = getUploadedFiles(formData)
 
     if (!title || !content) {
@@ -201,6 +210,7 @@ export async function POST(request: Request) {
       category,
       tags,
       is_draft: isDraft,
+      visibility,
       sharepoint_folder_path: folderPath,
       sharepoint_text_file_path: uploaded.textFilePath,
       sharepoint_attachments: uploaded.attachments,

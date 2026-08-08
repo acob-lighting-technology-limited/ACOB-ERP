@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { PromptDialog } from "@/components/ui/prompt-dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, CheckCircle, UserPlus, ChevronRight, ShieldCheck, Hash, Mail } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
@@ -265,7 +266,7 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
     }
   }
 
-  const handleReject = async () => {
+  const handleReject = async (rejectionReason: string) => {
     if (!selectedUser) return
 
     setIsProcessing(true)
@@ -273,7 +274,7 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
       const response = await apiFetch("/api/admin/reject-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pendingUserId: selectedUser.id }),
+        body: JSON.stringify({ pendingUserId: selectedUser.id, rejectionReason }),
       })
       const payload = (await response.json().catch(() => null)) as { error?: string } | null
       if (!response.ok) throw new Error(payload?.error || "Failed to reject application")
@@ -808,29 +809,23 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={pendingReject} onOpenChange={(open) => !open && setPendingReject(false)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Reject Application</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to reject this application? This cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isProcessing}>Cancel</AlertDialogCancel>
-            <Button
-              variant="destructive"
-              loading={isProcessing}
-              onClick={async () => {
-                await handleReject()
-                setPendingReject(false)
-              }}
-            >
-              Reject
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <PromptDialog
+        open={pendingReject}
+        onOpenChange={(open) => !open && setPendingReject(false)}
+        title="Reject Application"
+        description="This cannot be undone. The reason is recorded against the application."
+        label="Reason for rejection"
+        placeholder="e.g. Role has been filled"
+        inputType="textarea"
+        required
+        confirmLabel="Reject"
+        confirmLoadingLabel="Rejecting..."
+        confirmVariant="destructive"
+        onConfirm={async (reason) => {
+          await handleReject(reason)
+          setPendingReject(false)
+        }}
+      />
     </Dialog>
   )
 }

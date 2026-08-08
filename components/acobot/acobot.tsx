@@ -15,8 +15,14 @@ interface AcoBotProps {
   userName?: string | null
 }
 
+/** Marks that the user has already been nudged, so we only ever do it once. */
+const NUDGE_SEEN_KEY = "acobot:nudge-seen"
+const NUDGE_APPEAR_MS = 5000
+const NUDGE_DISMISS_MS = 20000
+
 export function AcoBot({ userName }: AcoBotProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [showNudge, setShowNudge] = useState(false)
   const router = useRouter()
   const pathname = usePathname()
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -26,6 +32,35 @@ export function AcoBot({ userName }: AcoBotProps) {
     setIsOpen(false)
     router.push(href)
   }
+
+  const dismissNudge = () => {
+    setShowNudge(false)
+    try {
+      window.localStorage.setItem(NUDGE_SEEN_KEY, "1")
+    } catch {
+      // Private mode / storage disabled — the nudge just reappears next session.
+    }
+  }
+
+  // One-time nudge so people discover the assistant instead of ignoring the
+  // launcher. Shows shortly after load, retires itself, and never returns once
+  // seen or once the user has opened the chat.
+  useEffect(() => {
+    let seen = false
+    try {
+      seen = window.localStorage.getItem(NUDGE_SEEN_KEY) === "1"
+    } catch {
+      seen = false
+    }
+    if (seen) return
+
+    const appearTimer = window.setTimeout(() => setShowNudge(true), NUDGE_APPEAR_MS)
+    const dismissTimer = window.setTimeout(() => setShowNudge(false), NUDGE_APPEAR_MS + NUDGE_DISMISS_MS)
+    return () => {
+      window.clearTimeout(appearTimer)
+      window.clearTimeout(dismissTimer)
+    }
+  }, [])
 
   const { messages, input, handleInputChange, handleSubmit, isLoading, stop, error, setInput } = useChat({
     api: "/api/acobot",
@@ -66,6 +101,39 @@ export function AcoBot({ userName }: AcoBotProps) {
 
   return (
     <>
+      {/* Discovery nudge — sits just above the launcher */}
+      <AnimatePresence>
+        {!isOpen && showNudge && (
+          <motion.div
+            initial={{ opacity: 0, y: 8, scale: 0.94 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.94 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            role="status"
+            className="bg-popover text-popover-foreground border-border fixed right-5 bottom-22 z-50 flex max-w-[min(17rem,calc(100vw-2.5rem))] items-start gap-2 rounded-xl border py-2.5 pr-2 pl-3 shadow-lg"
+          >
+            <button
+              type="button"
+              onClick={() => {
+                dismissNudge()
+                setIsOpen(true)
+              }}
+              className="cursor-pointer text-left text-sm leading-snug"
+            >
+              Hi {greeting} — need to find something? Ask <span className="font-semibold">ACOBot</span>.
+            </button>
+            <button
+              type="button"
+              onClick={dismissNudge}
+              aria-label="Dismiss ACOBot tip"
+              className="hover:bg-muted text-muted-foreground shrink-0 rounded-full p-1 transition-colors"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Launcher */}
       <AnimatePresence>
         {!isOpen && (
@@ -76,7 +144,10 @@ export function AcoBot({ userName }: AcoBotProps) {
             exit={{ opacity: 0, scale: 0.6 }}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => setIsOpen(true)}
+            onClick={() => {
+              dismissNudge()
+              setIsOpen(true)
+            }}
             aria-label="Open ACOBot assistant"
             className="bg-primary text-primary-foreground ring-border fixed right-5 bottom-5 z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-lg ring-1"
           >

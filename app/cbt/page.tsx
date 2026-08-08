@@ -17,6 +17,9 @@ type CandidateOption = {
 type ReviewCycleOption = {
   id: string
   name: string
+  status?: string | null
+  /** The cycle preselected for the candidate; others remain choosable. */
+  is_default?: boolean
 }
 
 type Question = {
@@ -97,7 +100,14 @@ export default function CbtPage() {
         const payload = await response.json()
         if (!response.ok) throw new Error(payload.error || "Failed to load CBT candidates")
         setCandidateOptions(payload.data?.candidates || [])
-        setCycles(payload.data?.cycles || [])
+        const loadedCycles: ReviewCycleOption[] = payload.data?.cycles || []
+        setCycles(loadedCycles)
+        // Preselect the current cycle so the common case is one tap, while
+        // still allowing an earlier cycle to be chosen before starting.
+        const defaultCycleId: string | null = payload.data?.default_cycle_id ?? null
+        if (defaultCycleId) {
+          setForm((current) => (current.review_cycle_id ? current : { ...current, review_cycle_id: defaultCycleId }))
+        }
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Failed to load CBT candidates")
       } finally {
@@ -532,6 +542,7 @@ export default function CbtPage() {
                 {cycles.map((c) => (
                   <SelectItem key={c.id} value={c.id}>
                     {c.name}
+                    {c.status && c.status !== "active" ? " (past)" : ""}
                   </SelectItem>
                 ))}
               </SelectContent>

@@ -138,6 +138,12 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     }
     const nextStatus = parsed.data.status ? String(parsed.data.status) : null
     const statusNote = parsed.data.status_note ? String(parsed.data.status_note).trim() : null
+
+    // Anyone in the chain can move a ticket to "rejected" from here, so the
+    // requester is owed an explanation — same rule the approvals route applies.
+    if (nextStatus === "rejected" && !statusNote) {
+      return NextResponse.json({ error: "A reason is required when rejecting a ticket" }, { status: 400 })
+    }
     const csatRating = parsed.data.csat_rating
     const csatFeedback = parsed.data.csat_feedback ? String(parsed.data.csat_feedback) : null
 

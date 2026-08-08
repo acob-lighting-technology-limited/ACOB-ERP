@@ -8,7 +8,7 @@ import type { ClientAdminScope } from "@/components/admin-scope-context"
 import type { UserRole } from "@/types/database"
 
 export const metadata: Metadata = {
-  title: "Dept Console | ACOB Lighting Technology Limited",
+  title: "My Department | ACOB Lighting Technology Limited",
   description: "Department lead console — manage your team, approvals, and operations.",
 }
 
@@ -64,11 +64,12 @@ export default async function DeptLayoutPage({ children, params }: DeptLayoutPag
     : undefined
 
   return (
-    <>
-      <DeptLayout scope={clientScope} user={userData} profile={sidebarProfile} deptName={scope.deptName}>
-        <ErrorBoundary>{children}</ErrorBoundary>
-      </DeptLayout>
+    // AcoBot renders inside DeptLayout (it is fixed-positioned, so this does not
+    // affect layout) so that it sits within .admin-shell and picks up the dept
+    // console's navy accent instead of the global green.
+    <DeptLayout scope={clientScope} user={userData} profile={sidebarProfile} deptName={scope.deptName}>
+      <ErrorBoundary>{children}</ErrorBoundary>
       <AcoBot userName={profile?.first_name ?? null} />
-    </>
+    </DeptLayout>
   )
 }

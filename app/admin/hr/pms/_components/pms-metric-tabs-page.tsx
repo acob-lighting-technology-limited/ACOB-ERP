@@ -42,6 +42,23 @@ type MetricSnapshotPayload = {
   }
 }
 
+/**
+ * Does a cycle's review_type belong to the chosen cadence?
+ *
+ * review_type is free text in the database, so match loosely: "quarter" covers
+ * "quarterly", and biannual/semi-annual spellings are folded together. Annual
+ * deliberately excludes those so "Annual" does not swallow "Bi-Annual".
+ */
+function matchesCadenceFor(cadence: string, reviewType: string | null): boolean {
+  if (cadence === "all") return true
+  const value = (reviewType || "").toLowerCase().replace(/[\s_-]/g, "")
+  if (cadence === "quarterly") return value.includes("quarter")
+  if (cadence === "biannual") return value.includes("biannual") || value.includes("semiannual")
+  if (cadence === "annual")
+    return value.includes("annual") && !value.includes("biannual") && !value.includes("semiannual")
+  return true
+}
+
 function asString(value: unknown) {
   if (value === null || value === undefined) return "-"
   return String(value)
@@ -399,6 +416,9 @@ export function PmsMetricTabsPage({
   const [processedRawRows, setProcessedRawRows] = useState<Record<string, unknown>[]>([])
   const [data, setData] = useState<MetricSnapshotPayload | null>(null)
   const [cycleId, setCycleId] = useState("")
+  // Cycle cadence filter. Narrows the Cycle picker to quarterly / biannual /
+  // annual so a long history of cycles stays navigable.
+  const [cycleType, setCycleType] = useState("all")
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null)
@@ -496,31 +516,74 @@ export function PmsMetricTabsPage({
 
   const tableFilters = useMemo<DataTableFilter<Record<string, unknown>>[]>(() => {
     const result: DataTableFilter<Record<string, unknown>>[] = []
+
+    const allCycles = data?.cycles || []
+    const visibleCycles = allCycles.filter((cycle) => matchesCadenceFor(cycleType, cycle.review_type))
+
+    result.push({
+      key: "cycle_type",
+      label: "Cadence",
+      options: [
+        { value: "all", label: "All cadences" },
+        { value: "quarterly", label: "Quarterly" },
+        { value: "biannual", label: "Biannual" },
+        { value: "annual", label: "Annual" },
+      ],
+      mode: "custom",
+      filterFn: () => true,
+      render: (values, onChange) => (
+        <Select
+          value={values[0] || cycleType}
+          onValueChange={(next) => {
+            onChange([next])
+            setCycleType(next)
+            // If the active cycle is not in the new cadence, jump to the most
+            // recent one that is, so the table never shows a stale window.
+            const stillVisible = allCycles.find((c) => c.id === cycleId && matchesCadenceFor(next, c.review_type))
+            if (!stillVisible) {
+              const fallback = allCycles.find((c) => matchesCadenceFor(next, c.review_type))
+              if (fallback) setCycleId(fallback.id)
+            }
+          }}
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder="All cadences" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All cadences</SelectItem>
+            <SelectItem value="quarterly">Quarterly</SelectItem>
+            <SelectItem value="biannual">Biannual</SelectItem>
+            <SelectItem value="annual">Annual</SelectItem>
+          </SelectContent>
+        </Select>
+      ),
+    })
+
     result.push({
       key: "cycle",
       label: "Cycle",
-      options: (data?.cycles || []).map((cycle) => ({ value: cycle.name, label: cycle.name })),
+      options: visibleCycles.map((cycle) => ({ value: cycle.name, label: cycle.name })),
       mode: "custom",
       filterFn: () => true,
       render: (values, onChange) => {
-        const activeCycleName = data?.cycles.find((c) => c.id === cycleId)?.name || ""
+        const activeCycleName = allCycles.find((c) => c.id === cycleId)?.name || ""
         const currentValue = values[0] || activeCycleName
         return (
           <Select
             value={currentValue}
             onValueChange={(name) => {
               onChange([name])
-              const targetCycle = data?.cycles.find((c) => c.name === name)
+              const targetCycle = allCycles.find((c) => c.name === name)
               if (targetCycle) {
                 setCycleId(targetCycle.id)
               }
             }}
           >
             <SelectTrigger className="w-full">
-              <SelectValue placeholder="Select Cycle" />
+              <SelectValue placeholder={visibleCycles.length === 0 ? "No cycles for this cadence" : "Select Cycle"} />
             </SelectTrigger>
             <SelectContent>
-              {(data?.cycles || []).map((cycle) => (
+              {visibleCycles.map((cycle) => (
                 <SelectItem key={cycle.id} value={cycle.name}>
                   {cycle.name}
                 </SelectItem>
@@ -550,7 +613,7 @@ export function PmsMetricTabsPage({
       })
     }
     return result
-  }, [tab, data, cycleId])
+  }, [tab, data, cycleId, cycleType])
 
   const tableRowActions = useMemo<RowAction<Record<string, unknown>>[] | undefined>(() => {
     if (tab === "individual" && metric !== "goals") {

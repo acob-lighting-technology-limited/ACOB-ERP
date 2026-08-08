@@ -3,6 +3,8 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageHeader, PageWrapper } from "@/components/layout"
+import { StatCard } from "@/components/ui/stat-card"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
@@ -50,6 +52,7 @@ import {
   Pencil,
   Trash2,
   FolderUp,
+  FileText,
 } from "lucide-react"
 import { BreadcrumbNav } from "@/components/onedrive/breadcrumb-nav"
 import { FileIcon, getExtensionColor } from "@/components/onedrive/file-icon"
@@ -68,6 +71,8 @@ interface DepartmentDocumentsBrowserProps {
   lockToInitialPath?: boolean
   accessMode?: "self" | "admin"
   lockedDepartment?: string
+  /** Back link shown in the page header, matching every other list page. */
+  backLink?: { href: string; label: string }
 }
 
 interface UploadQueueItem {
@@ -207,6 +212,7 @@ export function DepartmentDocumentsBrowser({
   lockToInitialPath = false,
   accessMode = "self",
   lockedDepartment,
+  backLink,
 }: DepartmentDocumentsBrowserProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -251,6 +257,11 @@ export function DepartmentDocumentsBrowser({
   const filesInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
   const isAdminMode = accessMode === "admin"
+  // Everyone may add to their own department library; only leads and admins
+  // (who reach this through the /admin and /dept consoles) may delete or rename,
+  // since those discard other people's work. Mirrors the WriteLevel split in
+  // /api/onedrive.
+  const canAddContent = currentPath !== "/"
   const canManageCurrentFolder = isAdminMode && currentPath !== "/"
   const selectedCount = selectedPaths.size
 
@@ -614,7 +625,7 @@ export function DepartmentDocumentsBrowser({
 
   const runUploadPlan = useCallback(
     async (plan: UploadPlan) => {
-      if (!canManageCurrentFolder) {
+      if (!canAddContent) {
         toast.error("Open a department library before uploading")
         return
       }
@@ -650,7 +661,7 @@ export function DepartmentDocumentsBrowser({
         resetFileInputs()
       }
     },
-    [canManageCurrentFolder, createFolderRequest, currentPath, fetchFiles, searchQuery, uploadWithProgress]
+    [canAddContent, createFolderRequest, currentPath, fetchFiles, searchQuery, uploadWithProgress]
   )
 
   const handleFilesSelected = async (selectedFiles: FileList | null) => {
@@ -685,7 +696,7 @@ export function DepartmentDocumentsBrowser({
     event.preventDefault()
     setIsDragActive(false)
 
-    if (!canManageCurrentFolder || isMutating) return
+    if (!canAddContent || isMutating) return
 
     const entryItems = Array.from(event.dataTransfer.items || []).filter((item) => item.kind === "file")
 
@@ -817,7 +828,7 @@ export function DepartmentDocumentsBrowser({
       <FolderOpen className="text-muted-foreground/50 mb-4 h-16 w-16" />
       <h3 className="text-lg font-medium">This folder is empty</h3>
       <p className="text-muted-foreground mt-1 text-sm">
-        {canManageCurrentFolder
+        {canAddContent
           ? "No files or folders found yet. Use the upload tools above or drag items here."
           : "No files or folders found in this location."}
       </p>
@@ -1068,17 +1079,103 @@ export function DepartmentDocumentsBrowser({
     </div>
   )
 
+  const folderCount = files.filter((file) => file.isFolder).length
+  const fileCount = files.length - folderCount
+
   return (
-    <div className="mx-auto w-full max-w-7xl px-4 sm:px-6 lg:px-8">
+    <PageWrapper maxWidth="full" background="gradient">
+      <PageHeader
+        title="Department Documents"
+        description="Browse confidential department documents stored in OneDrive."
+        icon={Cloud}
+        backLink={backLink}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-2"
+              onClick={() => {
+                void handleDownloadSelected()
+              }}
+              disabled={selectedCount === 0 || isMutating}
+            >
+              <Download className="h-4 w-4" />
+              Download ({selectedCount})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-2"
+              onClick={() => setNewFolderOpen(true)}
+              disabled={!canAddContent || isMutating}
+            >
+              <FolderPlus className="h-4 w-4" />
+              New Folder
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-8 gap-2"
+              onClick={() => folderInputRef.current?.click()}
+              disabled={!canAddContent || isMutating}
+            >
+              <FolderUp className="h-4 w-4" />
+              Upload Folder
+            </Button>
+            <Button
+              size="sm"
+              className="h-8 gap-2"
+              onClick={() => filesInputRef.current?.click()}
+              disabled={!canAddContent || isMutating}
+            >
+              <Upload className="h-4 w-4" />
+              Upload Files
+            </Button>
+          </div>
+        }
+      />
+
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard
+          title="Files"
+          value={fileCount}
+          icon={FileText}
+          iconBgColor="bg-blue-500/10"
+          iconColor="text-blue-500"
+        />
+        <StatCard
+          title="Folders"
+          value={folderCount}
+          icon={FolderOpen}
+          iconBgColor="bg-amber-500/10"
+          iconColor="text-amber-500"
+        />
+        <StatCard
+          title="Selected"
+          value={selectedCount}
+          icon={Download}
+          iconBgColor="bg-violet-500/10"
+          iconColor="text-violet-500"
+        />
+        <StatCard
+          title="Library"
+          value={lockedDepartment || rootLabel}
+          icon={Cloud}
+          iconBgColor="bg-emerald-500/10"
+          iconColor="text-emerald-500"
+        />
+      </div>
+
       <Card
         className={isDragActive ? "border-primary bg-primary/5" : ""}
         onDragOver={(event) => {
-          if (!canManageCurrentFolder || isMutating) return
+          if (!canAddContent || isMutating) return
           event.preventDefault()
           setIsDragActive(true)
         }}
         onDragEnter={(event) => {
-          if (!canManageCurrentFolder || isMutating) return
+          if (!canAddContent || isMutating) return
           event.preventDefault()
           setIsDragActive(true)
         }}
@@ -1091,78 +1188,27 @@ export function DepartmentDocumentsBrowser({
           void handleDrop(event)
         }}
       >
-        <CardHeader className="pb-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <Cloud className="h-6 w-6 text-blue-500" />
-              <div>
-                <CardTitle>Department Documents</CardTitle>
-                <CardDescription>Browse confidential department documents stored in OneDrive</CardDescription>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button
-                variant="outline"
-                className="gap-2"
-                onClick={() => {
-                  void handleDownloadSelected()
-                }}
-                disabled={selectedCount === 0 || isMutating}
-              >
-                <Download className="h-4 w-4" />
-                Download Selected ({selectedCount})
-              </Button>
-              {isAdminMode && (
-                <>
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => setNewFolderOpen(true)}
-                    disabled={!canManageCurrentFolder || isMutating}
-                  >
-                    <FolderPlus className="h-4 w-4" />
-                    New Folder
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => filesInputRef.current?.click()}
-                    disabled={!canManageCurrentFolder || isMutating}
-                  >
-                    <Upload className="h-4 w-4" />
-                    Upload Files
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => folderInputRef.current?.click()}
-                    disabled={!canManageCurrentFolder || isMutating}
-                  >
-                    <FolderUp className="h-4 w-4" />
-                    Upload Folder
-                  </Button>
-                </>
-              )}
-              <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "grid")}>
-                <TabsList className="h-9">
-                  <TabsTrigger value="list" className="px-3">
-                    <List className="h-4 w-4" />
-                  </TabsTrigger>
-                  <TabsTrigger value="grid" className="px-3">
-                    <Grid3X3 className="h-4 w-4" />
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <Button
-                variant="outline"
-                size="icon"
-                aria-label="Refresh"
-                onClick={handleRefresh}
-                disabled={loading || isMutating}
-              >
-                <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
-              </Button>
-            </div>
+        <CardHeader className="pb-3">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "grid")}>
+              <TabsList className="h-9">
+                <TabsTrigger value="list" className="px-3">
+                  <List className="h-4 w-4" />
+                </TabsTrigger>
+                <TabsTrigger value="grid" className="px-3">
+                  <Grid3X3 className="h-4 w-4" />
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+            <Button
+              variant="outline"
+              size="icon"
+              aria-label="Refresh"
+              onClick={handleRefresh}
+              disabled={loading || isMutating}
+            >
+              <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            </Button>
           </div>
         </CardHeader>
 
@@ -1200,13 +1246,13 @@ export function DepartmentDocumentsBrowser({
             </form>
           </div>
 
-          {isAdminMode && !canManageCurrentFolder && (
+          {!canAddContent && (
             <div className="bg-muted/50 text-muted-foreground mb-4 rounded-md border px-3 py-2 text-sm">
               Open a department library first to create folders, upload files, upload folders, or drag and drop content.
             </div>
           )}
 
-          {canManageCurrentFolder && (
+          {canAddContent && (
             <div
               className={`mb-4 rounded-lg border border-dashed px-4 py-3 text-sm transition-colors ${
                 isDragActive ? "border-primary bg-primary/5 text-foreground" : "text-muted-foreground"
@@ -1382,6 +1428,6 @@ export function DepartmentDocumentsBrowser({
           </Card>
         </div>
       )}
-    </div>
+    </PageWrapper>
   )
 }

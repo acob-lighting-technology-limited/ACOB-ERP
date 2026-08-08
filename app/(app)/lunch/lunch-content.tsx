@@ -13,9 +13,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
 import { cn, getInitials } from "@/lib/utils"
 import { apiFetch } from "@/lib/api-client"
-import { formatWATDate, formatWATTime, toLocalYearMonth } from "@/lib/utils/date"
-import { tallyVotes, type LunchMenu, type LunchVoteRecord } from "@/lib/hr/lunch-voting"
+import { formatWATDate, formatWATTime, toLocalISODate, toLocalYearMonth } from "@/lib/utils/date"
+import { groupHeading, menuHeading, tallyVotes, type LunchMenu, type LunchVoteRecord } from "@/lib/hr/lunch-voting"
 import { logger } from "@/lib/logger"
+import { LunchReviewDialog } from "./_components/lunch-review-dialog"
 
 const log = logger("lunch-content")
 
@@ -34,8 +35,9 @@ interface HistoryRow {
   cost: number
   company_subsidy: number
   employee_deduction: number
-  menu_title: string | null
   picks: string[]
+  /** Null when that day predates the menu feature — nothing to review. */
+  menu_id: string | null
 }
 
 interface LunchContentProps {
@@ -96,6 +98,8 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
 
   // ── History tab ───────────────────────────────────────────────────────────
   const [historyMonth, setHistoryMonth] = useState<string>(() => toLocalYearMonth())
+  const [reviewTarget, setReviewTarget] = useState<{ menuId: string; date: string } | null>(null)
+  const todayIso = toLocalISODate()
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
@@ -225,7 +229,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
             ))}
           </div>
         ) : (
-          <span className="text-muted-foreground text-xs">{row.menu_title || "Logged by admin"}</span>
+          <span className="text-muted-foreground text-xs">Logged by admin</span>
         ),
     },
     {
@@ -339,7 +343,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
                     <div>
                       <CardTitle className="flex items-center gap-2 text-base">
                         <Utensils className="text-primary h-4 w-4" />
-                        {menu.title || "Today's Lunch"}
+                        {menuHeading(menu.date, data.date)}
                       </CardTitle>
                       <p className="text-muted-foreground mt-1 text-xs">
                         {formatWATDate(menu.date, { weekday: "long", day: "numeric", month: "long" })}
@@ -369,18 +373,23 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
                 <CardContent className="space-y-5">
                   {menu.groups.map((group, index) => (
                     <div key={group.id} className="space-y-2">
-                      <div className="flex items-baseline gap-2">
-                        <span className="text-foreground text-sm font-semibold">{group.name}</span>
-                        {menu.groups.length > 1 && (
+                      {/* One list needs no heading — the dishes speak for
+                          themselves. Headings appear only to tell several
+                          lists apart (Soup vs Swallow). */}
+                      {menu.groups.length > 1 && (
+                        <div className="flex items-baseline gap-2">
+                          <span className="text-foreground text-sm font-semibold">{groupHeading(group, index)}</span>
                           <span className="text-muted-foreground text-[11px] tracking-wider uppercase">
                             Step {index + 1} of {menu.groups.length} · pick one
                           </span>
-                        )}
-                        {!group.is_required && (
-                          <span className="text-muted-foreground text-[11px] italic">optional — you can skip this</span>
-                        )}
-                        {draft[group.id] && <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" />}
-                      </div>
+                          {!group.is_required && (
+                            <span className="text-muted-foreground text-[11px] italic">
+                              optional — you can skip this
+                            </span>
+                          )}
+                          {draft[group.id] && <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" />}
+                        </div>
+                      )}
 
                       <div className="grid gap-2 sm:grid-cols-2">
                         {group.options.map((option) => {
@@ -431,12 +440,15 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
 
                   {menu.groups.length > 1 && (
                     <div className="bg-muted/40 rounded-lg border p-3 text-xs">
-                      This menu has {menu.groups.length} categories —{" "}
-                      <span className="font-semibold">{menu.groups.map((g) => g.name).join(" and ")}</span>. Pick one
-                      from each; your vote only counts once{" "}
+                      Pick one from each —{" "}
+                      <span className="font-semibold">
+                        {menu.groups.map((g, i) => groupHeading(g, i)).join(" and ")}
+                      </span>
+                      . Your vote only counts once{" "}
                       {menu.groups
-                        .filter((g) => g.is_required)
-                        .map((g) => g.name)
+                        .map((g, i) => ({ label: groupHeading(g, i), required: g.is_required }))
+                        .filter((g) => g.required)
+                        .map((g) => g.label)
                         .join(" and ")}{" "}
                       are chosen.
                     </div>
@@ -475,7 +487,9 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
                     {missingGroups.length > 0 && votingOpen && (
                       <span className="text-muted-foreground text-xs">
                         Still to pick:{" "}
-                        <span className="font-semibold">{missingGroups.map((g) => g.name).join(", ")}</span>
+                        <span className="font-semibold">
+                          {missingGroups.map((g) => groupHeading(g, menu.groups.indexOf(g))).join(", ")}
+                        </span>
                       </span>
                     )}
                     {!votingOpen && (
@@ -534,9 +548,24 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
             error={historyError}
             onRetry={() => void loadHistory(historyMonth)}
             pagination={{ pageSize: 31 }}
+            rowActions={[
+              {
+                label: "Review meal",
+                onClick: (row) => setReviewTarget({ menuId: row.menu_id!, date: row.date }),
+                // Only days that had a menu, and only once they are in the past.
+                hidden: (row) => !row.menu_id || row.date >= todayIso,
+              },
+            ]}
           />
         </div>
       )}
+
+      <LunchReviewDialog
+        open={reviewTarget !== null}
+        onOpenChange={(open) => !open && setReviewTarget(null)}
+        menuId={reviewTarget?.menuId ?? null}
+        date={reviewTarget?.date ?? null}
+      />
     </DataTablePage>
   )
 }
@@ -570,14 +599,18 @@ function VoteResults({
           </p>
         </CardHeader>
         <CardContent className="space-y-4 pt-0">
-          {menu.groups.map((group) => {
+          {menu.groups.map((group, index) => {
             const groupTallies = tallies
               .filter((t) => t.group_id === group.id)
               .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 
             return (
               <div key={group.id} className="space-y-2">
-                <p className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">{group.name}</p>
+                {menu.groups.length > 1 && (
+                  <p className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
+                    {groupHeading(group, index)}
+                  </p>
+                )}
                 {groupTallies.map((tally) => {
                   const percent = total > 0 ? Math.round((tally.count / total) * 100) : 0
                   return (

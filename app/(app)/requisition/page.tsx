@@ -14,6 +14,7 @@ import { Plus, FileCheck2, Clock, CheckCircle2, AlertCircle, Eye, RefreshCw, Sir
 import type { Requisition } from "@/lib/requisitions/types"
 import { getStageLabel } from "@/lib/requisitions/workflow"
 import { NewRequisitionDialog } from "./_components/new-requisition-dialog"
+import { createClient } from "@/lib/supabase/client"
 import Link from "next/link"
 
 const TABS: DataTableTab[] = [
@@ -28,6 +29,21 @@ export default function RequisitionListPage() {
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
   const [isCreateOpen, setIsCreateOpen] = useState<boolean>(false)
+  // A requisition is always raised for the requester's own department, so the
+  // dialog shows it read-only rather than asking them to type it.
+  const [userDepartment, setUserDepartment] = useState<string | null>(null)
+
+  useEffect(() => {
+    const supabase = createClient()
+    void (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.from("profiles").select("department").eq("id", user.id).single()
+      setUserDepartment(data?.department ?? null)
+    })()
+  }, [])
 
   const fetchRequisitions = useCallback(async () => {
     setIsLoading(true)
@@ -294,7 +310,12 @@ export default function RequisitionListPage() {
         pagination={{ pageSize: 25 }}
       />
 
-      <NewRequisitionDialog open={isCreateOpen} onOpenChange={setIsCreateOpen} onSuccess={fetchRequisitions} />
+      <NewRequisitionDialog
+        open={isCreateOpen}
+        onOpenChange={setIsCreateOpen}
+        userDepartment={userDepartment}
+        onSuccess={fetchRequisitions}
+      />
     </DataTablePage>
   )
 }
