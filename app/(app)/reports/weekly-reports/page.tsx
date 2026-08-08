@@ -69,7 +69,12 @@ async function fetchProfileAndDepartments(supabase: ReturnType<typeof createClie
     .eq("id", user.id)
     .single()
 
-  const { data: departmentsData } = await supabase.from("profiles").select("department").not("department", "is", null)
+  // staff_directory, not profiles: profiles RLS would reduce this to the
+  // caller's own department, leaving the filter dropdown with one entry.
+  const { data: departmentsData } = await supabase
+    .from("staff_directory")
+    .select("department")
+    .not("department", "is", null)
 
   const allDepartments = Array.from(
     new Set(
@@ -91,10 +96,13 @@ async function fetchWeeklyReports(
   year: number,
   deptFilter: string
 ): Promise<WeeklyReportsData> {
+  // The submitter name is resolved separately rather than embedded as
+  // profiles(...): the embed runs under profiles RLS, which hides everyone but
+  // the caller and rendered "Submitted By" as "Unknown" for plain employees.
   let query = supabase
     .from("weekly_reports")
     .select(
-      "id, department, week_number, year, work_done, tasks_new_week, challenges, status, user_id, created_at, updated_at, profiles(first_name, last_name)"
+      "id, department, week_number, year, work_done, tasks_new_week, challenges, status, user_id, created_at, updated_at"
     )
     .eq("status", "submitted")
     .eq("week_number", week)
@@ -108,7 +116,30 @@ async function fetchWeeklyReports(
   const { data: reportsData, error } = await query
   if (error) throw new Error(error.message)
 
-  const reports = sortReportsByDepartment((reportsData || []) as WeeklyReport[])
+  const submitterIds = Array.from(
+    new Set((reportsData || []).map((report) => report.user_id).filter((id): id is string => Boolean(id)))
+  )
+
+  const submitterById = new Map<string, { first_name: string | null; last_name: string | null }>()
+  if (submitterIds.length > 0) {
+    const { data: submitters } = await supabase
+      .from("staff_directory")
+      .select("id, first_name, last_name")
+      .in("id", submitterIds)
+    for (const submitter of submitters || []) {
+      submitterById.set(String(submitter.id), {
+        first_name: submitter.first_name,
+        last_name: submitter.last_name,
+      })
+    }
+  }
+
+  const reports = sortReportsByDepartment(
+    (reportsData || []).map((report) => ({
+      ...report,
+      profiles: report.user_id ? (submitterById.get(report.user_id) ?? null) : null,
+    })) as WeeklyReport[]
+  )
   const departments = Array.from(new Set(reports.map((report) => report.department))).filter(Boolean)
   const departmentsForTasks = Array.from(new Set(departments.flatMap((department) => getDepartmentAliases(department))))
 

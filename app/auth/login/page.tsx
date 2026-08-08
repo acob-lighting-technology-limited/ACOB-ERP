@@ -348,7 +348,7 @@ export default function LoginPage() {
                             id="email"
                             name="email"
                             type="email"
-                            placeholder="a.john@org.acoblighting.com"
+                            placeholder="a.nmanma@org.acoblighting.com"
                             required
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}
@@ -419,7 +419,7 @@ export default function LoginPage() {
                           <Input
                             id="email-otp"
                             type="email"
-                            placeholder="a.john@org.acoblighting.com"
+                            placeholder="a.nmanma@org.acoblighting.com"
                             required
                             value={email}
                             onChange={(e) => setEmail(e.target.value)}

@@ -24,6 +24,13 @@ import { apiFetch } from "@/lib/api-client"
 
 const log = logger("auth-setup-account")
 
+// Supabase enforces a 60s per-address cooldown on recovery mail plus a project-wide
+// hourly cap. Mirroring the 60s here turns a raw "over_email_send_rate_limit" error
+// into a visible countdown, and the attempt cap stops people burning the hourly
+// project quota on an address that is never going to receive anything.
+const RESEND_COOLDOWN_SECONDS = 60
+const MAX_SEND_ATTEMPTS = 3
+
 function SetupAccountContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
@@ -42,6 +49,8 @@ function SetupAccountContent() {
   const [mounted, setMounted] = useState(false)
   const [otpDigits, setOtpDigits] = useState<string[]>(["", "", "", "", "", ""])
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false)
+  const [sendCount, setSendCount] = useState(0)
+  const [resendCooldown, setResendCooldown] = useState(0)
   const otpRefs = useRef<(HTMLInputElement | null)[]>([])
   const { resolvedTheme } = useTheme()
 
@@ -81,12 +90,24 @@ function SetupAccountContent() {
     }
   }, [])
 
-  const handleSetupAccount = async (e: React.FormEvent) => {
-    e.preventDefault()
+  // Tick the resend cooldown down to zero.
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setTimeout(() => setResendCooldown((seconds) => seconds - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [resendCooldown])
 
+  const sendSetupEmail = useCallback(async () => {
     // Domain restriction check
     if (!formValidation.isCompanyEmail(email)) {
       toast.error("Only @acoblighting.com and @org.acoblighting.com emails are allowed.")
+      return
+    }
+
+    if (resendCooldown > 0) return
+
+    if (sendCount >= MAX_SEND_ATTEMPTS) {
+      toast.error("Too many attempts. Please contact HR to have your account checked.")
       return
     }
 
@@ -102,8 +123,12 @@ function SetupAccountContent() {
 
       if (error) throw error
 
+      setSendCount((count) => count + 1)
+      setResendCooldown(RESEND_COOLDOWN_SECONDS)
       setEmailSent(true)
-      toast.success("Setup link sent! Check your inbox.")
+      // Deliberately not "Setup link sent!" — Supabase returns success for addresses
+      // that have no account, so a confirmed send is something we cannot promise.
+      toast.success("If that email has an account, a setup code is on its way.")
     } catch (error: unknown) {
       log.error("Setup Account Error:", error)
       const message = error instanceof Error ? error.message : "Failed to send setup email"
@@ -111,6 +136,11 @@ function SetupAccountContent() {
     } finally {
       setIsLoading(false)
     }
+  }, [email, resendCooldown, sendCount])
+
+  const handleSetupAccount = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await sendSetupEmail()
   }
 
   // OTP digit handlers
@@ -259,7 +289,7 @@ function SetupAccountContent() {
                       ? "Enter a new password to continue."
                       : "Create a secure password to activate your account."
                     : emailSent
-                      ? `We sent a setup link to ${email}`
+                      ? `If ${email} has an account, a setup code is on its way.`
                       : "Enter your company email to get started."}
               </CardDescription>
             </CardHeader>
@@ -332,15 +362,16 @@ function SetupAccountContent() {
                 </form>
               ) : emailSent ? (
                 <div className="space-y-6">
-                  <div className="rounded-lg border border-green-200 bg-green-50 p-4 dark:border-green-900 dark:bg-green-950/30">
+                  <div className="border-border bg-muted/50 rounded-lg border p-4">
                     <div className="flex gap-3">
-                      <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" />
-                      <div className="space-y-1 text-sm text-green-800 dark:text-green-200">
-                        <p className="font-medium">Setup code sent to {email}</p>
+                      <CheckCircle2 className="text-muted-foreground mt-0.5 h-5 w-5 shrink-0" />
+                      <div className="text-muted-foreground space-y-1 text-sm">
+                        <p className="text-foreground font-medium">Setup code requested for {email}</p>
                         <p>
-                          We sent a 6-digit verification code to your email. Enter it below, or click the link in the
-                          email.
+                          If that address has an account, a 6-digit code and a setup link are on their way. Enter the
+                          code below, or click the link in the email.
                         </p>
+                        <p>No email after a few minutes? The address may not have an account yet — contact HR.</p>
                       </div>
                     </div>
                   </div>
@@ -396,13 +427,29 @@ function SetupAccountContent() {
                   <div className="space-y-3">
                     <Button
                       onClick={() => {
-                        setEmailSent(false)
                         setOtpDigits(["", "", "", "", "", ""])
+                        void sendSetupEmail()
                       }}
                       variant="outline"
                       className="h-11 w-full"
+                      loading={isLoading}
+                      disabled={resendCooldown > 0 || sendCount >= MAX_SEND_ATTEMPTS}
                     >
-                      Didn&apos;t receive it? Send again
+                      {sendCount >= MAX_SEND_ATTEMPTS
+                        ? "Resend limit reached — contact HR"
+                        : resendCooldown > 0
+                          ? `Didn't receive it? Resend in ${resendCooldown}s`
+                          : "Didn't receive it? Send again"}
+                    </Button>
+                    <Button
+                      onClick={() => {
+                        setEmailSent(false)
+                        setOtpDigits(["", "", "", "", "", ""])
+                      }}
+                      variant="ghost"
+                      className="h-11 w-full"
+                    >
+                      Use a different email
                     </Button>
                     <Link href="/auth/login" className="block">
                       <Button variant="ghost" className="h-11 w-full">
@@ -419,7 +466,7 @@ function SetupAccountContent() {
                       <Input
                         id="email"
                         type="email"
-                        placeholder="a.john@org.acoblighting.com"
+                        placeholder="a.nmanma@org.acoblighting.com"
                         required
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}

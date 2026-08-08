@@ -829,7 +829,7 @@ export function SignatureCreator({
                 type="email"
                 value={formData.companyEmail}
                 onChange={(e) => handleInputChange("companyEmail", e.target.value)}
-                placeholder="a.john@org.acoblighting.com"
+                placeholder="a.nmanma@org.acoblighting.com"
               />
               {emailError && <p className="text-destructive text-sm">{emailError}</p>}
             </div>

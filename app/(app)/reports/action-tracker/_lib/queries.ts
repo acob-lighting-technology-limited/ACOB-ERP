@@ -41,7 +41,9 @@ export async function fetchActionTrackerMetadata(
     profile = p
   }
 
-  const { data: depts } = await supabase.from("profiles").select("department").not("department", "is", null)
+  // staff_directory, not profiles: profiles RLS limits a plain employee to their
+  // own row, which collapsed the department filter to a single entry.
+  const { data: depts } = await supabase.from("staff_directory").select("department").not("department", "is", null)
   const allDepartments = depts
     ? (Array.from(new Set(depts.map((d) => d.department)))
         .filter(Boolean)

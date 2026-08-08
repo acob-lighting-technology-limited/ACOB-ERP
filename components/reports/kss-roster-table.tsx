@@ -836,6 +836,8 @@ export function KssRosterTable({
     actions.push({
       label: "Download",
       icon: Download,
+      // Hide rather than render a button whose only outcome is an error toast.
+      hidden: (row: KssRosterEntry) => !docByWeekYear.get(`${row.meeting_year}-${row.meeting_week}`)?.signed_url,
       onClick: (row: KssRosterEntry) => {
         const doc = docByWeekYear.get(`${row.meeting_year}-${row.meeting_week}`)
         const presenterName = getPresenterName(row)
