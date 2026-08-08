@@ -101,35 +101,40 @@ export function AcoBot({ userName }: AcoBotProps) {
 
   return (
     <>
-      {/* Discovery nudge — sits just above the launcher */}
+      {/* Discovery nudge — sits to the LEFT of the launcher, vertically centred
+          against it. The outer element matches the launcher's box (bottom-5,
+          h-14) so the bubble centres regardless of how tall its text wraps. */}
       <AnimatePresence>
         {!isOpen && showNudge && (
           <motion.div
-            initial={{ opacity: 0, y: 8, scale: 0.94 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.94 }}
+            initial={{ opacity: 0, x: 8, scale: 0.94 }}
+            animate={{ opacity: 1, x: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 8, scale: 0.94 }}
             transition={{ duration: 0.2, ease: "easeOut" }}
             role="status"
-            className="bg-popover text-popover-foreground border-border fixed right-5 bottom-22 z-50 flex max-w-[min(17rem,calc(100vw-2.5rem))] items-start gap-2 rounded-xl border py-2.5 pr-2 pl-3 shadow-lg"
+            // right = launcher offset (1.25rem) + launcher width (3.5rem) + gap (0.75rem)
+            className="fixed right-[5.5rem] bottom-5 z-50 flex h-14 items-center"
           >
-            <button
-              type="button"
-              onClick={() => {
-                dismissNudge()
-                setIsOpen(true)
-              }}
-              className="cursor-pointer text-left text-sm leading-snug"
-            >
-              Hi {greeting} — need to find something? Ask <span className="font-semibold">ACOBot</span>.
-            </button>
-            <button
-              type="button"
-              onClick={dismissNudge}
-              aria-label="Dismiss ACOBot tip"
-              className="hover:bg-muted text-muted-foreground shrink-0 rounded-full p-1 transition-colors"
-            >
-              <X className="h-3.5 w-3.5" />
-            </button>
+            <div className="bg-popover text-popover-foreground border-border flex max-w-[min(17rem,calc(100vw-7rem))] items-start gap-2 rounded-xl border py-2.5 pr-2 pl-3 shadow-lg">
+              <button
+                type="button"
+                onClick={() => {
+                  dismissNudge()
+                  setIsOpen(true)
+                }}
+                className="cursor-pointer text-left text-sm leading-snug"
+              >
+                Hi {greeting} — need to find something? Ask <span className="font-semibold">ACOBot</span>.
+              </button>
+              <button
+                type="button"
+                onClick={dismissNudge}
+                aria-label="Dismiss ACOBot tip"
+                className="hover:bg-muted text-muted-foreground shrink-0 rounded-full p-1 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
