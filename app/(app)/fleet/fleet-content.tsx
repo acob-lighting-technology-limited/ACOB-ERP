@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { formatWATDateTime } from "@/lib/utils/date"
+import { formatWATDateTime, toLocalISODate } from "@/lib/utils/date"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { CalendarClock, Car, Paperclip, Plus } from "lucide-react"
@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { Calendar } from "@/components/ui/calendar"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -143,6 +144,37 @@ export function FleetContent() {
     if (!resourceId) return []
     return (bookingsData?.schedule ?? []).filter((slot) => slot.resource_id === resourceId)
   }, [resourceId, bookingsData?.schedule])
+
+  /**
+   * Days the selected resource is already taken, so the picker can grey them
+   * out the way the leave calendar marks department-booked days. A slot can
+   * span several days, so every day it touches counts.
+   */
+  const bookedDayKeys = useMemo(() => {
+    const keys = new Set<string>()
+    for (const slot of selectedResourceSchedule) {
+      const start = new Date(slot.start_at)
+      const end = new Date(slot.end_at)
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue
+      for (const cursor = new Date(start); cursor <= end; cursor.setDate(cursor.getDate() + 1)) {
+        keys.add(toLocalISODate(cursor))
+      }
+    }
+    return keys
+  }, [selectedResourceSchedule])
+
+  const selectedRange = useMemo(() => {
+    const from = startAt ? new Date(startAt) : undefined
+    const to = endAt ? new Date(endAt) : undefined
+    if (!from || Number.isNaN(from.getTime())) return undefined
+    return { from, to: to && !Number.isNaN(to.getTime()) ? to : undefined }
+  }, [startAt, endAt])
+
+  /** Keeps the time part when the calendar changes only the day. */
+  const withDate = (existing: string, day: Date, fallbackTime: string) => {
+    const time = existing.includes("T") ? existing.slice(11, 16) : fallbackTime
+    return `${toLocalISODate(day)}T${time}`
+  }
 
   const currentWindowConflicts = useMemo(() => {
     if (!resourceId || !startAt || !endAt) return []
@@ -466,6 +498,48 @@ export function FleetContent() {
                 </SelectContent>
               </Select>
             </div>
+
+            {resourceId ? (
+              <div className="space-y-2">
+                <Label>Pick Dates (Calendar)</Label>
+                <div className="rounded-md border p-3">
+                  <Calendar
+                    mode="range"
+                    selected={selectedRange}
+                    onSelect={(range) => {
+                      if (!range?.from) {
+                        setStartAt("")
+                        setEndAt("")
+                        return
+                      }
+                      // Default to a working day: 09:00 start, 17:00 end. The
+                      // time inputs below stay authoritative once edited.
+                      setStartAt(withDate(startAt, range.from, "09:00"))
+                      if (range.to) setEndAt(withDate(endAt, range.to, "17:00"))
+                    }}
+                    showOutsideDays
+                    disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                    modifiers={{ resource_busy: (date) => bookedDayKeys.has(toLocalISODate(date)) }}
+                    modifiersClassNames={{ resource_busy: "bg-amber-100 text-amber-900 font-medium" }}
+                    className="mx-auto"
+                  />
+                  <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-4 text-xs">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="h-3 w-3 rounded bg-amber-100" />
+                      Already booked
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <span className="bg-muted h-3 w-3 rounded" />
+                      Past dates unavailable
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="text-muted-foreground rounded-md border border-dashed p-4 text-center text-sm">
+                Select a resource to see which dates are already taken.
+              </div>
+            )}
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">

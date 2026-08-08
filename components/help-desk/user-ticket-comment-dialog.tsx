@@ -27,6 +27,8 @@ interface UserHelpDeskTicketCommentDialogProps {
   isSaving: boolean
   feedbackMessage: string | null
   feedbackTone: "success" | "error" | null
+  /** Rendered above the comment box — used for the attachments panel. */
+  attachmentsSlot?: React.ReactNode
 }
 
 export function UserHelpDeskTicketCommentDialog({
@@ -42,6 +44,7 @@ export function UserHelpDeskTicketCommentDialog({
   isSaving,
   feedbackMessage,
   feedbackTone,
+  attachmentsSlot,
 }: UserHelpDeskTicketCommentDialogProps) {
   const ticket = detail?.ticket || null
   const comments = detail?.comments || []
@@ -104,6 +107,8 @@ export function UserHelpDeskTicketCommentDialog({
               </p>
             )}
           </section>
+
+          {attachmentsSlot ? <section className="space-y-2">{attachmentsSlot}</section> : null}
 
           <section className="space-y-2">
             <h3 className="flex items-center gap-2 text-sm font-semibold">

@@ -21,6 +21,7 @@ import { PriorityBadge, TicketStatusBadge } from "@/components/dashboard/help-de
 import { formatName } from "@/lib/utils"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import { apiFetch } from "@/lib/api-client"
+import { TicketAttachmentsPanel } from "@/components/help-desk/ticket-attachments-panel"
 
 type ErrorPayload = {
   error?: string
@@ -794,6 +795,7 @@ export function HelpDeskContent({
         isSaving={isDetailSaving}
         feedbackMessage={commentFeedback}
         feedbackTone={commentFeedbackTone}
+        attachmentsSlot={<TicketAttachmentsPanel ticketId={selectedTicketId} currentUserId={userId} />}
       />
     </DataTablePage>
   )
