@@ -1,12 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
+import { toLocalISODate } from "@/lib/utils/date"
 
 /**
  * Shared types and helpers for the lunch menu voting flow.
  *
  * A menu belongs to a single date and is made of an arbitrary number of
- * ordered, admin-named categories ("groups"). The count and the names are set
- * per menu — one category on a rice day, two when the meal pairs up, three or
- * more when the day calls for it.
+ * ordered categories ("groups"), each holding the dishes staff pick from:
+ *
+ *   1 category, 1 option  → a fixed meal; voting just means "I'm eating"
+ *   1 category, N options → a straight choice (White Rice / Jollof / Fried)
+ *   2+ categories         → a pairing (Egusi/Ogbono/Afang + Fufu/Eba/Semovita)
+ *
+ * Nothing here is titled by hand. A single-category menu carries no group name
+ * (one list needs no heading), and the page heading comes from the date via
+ * menuHeading() — "Today's Menu" on the day, dated afterwards.
  *
  * The invariant that never changes: a voter picks at most one option per
  * category, and must answer every category the admin marked required — never
@@ -50,7 +57,8 @@ export interface LunchMenuOption {
 export interface LunchMenuGroup {
   id: string
   menu_id: string
-  name: string
+  /** Null on a single-category menu — one list needs no heading. */
+  name: string | null
   position: number
   is_required: boolean
   options: LunchMenuOption[]
@@ -59,7 +67,6 @@ export interface LunchMenuGroup {
 export interface LunchMenu {
   id: string
   date: string
-  title: string | null
   status: LunchMenuStatus
   voting_deadline: string | null
   published_at: string | null
@@ -85,6 +92,37 @@ export interface LunchOptionTally {
   name: string
   count: number
   voters: { user_id: string; full_name: string }[]
+}
+
+/**
+ * The heading staff see. Derived from the menu's date relative to today, never
+ * typed by an admin — a menu for today reads "Today's Menu" on the day and
+ * "Menu — Fri, 8 Aug" when looked back on later.
+ */
+export function menuHeading(date: string, today: string): string {
+  if (date === today) return "Today's Menu"
+
+  const shift = (days: number) => {
+    const d = new Date(`${today}T12:00:00+01:00`)
+    d.setDate(d.getDate() + days)
+    return toLocalISODate(d)
+  }
+
+  if (date === shift(1)) return "Tomorrow's Menu"
+  if (date === shift(-1)) return "Yesterday's Menu"
+
+  const label = new Date(`${date}T12:00:00+01:00`).toLocaleDateString("en-GB", {
+    timeZone: "Africa/Lagos",
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  })
+  return `Menu — ${label}`
+}
+
+/** The label for one category, for menus that have more than one. */
+export function groupHeading(group: Pick<LunchMenuGroup, "name">, index: number): string {
+  return group.name?.trim() || `Choice ${index + 1}`
 }
 
 /** West Africa Time is UTC+1 year-round — no DST to account for. */

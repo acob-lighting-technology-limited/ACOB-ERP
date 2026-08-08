@@ -43,6 +43,8 @@ import { apiFetch } from "@/lib/api-client"
 import { LunchMenuBuilderDialog } from "./_components/lunch-menu-builder-dialog"
 import {
   DEFAULT_LUNCH_SETTINGS,
+  groupHeading,
+  menuHeading,
   type LunchMenu,
   type LunchOptionTally,
   type LunchVoteRecord,
@@ -93,7 +95,7 @@ interface LunchRegisterPageProps {
   todayDate: string
 }
 
-type LunchTab = "menus" | "daily" | "summary" | "leaderboard" | "calendar"
+type LunchTab = "menus" | "daily" | "summary" | "leaderboard" | "calendar" | "reviews"
 
 const LUNCH_TABS: DataTableTab[] = [
   { key: "menus", label: "Menu & Votes" },
@@ -101,7 +103,17 @@ const LUNCH_TABS: DataTableTab[] = [
   { key: "summary", label: "Summary" },
   { key: "leaderboard", label: "Leaderboard" },
   { key: "calendar", label: "Calendar" },
+  { key: "reviews", label: "Feedback" },
 ]
+
+/** One day's anonymous feedback. No author is returned by the API, by design. */
+type LunchReviewSummary = {
+  menu_id: string
+  date: string
+  review_count: number
+  average_rating: number | null
+  comments: { id: string; rating: number; comment: string | null; created_at: string }[]
+}
 
 const DAY_HEADERS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
@@ -134,6 +146,9 @@ export function LunchRegisterPage({
 }: LunchRegisterPageProps) {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<LunchTab>("menus")
+  const [reviews, setReviews] = useState<LunchReviewSummary[]>([])
+  const [reviewsLoading, setReviewsLoading] = useState(false)
+  const [reviewsError, setReviewsError] = useState<string | null>(null)
   const [employees] = useState<LunchEmployee[]>(initialEmployees)
   // Rows currently visible in each table (after search + filters + sort).
   const [processedDailyRows, setProcessedDailyRows] = useState<{ id: string; employee: LunchEmployee }[]>([])
@@ -329,6 +344,26 @@ export function LunchRegisterPage({
     if (activeTab !== "menus") return
     void loadMenus()
   }, [activeTab, loadMenus])
+
+  const loadReviews = useCallback(async () => {
+    setReviewsLoading(true)
+    setReviewsError(null)
+    try {
+      const res = await apiFetch("/api/admin/hr/lunch/reviews", { cache: "no-store" })
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error || "Failed to load lunch feedback")
+      setReviews(payload.data || [])
+    } catch (err) {
+      setReviewsError(err instanceof Error ? err.message : "Failed to load lunch feedback")
+    } finally {
+      setReviewsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab !== "reviews") return
+    void loadReviews()
+  }, [activeTab, loadReviews])
 
   // Publish / close / reopen a menu
   async function updateMenuStatus(menu: AdminLunchMenu, status: "draft" | "published" | "closed") {
@@ -632,25 +667,29 @@ export function LunchRegisterPage({
       accessor: (row) => row.date,
       render: (row) => (
         <div>
-          <span className="text-foreground font-semibold">
-            {formatWATDate(row.date, { day: "numeric", month: "short", year: "numeric" })}
-          </span>
-          <div className="text-muted-foreground text-xs">{formatWATDate(row.date, { weekday: "long" })}</div>
+          <span className="text-foreground font-semibold">{menuHeading(row.date, todayDate)}</span>
+          <div className="text-muted-foreground text-xs">
+            {formatWATDate(row.date, { weekday: "long", day: "numeric", month: "short" })}
+          </div>
         </div>
       ),
     },
     {
-      key: "title",
+      key: "menu",
       label: "Menu",
-      accessor: (row) => row.title || "",
-      render: (row) => (
-        <div>
-          <span className="font-medium">{row.title || "Untitled menu"}</span>
-          <div className="text-muted-foreground text-xs">
-            {row.groups.map((g) => `${g.name} (${g.options.length})`).join(" · ") || "No options"}
-          </div>
-        </div>
-      ),
+      // Single-category menus have no group name, so list the dishes directly;
+      // multi-category ones list the category names and their counts.
+      accessor: (row) => row.groups.flatMap((g) => g.options.map((o) => o.name)).join(" "),
+      render: (row) => {
+        if (row.groups.length === 0) {
+          return <span className="text-muted-foreground text-xs">No dishes yet</span>
+        }
+        const summary =
+          row.groups.length === 1
+            ? row.groups[0].options.map((o) => o.name).join(" · ")
+            : row.groups.map((g, i) => `${groupHeading(g, i)} (${g.options.length})`).join(" · ")
+        return <span className="text-sm">{summary}</span>
+      },
     },
     {
       key: "status",
@@ -1090,13 +1129,10 @@ export function LunchRegisterPage({
             data={menus}
             columns={menuColumns}
             getRowId={(row) => row.id}
-            searchPlaceholder="Search menu title or option…"
+            searchPlaceholder="Search a dish…"
             searchFn={(row, q) => {
               const needle = q.toLowerCase()
-              return (
-                (row.title || "").toLowerCase().includes(needle) ||
-                row.groups.some((g) => g.options.some((o) => o.name.toLowerCase().includes(needle)))
-              )
+              return row.groups.some((g) => g.options.some((o) => o.name.toLowerCase().includes(needle)))
             }}
             filters={menuFilters}
             isLoading={fetchingMenus}
@@ -1592,6 +1628,7 @@ export function LunchRegisterPage({
         onOpenChange={setOpenMenuBuilder}
         menu={editingMenu}
         defaultDate={selectedDate}
+        todayDate={todayDate}
         defaultDeadline={settings.voting_deadline || DEFAULT_LUNCH_SETTINGS.voting_deadline}
         onSaved={() => void loadMenus()}
       />
@@ -1662,6 +1699,58 @@ export function LunchRegisterPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      {activeTab === "reviews" &&
+        (reviewsLoading ? (
+          <div className="text-muted-foreground flex flex-col items-center justify-center gap-3 p-12">
+            <Loader2 className="text-primary h-8 w-8 animate-spin" />
+            <span>Loading feedback...</span>
+          </div>
+        ) : reviewsError ? (
+          <Card>
+            <CardContent className="text-destructive p-6 text-sm">{reviewsError}</CardContent>
+          </Card>
+        ) : reviews.length === 0 ? (
+          <Card>
+            <CardContent className="text-muted-foreground p-12 text-center text-sm">
+              No feedback yet. Staff can review a meal from their lunch history once the day has passed.
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="space-y-4">
+            <p className="text-muted-foreground text-xs">
+              Feedback is submitted anonymously — ratings and comments are never attributed to a staff member.
+            </p>
+            {reviews.map((entry) => (
+              <Card key={entry.menu_id}>
+                <CardHeader className="pb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <CardTitle className="text-base">
+                      {formatWATDate(entry.date, { weekday: "long", day: "numeric", month: "long" })}
+                    </CardTitle>
+                    <div className="flex items-center gap-3 text-sm">
+                      <span className="font-semibold text-amber-500">
+                        {entry.average_rating !== null ? `${entry.average_rating.toFixed(1)} / 5` : "—"}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {entry.review_count} review{entry.review_count === 1 ? "" : "s"}
+                      </span>
+                    </div>
+                  </div>
+                </CardHeader>
+                {entry.comments.length > 0 && (
+                  <CardContent className="space-y-2">
+                    {entry.comments.map((comment) => (
+                      <div key={comment.id} className="bg-muted/30 rounded-lg border p-3 text-sm">
+                        <div className="text-muted-foreground mb-1 text-xs font-semibold">{comment.rating} / 5</div>
+                        <p className="whitespace-pre-wrap">{comment.comment}</p>
+                      </div>
+                    ))}
+                  </CardContent>
+                )}
+              </Card>
+            ))}
+          </div>
+        ))}
     </DataTablePage>
   )
 }
@@ -1678,14 +1767,18 @@ function MenuVotesPanel({ menu }: { menu: AdminLunchMenu }) {
       {menu.groups.length === 0 ? (
         <p className="text-muted-foreground text-xs">This menu has no options yet.</p>
       ) : (
-        menu.groups.map((group) => {
+        menu.groups.map((group, index) => {
           const groupTallies = menu.tallies
             .filter((t) => t.group_id === group.id)
             .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 
           return (
             <div key={group.id} className="space-y-2">
-              <p className="text-muted-foreground text-[10px] font-bold tracking-wider uppercase">{group.name}</p>
+              {menu.groups.length > 1 && (
+                <p className="text-muted-foreground text-[10px] font-bold tracking-wider uppercase">
+                  {groupHeading(group, index)}
+                </p>
+              )}
               {groupTallies.map((tally) => {
                 const percent = total > 0 ? Math.round((tally.count / total) * 100) : 0
                 return (

@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Checkbox } from "@/components/ui/checkbox"
 import { apiFetch } from "@/lib/api-client"
-import type { LunchMenu } from "@/lib/hr/lunch-voting"
+import { menuHeading, type LunchMenu } from "@/lib/hr/lunch-voting"
 
 interface DraftOption {
   name: string
@@ -38,6 +38,8 @@ interface LunchMenuBuilderDialogProps {
   /** Voting cut-off (HH:MM) from lunch settings — shown read-only, not editable here. */
   defaultDeadline: string
   defaultDate: string
+  /** Today in WAT, so the derived heading preview matches the staff page. */
+  todayDate: string
   onSaved: () => void
 }
 
@@ -45,14 +47,14 @@ function blankGroup(): DraftGroup {
   return { name: "", is_required: true, options: [{ name: "", description: "" }] }
 }
 
-/** Starts the form with N empty categories — the admin names each one. */
+/** Starts the form with N empty categories. */
 function blankGroups(count: number): DraftGroup[] {
   return Array.from({ length: count }, blankGroup)
 }
 
 function toDraftGroups(menu: LunchMenu): DraftGroup[] {
   return menu.groups.map((group) => ({
-    name: group.name,
+    name: group.name || "",
     is_required: group.is_required,
     options: group.options.map((option) => ({ name: option.name, description: option.description || "" })),
   }))
@@ -70,10 +72,9 @@ function deadlineTimeOf(menu: LunchMenu): string | null {
 }
 
 /**
- * Builds a day's menu as an arbitrary number of admin-named categories. The
- * count and the names are entirely up to the admin — the only fixed rule is
- * that staff pick exactly one option per category, which the staff page walks
- * through one category at a time.
+ * Builds a day's menu. Nothing here is titled by hand: the staff heading comes
+ * from the date, and category names are only asked for once a menu has two or
+ * more lists to tell apart. A one-dish day is just a dish.
  */
 export function LunchMenuBuilderDialog({
   open,
@@ -81,12 +82,12 @@ export function LunchMenuBuilderDialog({
   menu,
   defaultDeadline,
   defaultDate,
+  todayDate,
   onSaved,
 }: LunchMenuBuilderDialogProps) {
   const isEdit = Boolean(menu)
   const [saving, setSaving] = useState(false)
   const [date, setDate] = useState(defaultDate)
-  const [title, setTitle] = useState("")
   const [groups, setGroups] = useState<DraftGroup[]>(() => blankGroups(1))
   // Off by default so the menu simply follows the Settings deadline. Turning it
   // on writes a value for this one day only.
@@ -97,14 +98,12 @@ export function LunchMenuBuilderDialog({
     if (!open) return
     if (menu) {
       setDate(menu.date)
-      setTitle(menu.title || "")
       const own = deadlineTimeOf(menu)
       setOverrideDeadline(own !== null)
       setDeadline(own ?? defaultDeadline)
       setGroups(toDraftGroups(menu))
     } else {
       setDate(defaultDate)
-      setTitle("")
       setOverrideDeadline(false)
       setDeadline(defaultDeadline)
       setGroups(blankGroups(1))
@@ -130,10 +129,9 @@ export function LunchMenuBuilderDialog({
     try {
       const payload = {
         date,
-        title: title.trim() || null,
         deadline_time: overrideDeadline ? deadline : null,
         groups: groups.map((group) => ({
-          name: group.name,
+          name: groups.length > 1 ? group.name : null,
           is_required: group.is_required,
           options: group.options.map((option) => ({ name: option.name, description: option.description || null })),
         })),
@@ -166,7 +164,7 @@ export function LunchMenuBuilderDialog({
   }
 
   const hasBlankGroup = groups.some(
-    (group) => !group.name.trim() || group.options.every((option) => !option.name.trim())
+    (group) => (groups.length > 1 && !group.name.trim()) || group.options.every((option) => !option.name.trim())
   )
 
   return (
@@ -175,36 +173,55 @@ export function LunchMenuBuilderDialog({
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit Lunch Menu" : "New Lunch Menu"}</DialogTitle>
           <DialogDescription>
-            A menu is one or more categories that you name yourself. Staff must pick{" "}
-            <span className="font-semibold">exactly one option from every category</span> — never two from the same one,
-            and never only some of them. One category on a rice day (White Rice / Jollof / Fried Rice); two when the
-            meal pairs up (Egusi / Ogbono / Afang, then Fufu / Eba / Semovita); three or more if the day calls for it.
-            Tick <span className="font-semibold">Optional</span> on a category (a drink, say) to let staff skip that
-            one.
+            List the dishes on offer. If the meal pairs up — a soup plus what you eat it with — add a second category
+            and staff pick one from each, never two from the same one.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2 text-sm">
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="menu-date">Date</Label>
-              <Input
-                id="menu-date"
-                type="date"
-                value={date}
-                disabled={isEdit}
-                onChange={(e) => setDate(e.target.value)}
-              />
+          {/* A worked example beats prose here — categories only earn their
+              keep when there are two lists to tell apart. */}
+          <div className="bg-muted/30 grid gap-3 rounded-lg border p-3 text-xs sm:grid-cols-3">
+            <div>
+              <p className="text-muted-foreground mb-1 text-[10px] font-bold tracking-wider uppercase">
+                Fixed meal — one dish
+              </p>
+              <p className="text-muted-foreground">Spaghetti with peppered beef</p>
+              <p className="text-muted-foreground/70 mt-1 italic">Voting = &ldquo;I&apos;m eating&rdquo;</p>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="menu-title">Title (optional)</Label>
-              <Input
-                id="menu-title"
-                value={title}
-                placeholder="e.g. Friday Special"
-                onChange={(e) => setTitle(e.target.value)}
-              />
+            <div>
+              <p className="text-muted-foreground mb-1 text-[10px] font-bold tracking-wider uppercase">
+                A choice — one category
+              </p>
+              <p className="text-muted-foreground">White Rice</p>
+              <p className="text-muted-foreground">Jollof Rice</p>
+              <p className="text-muted-foreground">Fried Rice</p>
             </div>
+            <div>
+              <p className="text-muted-foreground mb-1 text-[10px] font-bold tracking-wider uppercase">
+                A pairing — two categories
+              </p>
+              <p className="font-semibold">Soup</p>
+              <p className="text-muted-foreground">└ Egusi · Ogbono · Afang</p>
+              <p className="mt-1 font-semibold">Swallow</p>
+              <p className="text-muted-foreground">└ Fufu · Eba · Semovita</p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="menu-date">Date</Label>
+            <Input
+              id="menu-date"
+              type="date"
+              value={date}
+              disabled={isEdit}
+              className="w-48"
+              onChange={(e) => setDate(e.target.value)}
+            />
+            <p className="text-muted-foreground text-xs">
+              Staff see this as <span className="text-foreground font-semibold">{menuHeading(date, todayDate)}</span> —
+              the heading comes from the date, so there is nothing to name.
+            </p>
           </div>
 
           <div className="bg-muted/30 space-y-2 rounded-lg border p-3">
@@ -244,14 +261,18 @@ export function LunchMenuBuilderDialog({
             <div key={groupIndex} className="space-y-3 rounded-lg border-2 p-3">
               <div className="flex flex-wrap items-end gap-3">
                 <div className="min-w-40 flex-1 space-y-1.5">
+                  {/* With one list there is nothing to tell apart, so no name
+                      is asked for. It appears the moment a second is added. */}
                   <Label className="text-xs">
-                    Category {groupIndex + 1} — {group.is_required ? "staff must pick one" : "staff may skip this one"}
+                    {groups.length > 1 ? `Category ${groupIndex + 1} name` : "The dishes on offer"}
                   </Label>
-                  <Input
-                    value={group.name}
-                    placeholder="Category name — e.g. Soup, Swallow, Rice, Protein, Drink"
-                    onChange={(e) => updateGroup(groupIndex, { name: e.target.value })}
-                  />
+                  {groups.length > 1 && (
+                    <Input
+                      value={group.name}
+                      placeholder="e.g. Soup"
+                      onChange={(e) => updateGroup(groupIndex, { name: e.target.value })}
+                    />
+                  )}
                 </div>
                 <div className="flex items-center gap-2 pb-2">
                   <Checkbox
@@ -278,11 +299,17 @@ export function LunchMenuBuilderDialog({
               </div>
 
               <div className="space-y-2">
+                <Label className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
+                  {groups.length > 1
+                    ? `Dishes under ${group.name.trim() || `category ${groupIndex + 1}`} — staff pick one`
+                    : "Staff pick one of these"}
+                </Label>
                 {group.options.map((option, optionIndex) => (
                   <div key={optionIndex} className="flex items-center gap-2">
+                    <span className="text-muted-foreground w-4 shrink-0 text-center text-xs">{optionIndex + 1}</span>
                     <Input
                       value={option.name}
-                      placeholder="Option name"
+                      placeholder="Dish name — e.g. Egusi, Jollof Rice, Spaghetti with peppered beef"
                       className="flex-1"
                       onChange={(e) => updateOption(groupIndex, optionIndex, { name: e.target.value })}
                     />
@@ -316,7 +343,7 @@ export function LunchMenuBuilderDialog({
                     updateGroup(groupIndex, { options: [...group.options, { name: "", description: "" }] })
                   }
                 >
-                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Add option
+                  <Plus className="mr-1.5 h-3.5 w-3.5" /> Add another dish here
                 </Button>
               </div>
             </div>
@@ -328,7 +355,7 @@ export function LunchMenuBuilderDialog({
             size="sm"
             onClick={() => setGroups((prev) => [...prev, blankGroup()])}
           >
-            <Plus className="mr-1.5 h-3.5 w-3.5" /> Add another category
+            <Plus className="mr-1.5 h-3.5 w-3.5" /> Add a second category (e.g. a Swallow to go with the Soup)
           </Button>
         </div>
 

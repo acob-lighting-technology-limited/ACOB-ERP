@@ -1,10 +1,14 @@
 -- Lunch menu voting.
 --
 -- Admin publishes a menu for a given day. A menu is made of any number of
--- ordered, admin-named "groups" (categories): one category on a rice day
--- (White Rice / Jollof / Fried Rice), two when the meal pairs up (Egusi /
--- Ogbono / Afang, then Fufu / Eba / Semovita), three or more if needed. Each
--- category holds the options staff pick from.
+-- ordered "groups" (categories), each holding the dishes staff pick from:
+--
+--   1 category, 1 option  → a fixed meal; voting just means "I'm eating"
+--   1 category, N options → a straight choice (White Rice / Jollof / Fried)
+--   2+ categories         → a pairing (Egusi/Ogbono/Afang + Fufu/Eba/Semovita)
+--
+-- A single-category menu has no group name: with one list there is nothing to
+-- tell apart. Names only appear once a menu has several categories.
 --
 -- A voter picks exactly one option per category — the unique (vote_id,
 -- group_id) key on lunch_vote_selections below is what makes "two soups"
@@ -17,7 +21,6 @@
 create table if not exists public.lunch_menus (
   id uuid primary key default gen_random_uuid(),
   date date not null unique,
-  title text,
   status text not null default 'draft' check (status in ('draft', 'published', 'closed')),
   -- Absolute cutoff for casting/changing a vote. Resolved at publish time from
   -- system_settings.lunch_settings.voting_deadline unless overridden per day.
@@ -30,19 +33,22 @@ create table if not exists public.lunch_menus (
 );
 
 comment on table public.lunch_menus is
-  'One lunch menu per date. Staff vote on its options until voting_deadline.';
+  'One lunch menu per date. Staff vote on its options until voting_deadline. The heading shown to staff is derived from the date ("Today''s Menu"), never stored.';
 
 create table if not exists public.lunch_menu_groups (
   id uuid primary key default gen_random_uuid(),
   menu_id uuid not null references public.lunch_menus(id) on delete cascade,
-  name text not null,
+  -- Null when the menu has a single category: with only one list there is
+  -- nothing to tell apart, so staff see the dishes with no heading above them.
+  -- Required once a menu has two or more (Soup vs Swallow).
+  name text,
   position integer not null default 0,
   is_required boolean not null default true,
   created_at timestamptz not null default now()
 );
 
 comment on table public.lunch_menu_groups is
-  'An ordered, admin-named category within a menu. Voters pick exactly one option from each. A menu with a single category is a plain one-pick menu.';
+  'An ordered category within a menu. Voters pick exactly one option from each. name is null for a single-category menu and required when a menu has several.';
 
 create table if not exists public.lunch_menu_options (
   id uuid primary key default gen_random_uuid(),

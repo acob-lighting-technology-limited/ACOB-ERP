@@ -26,7 +26,7 @@ const log = logger("api-admin-hr-lunch-menus")
 export const dynamic = "force-dynamic"
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
-const MENU_COLUMNS = "id, date, title, status, voting_deadline, published_at, closed_at"
+const MENU_COLUMNS = "id, date, status, voting_deadline, published_at, closed_at"
 
 /**
  * Lists menus in a date window (defaults to the last 14 and next 14 days),
@@ -100,7 +100,6 @@ export async function POST(request: NextRequest) {
 
     const body = (await request.json()) as {
       date?: string
-      title?: string | null
       status?: LunchMenuStatus
       deadline_time?: string | null
       groups?: MenuGroupInput[]
@@ -130,7 +129,6 @@ export async function POST(request: NextRequest) {
       .from("lunch_menus")
       .insert({
         date: body.date,
-        title: body.title?.trim() || null,
         status,
         // Null is the normal case: the cut-off is then derived from
         // lunch_settings.voting_deadline at read time, so changing that setting
