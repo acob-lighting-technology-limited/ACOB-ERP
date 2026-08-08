@@ -251,6 +251,11 @@ export function DepartmentDocumentsBrowser({
   const filesInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
   const isAdminMode = accessMode === "admin"
+  // Everyone may add to their own department library; only leads and admins
+  // (who reach this through the /admin and /dept consoles) may delete or rename,
+  // since those discard other people's work. Mirrors the WriteLevel split in
+  // /api/onedrive.
+  const canAddContent = currentPath !== "/"
   const canManageCurrentFolder = isAdminMode && currentPath !== "/"
   const selectedCount = selectedPaths.size
 
@@ -614,7 +619,7 @@ export function DepartmentDocumentsBrowser({
 
   const runUploadPlan = useCallback(
     async (plan: UploadPlan) => {
-      if (!canManageCurrentFolder) {
+      if (!canAddContent) {
         toast.error("Open a department library before uploading")
         return
       }
@@ -650,7 +655,7 @@ export function DepartmentDocumentsBrowser({
         resetFileInputs()
       }
     },
-    [canManageCurrentFolder, createFolderRequest, currentPath, fetchFiles, searchQuery, uploadWithProgress]
+    [canAddContent, createFolderRequest, currentPath, fetchFiles, searchQuery, uploadWithProgress]
   )
 
   const handleFilesSelected = async (selectedFiles: FileList | null) => {
@@ -685,7 +690,7 @@ export function DepartmentDocumentsBrowser({
     event.preventDefault()
     setIsDragActive(false)
 
-    if (!canManageCurrentFolder || isMutating) return
+    if (!canAddContent || isMutating) return
 
     const entryItems = Array.from(event.dataTransfer.items || []).filter((item) => item.kind === "file")
 
@@ -817,7 +822,7 @@ export function DepartmentDocumentsBrowser({
       <FolderOpen className="text-muted-foreground/50 mb-4 h-16 w-16" />
       <h3 className="text-lg font-medium">This folder is empty</h3>
       <p className="text-muted-foreground mt-1 text-sm">
-        {canManageCurrentFolder
+        {canAddContent
           ? "No files or folders found yet. Use the upload tools above or drag items here."
           : "No files or folders found in this location."}
       </p>
@@ -1112,37 +1117,33 @@ export function DepartmentDocumentsBrowser({
                 <Download className="h-4 w-4" />
                 Download Selected ({selectedCount})
               </Button>
-              {isAdminMode && (
-                <>
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => setNewFolderOpen(true)}
-                    disabled={!canManageCurrentFolder || isMutating}
-                  >
-                    <FolderPlus className="h-4 w-4" />
-                    New Folder
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => filesInputRef.current?.click()}
-                    disabled={!canManageCurrentFolder || isMutating}
-                  >
-                    <Upload className="h-4 w-4" />
-                    Upload Files
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="gap-2"
-                    onClick={() => folderInputRef.current?.click()}
-                    disabled={!canManageCurrentFolder || isMutating}
-                  >
-                    <FolderUp className="h-4 w-4" />
-                    Upload Folder
-                  </Button>
-                </>
-              )}
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => setNewFolderOpen(true)}
+                disabled={!canAddContent || isMutating}
+              >
+                <FolderPlus className="h-4 w-4" />
+                New Folder
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => filesInputRef.current?.click()}
+                disabled={!canAddContent || isMutating}
+              >
+                <Upload className="h-4 w-4" />
+                Upload Files
+              </Button>
+              <Button
+                variant="outline"
+                className="gap-2"
+                onClick={() => folderInputRef.current?.click()}
+                disabled={!canAddContent || isMutating}
+              >
+                <FolderUp className="h-4 w-4" />
+                Upload Folder
+              </Button>
               <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "grid")}>
                 <TabsList className="h-9">
                   <TabsTrigger value="list" className="px-3">
@@ -1200,13 +1201,13 @@ export function DepartmentDocumentsBrowser({
             </form>
           </div>
 
-          {isAdminMode && !canManageCurrentFolder && (
+          {!canAddContent && (
             <div className="bg-muted/50 text-muted-foreground mb-4 rounded-md border px-3 py-2 text-sm">
               Open a department library first to create folders, upload files, upload folders, or drag and drop content.
             </div>
           )}
 
-          {canManageCurrentFolder && (
+          {canAddContent && (
             <div
               className={`mb-4 rounded-lg border border-dashed px-4 py-3 text-sm transition-colors ${
                 isDragActive ? "border-primary bg-primary/5 text-foreground" : "text-muted-foreground"

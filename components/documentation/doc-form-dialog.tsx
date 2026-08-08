@@ -32,6 +32,8 @@ export interface DocFormData {
   category: string
   tags: string
   is_draft: boolean
+  /** private = you, your lead and admins. general = everyone in the company. */
+  visibility: "private" | "general"
   attachments: File[]
 }
 
@@ -113,6 +115,27 @@ export function DocFormDialog({
           </div>
 
           <div className="space-y-2">
+            <label className="text-sm font-medium">Who can see this</label>
+            <Select
+              value={formData.visibility}
+              onValueChange={(value) => onFormChange({ ...formData, visibility: value as DocFormData["visibility"] })}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="private">Private — you, your lead and admins</SelectItem>
+                <SelectItem value="general">General — everyone in the company</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              {formData.visibility === "general"
+                ? "This will appear in the General tab for all staff."
+                : "Only you, your department lead and admins can open this."}
+            </p>
+          </div>
+
+          <div className="space-y-2">
             <label className="text-sm font-medium">Content *</label>
             <Textarea
               value={formData.content}
@@ -125,7 +148,7 @@ export function DocFormDialog({
           <div className="space-y-2">
             <label className="text-sm font-medium">Attachments</label>
             <div className="space-y-3">
-              <label className="block cursor-pointer rounded-lg border border-dashed border-border bg-muted/20 p-4 transition-colors hover:bg-muted/40">
+              <label className="border-border bg-muted/20 hover:bg-muted/40 block cursor-pointer rounded-lg border border-dashed p-4 transition-colors">
                 <input
                   type="file"
                   multiple
@@ -140,17 +163,14 @@ export function DocFormDialog({
 
                     if (attachments.length > 0) {
                       const totalSize = attachments.reduce((total, file) => total + file.size, 0)
-                      toast.info(
-                        `${attachments.length} file${attachments.length === 1 ? "" : "s"} selected`,
-                        {
-                          description: `Total size: ${formatFileSize(totalSize)}`,
-                        }
-                      )
+                      toast.info(`${attachments.length} file${attachments.length === 1 ? "" : "s"} selected`, {
+                        description: `Total size: ${formatFileSize(totalSize)}`,
+                      })
                     }
                   }}
                 />
                 <div className="flex items-start gap-3">
-                  <div className="rounded-md bg-primary/10 p-2 text-primary">
+                  <div className="bg-primary/10 text-primary rounded-md p-2">
                     <Upload className="h-4 w-4" />
                   </div>
                   <div className="space-y-1">
@@ -174,20 +194,19 @@ export function DocFormDialog({
 
             {existingAttachments.length > 0 && (
               <div className="rounded-md border p-3">
-                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                <p className="text-muted-foreground mb-2 text-xs font-medium tracking-wide uppercase">
                   Existing Attachments
                 </p>
                 <div className="space-y-1">
                   {existingAttachments.map((attachment) => (
                     <div key={attachment.id} className="flex items-center gap-2 text-sm">
-                      <Paperclip className="h-3.5 w-3.5 text-muted-foreground" />
+                      <Paperclip className="text-muted-foreground h-3.5 w-3.5" />
                       <span>{attachment.name}</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
-
           </div>
         </div>
 

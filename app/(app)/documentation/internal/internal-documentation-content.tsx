@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { FileText, Plus, Eye, Edit2, Trash2 } from "lucide-react"
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { MarkdownContent } from "@/components/ui/markdown-content"
 import { Button } from "@/components/ui/button"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
-import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
+import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { DocViewDialog } from "@/components/documentation/doc-view-dialog"
 import { DocFormDialog, type DocFormData } from "@/components/documentation/doc-form-dialog"
@@ -27,6 +27,9 @@ interface Documentation {
   category?: string
   tags?: string[]
   is_draft: boolean
+  visibility?: "private" | "general"
+  user_id?: string
+  author_name?: string | null
   sharepoint_folder_path?: string | null
   sharepoint_text_file_path?: string | null
   sharepoint_attachments?: DocumentationAttachment[]
@@ -62,8 +65,14 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
     category: "",
     tags: "",
     is_draft: false,
+    visibility: "private",
     attachments: [],
   })
+  // "mine" = documents you authored. "general" = documents anyone published to
+  // the whole company (RLS exposes only visibility = 'general' rows here).
+  const [activeTab, setActiveTab] = useState<string>("mine")
+  const [generalDocs, setGeneralDocs] = useState<Documentation[]>([])
+  const [isLoadingGeneral, setIsLoadingGeneral] = useState(false)
   const supabase = createClient()
 
   const stats = useMemo(
@@ -111,6 +120,19 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
         render: (row) => <Badge className={getStatusColor(row.is_draft)}>{row.is_draft ? "Draft" : "Published"}</Badge>,
       },
       {
+        key: "visibility",
+        label: "Visibility",
+        sortable: true,
+        accessor: (row) => row.visibility ?? "private",
+        render: (row) =>
+          (row.visibility ?? "private") === "general" ? (
+            <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">General</Badge>
+          ) : (
+            <Badge className="bg-slate-100 text-slate-700 dark:bg-slate-900/40 dark:text-slate-300">Private</Badge>
+          ),
+        hideOnMobile: true,
+      },
+      {
         key: "updated_at",
         label: "Updated",
         sortable: true,
@@ -121,6 +143,31 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
     ],
     []
   )
+
+  const generalColumns: DataTableColumn<Documentation>[] = useMemo(
+    () => [
+      ...columns.filter((column) => column.key !== "visibility" && column.key !== "status"),
+      {
+        key: "author_name",
+        label: "Author",
+        sortable: true,
+        accessor: (row) => row.author_name || "Unknown",
+        render: (row) => <span>{row.author_name || "Unknown"}</span>,
+      },
+    ],
+    [columns]
+  )
+
+  const tabs: DataTableTab[] = useMemo(
+    () => [
+      { key: "mine", label: "My Documents" },
+      { key: "general", label: "General" },
+    ],
+    []
+  )
+
+  const isGeneralTab = activeTab === "general"
+  const tableData = isGeneralTab ? generalDocs : docs
 
   const filters: DataTableFilter<Documentation>[] = useMemo(
     () => [
@@ -133,6 +180,14 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
         ],
         mode: "custom",
         filterFn: (row, selected) => selected.includes(row.is_draft ? "draft" : "published"),
+      },
+      {
+        key: "visibility",
+        label: "Visibility",
+        options: [
+          { value: "private", label: "Private" },
+          { value: "general", label: "General" },
+        ],
       },
       {
         key: "category",
@@ -159,9 +214,50 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
     }
   }
 
+  const loadGeneralDocumentation = useCallback(async () => {
+    setIsLoadingGeneral(true)
+    try {
+      const { data, error } = await supabase
+        .from("user_documentation")
+        .select("*, profiles(first_name, last_name)")
+        .eq("visibility", "general")
+        .eq("is_draft", false)
+        .order("updated_at", { ascending: false })
+
+      if (error) throw error
+      setGeneralDocs(
+        (data || []).map((row: Record<string, unknown>) => {
+          const author = Array.isArray(row.profiles) ? row.profiles[0] : row.profiles
+          const named = author as { first_name?: string; last_name?: string } | null
+          return {
+            ...(row as unknown as Documentation),
+            author_name: named ? `${named.first_name ?? ""} ${named.last_name ?? ""}`.trim() : null,
+          }
+        })
+      )
+    } catch (error) {
+      log.error("Error loading general documentation:", error)
+      toast.error("Failed to load general documentation")
+    } finally {
+      setIsLoadingGeneral(false)
+    }
+  }, [supabase])
+
+  useEffect(() => {
+    if (activeTab === "general") void loadGeneralDocumentation()
+  }, [activeTab, loadGeneralDocumentation])
+
   function openCreateDialog() {
     setSelectedDoc(null)
-    setFormData({ title: "", content: "", category: "", tags: "", is_draft: false, attachments: [] })
+    setFormData({
+      title: "",
+      content: "",
+      category: "",
+      tags: "",
+      is_draft: false,
+      visibility: "private",
+      attachments: [],
+    })
     setIsDialogOpen(true)
   }
 
@@ -173,6 +269,7 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
       category: doc.category || "",
       tags: doc.tags?.join(", ") || "",
       is_draft: doc.is_draft,
+      visibility: doc.visibility ?? "private",
       attachments: [],
     })
     setIsDialogOpen(true)
@@ -192,6 +289,7 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
       payload.append("category", formData.category)
       payload.append("tags", formData.tags)
       payload.append("is_draft", String(isDraft))
+      payload.append("visibility", formData.visibility)
       for (const file of formData.attachments) {
         payload.append("attachments", file)
       }
@@ -249,6 +347,9 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
       description="Create and manage your work documentation."
       icon={FileText}
       backLink={{ href: "/documentation", label: "Back to Documentation" }}
+      tabs={tabs}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
       actions={
         <Button onClick={openCreateDialog} className="gap-2">
           <Plus className="h-4 w-4" />
@@ -282,9 +383,10 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
       }
     >
       <DataTable<Documentation>
-        data={docs}
-        columns={columns}
-        filters={filters}
+        data={tableData}
+        columns={isGeneralTab ? generalColumns : columns}
+        filters={isGeneralTab ? filters.filter((f) => f.key === "category") : filters}
+        isLoading={isGeneralTab && isLoadingGeneral}
         getRowId={(row) => row.id}
         pagination={{ pageSize: 50 }}
         searchPlaceholder="Search title, content, tags, or category..."
@@ -302,11 +404,14 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
               setIsViewDialogOpen(true)
             },
           },
-          { label: "Edit", icon: Edit2, onClick: openEditDialog },
+          // Editing and deleting stay with the author — on the General tab the
+          // rows belong to other people, and the API scopes writes by user_id.
+          { label: "Edit", icon: Edit2, onClick: openEditDialog, hidden: (doc) => doc.user_id !== userId },
           {
             label: "Delete",
             icon: Trash2,
             variant: "destructive",
+            hidden: (doc) => doc.user_id !== userId,
             onClick: (doc) => {
               setSelectedDoc(doc)
               setIsDeleteDialogOpen(true)

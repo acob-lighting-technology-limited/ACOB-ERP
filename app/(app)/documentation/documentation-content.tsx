@@ -74,6 +74,7 @@ export function DocumentationContent({
     category: "",
     tags: "",
     is_draft: false,
+    visibility: "private",
     attachments: [],
   })
   const supabase = createClient()
@@ -126,7 +127,15 @@ export function DocumentationContent({
 
   const openCreateDialog = () => {
     setSelectedDoc(null)
-    setFormData({ title: "", content: "", category: "", tags: "", is_draft: false, attachments: [] })
+    setFormData({
+      title: "",
+      content: "",
+      category: "",
+      tags: "",
+      is_draft: false,
+      visibility: "private",
+      attachments: [],
+    })
     setIsDialogOpen(true)
   }
 
@@ -138,6 +147,7 @@ export function DocumentationContent({
       category: doc.category || "",
       tags: doc.tags?.join(", ") || "",
       is_draft: doc.is_draft,
+      visibility: (doc as { visibility?: "private" | "general" }).visibility ?? "private",
       attachments: [],
     })
     setIsDialogOpen(true)
