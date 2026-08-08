@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
+import { canMutateV2, type AccessContextV2 } from "@/lib/admin/policy-v2"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("hr-performance-cbt-question-detail")
@@ -33,6 +34,33 @@ async function getAuthorizedContext() {
   return { supabase, dataClient: getServiceRoleClientOrFallback(supabase), user }
 }
 
+/**
+ * Confirms the caller may manage the department that owns this question.
+ *
+ * These handlers address a question by id alone, so without this a department
+ * lead could edit or delete another department's CBT bank. Global admins pass
+ * through unchanged.
+ */
+async function assertCanManageQuestion(
+  dataClient: { from: (table: string) => any },
+  context: AccessContextV2,
+  questionId: string
+): Promise<NextResponse | null> {
+  const { data: existing } = await dataClient
+    .from("cbt_questions")
+    .select("department")
+    .eq("id", questionId)
+    .maybeSingle()
+
+  const department = (existing as { department?: string | null } | null)?.department ?? null
+  if (!department) return NextResponse.json({ error: "Question not found" }, { status: 404 })
+
+  if (!canMutateV2(context, "hr.pms.cbt.manage", department)) {
+    return NextResponse.json({ error: "You can only manage CBT questions for your own department" }, { status: 403 })
+  }
+  return null
+}
+
 export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params
   const rl = await rateLimit(`hr-performance-cbt-questions:${getClientId(request)}`, { limit: 20, windowSec: 60 })
@@ -59,6 +87,15 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     const parsed = UpdateSchema.safeParse(await request.json())
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
+    }
+
+    const patchDenied = await assertCanManageQuestion(dataClient, contextResult.context, params.id)
+    if (patchDenied) return patchDenied
+
+    // Reassigning a question to a department the caller does not manage would
+    // move it out of their scope.
+    if (parsed.data.department && !canMutateV2(contextResult.context, "hr.pms.cbt.manage", parsed.data.department)) {
+      return NextResponse.json({ error: "You can only manage CBT questions for your own department" }, { status: 403 })
     }
 
     const { data, error } = await dataClient
@@ -115,6 +152,9 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
     if (!routeAccess.ok) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
+
+    const deleteDenied = await assertCanManageQuestion(dataClient, contextResult.context, params.id)
+    if (deleteDenied) return deleteDenied
 
     const { error } = await dataClient.from("cbt_questions").delete().eq("id", params.id)
     if (error) {

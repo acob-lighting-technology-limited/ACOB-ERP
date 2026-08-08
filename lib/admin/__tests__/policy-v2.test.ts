@@ -62,7 +62,15 @@ test("lead cannot access admin-only routes", () => {
   assert.equal(canAccessRouteV2(leadContext, "communications.meetings"), false)
   assert.equal(canAccessRouteV2(leadContext, "hr.fleet"), false)
   assert.equal(canAccessRouteV2(leadContext, "hr.resources"), false)
-  assert.equal(canAccessRouteV2(leadContext, "hr.pms.cbt.manage"), false)
+})
+
+test("lead manages CBT for their own department", () => {
+  // Leads own their team's assessment, so CBT is dept-scoped, not admin-only.
+  assert.equal(canAccessRouteV2(leadContext, "hr.pms.cbt.manage"), true)
+  assert.deepEqual(getDataScopeV2(leadContext, "hr.pms.cbt.manage"), leadContext.managedDepartments)
+  assert.equal(canMutateV2(leadContext, "hr.pms.cbt.manage", "Accounts"), true)
+  // ...but not for a department they do not lead.
+  assert.equal(canMutateV2(leadContext, "hr.pms.cbt.manage", "Operations"), false)
 })
 
 test("lead gets global report visibility but limited mutations", () => {

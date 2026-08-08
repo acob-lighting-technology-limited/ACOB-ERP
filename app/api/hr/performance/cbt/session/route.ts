@@ -84,25 +84,45 @@ export async function GET(request: NextRequest) {
         .not("company_email", "is", null)
         .eq("employment_status", "active")
         .order("company_email", { ascending: true }),
-      supabase
-        .from("review_cycles")
-        .select("id, name")
-        .eq("status", "active")
-        .order("start_date", { ascending: false }),
+      // Every cycle is offered, not just the active one: a candidate may need to
+      // sit an assessment for an earlier cycle. The active cycle is still the
+      // default selection (default_cycle_id below).
+      supabase.from("review_cycles").select("id, name, status, start_date").order("start_date", { ascending: false }),
     ])
 
     if (profilesError) throw profilesError
     if (cyclesError) throw cyclesError
+
+    const allCycles = (cycles || []) as { id: string; name: string; status: string | null }[]
+
+    // Only offer cycles that actually have questions — picking an empty one
+    // yields a test with nothing in it.
+    const { data: questionCycles } = await supabase
+      .from("cbt_questions")
+      .select("review_cycle_id")
+      .eq("is_active", true)
+
+    const cycleIdsWithQuestions = new Set(
+      ((questionCycles || []) as { review_cycle_id: string | null }[])
+        .map((row) => row.review_cycle_id)
+        .filter((id): id is string => Boolean(id))
+    )
+    const selectableCycles = allCycles.filter((cycle) => cycleIdsWithQuestions.has(cycle.id))
+
+    const defaultCycle = selectableCycles.find((cycle) => cycle.status === "active") ?? selectableCycles[0] ?? null
 
     return NextResponse.json({
       data: {
         candidates: (profiles || []).map((profile) => ({
           company_email: profile.company_email,
         })),
-        cycles: (cycles || []).map((cycle) => ({
+        cycles: selectableCycles.map((cycle) => ({
           id: cycle.id,
           name: cycle.name,
+          status: cycle.status,
+          is_default: cycle.id === defaultCycle?.id,
         })),
+        default_cycle_id: defaultCycle?.id ?? null,
       },
     })
   } catch (error) {
@@ -134,8 +154,10 @@ export async function POST(request: NextRequest) {
       .maybeSingle<CycleRow & { status: string }>()
 
     if (cycleError) throw cycleError
-    if (!cycle || cycle.status !== "active") {
-      return NextResponse.json({ error: "The selected review cycle is not currently active." }, { status: 400 })
+    // Candidates may sit an assessment for an earlier cycle, so status is no
+    // longer a gate — the cycle only has to exist and have questions.
+    if (!cycle) {
+      return NextResponse.json({ error: "The selected review cycle could not be found." }, { status: 400 })
     }
 
     const { data: profile, error: profileError } = await supabase

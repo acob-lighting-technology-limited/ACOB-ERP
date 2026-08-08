@@ -5,6 +5,7 @@ import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
+import { canMutateV2 } from "@/lib/admin/policy-v2"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 
 const log = logger("hr-performance-cbt-questions")
@@ -66,6 +67,8 @@ export async function GET(request: NextRequest) {
     if (!routeAccess.ok) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
+    // "all" for global admins; a department list for leads.
+    const dataScope = routeAccess.dataScope
 
     const cycleId = request.nextUrl.searchParams.get("cycle_id")
     const isBonusParam = request.nextUrl.searchParams.get("is_bonus")
@@ -81,6 +84,14 @@ export async function GET(request: NextRequest) {
 
     if (cycleId) {
       query = query.eq("review_cycle_id", cycleId)
+    }
+
+    // A lead sees only their own department's question bank.
+    if (dataScope !== "all") {
+      if (dataScope === "none" || dataScope.length === 0) {
+        return NextResponse.json({ data: [] })
+      }
+      query = query.in("department", dataScope)
     }
 
     const { data, error } = await query.returns<CbtQuestionRow[]>()
@@ -119,6 +130,12 @@ export async function POST(request: NextRequest) {
     const parsed = QuestionSchema.safeParse(await request.json())
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
+    }
+
+    // A lead may only author questions for a department they lead; global
+    // admins are unrestricted.
+    if (!canMutateV2(contextResult.context, "hr.pms.cbt.manage", parsed.data.department)) {
+      return NextResponse.json({ error: "You can only manage CBT questions for your own department" }, { status: 403 })
     }
 
     const { data, error } = await dataClient
