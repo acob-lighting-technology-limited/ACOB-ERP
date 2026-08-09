@@ -2,7 +2,14 @@
 
 const MUTATING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
 
-function readCsrfCookie(): string | null {
+/**
+ * The CSRF token middleware expects echoed back as x-csrf-token.
+ *
+ * Exported for the few callers that cannot go through apiFetch — notably
+ * XMLHttpRequest uploads, which are used where upload progress is needed.
+ * Those must set the header themselves or middleware rejects them with 403.
+ */
+export function readCsrfCookie(): string | null {
   if (typeof document === "undefined") return null
   const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]+)/)
   return match ? decodeURIComponent(match[1]) : null
