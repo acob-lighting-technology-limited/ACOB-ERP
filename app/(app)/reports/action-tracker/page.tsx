@@ -303,6 +303,47 @@ export default function ActionTrackerPortal() {
 
   const filters = useMemo<DataTableFilter<DepartmentActionRow>[]>(
     () => [
+      // Week and year refetch from the server rather than narrowing the rows
+      // already loaded, so they render their own controls and never feed a
+      // client-side filterFn. They live here so every control sits in one row.
+      {
+        key: "week",
+        label: "Week",
+        options: [],
+        render: () => (
+          <Select value={String(week)} onValueChange={(value) => setWeek(Number(value))}>
+            <SelectTrigger className="w-full" aria-label="Week">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {weekOptions.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  Week {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ),
+      },
+      {
+        key: "year",
+        label: "Year",
+        options: [],
+        render: () => (
+          <Select value={String(year)} onValueChange={(value) => setYear(Number(value))}>
+            <SelectTrigger className="w-full" aria-label="Year">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ),
+      },
       {
         key: "summary_status",
         label: "Summary Status",
@@ -329,7 +370,7 @@ export default function ActionTrackerPortal() {
         },
       },
     ],
-    [departmentOptions, priorityOptions]
+    [departmentOptions, priorityOptions, week, weekOptions, year, yearOptions]
   )
 
   return (
@@ -340,30 +381,6 @@ export default function ActionTrackerPortal() {
       backLink={{ href: "/reports/general-meeting", label: "Back to General Meeting" }}
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={String(week)} onValueChange={(value) => setWeek(Number(value))}>
-            <SelectTrigger className="h-8 w-[130px]" aria-label="Week">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {weekOptions.map((option) => (
-                <SelectItem key={option} value={String(option)}>
-                  Week {option}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select value={String(year)} onValueChange={(value) => setYear(Number(value))}>
-            <SelectTrigger className="h-8 w-[110px]" aria-label="Year">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {yearOptions.map((option) => (
-                <SelectItem key={option} value={String(option)}>
-                  {option}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
           {tasks.length > 0 ? (
             <Button
               variant="outline"
