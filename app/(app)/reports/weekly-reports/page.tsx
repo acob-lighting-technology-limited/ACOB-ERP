@@ -5,7 +5,7 @@ import { useMemo, useState } from "react"
 import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
-import { getCurrentOfficeWeek } from "@/lib/meeting-week"
+import { getCurrentOfficeWeek, getReportingOfficeWeek } from "@/lib/meeting-week"
 import { fetchWeeklyReportLockState, getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
 import { CalendarDays, Download, FileBarChart, FileSpreadsheet, Plus } from "lucide-react"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
@@ -187,15 +187,14 @@ function getActionTrackerStatus(department: string, trackingData: TrackerStatus[
 
 export default function WeeklyReportsPortal() {
   const currentOfficeWeek = getCurrentOfficeWeek()
-  const nextOfficeWeek = useMemo(() => {
-    const next = new Date()
-    next.setDate(next.getDate() + 7)
-    return getCurrentOfficeWeek(next)
-  }, [])
-  const [weekFilter, setWeekFilter] = useState(currentOfficeWeek.week)
-  const [yearFilter, setYearFilter] = useState(currentOfficeWeek.year)
-  // New submissions target the upcoming week by default — the current week is only
-  // reached by editing its existing report or by picking that week in the filters.
+  // The week people are reporting on, which from Friday is the next one — that
+  // is when reports for the coming Monday's meeting start arriving. The table
+  // and the Add Report button both follow it, so a report is never filed into a
+  // week the page is not showing.
+  const reportingWeek = useMemo(() => getReportingOfficeWeek(), [])
+  const [weekFilter, setWeekFilter] = useState(reportingWeek.week)
+  const [yearFilter, setYearFilter] = useState(reportingWeek.year)
+  // Once the user picks a week themselves, that choice wins over the default.
   const [hasManualWeekSelection, setHasManualWeekSelection] = useState(false)
   const [deptFilter, setDeptFilter] = useState("all")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
@@ -442,7 +441,7 @@ export default function WeeklyReportsPortal() {
             size="sm"
             className="h-8 gap-2"
             onClick={() => {
-              const target = hasManualWeekSelection ? { week: weekFilter, year: yearFilter } : nextOfficeWeek
+              const target = hasManualWeekSelection ? { week: weekFilter, year: yearFilter } : reportingWeek
               setSelectedReportParams({
                 week: target.week,
                 year: target.year,

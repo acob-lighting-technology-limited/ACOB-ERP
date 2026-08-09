@@ -15,6 +15,7 @@
     "type-check": "tsc --noEmit",
     "test:audit": "tsx --test lib/audit/__tests__/*.test.ts",
     "test:admin-scope": "tsx --test lib/admin/__tests__/*.test.ts",
+    "test:meeting-week": "tsx --test lib/__tests__/*.test.ts",
     "test:campaign": "tsx scripts/test-campaign/run.ts",
     "test:campaign:inventory": "tsx scripts/test-campaign/run.ts --inventory-only",
     "test:e2e": "playwright test",
