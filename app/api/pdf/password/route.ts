@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { PDFDocument } from "pdf-lib"
+import { callDocumentService, isDocumentServiceConfigured } from "@/lib/pdf/document-service"
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,23 +21,42 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: "Password is required for protection" }, { status: 400 })
       }
 
-      const pdfDoc = await PDFDocument.load(pdfBytes)
-      const protectedBytes = await pdfDoc.save({
-        useObjectStreams: false,
-        addDefaultPage: false,
-      })
+      // pdf-lib cannot encrypt, which is why this used to return 501. qpdf in the
+      // document service does real AES-256.
+      if (!isDocumentServiceConfigured()) {
+        return NextResponse.json(
+          {
+            error:
+              "PDF password protection is unavailable: the document service is not configured on this environment.",
+          },
+          { status: 501 }
+        )
+      }
 
-      return NextResponse.json(
-        {
-          error:
-            "PDF password protection requires additional tools. Consider using qpdf or pdftk for full encryption support.",
-          note: "Basic protection can be added, but full encryption requires external tools.",
+      const result = await callDocumentService("encrypt", pdfBytes, { password })
+      return new NextResponse(result.bytes as any, {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="protected_${file.name}"`,
+          "Content-Length": result.bytes.length.toString(),
         },
-        { status: 501 }
-      )
+      })
     } else if (action === "remove") {
       if (!password) {
         return NextResponse.json({ error: "Password is required to remove protection" }, { status: 400 })
+      }
+
+      // qpdf decrypts properly when available; pdf-lib's ignoreEncryption only
+      // works for the narrow case of a PDF that is not really encrypted.
+      if (isDocumentServiceConfigured()) {
+        const result = await callDocumentService("decrypt", pdfBytes, { password })
+        return new NextResponse(result.bytes as any, {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename="unprotected_${file.name}"`,
+            "Content-Length": result.bytes.length.toString(),
+          },
+        })
       }
 
       try {

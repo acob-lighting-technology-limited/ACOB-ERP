@@ -16,25 +16,35 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
 
-    // Dynamic import for pdf-parse (CommonJS)
-    const pdfParse = ((await import("pdf-parse")) as any).default || ((await import("pdf-parse")) as any)
-    const data = await pdfParse(buffer)
+    // pdf-parse v2 is class-based. The old call style (`pdfParse(buffer)`) is the
+    // v1 API; invoking the v2 class without `new` blew up inside pdfjs and
+    // surfaced as "DOMMatrix is not defined". Used correctly it needs no DOM
+    // polyfill in Node.
+    const { PDFParse } = await import("pdf-parse")
+    const parser = new PDFParse({ data: buffer })
 
-    return NextResponse.json({
-      success: true,
-      text: data.text,
-      numPages: data.numpages,
-      info: {
-        title: data.info?.Title || null,
-        author: data.info?.Author || null,
-        subject: data.info?.Subject || null,
-        creator: data.info?.Creator || null,
-        producer: data.info?.Producer || null,
-        creationDate: data.info?.CreationDate || null,
-        modificationDate: data.info?.ModDate || null,
-      },
-      metadata: data.metadata || {},
-    })
+    try {
+      const [textResult, infoResult] = await Promise.all([parser.getText(), parser.getInfo()])
+      const info = (infoResult.info ?? {}) as Record<string, unknown>
+
+      return NextResponse.json({
+        success: true,
+        text: textResult.text,
+        numPages: infoResult.total ?? null,
+        info: {
+          title: info.Title ?? null,
+          author: info.Author ?? null,
+          subject: info.Subject ?? null,
+          creator: info.Creator ?? null,
+          producer: info.Producer ?? null,
+          creationDate: info.CreationDate ?? null,
+          modificationDate: info.ModDate ?? null,
+        },
+        metadata: infoResult.metadata ?? {},
+      })
+    } finally {
+      await parser.destroy()
+    }
   } catch (error: any) {
     console.error("Error extracting text from PDF:", error)
     return NextResponse.json({ error: error.message || "Failed to extract text from PDF" }, { status: 500 })

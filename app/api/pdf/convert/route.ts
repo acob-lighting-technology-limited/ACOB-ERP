@@ -5,6 +5,8 @@ import { readFile, unlink, writeFile, readdir, mkdir, rmdir } from "fs/promises"
 import { existsSync } from "fs"
 import path from "path"
 import { tmpdir } from "os"
+import { hasBinary } from "@/lib/pdf/binaries"
+import { callDocumentService, isDocumentServiceConfigured } from "@/lib/pdf/document-service"
 import JSZip from "jszip"
 
 const execAsync = promisify(exec)
@@ -39,20 +41,32 @@ export async function POST(request: NextRequest) {
     let command: string
     let usePoppler = false
 
-    try {
-      await execAsync("which pdftoppm")
-      usePoppler = true
-    } catch (e) {}
+    // Preferred path: the document service, which has poppler. It returns a zip
+    // of page images, which is exactly what this route hands back.
+    if (isDocumentServiceConfigured()) {
+      try {
+        const result = await callDocumentService("convert", new Uint8Array(buffer), {
+          params: { format },
+        })
+        return new NextResponse(result.bytes as any, {
+          headers: {
+            "Content-Type": "application/zip",
+            "Content-Disposition": `attachment; filename="pdf_images_${Date.now()}.zip"`,
+            "Content-Length": result.bytes.length.toString(),
+          },
+        })
+      } catch (serviceError) {
+        console.error("Document service convert failed; falling back:", serviceError)
+      }
+    }
+
+    usePoppler = await hasBinary("pdftoppm")
 
     if (usePoppler) {
       const outputPrefix = path.join(outputDir, "page")
       command = `pdftoppm -${format} "${tempFile}" "${outputPrefix}"`
     } else {
-      let gsAvailable = false
-      try {
-        await execAsync("which gs")
-        gsAvailable = true
-      } catch (e) {}
+      const gsAvailable = await hasBinary("gs")
 
       if (gsAvailable) {
         let device = "jpeg"

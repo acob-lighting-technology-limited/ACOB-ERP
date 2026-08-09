@@ -6,8 +6,12 @@ import { readFile, unlink, writeFile } from "fs/promises"
 import { existsSync } from "fs"
 import path from "path"
 import { tmpdir } from "os"
+import { hasBinary } from "@/lib/pdf/binaries"
+import { callDocumentService, isDocumentServiceConfigured } from "@/lib/pdf/document-service"
+import { logger } from "@/lib/logger"
 
 const execAsync = promisify(exec)
+const log = logger("pdf-compress")
 
 export async function POST(request: NextRequest) {
   let tempFile: string | null = null
@@ -64,11 +68,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid compression mode or parameters" }, { status: 400 })
     }
 
-    let useGhostscript = false
-    try {
-      await execAsync("which gs")
-      useGhostscript = true
-    } catch (e) {}
+    // Preferred path: the document service, which has Ghostscript. Local
+    // binaries are still used when present (self-hosted / dev machines), and the
+    // pdf-lib re-save remains the last resort.
+    if (isDocumentServiceConfigured()) {
+      try {
+        const result = await callDocumentService("compress", pdfBytes, {
+          params: { targetBytes: targetSizeBytes ? Math.floor(targetSizeBytes) : undefined },
+        })
+        return new NextResponse(result.bytes as any, {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename="compressed_${file.name}"`,
+            "Content-Length": result.bytes.length.toString(),
+            "X-Original-Bytes": result.headers.get("x-original-bytes") || String(originalSize),
+            "X-Result-Bytes": result.headers.get("x-result-bytes") || String(result.bytes.length),
+            "X-Target-Met": result.headers.get("x-target-met") || "false",
+          },
+        })
+      } catch (serviceError) {
+        log.error({ err: String(serviceError) }, "Document service compress failed; falling back")
+      }
+    }
+
+    let useGhostscript = await hasBinary("gs")
 
     let compressedBytes: Uint8Array | null = null
 
