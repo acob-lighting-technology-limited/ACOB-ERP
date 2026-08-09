@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { logger } from "@/lib/logger"
+import { getAvatarSignedUrls } from "@/lib/profile-photos"
 import type { LunchMenu, LunchMenuGroup, LunchMenuOption, LunchMenuStatus, LunchVoteRecord } from "./lunch-voting"
 
 const log = logger("lunch-menu-server")
@@ -17,6 +18,7 @@ type MenuRow = {
   voting_deadline: string | null
   published_at: string | null
   closed_at: string | null
+  archived_at: string | null
 }
 
 type GroupRow = {
@@ -40,6 +42,7 @@ type VoteRow = {
   id: string
   menu_id: string
   user_id: string
+  is_eating: boolean
   created_at: string
   updated_at: string
 }
@@ -50,7 +53,7 @@ type SelectionRow = {
   option_id: string
 }
 
-const MENU_COLUMNS = "id, date, status, voting_deadline, published_at, closed_at"
+const MENU_COLUMNS = "id, date, status, voting_deadline, published_at, closed_at, archived_at"
 
 /** Attaches groups and their options to a bare menu row. */
 export async function hydrateMenu(client: SupabaseClient, menu: MenuRow): Promise<LunchMenu> {
@@ -81,19 +84,43 @@ export async function hydrateMenu(client: SupabaseClient, menu: MenuRow): Promis
   return { ...menu, groups: hydratedGroups }
 }
 
-/** Loads the menu for a single date, or null when none exists. */
+/**
+ * The live menu for a single date, or null when there is none.
+ *
+ * A date can hold several rows — one live plus any number of cancelled ones —
+ * so this always pins to the live one rather than assuming a single row.
+ */
 export async function loadMenuForDate(
   client: SupabaseClient,
   date: string,
   options: { includeDrafts?: boolean } = {}
 ): Promise<LunchMenu | null> {
-  let query = client.from("lunch_menus").select(MENU_COLUMNS).eq("date", date)
+  let query = client.from("lunch_menus").select(MENU_COLUMNS).eq("date", date).is("archived_at", null)
   if (!options.includeDrafts) query = query.neq("status", "draft")
 
   const { data } = await query.maybeSingle()
   if (!data) return null
 
   return hydrateMenu(client, data as MenuRow)
+}
+
+/**
+ * Every published menu in a date window, oldest first. Staff vote ahead — a
+ * menu for Friday is normally put up and voted on days earlier — so /lunch
+ * offers each published day rather than only today's.
+ */
+export async function loadMenusInRange(client: SupabaseClient, from: string, to: string): Promise<LunchMenu[]> {
+  const { data } = await client
+    .from("lunch_menus")
+    .select(MENU_COLUMNS)
+    .neq("status", "draft")
+    .is("archived_at", null)
+    .gte("date", from)
+    .lte("date", to)
+    .order("date")
+
+  const rows = (data || []) as MenuRow[]
+  return Promise.all(rows.map((row) => hydrateMenu(client, row)))
 }
 
 /** Loads a menu by id, or null when it does not exist. */
@@ -110,7 +137,7 @@ export async function loadMenuById(client: SupabaseClient, menuId: string): Prom
 export async function loadVotesForMenu(client: SupabaseClient, menuId: string): Promise<LunchVoteRecord[]> {
   const { data: voteRows } = await client
     .from("lunch_votes")
-    .select("id, menu_id, user_id, created_at, updated_at")
+    .select("id, menu_id, user_id, is_eating, created_at, updated_at")
     .eq("menu_id", menuId)
 
   const votes = (voteRows || []) as VoteRow[]
@@ -126,7 +153,7 @@ export async function loadVotesForMenu(client: SupabaseClient, menuId: string): 
       ),
     client
       .from("profiles")
-      .select("id, full_name, department")
+      .select("id, full_name, department, avatar_path")
       .in(
         "id",
         votes.map((v) => v.user_id)
@@ -134,8 +161,19 @@ export async function loadVotesForMenu(client: SupabaseClient, menuId: string): 
   ])
 
   const selections = (selectionRows || []) as SelectionRow[]
-  const profiles = (profileRows || []) as { id: string; full_name: string | null; department: string | null }[]
+  const profiles = (profileRows || []) as {
+    id: string
+    full_name: string | null
+    department: string | null
+    avatar_path: string | null
+  }[]
   const profileById = new Map(profiles.map((p) => [p.id, p]))
+
+  // Signed in one batch — the poll shows a stack of voter photos.
+  const signedUrls = await getAvatarSignedUrls(
+    client,
+    profiles.map((p) => p.avatar_path).filter((path): path is string => Boolean(path))
+  )
 
   return votes
     .map((vote) => {
@@ -148,6 +186,8 @@ export async function loadVotesForMenu(client: SupabaseClient, menuId: string): 
         user_id: vote.user_id,
         full_name: profile?.full_name || "Unknown",
         department: profile?.department || null,
+        avatar_url: profile?.avatar_path ? (signedUrls.get(profile.avatar_path) ?? null) : null,
+        is_eating: vote.is_eating !== false,
         created_at: vote.created_at,
         updated_at: vote.updated_at,
         selections: voteSelections,
