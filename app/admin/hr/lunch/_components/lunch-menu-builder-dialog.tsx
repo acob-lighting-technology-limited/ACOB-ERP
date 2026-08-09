@@ -35,6 +35,8 @@ interface LunchMenuBuilderDialogProps {
   onOpenChange: (open: boolean) => void
   /** Passing a menu switches the dialog to edit mode. */
   menu?: LunchMenu | null
+  /** Votes already cast on this menu — changing the dishes discards them. */
+  voteCount?: number
   /** Voting cut-off (HH:MM) from lunch settings — shown read-only, not editable here. */
   defaultDeadline: string
   defaultDate: string
@@ -80,6 +82,7 @@ export function LunchMenuBuilderDialog({
   open,
   onOpenChange,
   menu,
+  voteCount = 0,
   defaultDeadline,
   defaultDate,
   todayDate,
@@ -130,6 +133,9 @@ export function LunchMenuBuilderDialog({
       const payload = {
         date,
         deadline_time: overrideDeadline ? deadline : null,
+        // Acknowledged in the warning above the form, so the server is
+        // allowed to discard the votes the rebuild would orphan.
+        clear_votes: voteCount > 0,
         groups: groups.map((group) => ({
           name: groups.length > 1 ? group.name : null,
           is_required: group.is_required,
@@ -179,6 +185,17 @@ export function LunchMenuBuilderDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2 text-sm">
+          {voteCount > 0 && (
+            <div className="rounded-lg border-2 border-amber-500/40 bg-amber-500/10 p-3 text-xs">
+              <span className="font-semibold">
+                {voteCount} {voteCount === 1 ? "person has" : "people have"} already voted.
+              </span>{" "}
+              Changing the dishes clears those votes and the lunch charges that went with them, and everyone has to vote
+              again. To move the cut-off instead, close this and use{" "}
+              <span className="font-semibold">Change deadline</span>.
+            </div>
+          )}
+
           {/* A worked example beats prose here — categories only earn their
               keep when there are two lists to tell apart. */}
           <div className="bg-muted/30 grid gap-3 rounded-lg border p-3 text-xs sm:grid-cols-3">
