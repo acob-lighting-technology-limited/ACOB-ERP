@@ -14,11 +14,13 @@ import {
   Image as ImageIcon,
   FileImage,
   Type,
-  FileEdit,
   FileCode,
   Key,
   FileText,
   Loader2,
+  ArrowUp,
+  ArrowDown,
+  Trash2,
 } from "lucide-react"
 
 type PdfToolType =
@@ -28,11 +30,19 @@ type PdfToolType =
   | "convert"
   | "images-to-pdf"
   | "extract-text"
-  | "add-text"
   | "to-doc"
   | "watermark"
   | "password"
   | "ocr"
+
+/** Human-readable byte size, e.g. 3,007,168 → "2.87 MB". */
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 B"
+  const units = ["B", "KB", "MB", "GB"]
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  const value = bytes / Math.pow(1024, exponent)
+  return `${value.toFixed(exponent === 0 ? 0 : 2)} ${units[exponent]}`
+}
 
 export function PdfTools() {
   const [toolType, setToolType] = useState<PdfToolType>("merge")
@@ -42,21 +52,21 @@ export function PdfTools() {
   // are about to split, page-number it, and pick ranges with confidence.
   const [singlePdfPreviewUrl, setSinglePdfPreviewUrl] = useState<string | null>(null)
   const [imageFiles, setImageFiles] = useState<File[]>([])
+  const [imagePreviews, setImagePreviews] = useState<string[]>([])
   const [splitPages, setSplitPages] = useState("")
   const [convertFormat, setConvertFormat] = useState("jpg")
   const [compressionMode, setCompressionMode] = useState<"size" | "percentage">("size")
+  const [compressionResult, setCompressionResult] = useState<{
+    originalSize: number
+    compressedSize: number
+    targetBytes: number
+    targetMissed: boolean
+  } | null>(null)
   const [targetSize, setTargetSize] = useState("")
   const [sizeUnit, setSizeUnit] = useState<"KB" | "MB" | "GB">("MB")
   const [percentage, setPercentage] = useState("50")
   const [processing, setProcessing] = useState(false)
   const [extractedText, setExtractedText] = useState("")
-  const [textToAdd, setTextToAdd] = useState("")
-  const [textX, setTextX] = useState("50")
-  const [textY, setTextY] = useState("50")
-  const [textFontSize, setTextFontSize] = useState("12")
-  const [textPageNumber, setTextPageNumber] = useState("1")
-  const [textColor, setTextColor] = useState("000000")
-  const [textPosition, setTextPosition] = useState<"top" | "bottom" | "center" | "custom">("custom")
   const [watermarkType, setWatermarkType] = useState<"text" | "image">("text")
   const [watermarkText, setWatermarkText] = useState("")
   const [watermarkImage, setWatermarkImage] = useState<File | null>(null)
@@ -66,6 +76,8 @@ export function PdfTools() {
   const [watermarkFontSize, setWatermarkFontSize] = useState("48")
   const [watermarkOpacity, setWatermarkOpacity] = useState("0.5")
   const [watermarkColor, setWatermarkColor] = useState("000000")
+  // -45 reproduces the long-standing slanted watermark; 0 is horizontal.
+  const [watermarkRotation, setWatermarkRotation] = useState("-45")
   const [passwordAction, setPasswordAction] = useState<"protect" | "remove">("protect")
   const [pdfPassword, setPdfPassword] = useState("")
   const [ocrOutputFormat, setOcrOutputFormat] = useState<"text" | "pdf">("text")
@@ -232,7 +244,27 @@ export function PdfTools() {
       a.click()
       window.URL.revokeObjectURL(url)
       document.body.removeChild(a)
-      toast.success("PDF compressed successfully!", { id: toastId })
+
+      // Report the sizes rather than a bare "success": when the server has no
+      // Ghostscript it can only re-serialise the file, which shaves ~1% and
+      // silently misses the target. Showing the numbers makes that visible.
+      const originalSize = singlePdfFile.size
+      const reduction = originalSize > 0 ? ((originalSize - blob.size) / originalSize) * 100 : 0
+      const sizeSummary = `${formatBytes(originalSize)} → ${formatBytes(blob.size)} (${reduction.toFixed(1)}% smaller)`
+      const targetBytes =
+        compressionMode === "size"
+          ? parseFloat(targetSize) *
+            (sizeUnit.toUpperCase() === "KB" ? 1024 : sizeUnit.toUpperCase() === "GB" ? 1024 ** 3 : 1024 ** 2)
+          : originalSize * (1 - parseFloat(percentage) / 100)
+      const targetMissed = Number.isFinite(targetBytes) && blob.size > targetBytes
+
+      setCompressionResult({ originalSize, compressedSize: blob.size, targetBytes, targetMissed })
+
+      if (targetMissed) {
+        toast.warning(`Target not reached. ${sizeSummary}`, { id: toastId, duration: 8000 })
+      } else {
+        toast.success(`PDF compressed. ${sizeSummary}`, { id: toastId })
+      }
     } catch (error: any) {
       toast.error(error.message || "Compression failed", { id: toastId })
     } finally {
@@ -272,6 +304,28 @@ export function PdfTools() {
     } finally {
       setProcessing(false)
     }
+  }
+
+  // Thumbnails for the images-to-PDF picker. Page order follows array order,
+  // so reordering here reorders the generated PDF.
+  useEffect(() => {
+    const urls = imageFiles.map((file) => URL.createObjectURL(file))
+    setImagePreviews(urls)
+    return () => urls.forEach((url) => URL.revokeObjectURL(url))
+  }, [imageFiles])
+
+  const moveImage = (from: number, to: number) => {
+    if (to < 0 || to >= imageFiles.length) return
+    setImageFiles((previous) => {
+      const next = [...previous]
+      const [moved] = next.splice(from, 1)
+      next.splice(to, 0, moved)
+      return next
+    })
+  }
+
+  const removeImage = (index: number) => {
+    setImageFiles((previous) => previous.filter((_, i) => i !== index))
   }
 
   const handleImagesToPdf = async () => {
@@ -332,50 +386,6 @@ export function PdfTools() {
     } catch (error: any) {
       toast.error(error.message || "Text extraction failed", { id: toastId })
       setExtractedText("")
-    } finally {
-      setProcessing(false)
-    }
-  }
-
-  const handleAddText = async () => {
-    if (!singlePdfFile) {
-      toast.error("Please select a PDF file")
-      return
-    }
-    if (!textToAdd.trim()) {
-      toast.error("Please enter text to add")
-      return
-    }
-    setProcessing(true)
-    const toastId = toast.loading("Adding text...")
-    try {
-      const formData = new FormData()
-      formData.append("file", singlePdfFile)
-      formData.append("text", textToAdd)
-      formData.append("x", textX)
-      formData.append("y", textY)
-      formData.append("fontSize", textFontSize)
-      formData.append("pageNumber", textPageNumber)
-      formData.append("color", textColor)
-      formData.append("position", textPosition)
-
-      const response = await apiFetch("/api/pdf/add-text", { method: "POST", body: formData })
-      if (!response.ok) {
-        const error = await response.json()
-        throw new Error(error.error || "Failed to add text")
-      }
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `pdf_with_text_${Date.now()}.pdf`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
-      toast.success("Text added successfully!", { id: toastId })
-    } catch (error: any) {
-      toast.error(error.message || "Failed to add text", { id: toastId })
     } finally {
       setProcessing(false)
     }
@@ -442,6 +452,7 @@ export function PdfTools() {
       formData.append("position", watermarkPosition)
       formData.append("opacity", watermarkOpacity)
       formData.append("fontSize", watermarkFontSize)
+      formData.append("rotation", watermarkRotation)
       formData.append("color", watermarkColor)
       if (watermarkPosition === "custom") {
         formData.append("x", watermarkX)
@@ -569,7 +580,6 @@ export function PdfTools() {
             "convert",
             "images-to-pdf",
             "extract-text",
-            "add-text",
             "to-doc",
             "watermark",
             "password",
@@ -607,7 +617,17 @@ export function PdfTools() {
                   <label className="text-sm font-medium">Select multiple PDF files</label>
                   <Input type="file" accept="application/pdf" multiple onChange={handlePdfFilesChange} />
                   {pdfFiles.length > 0 && (
-                    <div className="text-muted-foreground text-xs">{pdfFiles.length} file(s) selected</div>
+                    <div className="text-muted-foreground space-y-0.5 text-xs">
+                      <div>
+                        {pdfFiles.length} file(s) selected —{" "}
+                        {formatBytes(pdfFiles.reduce((total, f) => total + f.size, 0))} total
+                      </div>
+                      {pdfFiles.map((f) => (
+                        <div key={f.name}>
+                          {f.name} — {formatBytes(f.size)}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
                 <Button className="w-full" onClick={handleMerge} disabled={pdfFiles.length < 2 || processing}>
@@ -622,7 +642,11 @@ export function PdfTools() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select PDF file</label>
                   <Input type="file" accept="application/pdf" onChange={handleSinglePdfChange} />
-                  {singlePdfFile && <div className="text-muted-foreground text-xs">{singlePdfFile.name}</div>}
+                  {singlePdfFile && (
+                    <div className="text-muted-foreground text-xs">
+                      {singlePdfFile.name} — {formatBytes(singlePdfFile.size)}
+                    </div>
+                  )}
                 </div>
                 {singlePdfPreviewUrl && (
                   <div className="space-y-2">
@@ -665,6 +689,11 @@ export function PdfTools() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select PDF file</label>
                   <Input type="file" accept="application/pdf" onChange={handleSinglePdfChange} />
+                  {singlePdfFile && (
+                    <div className="text-muted-foreground text-xs">
+                      {singlePdfFile.name} — {formatBytes(singlePdfFile.size)}
+                    </div>
+                  )}
                 </div>
                 <div className="bg-muted mb-2 flex w-full rounded-lg p-1">
                   <Button
@@ -718,6 +747,27 @@ export function PdfTools() {
                   )}
                   Compress PDF
                 </Button>
+                {compressionResult && (
+                  <div
+                    className={
+                      compressionResult.targetMissed
+                        ? "rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs dark:border-amber-900 dark:bg-amber-950/30"
+                        : "rounded-lg border p-3 text-xs"
+                    }
+                  >
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      <span>Original: {formatBytes(compressionResult.originalSize)}</span>
+                      <span>Result: {formatBytes(compressionResult.compressedSize)}</span>
+                      <span>Target: {formatBytes(compressionResult.targetBytes)}</span>
+                    </div>
+                    {compressionResult.targetMissed && (
+                      <p className="mt-2 text-amber-800 dark:text-amber-200">
+                        The target could not be reached. Real size reduction needs Ghostscript on the server; without it
+                        the file can only be re-saved, which reclaims very little on image-heavy PDFs.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -726,6 +776,11 @@ export function PdfTools() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select PDF file</label>
                   <Input type="file" accept="application/pdf" onChange={handleSinglePdfChange} />
+                  {singlePdfFile && (
+                    <div className="text-muted-foreground text-xs">
+                      {singlePdfFile.name} — {formatBytes(singlePdfFile.size)}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Image Format</label>
@@ -755,6 +810,67 @@ export function PdfTools() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select Images</label>
                   <Input type="file" accept="image/*" multiple onChange={handleImageFilesChange} />
+                  {imageFiles.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="text-muted-foreground text-xs">
+                        {imageFiles.length} image(s) selected —{" "}
+                        {formatBytes(imageFiles.reduce((total, f) => total + f.size, 0))} total. Pages follow the order
+                        below.
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                        {imageFiles.map((file, index) => (
+                          <div key={`${file.name}-${index}`} className="space-y-1 rounded-lg border p-2">
+                            <div className="bg-muted flex h-24 items-center justify-center overflow-hidden rounded">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={imagePreviews[index]}
+                                alt={file.name}
+                                className="max-h-24 max-w-full object-contain"
+                              />
+                            </div>
+                            <div className="text-muted-foreground truncate text-xs" title={file.name}>
+                              {index + 1}. {file.name}
+                            </div>
+                            <div className="text-muted-foreground text-xs">{formatBytes(file.size)}</div>
+                            <div className="flex gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7"
+                                aria-label="Move earlier"
+                                disabled={index === 0}
+                                onClick={() => moveImage(index, index - 1)}
+                              >
+                                <ArrowUp className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7"
+                                aria-label="Move later"
+                                disabled={index === imageFiles.length - 1}
+                                onClick={() => moveImage(index, index + 1)}
+                              >
+                                <ArrowDown className="h-3 w-3" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-7 w-7"
+                                aria-label="Remove image"
+                                onClick={() => removeImage(index)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
                 <Button className="w-full" onClick={handleImagesToPdf} disabled={imageFiles.length === 0 || processing}>
                   {processing ? (
@@ -772,7 +888,22 @@ export function PdfTools() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select PDF file</label>
                   <Input type="file" accept="application/pdf" onChange={handleSinglePdfChange} />
+                  {singlePdfFile && (
+                    <div className="text-muted-foreground text-xs">
+                      {singlePdfFile.name} — {formatBytes(singlePdfFile.size)}
+                    </div>
+                  )}
                 </div>
+                {singlePdfPreviewUrl && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Preview</label>
+                    <iframe
+                      src={singlePdfPreviewUrl}
+                      title={`Preview of ${singlePdfFile?.name || "selected PDF"}`}
+                      className="h-[420px] w-full rounded-md border"
+                    />
+                  </div>
+                )}
                 <Button className="w-full" onClick={handleExtractText} disabled={!singlePdfFile || processing}>
                   {processing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Type className="mr-2 h-4 w-4" />}
                   Extract Plain Text
@@ -796,105 +927,16 @@ export function PdfTools() {
               </div>
             )}
 
-            {toolType === "add-text" && (
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Select PDF file</label>
-                  <Input type="file" accept="application/pdf" onChange={handleSinglePdfChange} />
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Text to Overlay</label>
-                  <Input
-                    placeholder="Enter custom text overlay"
-                    value={textToAdd}
-                    onChange={(e) => setTextToAdd(e.target.value)}
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Page Number</label>
-                    <Input
-                      type="number"
-                      min="1"
-                      value={textPageNumber}
-                      onChange={(e) => setTextPageNumber(e.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Font Size</label>
-                    <Input
-                      type="number"
-                      min="8"
-                      value={textFontSize}
-                      onChange={(e) => setTextFontSize(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Positioning Mode</label>
-                  <select
-                    value={textPosition}
-                    onChange={(e: any) => setTextPosition(e.target.value)}
-                    className="bg-background w-full rounded border p-2 text-sm"
-                  >
-                    <option value="top">Top Center</option>
-                    <option value="center">Center</option>
-                    <option value="bottom">Bottom Center</option>
-                    <option value="custom">Custom (X/Y)</option>
-                  </select>
-                </div>
-                {textPosition === "custom" && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input
-                      type="number"
-                      placeholder="X coordinate"
-                      value={textX}
-                      onChange={(e) => setTextX(e.target.value)}
-                    />
-                    <Input
-                      type="number"
-                      placeholder="Y coordinate"
-                      value={textY}
-                      onChange={(e) => setTextY(e.target.value)}
-                    />
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <label className="text-sm font-medium">Text Color (Hex)</label>
-                  <div className="flex gap-2">
-                    <Input
-                      value={textColor}
-                      onChange={(e) => setTextColor(e.target.value.substring(0, 6))}
-                      className="flex-1"
-                    />
-                    <input
-                      type="color"
-                      value={`#${textColor}`}
-                      onChange={(e) => setTextColor(e.target.value.replace("#", ""))}
-                      className="h-10 w-12 cursor-pointer rounded border"
-                    />
-                  </div>
-                </div>
-                <Button
-                  className="w-full"
-                  onClick={handleAddText}
-                  disabled={!singlePdfFile || !textToAdd.trim() || processing}
-                >
-                  {processing ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <FileEdit className="mr-2 h-4 w-4" />
-                  )}
-                  Add Text Layer
-                </Button>
-              </div>
-            )}
-
             {toolType === "to-doc" && (
               <div className="space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select PDF file</label>
                   <Input type="file" accept="application/pdf" onChange={handleSinglePdfChange} />
+                  {singlePdfFile && (
+                    <div className="text-muted-foreground text-xs">
+                      {singlePdfFile.name} — {formatBytes(singlePdfFile.size)}
+                    </div>
+                  )}
                 </div>
                 <Button className="w-full" onClick={handlePdfToDoc} disabled={!singlePdfFile || processing}>
                   {processing ? (
@@ -912,6 +954,11 @@ export function PdfTools() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select PDF file</label>
                   <Input type="file" accept="application/pdf" onChange={handleSinglePdfChange} />
+                  {singlePdfFile && (
+                    <div className="text-muted-foreground text-xs">
+                      {singlePdfFile.name} — {formatBytes(singlePdfFile.size)}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Watermark Source</label>
@@ -986,6 +1033,18 @@ export function PdfTools() {
                       onChange={(e) => setWatermarkOpacity(e.target.value)}
                     />
                   </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium">Rotation (degrees)</label>
+                    <Input
+                      type="number"
+                      min="-180"
+                      max="180"
+                      step="5"
+                      value={watermarkRotation}
+                      onChange={(e) => setWatermarkRotation(e.target.value)}
+                    />
+                    <p className="text-muted-foreground text-xs">0 = horizontal, -45 = slanted (default)</p>
+                  </div>
                 </div>
                 <Button className="w-full" onClick={handleWatermark} disabled={!singlePdfFile || processing}>
                   {processing ? (
@@ -1003,6 +1062,11 @@ export function PdfTools() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select PDF file</label>
                   <Input type="file" accept="application/pdf" onChange={handleSinglePdfChange} />
+                  {singlePdfFile && (
+                    <div className="text-muted-foreground text-xs">
+                      {singlePdfFile.name} — {formatBytes(singlePdfFile.size)}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Action</label>
@@ -1040,6 +1104,11 @@ export function PdfTools() {
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Select Scanned PDF file</label>
                   <Input type="file" accept="application/pdf" onChange={handleSinglePdfChange} />
+                  {singlePdfFile && (
+                    <div className="text-muted-foreground text-xs">
+                      {singlePdfFile.name} — {formatBytes(singlePdfFile.size)}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Output Format</label>
