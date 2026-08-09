@@ -137,14 +137,22 @@ export function ActionTrackerContent({
   const searchParams = useSearchParams()
   const queryClient = useQueryClient()
 
-  const [weekFilter] = useState(() => {
+  // Week/year drive a server-side refetch, so they are page state surfaced as
+  // custom controls in the table filter row rather than DataTable filters
+  // (which only narrow the rows already fetched for one week).
+  const [weekFilter, setWeekFilter] = useState(() => {
     const week = searchParams.get("week")
     return week ? parseInt(week, 10) : currentOfficeWeek.week
   })
-  const [yearFilter] = useState(() => {
+  const [yearFilter, setYearFilter] = useState(() => {
     const year = searchParams.get("year")
     return year ? parseInt(year, 10) : currentOfficeWeek.year
   })
+  const weekOptions = useMemo(() => Array.from({ length: 53 }, (_, i) => i + 1), [])
+  const yearOptions = useMemo(
+    () => [currentOfficeWeek.year - 1, currentOfficeWeek.year, currentOfficeWeek.year + 1],
+    [currentOfficeWeek.year]
+  )
   const [deptFilter] = useState(() => searchParams.get("dept") || "all")
   const [isCarryForwarding, setIsCarryForwarding] = useState(false)
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false)
@@ -363,6 +371,46 @@ export function ActionTrackerContent({
 
   const filters = useMemo<DataTableFilter<DepartmentActionRow>[]>(
     () => [
+      // Render their own controls and never feed a client-side filterFn: the
+      // server has already filtered to this week/year.
+      {
+        key: "week",
+        label: "Week",
+        options: [],
+        render: () => (
+          <Select value={String(weekFilter)} onValueChange={(value) => setWeekFilter(Number(value))}>
+            <SelectTrigger className="w-full" aria-label="Week">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {weekOptions.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  Week {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ),
+      },
+      {
+        key: "year",
+        label: "Year",
+        options: [],
+        render: () => (
+          <Select value={String(yearFilter)} onValueChange={(value) => setYearFilter(Number(value))}>
+            <SelectTrigger className="w-full" aria-label="Year">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ),
+      },
       {
         key: "summary_status",
         label: "Summary Status",
@@ -389,7 +437,7 @@ export function ActionTrackerContent({
         },
       },
     ],
-    [departmentOptions, priorityOptions]
+    [departmentOptions, priorityOptions, weekFilter, weekOptions, yearFilter, yearOptions]
   )
 
   return (
