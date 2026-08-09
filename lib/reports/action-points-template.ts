@@ -41,7 +41,10 @@ const TEMPLATE_HEADINGS = [
     candidates: ["OPERATIONS AND MAINTENANCE DEPARTMENT:", "OPERATIONS DEPARTMENT:"],
   },
   { key: "Project", candidates: ["PROJECT DEPARTMENT:"] },
-  { key: "Legal, Regulatory and Compliance", candidates: ["REGULATORY & COMPLIANCE DEPARTMENT:"] },
+  {
+    key: "Regulatory and Compliance",
+    candidates: ["REGULATORY & COMPLIANCE DEPARTMENT:", "LEGAL, REGULATORY AND COMPLIANCE:"],
+  },
   { key: "Technical", candidates: ["TECHNICAL DEPARTMENT"] },
 ] as const
 
