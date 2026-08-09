@@ -10,6 +10,16 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -40,11 +50,15 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-client"
+import { cn } from "@/lib/utils"
 import { LunchMenuBuilderDialog } from "./_components/lunch-menu-builder-dialog"
+import { LunchDeadlineDialog } from "./_components/lunch-deadline-dialog"
+import { LunchVoteOverrideDialog } from "./_components/lunch-vote-override-dialog"
 import {
   DEFAULT_LUNCH_SETTINGS,
   groupHeading,
   menuHeading,
+  NOT_EATING_OPTION_ID,
   type LunchMenu,
   type LunchOptionTally,
   type LunchVoteRecord,
@@ -69,6 +83,8 @@ export interface LunchSettings {
 export interface AdminLunchMenu extends LunchMenu {
   votes: LunchVoteRecord[]
   tallies: LunchOptionTally[]
+  /** Votes that will actually be charged — excludes the poll's NO answers. */
+  eatingCount: number
   votingOpen: boolean
   resolvedDeadline: string
 }
@@ -195,6 +211,11 @@ export function LunchRegisterPage({
   const [menusError, setMenusError] = useState<string | null>(null)
   const [openMenuBuilder, setOpenMenuBuilder] = useState(false)
   const [editingMenu, setEditingMenu] = useState<AdminLunchMenu | null>(null)
+  const [deadlineMenu, setDeadlineMenu] = useState<AdminLunchMenu | null>(null)
+  const [deletingMenu, setDeletingMenu] = useState<AdminLunchMenu | null>(null)
+  const [archivingMenu, setArchivingMenu] = useState<AdminLunchMenu | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [overrideMenu, setOverrideMenu] = useState<AdminLunchMenu | null>(null)
 
   // Export states
   const [openExport, setOpenExport] = useState(false)
@@ -389,15 +410,44 @@ export function LunchRegisterPage({
     }
   }
 
-  async function deleteMenu(menu: AdminLunchMenu) {
+  // Cancelling a day drops its lunch charges but keeps the votes on record.
+  async function setArchived(menu: AdminLunchMenu, archived: boolean) {
     try {
-      const res = await apiFetch(`/api/admin/hr/lunch/menus/${menu.id}`, { method: "DELETE" })
+      const res = await apiFetch(`/api/admin/hr/lunch/menus/${menu.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ archived }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to update menu")
+
+      toast.success(
+        archived
+          ? "Day cancelled — nobody is charged for it, and the votes are kept."
+          : "Day restored — the lunch charges are back."
+      )
+      setArchivingMenu(null)
+      void loadMenus()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update menu")
+    }
+  }
+
+  async function deleteMenu(menu: AdminLunchMenu) {
+    setDeleting(true)
+    try {
+      // Votes are only discarded because the confirmation said so out loud.
+      const clearVotes = menu.votes.length > 0 ? "?clear_votes=true" : ""
+      const res = await apiFetch(`/api/admin/hr/lunch/menus/${menu.id}${clearVotes}`, { method: "DELETE" })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || "Failed to delete menu")
       toast.success("Menu deleted.")
+      setDeletingMenu(null)
       void loadMenus()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to delete menu")
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -696,6 +746,9 @@ export function LunchRegisterPage({
       label: "Status",
       accessor: (row) => row.status,
       render: (row) => {
+        if (row.archived_at) {
+          return <Badge className="border bg-gray-100 text-gray-500 hover:bg-gray-100/80">Cancelled</Badge>
+        }
         const tone =
           row.status === "published" && row.votingOpen
             ? "border-0 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
@@ -733,14 +786,20 @@ export function LunchRegisterPage({
     },
     {
       key: "votes",
-      label: "Votes",
+      label: "Eating",
       sortable: true,
-      accessor: (row) => row.votes.length,
-      render: (row) => (
-        <Badge variant="outline" className="border-2 px-2.5 py-0.5 font-semibold">
-          {row.votes.length}
-        </Badge>
-      ),
+      accessor: (row) => row.eatingCount,
+      render: (row) => {
+        const notEating = row.votes.length - row.eatingCount
+        return (
+          <div className="flex items-center gap-1.5">
+            <Badge variant="outline" className="border-2 px-2.5 py-0.5 font-semibold">
+              {row.eatingCount}
+            </Badge>
+            {notEating > 0 && <span className="text-muted-foreground text-xs">{notEating} said no</span>}
+          </div>
+        )
+      },
     },
   ]
 
@@ -1138,17 +1197,28 @@ export function LunchRegisterPage({
             isLoading={fetchingMenus}
             error={menusError}
             onRetry={() => void loadMenus()}
-            expandable={{ render: (row) => <MenuVotesPanel menu={row} /> }}
+            expandable={{ render: (row) => <MenuVotesPanel menu={row} totalStaff={employees.length} /> }}
             rowActions={[
               {
-                // Structural edits are refused once votes exist — they would
-                // orphan every selection already cast.
+                // Always offered. When votes exist the builder warns that
+                // changing the dishes clears them, rather than the action
+                // silently disappearing.
                 label: "Edit menu",
-                hidden: (row) => row.votes.length > 0,
                 onClick: (row) => {
                   setEditingMenu(row)
                   setOpenMenuBuilder(true)
                 },
+              },
+              {
+                // The clock stays editable after votes exist — only rebuilding
+                // the dishes is destructive. Past days are left alone.
+                label: "Change deadline",
+                hidden: (row) => row.date < todayDate,
+                onClick: (row) => setDeadlineMenu(row),
+              },
+              {
+                label: "Change someone's answer",
+                onClick: (row) => setOverrideMenu(row),
               },
               {
                 label: "Publish for voting",
@@ -1156,15 +1226,34 @@ export function LunchRegisterPage({
                 onClick: (row) => void updateMenuStatus(row, "published"),
               },
               {
-                label: "Close voting now",
-                hidden: (row) => row.status !== "published",
+                // Only worth offering while voting is genuinely still open —
+                // it closes itself at the deadline, so after that this would
+                // just be a button that changes nothing anyone can see.
+                label: "Close voting early",
+                hidden: (row) => !row.votingOpen,
                 onClick: (row) => void updateMenuStatus(row, "closed"),
               },
               {
-                label: "Delete menu",
+                label: "Reopen voting",
+                hidden: (row) => row.status !== "closed" || row.date < todayDate,
+                onClick: (row) => void updateMenuStatus(row, "published"),
+              },
+              {
+                // The everyday "this day is off" action: keeps the record,
+                // drops the charges.
+                label: "Cancel this day",
+                hidden: (row) => Boolean(row.archived_at),
+                onClick: (row) => setArchivingMenu(row),
+              },
+              {
+                label: "Restore this day",
+                hidden: (row) => !row.archived_at,
+                onClick: (row) => void setArchived(row, false),
+              },
+              {
+                label: "Delete permanently",
                 variant: "destructive",
-                hidden: (row) => row.votes.length > 0,
-                onClick: (row) => void deleteMenu(row),
+                onClick: (row) => setDeletingMenu(row),
               },
             ]}
           />
@@ -1623,10 +1712,86 @@ export function LunchRegisterPage({
             </div>
           </div>
         ))}
+      <AlertDialog open={archivingMenu !== null} onOpenChange={(open) => !open && setArchivingMenu(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Cancel lunch for{" "}
+              {archivingMenu
+                ? formatWATDate(archivingMenu.date, { weekday: "long", day: "numeric", month: "long" })
+                : ""}
+              ?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {archivingMenu && archivingMenu.eatingCount > 0
+                ? `The day disappears from everyone's /lunch page and the ${archivingMenu.eatingCount} lunch ${archivingMenu.eatingCount === 1 ? "charge" : "charges"} for it are removed, so nobody is deducted. The votes are kept, so you can restore the day and the charges together if lunch goes ahead after all.`
+                : "The day disappears from everyone's /lunch page. Nobody is charged. You can restore it at any time."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Keep it</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault()
+                if (archivingMenu) void setArchived(archivingMenu, true)
+              }}
+            >
+              Cancel the day
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={deletingMenu !== null} onOpenChange={(open) => !open && setDeletingMenu(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Delete the menu for{" "}
+              {deletingMenu ? formatWATDate(deletingMenu.date, { weekday: "long", day: "numeric", month: "long" }) : ""}
+              ?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {deletingMenu && deletingMenu.votes.length > 0
+                ? `${deletingMenu.votes.length} ${deletingMenu.votes.length === 1 ? "person has" : "people have"} already voted. This erases the menu, their votes and the lunch charges for good — there is no record left of who chose what. If you only need lunch called off, use "Cancel this day" instead; it removes the charges but keeps the record.`
+                : "This menu has no votes yet, so nothing else is affected."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleting}
+              onClick={(e) => {
+                e.preventDefault()
+                if (deletingMenu) void deleteMenu(deletingMenu)
+              }}
+            >
+              {deleting ? "Deleting…" : "Delete menu"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <LunchDeadlineDialog
+        open={deadlineMenu !== null}
+        onOpenChange={(open) => !open && setDeadlineMenu(null)}
+        menu={deadlineMenu}
+        defaultDeadline={settings.voting_deadline || DEFAULT_LUNCH_SETTINGS.voting_deadline}
+        onSaved={() => void loadMenus()}
+      />
+
+      <LunchVoteOverrideDialog
+        open={overrideMenu !== null}
+        onOpenChange={(open) => !open && setOverrideMenu(null)}
+        menu={overrideMenu}
+        employees={employees.map((e) => ({ id: e.id, full_name: e.full_name }))}
+        onSaved={() => void loadMenus()}
+      />
+
       <LunchMenuBuilderDialog
         open={openMenuBuilder}
         onOpenChange={setOpenMenuBuilder}
         menu={editingMenu}
+        voteCount={editingMenu?.votes.length ?? 0}
         defaultDate={selectedDate}
         todayDate={todayDate}
         defaultDeadline={settings.voting_deadline || DEFAULT_LUNCH_SETTINGS.voting_deadline}
@@ -1759,58 +1924,131 @@ export function LunchRegisterPage({
  * Per-menu breakdown: the tally for every option with the staff behind it,
  * plus anyone who has not voted yet on a menu that is still open.
  */
-function MenuVotesPanel({ menu }: { menu: AdminLunchMenu }) {
-  const total = menu.votes.length
+/**
+ * What the kitchen and Admin & HR actually need off a menu: how many portions
+ * of each dish to prepare, and who gets what. Deliberately not a copy of the
+ * staff poll — percentages and progress bars answer "what is winning", which
+ * is not a question anybody has once voting is done.
+ */
+function MenuVotesPanel({ menu, totalStaff }: { menu: AdminLunchMenu; totalStaff: number }) {
+  const notEating = menu.tallies.find((t) => t.option_id === NOT_EATING_OPTION_ID)
+  const notEatingCount = notEating?.count ?? 0
+  const noAnswer = Math.max(totalStaff - menu.votes.length, 0)
+
+  // Each eater with their full combination, so a two-category day reads
+  // "Afang + Eba" per person instead of two disconnected lists.
+  const eaters = menu.votes
+    .filter((vote) => vote.is_eating)
+    .map((vote) => ({
+      user_id: vote.user_id,
+      full_name: vote.full_name,
+      department: vote.department,
+      combo: menu.groups
+        .map((group) => group.options.find((o) => o.id === vote.selections[group.id])?.name)
+        .filter(Boolean)
+        .join(" + "),
+    }))
+    .sort((a, b) => a.combo.localeCompare(b.combo) || a.full_name.localeCompare(b.full_name))
+
+  if (menu.groups.length === 0) {
+    return (
+      <div className="bg-muted/20 border-b px-6 py-4">
+        <p className="text-muted-foreground text-xs">No dishes on this menu yet.</p>
+      </div>
+    )
+  }
 
   return (
-    <div className="bg-muted/20 space-y-4 border-b px-6 py-4">
-      {menu.groups.length === 0 ? (
-        <p className="text-muted-foreground text-xs">This menu has no options yet.</p>
-      ) : (
-        menu.groups.map((group, index) => {
-          const groupTallies = menu.tallies
-            .filter((t) => t.group_id === group.id)
-            .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+    <div className="bg-muted/20 space-y-5 border-b px-6 py-4">
+      {/* 1 ── the cooking list */}
+      <div className="space-y-2">
+        <p className="text-foreground text-xs font-bold">How many to prepare</p>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {menu.groups.map((group, index) => {
+            const groupTallies = menu.tallies
+              .filter((t) => t.group_id === group.id && t.option_id !== NOT_EATING_OPTION_ID)
+              .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
 
-          return (
-            <div key={group.id} className="space-y-2">
-              {menu.groups.length > 1 && (
-                <p className="text-muted-foreground text-[10px] font-bold tracking-wider uppercase">
-                  {groupHeading(group, index)}
-                </p>
-              )}
-              {groupTallies.map((tally) => {
-                const percent = total > 0 ? Math.round((tally.count / total) * 100) : 0
-                return (
-                  <div key={tally.option_id} className="space-y-1">
-                    <div className="flex items-center justify-between gap-2 text-xs">
-                      <span className="text-foreground font-semibold">{tally.name}</span>
-                      <span className="text-muted-foreground font-mono">
-                        {tally.count} · {percent}%
+            return (
+              <div key={group.id} className="bg-background rounded-lg border p-3">
+                {menu.groups.length > 1 && (
+                  <p className="text-muted-foreground mb-2 text-[10px] font-bold tracking-wider uppercase">
+                    {groupHeading(group, index)}
+                  </p>
+                )}
+                <div className="space-y-1.5">
+                  {groupTallies.map((tally) => (
+                    <div key={tally.option_id} className="flex items-baseline justify-between gap-3">
+                      <span className={cn("text-sm", tally.count > 0 ? "font-semibold" : "text-muted-foreground")}>
+                        {tally.name}
+                      </span>
+                      <span
+                        className={cn(
+                          "shrink-0 font-mono text-sm tabular-nums",
+                          tally.count > 0 ? "text-foreground font-bold" : "text-muted-foreground/50"
+                        )}
+                      >
+                        {tally.count}
                       </span>
                     </div>
-                    {tally.voters.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {tally.voters.map((voter) => (
-                          <Badge key={voter.user_id} variant="outline" className="px-1.5 py-0 text-[10px]">
-                            {voter.full_name}
-                          </Badge>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          )
-        })
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* 2 ── the serving list */}
+      <div className="space-y-2">
+        <p className="text-foreground text-xs font-bold">
+          Who gets what{" "}
+          <span className="text-muted-foreground font-normal">
+            ({eaters.length} {eaters.length === 1 ? "person" : "people"})
+          </span>
+        </p>
+        {eaters.length === 0 ? (
+          <p className="text-muted-foreground text-xs">Nobody has chosen a meal yet.</p>
+        ) : (
+          <div className="bg-background divide-border max-h-64 divide-y overflow-y-auto rounded-lg border">
+            {eaters.map((eater) => (
+              <div key={eater.user_id} className="flex items-center justify-between gap-3 px-3 py-2">
+                <div className="min-w-0">
+                  <span className="text-foreground truncate text-sm font-medium">{eater.full_name}</span>
+                  <div className="text-muted-foreground truncate text-[10px]">{eater.department || "General"}</div>
+                </div>
+                <span className="text-foreground shrink-0 text-xs font-semibold">{eater.combo || "—"}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* 3 ── everyone who is not being cooked for */}
+      {(notEatingCount > 0 || noAnswer > 0) && (
+        <div className="space-y-2">
+          <p className="text-foreground text-xs font-bold">Not being cooked for</p>
+          <div className="text-muted-foreground space-y-1 text-xs">
+            {notEatingCount > 0 && (
+              <p>
+                <span className="text-foreground font-semibold">{notEatingCount}</span> said no:{" "}
+                {notEating?.voters.map((v) => v.full_name).join(", ")}
+              </p>
+            )}
+            {noAnswer > 0 && (
+              <p>
+                <span className="text-foreground font-semibold">{noAnswer}</span> never answered — they are not on the
+                list and will not be charged.
+              </p>
+            )}
+          </div>
+        </div>
       )}
 
-      <div className="text-muted-foreground border-t pt-2 text-xs">
-        {total === 0
-          ? "No votes cast yet."
-          : `${total} ${total === 1 ? "person has" : "people have"} voted. Each vote already writes the day's lunch register entry.`}
-      </div>
+      <p className="text-muted-foreground border-t pt-2 text-xs">
+        Cook for <span className="text-foreground font-semibold">{menu.eatingCount}</span>. Those{" "}
+        {menu.eatingCount === 1 ? "is the person" : "are the people"} charged for lunch on this day.
+      </p>
     </div>
   )
 }
