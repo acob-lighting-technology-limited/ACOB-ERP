@@ -131,6 +131,14 @@
 .admin-shell {
   --primary: var(--admin-primary);
   --primary-foreground: var(--admin-primary-foreground);
+  /* --secondary drives Badge variant="secondary" (the active filter pills) and
+     --accent drives hover states on ghost/outline buttons and menu items. Both
+     default to the green employee brand, so without these they stayed green on
+     gold admin and navy dept routes. */
+  --secondary: var(--admin-primary);
+  --secondary-foreground: var(--admin-primary-foreground);
+  --accent: var(--admin-primary);
+  --accent-foreground: var(--admin-primary-foreground);
 }
 
 /* ── Lead scope mode: deep navy blue theme ─────────────────────────────────
@@ -268,6 +276,10 @@ html {
 html:has(.admin-shell) {
   --primary: var(--admin-primary);
   --primary-foreground: var(--admin-primary-foreground);
+  --secondary: var(--admin-primary);
+  --secondary-foreground: var(--admin-primary-foreground);
+  --accent: var(--admin-primary);
+  --accent-foreground: var(--admin-primary-foreground);
   --ring: var(--admin-primary);
   --scrollbar-thumb: var(--admin-primary);
 }
@@ -275,6 +287,10 @@ html:has(.admin-shell) {
 html:has(.admin-shell[data-scope="lead"]) {
   --primary: var(--lead-primary);
   --primary-foreground: var(--lead-primary-foreground);
+  --secondary: var(--lead-primary);
+  --secondary-foreground: var(--lead-primary-foreground);
+  --accent: var(--lead-primary);
+  --accent-foreground: var(--lead-primary-foreground);
   --ring: var(--lead-primary);
   --scrollbar-thumb: var(--lead-primary);
 }

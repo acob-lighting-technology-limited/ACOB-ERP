@@ -55,8 +55,13 @@ const securityHeaders = [
       `connect-src 'self' ${supabaseHost} wss://itqegqxeqkeogwrvlzlj.supabase.co https://vitals.vercel-insights.com`,
       // Allow embedding only from the same origin
       "frame-ancestors 'self'",
-      // Allow same-origin frame content
-      "frame-src 'self'",
+      // Same-origin frames, plus blob: for the client-side document previews
+      // (Split PDF renders the chosen file from a URL.createObjectURL blob in an
+      // iframe). Without blob: the browser blocks the frame outright and shows
+      // "This content is blocked. Contact the site owner to fix the issue."
+      // blob: here is same-origin, script-created content only — it cannot be
+      // used to pull in a third-party document.
+      "frame-src 'self' blob:",
       // No plugins
       "object-src 'none'",
       // Base URI restricted to self
