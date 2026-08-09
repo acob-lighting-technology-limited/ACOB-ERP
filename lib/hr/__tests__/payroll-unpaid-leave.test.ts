@@ -24,7 +24,10 @@ test("counts only working days inside the period", () => {
 
 test("ignores a holiday that was excluded from the workday set", () => {
   const withHoliday = WORKDAYS.filter((d) => d !== "2026-08-05")
-  const result = countUnpaidLeaveDays([{ user_id: "u1", start_date: "2026-08-03", end_date: "2026-08-07" }], withHoliday)
+  const result = countUnpaidLeaveDays(
+    [{ user_id: "u1", start_date: "2026-08-03", end_date: "2026-08-07" }],
+    withHoliday
+  )
   assert.equal(result.get("u1"), 4)
 })
 
