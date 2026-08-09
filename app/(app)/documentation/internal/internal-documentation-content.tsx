@@ -68,21 +68,23 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
     visibility: "private",
     attachments: [],
   })
-  // "mine" = documents you authored. "general" = documents anyone published to
-  // the whole company (RLS exposes only visibility = 'general' rows here).
-  const [activeTab, setActiveTab] = useState<string>("mine")
+  // "general" = documents anyone published to the whole company.
+  // "mine" = documents you authored.
+  const [activeTab, setActiveTab] = useState<string>("general")
   const [generalDocs, setGeneralDocs] = useState<Documentation[]>([])
   const [isLoadingGeneral, setIsLoadingGeneral] = useState(false)
   const supabase = createClient()
 
-  const stats = useMemo(
-    () => ({
-      total: docs.length,
-      published: docs.filter((doc) => !doc.is_draft).length,
-      draft: docs.filter((doc) => doc.is_draft).length,
-    }),
-    [docs]
-  )
+  const isGeneralTab = activeTab === "general"
+
+  const stats = useMemo(() => {
+    const activeDocs = isGeneralTab ? generalDocs : docs
+    return {
+      total: activeDocs.length,
+      published: activeDocs.filter((doc) => !doc.is_draft).length,
+      draft: activeDocs.filter((doc) => doc.is_draft).length,
+    }
+  }, [docs, generalDocs, isGeneralTab])
 
   const categoryOptions = useMemo(
     () =>
@@ -160,13 +162,12 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
 
   const tabs: DataTableTab[] = useMemo(
     () => [
-      { key: "mine", label: "My Documents" },
       { key: "general", label: "General" },
+      { key: "mine", label: "My Documents" },
     ],
     []
   )
 
-  const isGeneralTab = activeTab === "general"
   const tableData = isGeneralTab ? generalDocs : docs
 
   const filters: DataTableFilter<Documentation>[] = useMemo(
@@ -230,9 +231,7 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
       if (error) throw error
 
       const rows = data || []
-      const authorIds = Array.from(
-        new Set(rows.map((row) => row.user_id).filter((id): id is string => Boolean(id)))
-      )
+      const authorIds = Array.from(new Set(rows.map((row) => row.user_id).filter((id): id is string => Boolean(id))))
 
       const authorNameById = new Map<string, string>()
       if (authorIds.length > 0) {

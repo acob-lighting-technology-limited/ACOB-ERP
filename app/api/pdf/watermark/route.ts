@@ -15,6 +15,11 @@ export async function POST(request: NextRequest) {
     const color = (formData.get("color") as string) || "000000"
     const x = parseFloat(formData.get("x") as string) || 0
     const y = parseFloat(formData.get("y") as string) || 0
+    // Rotation was previously hardcoded to -45 with no way to change it, so every
+    // watermark came out slanted. Default stays -45 so existing behaviour is
+    // unchanged; 0 gives a horizontal watermark.
+    const rotationRaw = parseFloat(formData.get("rotation") as string)
+    const rotation = Number.isFinite(rotationRaw) ? rotationRaw : -45
 
     if (!file) {
       return NextResponse.json({ error: "PDF file is required" }, { status: 400 })
@@ -69,7 +74,7 @@ export async function POST(request: NextRequest) {
           font: font,
           color: textColor,
           opacity: opacity,
-          rotate: degrees(-45),
+          rotate: degrees(rotation),
         })
       } else if (watermarkType === "image") {
         const imageArrayBuffer = await watermarkImage.arrayBuffer()
@@ -93,7 +98,7 @@ export async function POST(request: NextRequest) {
           width: imageDims.width,
           height: imageDims.height,
           opacity: opacity,
-          rotate: degrees(-45),
+          rotate: degrees(rotation),
         })
       }
     }

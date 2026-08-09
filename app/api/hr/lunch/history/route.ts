@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
         .gte("date", start)
         .lt("date", end)
         .order("date", { ascending: false }),
-      dataClient.from("lunch_menus").select("id, date").gte("date", start).lt("date", end),
+      dataClient.from("lunch_menus").select("id, date").is("archived_at", null).gte("date", start).lt("date", end),
     ])
 
     const logs = (logRows || []) as LunchLogRow[]

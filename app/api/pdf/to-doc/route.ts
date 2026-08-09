@@ -5,6 +5,7 @@ import { readFile, unlink, writeFile } from "fs/promises"
 import { existsSync } from "fs"
 import path from "path"
 import { tmpdir } from "os"
+import { hasBinary } from "@/lib/pdf/binaries"
 import { Document, Packer, Paragraph, TextRun, HeadingLevel } from "docx"
 
 const execAsync = promisify(exec)
@@ -31,8 +32,16 @@ export async function POST(request: NextRequest) {
 
     await writeFile(tempFile, buffer)
 
-    const pdfParse = ((await import("pdf-parse")) as any).default || ((await import("pdf-parse")) as any)
-    const pdfData = await pdfParse(buffer)
+    // pdf-parse v2 is class-based; the old v1-style call surfaced as
+    // "DOMMatrix is not defined". See app/api/pdf/extract-text/route.ts.
+    const { PDFParse } = await import("pdf-parse")
+    const parser = new PDFParse({ data: buffer })
+    let pdfData: { text: string }
+    try {
+      pdfData = await parser.getText()
+    } finally {
+      await parser.destroy()
+    }
 
     if (!pdfData.text || pdfData.text.trim().length === 0) {
       return NextResponse.json(
@@ -89,7 +98,7 @@ export async function POST(request: NextRequest) {
       await writeFile(outputFile, docxBuffer)
 
       try {
-        await execAsync("which libreoffice")
+        if (!(await hasBinary("libreoffice"))) throw new Error("libreoffice not found")
         const docOutputFile = path.join(tempDir, `pdf_to_doc_${timestamp}.doc`)
         const convertCommand = `libreoffice --headless --convert-to doc --outdir "${tempDir}" "${outputFile}"`
         await execAsync(convertCommand, {

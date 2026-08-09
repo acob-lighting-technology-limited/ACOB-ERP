@@ -24,6 +24,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { StatCard } from "@/components/ui/stat-card"
 import { Textarea } from "@/components/ui/textarea"
 import { apiFetch } from "@/lib/api-client"
+import { useDepartments } from "@/hooks/use-departments"
+import { getCanonicalDepartmentOrder } from "@/shared/departments"
 
 type ReviewCycle = {
   id: string
@@ -48,19 +50,6 @@ type CbtQuestion = {
   is_active?: boolean
   created_at?: string
 }
-
-const DEPARTMENTS = [
-  "Accounts",
-  "Admin & HR",
-  "Business, Growth and Innovation",
-  "Corporate Services",
-  "IT and Communications",
-  "Operations and Maintenance",
-  "Project",
-  "Regulatory and Compliance",
-  "Technical",
-  "Executive Management",
-] as const
 
 const INITIAL_FORM = {
   review_cycle_id: "",
@@ -154,6 +143,9 @@ function QuestionCard({
 }
 
 export default function AdminPmsCbtQuestionPage() {
+  const { departments: dynamicDepartments } = useDepartments()
+  const departmentsList = dynamicDepartments.length > 0 ? dynamicDepartments : getCanonicalDepartmentOrder()
+
   const router = useRouter()
   const searchParams = useSearchParams()
   const requestedCycleId = searchParams.get("cycleId")
@@ -261,7 +253,7 @@ export default function AdminPmsCbtQuestionPage() {
     {
       key: "department",
       label: "Department",
-      options: DEPARTMENTS.map((dept) => ({ value: dept, label: dept })),
+      options: departmentsList.map((dept) => ({ value: dept, label: dept })),
       placeholder: "All Departments",
     },
     {
@@ -623,7 +615,7 @@ export default function AdminPmsCbtQuestionPage() {
                     <SelectValue placeholder="Select department" />
                   </SelectTrigger>
                   <SelectContent>
-                    {DEPARTMENTS.map((dept) => (
+                    {departmentsList.map((dept) => (
                       <SelectItem key={dept} value={dept}>
                         {dept}
                       </SelectItem>

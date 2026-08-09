@@ -64,13 +64,17 @@ create table if not exists public.lunch_votes (
   id uuid primary key default gen_random_uuid(),
   menu_id uuid not null references public.lunch_menus(id) on delete cascade,
   user_id uuid not null references public.profiles(id) on delete cascade,
+  -- False is the "NO" answer the poll always offers: a deliberate, visible
+  -- "not eating today". It carries no selections and no payroll deduction —
+  -- the only difference from never voting is that colleagues can see it.
+  is_eating boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (menu_id, user_id)
 );
 
 comment on table public.lunch_votes is
-  'One vote per staff member per menu. Casting a vote also writes attendance_lunch_log for that day, which feeds the STAFF LUNCH payroll deduction.';
+  'One vote per staff member per menu. An is_eating vote also writes attendance_lunch_log for that day, which feeds the STAFF LUNCH payroll deduction; a NO vote writes nothing but stays visible on the poll.';
 
 create table if not exists public.lunch_vote_selections (
   id uuid primary key default gen_random_uuid(),

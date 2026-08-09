@@ -9,6 +9,7 @@ import { PromptDialog } from "@/components/ui/prompt-dialog"
 import { Building2, CheckCircle, Clock, FileText, ListFilter, ShieldCheck, Download } from "lucide-react"
 import type { CorrespondenceRecord, CorrespondenceStatus } from "@/types/correspondence"
 import { getCanonicalDepartmentOrder } from "@/shared/departments"
+import { useDepartments } from "@/hooks/use-departments"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
@@ -39,6 +40,9 @@ export function AdminReferenceGeneratorContent({
   lockedDepartment,
   backLinkHref = "/admin",
 }: AdminReferenceGeneratorContentProps) {
+  const { departments: dynamicDepartments } = useDepartments()
+  const availableDepartments = dynamicDepartments.length > 0 ? dynamicDepartments : getCanonicalDepartmentOrder()
+
   const [records, setRecords] = useState<CorrespondenceRecord[]>(initialRecords)
   const [loadingRecordId, setLoadingRecordId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"all" | "external" | "internal">("all")
@@ -53,7 +57,6 @@ export function AdminReferenceGeneratorContent({
   // This table is server-paginated, so the DataTable cannot filter rows itself —
   // every active filter has to be forwarded to the API or it does nothing.
   const [statusFilter, setStatusFilter] = useState("")
-  const [letterTypeFilter, setLetterTypeFilter] = useState("")
   const [yearFilter, setYearFilter] = useState("")
 
   const recordsUrl = useCallback(
@@ -68,8 +71,6 @@ export function AdminReferenceGeneratorContent({
   /** Applies the filter-bar selections that the server understands. */
   const applyServerFilters = useCallback(
     (params: URLSearchParams) => {
-      // An explicit Type filter overrides the active tab.
-      if (letterTypeFilter) params.set("letter_type", letterTypeFilter)
       if (statusFilter) params.set("status", statusFilter)
       if (yearFilter) {
         params.set("date_from", `${yearFilter}-01-01`)
@@ -77,7 +78,7 @@ export function AdminReferenceGeneratorContent({
       }
       return params
     },
-    [letterTypeFilter, statusFilter, yearFilter]
+    [statusFilter, yearFilter]
   )
 
   const [decisionPrompt, setDecisionPrompt] = useState<{
@@ -387,18 +388,6 @@ export function AdminReferenceGeneratorContent({
       filterFn: () => true,
     },
     {
-      key: "letter_type",
-      label: "Type",
-      options: [
-        { value: "internal", label: "Internal" },
-        { value: "external", label: "External" },
-      ],
-      multi: false,
-      // Server does the actual filtering (see onFilterChange -> letterTypeFilter).
-      mode: "custom",
-      filterFn: () => true,
-    },
-    {
       key: "year",
       label: "Year",
       multi: false,
@@ -430,7 +419,7 @@ export function AdminReferenceGeneratorContent({
             mode: "custom" as const,
             // Server does the actual filtering; keep client-side rows intact.
             filterFn: () => true,
-            options: getCanonicalDepartmentOrder().map((name) => ({ value: name, label: name })),
+            options: availableDepartments.map((name) => ({ value: name, label: name })),
           } satisfies DataTableFilter<CorrespondenceRecord>,
         ]),
   ]
@@ -511,21 +500,14 @@ export function AdminReferenceGeneratorContent({
         onFilterChange={(f) => {
           const dept = f.department?.[0] ?? ""
           const status = f.status?.[0] ?? ""
-          const letterType = f.letter_type?.[0] ?? ""
           const year = f.year?.[0] ?? ""
 
-          if (
-            dept === departmentFilter &&
-            status === statusFilter &&
-            letterType === letterTypeFilter &&
-            year === yearFilter
-          ) {
+          if (dept === departmentFilter && status === statusFilter && year === yearFilter) {
             return
           }
 
           setDepartmentFilter(dept)
           setStatusFilter(status)
-          setLetterTypeFilter(letterType)
           setYearFilter(year)
           setPage(1)
         }}

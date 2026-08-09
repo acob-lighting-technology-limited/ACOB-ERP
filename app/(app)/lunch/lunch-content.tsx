@@ -2,7 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { CalendarDays, Check, Clock, Loader2, Trash2, Users, Utensils, Wallet } from "lucide-react"
+import {
+  CalendarDays,
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Loader2,
+  Users,
+  Utensils,
+  Wallet,
+} from "lucide-react"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
@@ -10,18 +21,35 @@ import { EmptyState } from "@/components/ui/patterns"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
 import { cn, getInitials } from "@/lib/utils"
 import { apiFetch } from "@/lib/api-client"
 import { formatWATDate, formatWATTime, toLocalISODate, toLocalYearMonth } from "@/lib/utils/date"
-import { groupHeading, menuHeading, tallyVotes, type LunchMenu, type LunchVoteRecord } from "@/lib/hr/lunch-voting"
+import {
+  groupHeading,
+  menuHeading,
+  notEatingTally,
+  tallyVotes,
+  NOT_EATING_OPTION_ID,
+  type LunchMenu,
+  type LunchOptionTally,
+  type LunchVoteRecord,
+  type LunchVoter,
+} from "@/lib/hr/lunch-voting"
 import { logger } from "@/lib/logger"
-import { LunchReviewDialog } from "./_components/lunch-review-dialog"
 
 const log = logger("lunch-content")
 
-export interface LunchPollData {
+interface LunchDay {
   date: string
+  menu_id: string
+  votingOpen: boolean
+  deadline: string
+}
+
+export interface LunchPollData {
+  today: string
+  selectedDate: string
+  days: LunchDay[]
   menu: LunchMenu | null
   votes: LunchVoteRecord[]
   votingOpen: boolean
@@ -36,8 +64,6 @@ interface HistoryRow {
   company_subsidy: number
   employee_deduction: number
   picks: string[]
-  /** Null when that day predates the menu feature — nothing to review. */
-  menu_id: string | null
 }
 
 interface LunchContentProps {
@@ -46,11 +72,14 @@ interface LunchContentProps {
 }
 
 const TABS: DataTableTab[] = [
-  { key: "today", label: "Today's Menu" },
+  { key: "poll", label: "Menu & Voting" },
   { key: "history", label: "My Lunch History" },
 ]
 
 const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+
+/** How many voter photos the collapsed row shows before the count. */
+const AVATAR_STACK_SIZE = 4
 
 function naira(value: number) {
   return `₦${Number(value).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
@@ -66,21 +95,41 @@ function formatTimeLeft(deadline: string, now: number): string | null {
   return `${Math.max(minutes, 1)}m left`
 }
 
+/** Steps a YYYY-MM-DD date by whole days, staying in WAT. */
+function shiftDate(date: string, days: number): string {
+  const d = new Date(`${date}T12:00:00+01:00`)
+  d.setDate(d.getDate() + days)
+  return toLocalISODate(d)
+}
+
 export function LunchContent({ initialData, currentUserId }: LunchContentProps) {
-  const [activeTab, setActiveTab] = useState<string>("today")
+  const [activeTab, setActiveTab] = useState<string>("poll")
   const [data, setData] = useState<LunchPollData>(initialData)
   const [submitting, setSubmitting] = useState(false)
+  const [loadingDay, setLoadingDay] = useState(false)
   const [now, setNow] = useState(() => Date.now())
 
   const menu = data.menu
   const myVote = useMemo(() => data.votes.find((v) => v.user_id === currentUserId) || null, [data.votes, currentUserId])
 
-  // Draft holds the in-progress picks; it starts from whatever the user
-  // already voted for so re-opening the page shows their current choice.
+  // Draft holds the in-progress answer: which dish per category, or the NO
+  // answer, seeded from whatever this person already voted.
   const [draft, setDraft] = useState<Record<string, string>>(() => myVote?.selections || {})
+  const [draftEating, setDraftEating] = useState<boolean>(() => myVote?.is_eating ?? true)
   useEffect(() => {
     setDraft(myVote?.selections || {})
+    setDraftEating(myVote?.is_eating ?? true)
   }, [myVote])
+
+  // Which option rows have their voter list expanded.
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const toggleExpanded = (id: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
 
   // The deadline can pass while the page sits open — tick so the countdown
   // and the disabled state stay honest without a refresh.
@@ -93,13 +142,36 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
   const votingOpen = data.votingOpen && !deadlinePassed
   const timeLeft = data.deadline && votingOpen ? formatTimeLeft(data.deadline, now) : null
 
-  const tallies = useMemo(() => (menu ? tallyVotes(menu.groups, data.votes) : []), [menu, data.votes])
-  const totalVoters = data.votes.length
+  const tallies = useMemo(
+    () => (menu ? [...tallyVotes(menu.groups, data.votes), notEatingTally(data.votes)] : []),
+    [menu, data.votes]
+  )
+  const totalVotes = data.votes.length
+  // Days that still have a menu worth jumping to, for the empty-day shortcut.
+  const upcomingDays = useMemo(
+    () => data.days.filter((d) => d.date >= data.today && d.date !== data.selectedDate).slice(0, 5),
+    [data.days, data.today, data.selectedDate]
+  )
+
+  /** Switches the poll to another published day. */
+  const selectDay = useCallback(async (date: string) => {
+    setLoadingDay(true)
+    try {
+      const res = await fetch(`/api/hr/lunch?date=${date}`)
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error || "Failed to load that day's menu")
+      setData(payload as LunchPollData)
+      setExpanded(new Set())
+    } catch (err) {
+      log.error({ err: String(err) }, "lunch day load failed")
+      toast.error(err instanceof Error ? err.message : "Failed to load that day's menu")
+    } finally {
+      setLoadingDay(false)
+    }
+  }, [])
 
   // ── History tab ───────────────────────────────────────────────────────────
   const [historyMonth, setHistoryMonth] = useState<string>(() => toLocalYearMonth())
-  const [reviewTarget, setReviewTarget] = useState<{ menuId: string; date: string } | null>(null)
-  const todayIso = toLocalISODate()
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
@@ -141,56 +213,60 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
   const monthDeduction = historyRows.reduce((sum, row) => sum + Number(row.employee_deduction), 0)
 
   // ── Voting ────────────────────────────────────────────────────────────────
-  // A vote must answer every required category — picking a soup without
-  // picking what you eat it with is not a submittable vote. Categories the
-  // admin marked optional can be left blank.
+  // Answering YES means one dish from every required category; NO answers none
+  // of them and costs nothing.
   const missingGroups = useMemo(
-    () => (menu ? menu.groups.filter((g) => g.is_required && !draft[g.id]) : []),
-    [menu, draft]
+    () => (menu && draftEating ? menu.groups.filter((g) => g.is_required && !draft[g.id]) : []),
+    [menu, draft, draftEating]
   )
-  const missingGroup = missingGroups[0]
   const draftMatchesVote =
     myVote != null &&
+    myVote.is_eating === draftEating &&
     Object.keys(draft).length === Object.keys(myVote.selections).length &&
     Object.entries(draft).every(([groupId, optionId]) => myVote.selections[groupId] === optionId)
 
-  async function castVote() {
-    if (!menu || missingGroup) return
-    setSubmitting(true)
-    try {
-      const res = await apiFetch("/api/hr/lunch/vote", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ menuId: menu.id, selections: draft }),
-      })
-      const payload = await res.json()
-      if (!res.ok) throw new Error(payload.error || "Failed to save your vote")
+  /**
+   * Saves the answer as soon as it is complete — there is no submit step.
+   * On a multi-category menu the first pick has nothing to save yet, so it is
+   * held in the draft until every required category has an answer.
+   */
+  const saveVote = useCallback(
+    async (eating: boolean, selections: Record<string, string>) => {
+      if (!menu) return
+      setSubmitting(true)
+      try {
+        const res = await apiFetch("/api/hr/lunch/vote", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ menuId: menu.id, eating, selections }),
+        })
+        const payload = await res.json()
+        if (!res.ok) throw new Error(payload.error || "Failed to save your vote")
 
-      setData((prev) => ({ ...prev, votes: (payload.votes || []) as LunchVoteRecord[] }))
-      toast.success(myVote ? "Your lunch choice was updated." : "Your lunch choice is in.")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save your vote")
-    } finally {
-      setSubmitting(false)
-    }
+        setData((prev) => ({ ...prev, votes: (payload.votes || []) as LunchVoteRecord[] }))
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to save your vote")
+      } finally {
+        setSubmitting(false)
+      }
+    },
+    [menu]
+  )
+
+  function pickOption(groupId: string, optionId: string) {
+    if (!menu) return
+    const next = { ...draft, [groupId]: optionId }
+    setDraftEating(true)
+    setDraft(next)
+
+    const stillMissing = menu.groups.filter((g) => g.is_required && !next[g.id])
+    if (stillMissing.length === 0) void saveVote(true, next)
   }
 
-  async function withdrawVote() {
-    if (!menu) return
-    setSubmitting(true)
-    try {
-      const res = await apiFetch(`/api/hr/lunch/vote?menuId=${menu.id}`, { method: "DELETE" })
-      const payload = await res.json()
-      if (!res.ok) throw new Error(payload.error || "Failed to withdraw your vote")
-
-      setData((prev) => ({ ...prev, votes: (payload.votes || []) as LunchVoteRecord[] }))
-      setDraft({})
-      toast.success("You're off the list for today.")
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to withdraw your vote")
-    } finally {
-      setSubmitting(false)
-    }
+  function pickNotEating() {
+    setDraftEating(false)
+    setDraft({})
+    void saveVote(false, {})
   }
 
   // ── History table ─────────────────────────────────────────────────────────
@@ -217,7 +293,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
     },
     {
       key: "picks",
-      label: "What You Picked",
+      label: "What You Ate",
       accessor: (row) => row.picks.join(" + "),
       render: (row) =>
         row.picks.length > 0 ? (
@@ -278,6 +354,16 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
     },
   ]
 
+  const myPickLabel =
+    myVote && menu
+      ? myVote.is_eating
+        ? menu.groups
+            .map((g) => g.options.find((o) => o.id === myVote.selections[g.id])?.name)
+            .filter(Boolean)
+            .join(" + ") || "Voted"
+        : "Not eating"
+      : "Not voted"
+
   return (
     <DataTablePage
       title="Lunch"
@@ -290,22 +376,15 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
-            title="Your Choice Today"
-            value={
-              myVote && menu
-                ? menu.groups
-                    .map((g) => g.options.find((o) => o.id === myVote.selections[g.id])?.name)
-                    .filter(Boolean)
-                    .join(" + ") || "Voted"
-                : "Not voted"
-            }
+            title="Your Choice"
+            value={myPickLabel}
             icon={Check}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
           />
           <StatCard
-            title="Voted Today"
-            value={totalVoters}
+            title="Voted"
+            value={totalVotes}
             icon={Users}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
@@ -318,7 +397,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
             iconColor="text-amber-500"
           />
           <StatCard
-            title="Your Deduction / Meal"
+            title="Deduction / Meal"
             value={naira(data.pricing.employee_deduction)}
             icon={Wallet}
             iconBgColor="bg-violet-500/10"
@@ -327,182 +406,179 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
         </div>
       }
     >
-      {activeTab === "today" && (
+      {activeTab === "poll" && (
         <div className="space-y-4">
-          {!menu ? (
+          {/* Any date, forwards or back. Voting is still gated by each day's
+              own deadline, so past days open read-only. */}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              disabled={loadingDay}
+              onClick={() => void selectDay(shiftDate(data.selectedDate, -1))}
+              aria-label="Previous day"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <input
+              type="date"
+              value={data.selectedDate}
+              disabled={loadingDay}
+              onChange={(e) => e.target.value && void selectDay(e.target.value)}
+              className="border-input bg-background h-9 rounded-md border px-3 py-1.5 text-sm"
+              aria-label="Pick a date"
+            />
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 shrink-0"
+              disabled={loadingDay}
+              onClick={() => void selectDay(shiftDate(data.selectedDate, 1))}
+              aria-label="Next day"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+            {data.selectedDate !== data.today && (
+              <Button variant="ghost" size="sm" disabled={loadingDay} onClick={() => void selectDay(data.today)}>
+                Today
+              </Button>
+            )}
+          </div>
+
+          {loadingDay ? (
+            <div className="text-muted-foreground flex items-center justify-center gap-3 p-12">
+              <Loader2 className="h-5 w-5 animate-spin" />
+              <span className="text-sm">Loading menu…</span>
+            </div>
+          ) : !menu ? (
             <EmptyState
               icon={Utensils}
-              title="No lunch menu today"
-              description={`Nothing has been published for ${formatWATDate(data.date, { weekday: "long", day: "numeric", month: "long" })}. Lunch normally runs on ${data.eatingDays.join(", ")} — check back when Admin & HR puts the menu up.`}
+              title={`No menu for ${formatWATDate(data.selectedDate, { weekday: "long", day: "numeric", month: "long" })}`}
+              description={
+                upcomingDays.length > 0
+                  ? `Nothing published for this day. Menus are up for ${upcomingDays.map((d) => formatWATDate(d.date, { weekday: "short", day: "numeric", month: "short" })).join(", ")}.`
+                  : `Nothing published for this day. Lunch normally runs on ${data.eatingDays.join(", ")} — Admin & HR usually put the menu up a day or two ahead, and you'll get a notification when they do.`
+              }
+              action={
+                upcomingDays.length > 0 ? (
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {upcomingDays.map((day) => (
+                      <Button key={day.date} size="sm" variant="outline" onClick={() => void selectDay(day.date)}>
+                        {formatWATDate(day.date, { weekday: "short", day: "numeric", month: "short" })}
+                      </Button>
+                    ))}
+                  </div>
+                ) : undefined
+              }
             />
           ) : (
-            <>
-              <Card>
-                <CardHeader className="pb-3">
-                  <div className="flex flex-wrap items-start justify-between gap-2">
-                    <div>
-                      <CardTitle className="flex items-center gap-2 text-base">
-                        <Utensils className="text-primary h-4 w-4" />
-                        {menuHeading(menu.date, data.date)}
-                      </CardTitle>
-                      <p className="text-muted-foreground mt-1 text-xs">
-                        {formatWATDate(menu.date, { weekday: "long", day: "numeric", month: "long" })}
-                        {data.deadline && (
-                          <>
-                            {" · "}
-                            {votingOpen
-                              ? `Voting closes ${formatWATTime(data.deadline)}${timeLeft ? ` (${timeLeft})` : ""}`
-                              : `Voting closed at ${formatWATTime(data.deadline)}`}
-                          </>
-                        )}
-                      </p>
-                    </div>
-                    <Badge
-                      className={cn(
-                        "border-0",
-                        votingOpen
-                          ? "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
-                          : "bg-red-500/10 text-red-500 hover:bg-red-500/20"
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Utensils className="text-primary h-4 w-4" />
+                      {menuHeading(menu.date, data.today)}
+                    </CardTitle>
+                    <p className="text-muted-foreground mt-1 text-xs">
+                      {formatWATDate(menu.date, { weekday: "long", day: "numeric", month: "long" })}
+                      {data.deadline && (
+                        <>
+                          {" · "}
+                          {votingOpen
+                            ? `Closes ${formatWATTime(data.deadline)}${timeLeft ? ` (${timeLeft})` : ""}`
+                            : `Closed at ${formatWATTime(data.deadline)}`}
+                        </>
                       )}
-                    >
-                      {votingOpen ? "Open for voting" : "Closed"}
-                    </Badge>
+                    </p>
                   </div>
-                </CardHeader>
-
-                <CardContent className="space-y-5">
-                  {menu.groups.map((group, index) => (
-                    <div key={group.id} className="space-y-2">
-                      {/* One list needs no heading — the dishes speak for
-                          themselves. Headings appear only to tell several
-                          lists apart (Soup vs Swallow). */}
-                      {menu.groups.length > 1 && (
-                        <div className="flex items-baseline gap-2">
-                          <span className="text-foreground text-sm font-semibold">{groupHeading(group, index)}</span>
-                          <span className="text-muted-foreground text-[11px] tracking-wider uppercase">
-                            Step {index + 1} of {menu.groups.length} · pick one
-                          </span>
-                          {!group.is_required && (
-                            <span className="text-muted-foreground text-[11px] italic">
-                              optional — you can skip this
-                            </span>
-                          )}
-                          {draft[group.id] && <Check className="h-3.5 w-3.5 shrink-0 text-emerald-500" />}
-                        </div>
-                      )}
-
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {group.options.map((option) => {
-                          const tally = tallies.find((t) => t.option_id === option.id)
-                          const count = tally?.count || 0
-                          const percent = totalVoters > 0 ? Math.round((count / totalVoters) * 100) : 0
-                          const selected = draft[group.id] === option.id
-                          const disabled = !votingOpen || !option.is_available || submitting
-
-                          return (
-                            <button
-                              key={option.id}
-                              type="button"
-                              disabled={disabled}
-                              onClick={() => setDraft((prev) => ({ ...prev, [group.id]: option.id }))}
-                              className={cn(
-                                "rounded-lg border-2 p-3 text-left transition-colors",
-                                selected ? "border-primary bg-primary/5" : "border-border hover:bg-muted/40",
-                                disabled && "cursor-not-allowed opacity-60"
-                              )}
-                            >
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5">
-                                    {selected && <Check className="text-primary h-3.5 w-3.5 shrink-0" />}
-                                    <span className="text-foreground truncate text-sm font-semibold">
-                                      {option.name}
-                                    </span>
-                                  </div>
-                                  {option.description && (
-                                    <p className="text-muted-foreground mt-0.5 text-xs">{option.description}</p>
-                                  )}
-                                  {!option.is_available && (
-                                    <p className="mt-0.5 text-xs font-medium text-red-500">Finished</p>
-                                  )}
-                                </div>
-                                <span className="text-muted-foreground shrink-0 text-xs font-semibold">
-                                  {count} {count === 1 ? "vote" : "votes"}
-                                </span>
-                              </div>
-                              <Progress value={percent} className="mt-2 h-1.5" />
-                            </button>
-                          )
-                        })}
-                      </div>
-                    </div>
-                  ))}
-
-                  {menu.groups.length > 1 && (
-                    <div className="bg-muted/40 rounded-lg border p-3 text-xs">
-                      Pick one from each —{" "}
-                      <span className="font-semibold">
-                        {menu.groups.map((g, i) => groupHeading(g, i)).join(" and ")}
-                      </span>
-                      . Your vote only counts once{" "}
-                      {menu.groups
-                        .map((g, i) => ({ label: groupHeading(g, i), required: g.is_required }))
-                        .filter((g) => g.required)
-                        .map((g) => g.label)
-                        .join(" and ")}{" "}
-                      are chosen.
-                    </div>
-                  )}
-
-                  <div className="bg-muted/40 rounded-lg border p-3 text-xs">
-                    Voting confirms your meal for the day —{" "}
-                    <span className="font-semibold text-red-600">{naira(data.pricing.employee_deduction)}</span> will be
-                    deducted from your salary and the company covers{" "}
-                    <span className="font-semibold text-emerald-600">{naira(data.pricing.company_subsidy)}</span>. You
-                    can change or withdraw your choice until the deadline.
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      onClick={() => void castVote()}
-                      disabled={!votingOpen || !!missingGroup || submitting || draftMatchesVote}
-                    >
-                      {submitting ? (
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      ) : (
-                        <Check className="mr-2 h-4 w-4" />
-                      )}
-                      {myVote ? "Update my choice" : "Cast my vote"}
-                    </Button>
-                    {myVote && (
-                      <Button
-                        variant="outline"
-                        onClick={() => void withdrawVote()}
-                        disabled={!votingOpen || submitting}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        I&apos;m not eating
-                      </Button>
+                  <Badge
+                    className={cn(
+                      "border-0",
+                      votingOpen
+                        ? "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
+                        : "bg-red-500/10 text-red-500 hover:bg-red-500/20"
                     )}
-                    {missingGroups.length > 0 && votingOpen && (
-                      <span className="text-muted-foreground text-xs">
+                  >
+                    {votingOpen ? "Open for voting" : "Closed"}
+                  </Badge>
+                </div>
+              </CardHeader>
+
+              <CardContent className="space-y-4">
+                {menu.groups.map((group, index) => (
+                  <div key={group.id} className="space-y-1">
+                    {/* One list needs no heading — headings only tell several
+                        lists apart (Soup vs Swallow). */}
+                    {menu.groups.length > 1 && (
+                      <div className="flex items-baseline gap-2 pb-1">
+                        <span className="text-foreground text-sm font-semibold">{groupHeading(group, index)}</span>
+                        <span className="text-muted-foreground text-[11px] tracking-wider uppercase">
+                          Step {index + 1} of {menu.groups.length} · pick one
+                        </span>
+                        {!group.is_required && (
+                          <span className="text-muted-foreground text-[11px] italic">optional</span>
+                        )}
+                      </div>
+                    )}
+
+                    {group.options.map((option) => (
+                      <PollRow
+                        key={option.id}
+                        label={option.name}
+                        description={option.description}
+                        tally={tallies.find((t) => t.option_id === option.id)}
+                        totalVotes={totalVotes}
+                        selected={draftEating && draft[group.id] === option.id}
+                        disabled={!votingOpen || !option.is_available || submitting}
+                        unavailable={!option.is_available}
+                        currentUserId={currentUserId}
+                        expanded={expanded.has(option.id)}
+                        onToggleExpanded={() => toggleExpanded(option.id)}
+                        onSelect={() => pickOption(group.id, option.id)}
+                      />
+                    ))}
+                  </div>
+                ))}
+
+                {/* The system's own answer. Opting out costs nothing, but
+                    saying so out loud is visible to everyone. */}
+                <div className="border-t pt-3">
+                  <PollRow
+                    label="NO — I'm not eating"
+                    description={null}
+                    tally={tallies.find((t) => t.option_id === NOT_EATING_OPTION_ID)}
+                    totalVotes={totalVotes}
+                    selected={!draftEating}
+                    disabled={!votingOpen || submitting}
+                    unavailable={false}
+                    currentUserId={currentUserId}
+                    expanded={expanded.has(NOT_EATING_OPTION_ID)}
+                    onToggleExpanded={() => toggleExpanded(NOT_EATING_OPTION_ID)}
+                    onSelect={pickNotEating}
+                  />
+                </div>
+
+                {(missingGroups.length > 0 || !votingOpen || submitting) && (
+                  <div className="text-muted-foreground flex flex-wrap items-center gap-2 text-xs">
+                    {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                    {submitting ? (
+                      <span>Saving…</span>
+                    ) : missingGroups.length > 0 && votingOpen ? (
+                      <span>
                         Still to pick:{" "}
-                        <span className="font-semibold">
+                        <span className="text-foreground font-semibold">
                           {missingGroups.map((g) => groupHeading(g, menu.groups.indexOf(g))).join(", ")}
                         </span>
                       </span>
-                    )}
-                    {!votingOpen && (
-                      <span className="text-muted-foreground text-xs">
-                        Voting has closed for today. Speak to Admin &amp; HR if you need a change.
-                      </span>
-                    )}
+                    ) : !votingOpen ? (
+                      <span>Voting has closed for this day. Speak to Admin &amp; HR if you need a change.</span>
+                    ) : null}
                   </div>
-                </CardContent>
-              </Card>
-
-              <VoteResults menu={menu} votes={data.votes} currentUserId={currentUserId} />
-            </>
+                )}
+              </CardContent>
+            </Card>
           )}
         </div>
       )}
@@ -548,148 +624,168 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
             error={historyError}
             onRetry={() => void loadHistory(historyMonth)}
             pagination={{ pageSize: 31 }}
-            rowActions={[
-              {
-                label: "Review meal",
-                onClick: (row) => setReviewTarget({ menuId: row.menu_id!, date: row.date }),
-                // Only days that had a menu, and only once they are in the past.
-                hidden: (row) => !row.menu_id || row.date >= todayIso,
-              },
-            ]}
           />
         </div>
       )}
-
-      <LunchReviewDialog
-        open={reviewTarget !== null}
-        onOpenChange={(open) => !open && setReviewTarget(null)}
-        menuId={reviewTarget?.menuId ?? null}
-        date={reviewTarget?.date ?? null}
-      />
     </DataTablePage>
   )
 }
 
 /**
- * WhatsApp-poll style results: every option with its share of the vote and the
- * colleagues behind it, plus the full list of who is eating what.
+ * One answer in the poll, laid out like a WhatsApp poll row: radio, label,
+ * a stack of the most recent voters' photos with the count, and a bar. Tapping
+ * the count expands the full list of who picked it.
  */
-function VoteResults({
-  menu,
-  votes,
+function PollRow({
+  label,
+  description,
+  tally,
+  totalVotes,
+  selected,
+  disabled,
+  unavailable,
   currentUserId,
+  expanded,
+  onToggleExpanded,
+  onSelect,
 }: {
-  menu: LunchMenu
-  votes: LunchVoteRecord[]
+  label: string
+  description: string | null
+  tally: LunchOptionTally | undefined
+  totalVotes: number
+  selected: boolean
+  disabled: boolean
+  unavailable: boolean
   currentUserId: string
+  expanded: boolean
+  onToggleExpanded: () => void
+  onSelect: () => void
 }) {
-  const tallies = useMemo(() => tallyVotes(menu.groups, votes), [menu, votes])
-  const total = votes.length
+  const count = tally?.count ?? 0
+  const voters = tally?.voters ?? []
+  const percent = totalVotes > 0 ? Math.round((count / totalVotes) * 100) : 0
 
   return (
-    <div className="grid gap-4 lg:grid-cols-2">
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Users className="h-4 w-4 text-blue-500" />
-            Results
-          </CardTitle>
-          <p className="text-muted-foreground text-xs">
-            {total === 0 ? "Nobody has voted yet." : `${total} ${total === 1 ? "person has" : "people have"} voted`}
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4 pt-0">
-          {menu.groups.map((group, index) => {
-            const groupTallies = tallies
-              .filter((t) => t.group_id === group.id)
-              .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
-
-            return (
-              <div key={group.id} className="space-y-2">
-                {menu.groups.length > 1 && (
-                  <p className="text-muted-foreground text-[11px] font-bold tracking-wider uppercase">
-                    {groupHeading(group, index)}
-                  </p>
-                )}
-                {groupTallies.map((tally) => {
-                  const percent = total > 0 ? Math.round((tally.count / total) * 100) : 0
-                  return (
-                    <div key={tally.option_id} className="space-y-1">
-                      <div className="flex items-center justify-between gap-2 text-xs">
-                        <span className="text-foreground truncate font-medium">{tally.name}</span>
-                        <span className="text-muted-foreground shrink-0 font-semibold">
-                          {tally.count} · {percent}%
-                        </span>
-                      </div>
-                      <Progress value={percent} className="h-1.5" />
-                      {tally.voters.length > 0 && (
-                        <div className="flex flex-wrap gap-1 pt-0.5">
-                          {tally.voters.map((voter) => (
-                            <Badge
-                              key={voter.user_id}
-                              variant="outline"
-                              className={cn(
-                                "px-1.5 py-0 text-[10px] font-medium",
-                                voter.user_id === currentUserId && "border-primary text-primary"
-                              )}
-                            >
-                              {voter.user_id === currentUserId ? "You" : voter.full_name}
-                            </Badge>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            )
-          })}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="flex items-center gap-2 text-sm">
-            <Utensils className="h-4 w-4 text-emerald-500" />
-            Who&apos;s Eating
-          </CardTitle>
-          <p className="text-muted-foreground text-xs">Everyone on today&apos;s list and what they chose</p>
-        </CardHeader>
-        <CardContent className="pt-0">
-          {votes.length === 0 ? (
-            <p className="text-muted-foreground py-6 text-center text-xs">No votes yet — be the first.</p>
-          ) : (
-            <div className="max-h-80 space-y-1 overflow-y-auto pr-1">
-              {votes.map((vote) => {
-                const picks = menu.groups
-                  .map((g) => g.options.find((o) => o.id === vote.selections[g.id])?.name)
-                  .filter(Boolean)
-                  .join(" + ")
-
-                return (
-                  <div
-                    key={vote.user_id}
-                    className="hover:bg-muted/30 flex items-center justify-between gap-2 rounded px-1.5 py-1.5"
-                  >
-                    <div className="flex min-w-0 items-center gap-2">
-                      <span className="bg-primary/10 text-primary flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold">
-                        {getInitials(undefined, vote.full_name.split(" ")[0], vote.full_name.split(" ")[1])}
-                      </span>
-                      <div className="min-w-0">
-                        <div className="truncate text-xs font-semibold">
-                          {vote.user_id === currentUserId ? "You" : vote.full_name}
-                        </div>
-                        <div className="text-muted-foreground truncate text-[10px]">{vote.department || "General"}</div>
-                      </div>
-                    </div>
-                    <span className="text-muted-foreground shrink-0 truncate text-xs">{picks || "—"}</span>
-                  </div>
-                )
-              })}
-            </div>
+    <div className="py-1.5">
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={onSelect}
+          className={cn(
+            "flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-1 text-left transition-colors",
+            !disabled && "hover:bg-muted/40",
+            disabled && "cursor-not-allowed opacity-60"
           )}
-        </CardContent>
-      </Card>
+          aria-pressed={selected}
+        >
+          <span
+            className={cn(
+              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
+              selected ? "border-primary bg-primary" : "border-muted-foreground/40"
+            )}
+          >
+            {selected && <Check className="text-primary-foreground h-3 w-3" />}
+          </span>
+          <span className="min-w-0">
+            <span className="text-foreground block truncate text-sm font-medium">{label}</span>
+            {description && <span className="text-muted-foreground block truncate text-xs">{description}</span>}
+            {unavailable && <span className="block text-xs font-medium text-red-500">Finished</span>}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          disabled={count === 0}
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 rounded-md px-1 py-1",
+            count > 0 ? "hover:bg-muted/40" : "cursor-default"
+          )}
+          aria-expanded={expanded}
+          aria-label={count > 0 ? `${count} voted — show who` : "No votes"}
+        >
+          <AvatarStack voters={voters} currentUserId={currentUserId} />
+          <span className="text-foreground text-sm font-semibold tabular-nums">{count}</span>
+          {count > 0 && (
+            <ChevronDown
+              className={cn("text-muted-foreground h-3.5 w-3.5 transition-transform", expanded && "rotate-180")}
+            />
+          )}
+        </button>
+      </div>
+
+      <div className="bg-muted mt-1.5 h-1.5 overflow-hidden rounded-full">
+        <div
+          className="bg-primary h-full rounded-full transition-[width] duration-300"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+
+      {expanded && voters.length > 0 && (
+        <div className="mt-2 space-y-1 pl-9">
+          {voters.map((voter) => (
+            <div key={voter.user_id} className="flex items-center gap-2">
+              <VoterAvatar voter={voter} className="h-6 w-6 text-[10px]" />
+              <span className="text-muted-foreground truncate text-xs">
+                {voter.user_id === currentUserId ? "You" : voter.full_name}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
+  )
+}
+
+/** Overlapping photos of the most recent voters, newest first. */
+function AvatarStack({ voters, currentUserId }: { voters: LunchVoter[]; currentUserId: string }) {
+  if (voters.length === 0) return null
+  const shown = voters.slice(0, AVATAR_STACK_SIZE)
+
+  return (
+    <div className="flex items-center -space-x-2">
+      {shown.map((voter) => (
+        <VoterAvatar
+          key={voter.user_id}
+          voter={voter}
+          className={cn("ring-background h-6 w-6 text-[9px] ring-2", voter.user_id === currentUserId && "ring-primary")}
+        />
+      ))}
+      {voters.length > shown.length && (
+        <span className="bg-muted text-muted-foreground ring-background flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-semibold ring-2">
+          +{voters.length - shown.length}
+        </span>
+      )}
+    </div>
+  )
+}
+
+function VoterAvatar({ voter, className }: { voter: LunchVoter; className?: string }) {
+  const [first, last] = voter.full_name.split(" ")
+
+  if (voter.avatar_url) {
+    return (
+      // Signed Supabase URLs are not on the configured next/image domains, so
+      // a plain img keeps this from failing at runtime.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={voter.avatar_url}
+        alt={voter.full_name}
+        className={cn("shrink-0 rounded-full object-cover", className)}
+      />
+    )
+  }
+
+  return (
+    <span
+      className={cn(
+        "bg-primary/10 text-primary flex shrink-0 items-center justify-center rounded-full font-semibold",
+        className
+      )}
+      title={voter.full_name}
+    >
+      {getInitials(undefined, first, last)}
+    </span>
   )
 }

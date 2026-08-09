@@ -53,6 +53,9 @@ import {
   Trash2,
   FolderUp,
   FileText,
+  FolderX,
+  ArrowLeft,
+  Home,
 } from "lucide-react"
 import { BreadcrumbNav } from "@/components/onedrive/breadcrumb-nav"
 import { FileIcon, getExtensionColor } from "@/components/onedrive/file-icon"
@@ -63,7 +66,7 @@ import { toast } from "sonner"
 import JSZip from "jszip"
 import { saveAs } from "file-saver"
 import { toLocalISODate, formatWATDateTime } from "@/lib/utils/date"
-import { apiFetch } from "@/lib/api-client"
+import { apiFetch, readCsrfCookie, readDeptContext } from "@/lib/api-client"
 
 interface DepartmentDocumentsBrowserProps {
   initialPath?: string
@@ -88,6 +91,14 @@ interface UploadCandidate {
   file: File
   label: string
   targetPath: string
+  /**
+   * Base name to store the file under, derived from the relative path.
+   *
+   * Sent explicitly rather than relying on file.name: for a directory upload
+   * the browser may set the multipart filename to the full relative path, and
+   * the API rejects any name containing a slash.
+   */
+  fileName: string
 }
 
 interface UploadPlan {
@@ -511,9 +522,18 @@ export function DepartmentDocumentsBrowser({
         formData.set("accessMode", accessMode)
         if (lockedDepartment) formData.set("department", lockedDepartment)
         formData.set("file", candidate.file)
+        formData.set("fileName", candidate.fileName)
 
         const xhr = new XMLHttpRequest()
         xhr.open("POST", "/api/onedrive")
+
+        // This upload uses XHR rather than apiFetch so it can report progress,
+        // so it has to attach the same headers apiFetch would. Without the CSRF
+        // token middleware rejects the request outright with 403.
+        const csrfToken = readCsrfCookie()
+        if (csrfToken) xhr.setRequestHeader("x-csrf-token", csrfToken)
+        const deptContext = readDeptContext()
+        if (deptContext) xhr.setRequestHeader("x-dept-context", deptContext)
 
         xhr.upload.onprogress = (event) => {
           if (!event.lengthComputable) return
@@ -612,6 +632,7 @@ export function DepartmentDocumentsBrowser({
           file: source.file,
           label: cleanedPath || fileName,
           targetPath,
+          fileName,
         }
       })
 
@@ -835,17 +856,68 @@ export function DepartmentDocumentsBrowser({
     </div>
   )
 
-  const renderErrorState = () => (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <AlertCircle className="mb-4 h-16 w-16 text-red-500/50" />
-      <h3 className="text-lg font-medium text-red-600">Error Loading Files</h3>
-      <p className="text-muted-foreground mt-1 max-w-md text-sm">{error}</p>
-      <Button onClick={handleRefresh} variant="outline" className="mt-4">
-        <RefreshCw className="mr-2 h-4 w-4" />
-        Try Again
-      </Button>
-    </div>
-  )
+  const renderErrorState = () => {
+    const isSubFolder = currentPath !== "/" && currentPath !== normalizedInitialPath
+    const folderName = basename(currentPath)
+    const parentPath = dirname(currentPath)
+    const parentName = basename(parentPath) || rootLabel
+
+    const isMissingFolder =
+      isSubFolder || /not found|itemnotfound|404|does not exist|fetch failed|failed to fetch/i.test(error || "")
+
+    if (isMissingFolder && isSubFolder) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <div className="mb-4 rounded-full bg-amber-500/10 p-4 text-amber-500">
+            <FolderX className="h-12 w-12" />
+          </div>
+          <h3 className="text-foreground text-xl font-semibold">Folder Not Found or Deleted</h3>
+          <p className="text-muted-foreground mt-2 max-w-md text-sm">
+            The folder <span className="text-foreground font-semibold">&quot;{folderName}&quot;</span> could not be
+            loaded. It may have been deleted, moved, or renamed.
+          </p>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <Button onClick={() => navigateToFolder(parentPath)} className="gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Go Back to {parentName}
+            </Button>
+            <Button onClick={() => navigateToFolder(normalizedInitialPath)} variant="outline" className="gap-2">
+              <Home className="h-4 w-4" />
+              Library Root
+            </Button>
+            <Button onClick={handleRefresh} variant="ghost" size="sm" className="text-muted-foreground">
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              Retry
+            </Button>
+          </div>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <div className="mb-4 rounded-full bg-red-500/10 p-4 text-red-500">
+          <AlertCircle className="h-12 w-12" />
+        </div>
+        <h3 className="text-foreground text-xl font-semibold">Unable to Load Files</h3>
+        <p className="text-muted-foreground mt-2 max-w-md text-sm">
+          {error || "An error occurred while communicating with the cloud repository."}
+        </p>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+          <Button onClick={handleRefresh} className="gap-2">
+            <RefreshCw className="h-4 w-4" />
+            Try Again
+          </Button>
+          {isSubFolder && (
+            <Button onClick={() => navigateToFolder(parentPath)} variant="outline" className="gap-2">
+              <ArrowLeft className="h-4 w-4" />
+              Go Back to {parentName}
+            </Button>
+          )}
+        </div>
+      </div>
+    )
+  }
 
   const renderListView = () => (
     <Table>

@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { apiFetch } from "@/lib/api-client"
 import { Upload, Download, Loader2, FileImage, FileVideo, RefreshCw } from "lucide-react"
 
 const IMAGE_FORMATS = [
@@ -80,7 +81,7 @@ export function MediaConverter() {
       formData.append("format", format)
 
       const endpoint = converterType === "image" ? "/api/convert/image" : "/api/convert/video"
-      const response = await fetch(endpoint, {
+      const response = await apiFetch(endpoint, {
         method: "POST",
         body: formData,
       })

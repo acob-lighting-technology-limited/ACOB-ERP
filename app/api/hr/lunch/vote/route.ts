@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { loadMenuById, loadVotesForMenu } from "@/lib/hr/lunch-menu-server"
-import { isVotingOpen, loadLunchSettings, lunchCostBreakdown, tallyVotes } from "@/lib/hr/lunch-voting"
+import { isVotingOpen, loadLunchSettings, lunchCostBreakdown, notEatingTally, tallyVotes } from "@/lib/hr/lunch-voting"
 import { logger } from "@/lib/logger"
 
 const log = logger("api-hr-lunch-vote")
@@ -21,9 +21,16 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser()
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    const body = (await request.json()) as { menuId?: string; selections?: Record<string, string> }
+    const body = (await request.json()) as {
+      menuId?: string
+      eating?: boolean
+      selections?: Record<string, string>
+    }
     const menuId = body.menuId
-    const selections = body.selections
+    // The poll's "NO" answer. It stores a vote so colleagues can see the
+    // person opted out, but selects nothing and is never charged.
+    const eating = body.eating !== false
+    const selections = eating ? body.selections : {}
 
     if (!menuId || !selections || typeof selections !== "object") {
       return NextResponse.json({ error: "menuId and selections are required" }, { status: 400 })
@@ -43,8 +50,9 @@ export async function POST(request: NextRequest) {
     // A vote must answer every REQUIRED category. A two-category day (soup +
     // what you eat it with) is not a valid vote with only the soup — such a
     // partial vote is rejected outright rather than stored. Categories the
-    // admin marked optional may be left unanswered.
-    const missing = menu.groups.filter((group) => group.is_required && !selections[group.id])
+    // admin marked optional may be left unanswered. A NO vote answers none of
+    // them by definition, so the check is skipped entirely.
+    const missing = eating ? menu.groups.filter((group) => group.is_required && !selections[group.id]) : []
     if (missing.length > 0) {
       const names = missing.map((g) => g.name)
       const list = names.length === 1 ? names[0] : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`
@@ -75,7 +83,7 @@ export async function POST(request: NextRequest) {
     const { data: voteRow, error: voteError } = await dataClient
       .from("lunch_votes")
       .upsert(
-        { menu_id: menu.id, user_id: user.id, updated_at: new Date().toISOString() },
+        { menu_id: menu.id, user_id: user.id, is_eating: eating, updated_at: new Date().toISOString() },
         { onConflict: "menu_id,user_id" }
       )
       .select("id")
@@ -97,21 +105,34 @@ export async function POST(request: NextRequest) {
       if (insertError) throw new Error(`Failed to save selections: ${insertError.message}`)
     }
 
-    // Voting commits the meal, so mirror it into the payroll-facing register.
-    const { cost, companySubsidy, employeeDeduction } = lunchCostBreakdown(settings)
-    const { error: logError } = await dataClient.from("attendance_lunch_log").upsert(
-      {
-        user_id: user.id,
-        date: menu.date,
-        cost,
-        company_subsidy: companySubsidy,
-        employee_deduction: employeeDeduction,
-        created_by: user.id,
-      },
-      { onConflict: "user_id,date" }
-    )
-    if (logError) {
-      log.error({ err: logError.message, userId: user.id, date: menu.date }, "lunch register sync failed")
+    // Voting to eat commits the meal, so mirror it into the payroll-facing
+    // register. Answering NO clears any row a previous yes-vote left behind —
+    // that is what makes NO cost nothing.
+    if (eating) {
+      const { cost, companySubsidy, employeeDeduction } = lunchCostBreakdown(settings)
+      const { error: logError } = await dataClient.from("attendance_lunch_log").upsert(
+        {
+          user_id: user.id,
+          date: menu.date,
+          cost,
+          company_subsidy: companySubsidy,
+          employee_deduction: employeeDeduction,
+          created_by: user.id,
+        },
+        { onConflict: "user_id,date" }
+      )
+      if (logError) {
+        log.error({ err: logError.message, userId: user.id, date: menu.date }, "lunch register sync failed")
+      }
+    } else {
+      const { error: logError } = await dataClient
+        .from("attendance_lunch_log")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("date", menu.date)
+      if (logError) {
+        log.error({ err: logError.message, userId: user.id, date: menu.date }, "lunch register cleanup failed")
+      }
     }
 
     const votes = await loadVotesForMenu(dataClient, menu.id)
@@ -119,7 +140,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       votes,
-      tallies: tallyVotes(menu.groups, votes),
+      tallies: [...tallyVotes(menu.groups, votes), notEatingTally(votes)],
       myVote: votes.find((v) => v.user_id === user.id) || null,
     })
   } catch (error) {
@@ -169,7 +190,7 @@ export async function DELETE(request: NextRequest) {
     return NextResponse.json({
       success: true,
       votes,
-      tallies: tallyVotes(menu.groups, votes),
+      tallies: [...tallyVotes(menu.groups, votes), notEatingTally(votes)],
       myVote: null,
     })
   } catch (error) {

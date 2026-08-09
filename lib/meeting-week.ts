@@ -56,6 +56,45 @@ export function getCurrentOfficeWeek(date: Date = new Date()): { week: number; y
   return getOfficeWeekFromDate(date)
 }
 
+/**
+ * Day of the office week (1 = start day, 5 = Friday when the year starts on a
+ * Monday) on which reporting rolls forward to the next week.
+ */
+const REPORTING_ROLLOVER_DAY = 5
+
+/** 1-based position of `date` within its office week. */
+export function getOfficeWeekDay(date: Date = new Date()): number {
+  const { week, year } = getOfficeWeekFromDate(date)
+  const weekStart = getOfficeWeekMonday(week, year)
+  const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate())
+  const diffDays = Math.round((startOfDay.getTime() - weekStart.getTime()) / (24 * 60 * 60 * 1000))
+  return diffDays + 1
+}
+
+/**
+ * The office week people are currently *reporting on*, which is not always the
+ * week they are living in.
+ *
+ * A week's general meeting is the Monday of that week, and reports are filed
+ * ahead of it — in practice from the Friday before. So from the rollover day
+ * onward the working week is the next one; before it, the current week's
+ * meeting has already happened and that week is still the subject.
+ *
+ * Use this for anything that should follow the reporting cycle (which week a
+ * page opens on, which week a new report is filed against) rather than
+ * getCurrentOfficeWeek, so the view and the submission can never disagree.
+ *
+ * Counted as a position within the office week rather than a fixed weekday, so
+ * it still means "the last three days" if a year ever starts on another day.
+ */
+export function getReportingOfficeWeek(date: Date = new Date()): { week: number; year: number } {
+  if (getOfficeWeekDay(date) < REPORTING_ROLLOVER_DAY) {
+    return getOfficeWeekFromDate(date)
+  }
+  const nextWeek = addDays(date, 7)
+  return getOfficeWeekFromDate(nextWeek)
+}
+
 export function getOfficeWeekMonday(week: number, year: number): Date {
   const yearStart = getOfficeYearStart(year)
   return addDays(yearStart, (week - 1) * 7)

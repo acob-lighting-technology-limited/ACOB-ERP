@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { toLocalISODate } from "@/lib/utils/date"
 
 /**
  * Shared types and helpers for the lunch menu voting flow.
@@ -71,6 +70,8 @@ export interface LunchMenu {
   voting_deadline: string | null
   published_at: string | null
   closed_at: string | null
+  /** Set when the day was cancelled — hidden from staff, no lunch charges. */
+  archived_at: string | null
   groups: LunchMenuGroup[]
 }
 
@@ -79,10 +80,21 @@ export interface LunchVoteRecord {
   user_id: string
   full_name: string
   department: string | null
+  avatar_url: string | null
+  /** False for the poll's "NO" answer — a visible "not eating today". */
+  is_eating: boolean
   created_at: string
   updated_at: string
-  /** group_id → option_id */
+  /** group_id → option_id. Empty for a NO vote. */
   selections: Record<string, string>
+}
+
+export interface LunchVoter {
+  user_id: string
+  full_name: string
+  avatar_url: string | null
+  /** When they voted — the avatar stack shows the most recent first. */
+  voted_at: string
 }
 
 /** Aggregated count for one option, used by both the admin and staff views. */
@@ -91,33 +103,56 @@ export interface LunchOptionTally {
   group_id: string
   name: string
   count: number
-  voters: { user_id: string; full_name: string }[]
+  voters: LunchVoter[]
 }
 
 /**
- * The heading staff see. Derived from the menu's date relative to today, never
- * typed by an admin — a menu for today reads "Today's Menu" on the day and
- * "Menu — Fri, 8 Aug" when looked back on later.
+ * The synthetic "NO" row. Every poll carries it, so opting out is a visible
+ * answer rather than silence — but it is never a stored option row, which is
+ * why it needs an id that cannot collide with a real uuid.
+ */
+export const NOT_EATING_OPTION_ID = "not-eating"
+
+/** How far ahead staff may vote. Only published days inside it are offered. */
+export const LUNCH_LOOKAHEAD_DAYS = 7
+/** Yesterday stays readable so a just-closed poll can still be reviewed. */
+export const LUNCH_LOOKBACK_DAYS = 1
+
+/** Builds the poll's "NO" row from the votes that answered it. */
+export function notEatingTally(votes: LunchVoteRecord[]): LunchOptionTally {
+  const voters = votes
+    .filter((vote) => !vote.is_eating)
+    .map((vote) => ({
+      user_id: vote.user_id,
+      full_name: vote.full_name,
+      avatar_url: vote.avatar_url,
+      voted_at: vote.updated_at,
+    }))
+
+  return {
+    option_id: NOT_EATING_OPTION_ID,
+    group_id: NOT_EATING_OPTION_ID,
+    name: "NO — not eating",
+    count: voters.length,
+    voters,
+  }
+}
+
+/**
+ * The heading staff see. Derived from the menu's date, never typed by an
+ * admin. Only today gets a relative name — every other day is shown as its
+ * actual date, so navigating the calendar is unambiguous.
  */
 export function menuHeading(date: string, today: string): string {
   if (date === today) return "Today's Menu"
 
-  const shift = (days: number) => {
-    const d = new Date(`${today}T12:00:00+01:00`)
-    d.setDate(d.getDate() + days)
-    return toLocalISODate(d)
-  }
-
-  if (date === shift(1)) return "Tomorrow's Menu"
-  if (date === shift(-1)) return "Yesterday's Menu"
-
   const label = new Date(`${date}T12:00:00+01:00`).toLocaleDateString("en-GB", {
     timeZone: "Africa/Lagos",
-    weekday: "short",
+    weekday: "long",
     day: "numeric",
-    month: "short",
+    month: "long",
   })
-  return `Menu — ${label}`
+  return label
 }
 
 /** The label for one category, for menus that have more than one. */
@@ -189,10 +224,11 @@ export function deadlineForDate(date: string, time: string): Date {
  * regardless of the clock; a published menu closes when the deadline passes.
  */
 export function isVotingOpen(
-  menu: { status: LunchMenuStatus; date: string; voting_deadline: string | null },
+  menu: { status: LunchMenuStatus; date: string; voting_deadline: string | null; archived_at?: string | null },
   settings: Pick<LunchSettingsValue, "voting_deadline">,
   now: Date = new Date()
 ): boolean {
+  if (menu.archived_at) return false
   if (menu.status !== "published") return false
   return now.getTime() < resolveVotingDeadline(menu, settings).getTime()
 }
@@ -228,12 +264,23 @@ export function tallyVotes(groups: LunchMenuGroup[], votes: LunchVoteRecord[]): 
   }
 
   for (const vote of votes) {
+    if (!vote.is_eating) continue
     for (const optionId of Object.values(vote.selections)) {
       const tally = tallies.get(optionId)
       if (!tally) continue
       tally.count += 1
-      tally.voters.push({ user_id: vote.user_id, full_name: vote.full_name })
+      tally.voters.push({
+        user_id: vote.user_id,
+        full_name: vote.full_name,
+        avatar_url: vote.avatar_url,
+        voted_at: vote.updated_at,
+      })
     }
+  }
+
+  // Most recent first, so the collapsed avatar stack shows the latest voters.
+  for (const tally of tallies.values()) {
+    tally.voters.sort((a, b) => b.voted_at.localeCompare(a.voted_at))
   }
 
   return Array.from(tallies.values())

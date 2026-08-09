@@ -15,6 +15,7 @@ import {
   isValidDeadlineTime,
   isVotingOpen,
   loadLunchSettings,
+  notEatingTally,
   resolveVotingDeadline,
   tallyVotes,
   type LunchMenuStatus,
@@ -26,7 +27,7 @@ const log = logger("api-admin-hr-lunch-menus")
 export const dynamic = "force-dynamic"
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/
-const MENU_COLUMNS = "id, date, status, voting_deadline, published_at, closed_at"
+const MENU_COLUMNS = "id, date, status, voting_deadline, published_at, closed_at, archived_at"
 
 /**
  * Lists menus in a date window (defaults to the last 14 and next 14 days),
@@ -73,7 +74,9 @@ export async function GET(request: NextRequest) {
         return {
           ...menu,
           votes,
-          tallies: tallyVotes(menu.groups, votes),
+          // The NO answers ride along so admin sees who opted out.
+          tallies: [...tallyVotes(menu.groups, votes), notEatingTally(votes)],
+          eatingCount: votes.filter((v) => v.is_eating).length,
           votingOpen: isVotingOpen(menu, settings),
           resolvedDeadline: resolveVotingDeadline(menu, settings).toISOString(),
         }
@@ -119,9 +122,19 @@ export async function POST(request: NextRequest) {
 
     const dataClient = getServiceRoleClientOrFallback(supabase)
 
-    const { data: existing } = await dataClient.from("lunch_menus").select("id").eq("date", body.date).maybeSingle()
+    // Only a live menu blocks the date. Cancelled ones stay as history, which
+    // is the whole point of cancelling before putting up a different meal.
+    const { data: existing } = await dataClient
+      .from("lunch_menus")
+      .select("id")
+      .eq("date", body.date)
+      .is("archived_at", null)
+      .maybeSingle()
     if (existing) {
-      return NextResponse.json({ error: "A menu already exists for that date. Edit it instead." }, { status: 409 })
+      return NextResponse.json(
+        { error: "A menu is already up for that date. Edit it, or cancel it first to replace it." },
+        { status: 409 }
+      )
     }
 
     const status: LunchMenuStatus = body.status || "draft"

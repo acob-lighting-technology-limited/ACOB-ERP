@@ -5,7 +5,7 @@ import { useMemo, useState } from "react"
 import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { getCurrentOfficeWeek } from "@/lib/meeting-week"
+import { getCurrentOfficeWeek, getReportingOfficeWeek } from "@/lib/meeting-week"
 import { toast } from "sonner"
 import { getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
 import { getDepartmentAliases, normalizeDepartmentName } from "@/shared/departments"
@@ -101,8 +101,11 @@ export function WeeklyReportsContent({
   currentUser,
 }: WeeklyReportsContentProps) {
   const currentOfficeWeek = getCurrentOfficeWeek()
-  const [weekFilter, setWeekFilter] = useState(currentOfficeWeek.week)
-  const [yearFilter, setYearFilter] = useState(currentOfficeWeek.year)
+  // Opens on the week being reported on — from Friday that is the next one, so
+  // reports arriving ahead of Monday's meeting land in the week on screen.
+  const reportingWeek = useMemo(() => getReportingOfficeWeek(), [])
+  const [weekFilter, setWeekFilter] = useState(reportingWeek.week)
+  const [yearFilter, setYearFilter] = useState(reportingWeek.year)
   const [isAdminDialogOpen, setIsAdminDialogOpen] = useState(false)
   const [editingReport, setEditingReport] = useState<WeeklyReport | null>(null)
   const [pptxModeDialogOpen, setPptxModeDialogOpen] = useState(false)

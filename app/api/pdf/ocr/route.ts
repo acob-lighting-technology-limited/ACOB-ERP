@@ -5,6 +5,7 @@ import { readFile, unlink, writeFile, mkdir } from "fs/promises"
 import { existsSync } from "fs"
 import path from "path"
 import { tmpdir } from "os"
+import { callDocumentService, isDocumentServiceConfigured } from "@/lib/pdf/document-service"
 import { PDFDocument } from "pdf-lib"
 
 const execAsync = promisify(exec)
@@ -57,14 +58,26 @@ export async function POST(request: NextRequest) {
     } catch (e) {}
 
     if (!tesseractAvailable) {
-      return NextResponse.json(
-        {
-          error:
-            "OCR requires Tesseract OCR. Install with: brew install tesseract (macOS) or visit https://github.com/tesseract-ocr/tesseract",
-          suggestion: "For scanned PDFs, you need Tesseract OCR installed on your system.",
+      // The old message told the operator to brew-install Tesseract on their own
+      // machine, but the binary is needed on the server. Use the document
+      // service, which carries tesseract + poppler.
+      if (!isDocumentServiceConfigured()) {
+        return NextResponse.json(
+          {
+            error: "OCR is unavailable: the document service is not configured on this environment.",
+          },
+          { status: 501 }
+        )
+      }
+
+      const result = await callDocumentService("ocr", new Uint8Array(buffer), { params: { lang: "eng" } })
+      return new NextResponse(result.bytes as any, {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="ocr_${file.name}"`,
+          "Content-Length": result.bytes.length.toString(),
         },
-        { status: 500 }
-      )
+      })
     }
 
     const tempDir = tmpdir()
