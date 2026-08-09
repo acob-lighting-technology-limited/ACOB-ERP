@@ -1,12 +1,13 @@
 export const CANONICAL_DEPARTMENT_ORDER = [
   "Accounts",
+  "Admin & HR",
   "Business, Growth and Innovation",
+  "Corporate Services",
   "Executive Management",
   "IT and Communications",
-  "Admin & HR",
-  "Legal, Regulatory and Compliance",
   "Operations and Maintenance",
   "Project",
+  "Regulatory and Compliance",
   "Technical",
 ] as const
 
@@ -17,17 +18,26 @@ const DEPARTMENT_ALIASES: Partial<Record<CanonicalDepartment, readonly string[]>
   "Business, Growth and Innovation": ["Business Growth and Innovation", "Business Growth & Innovation", "BGI"],
   "Operations and Maintenance": ["Operations"],
   "IT and Communications": ["ICT", "IT", "IT & Communications", "Information and Communications Technology"],
+  "Regulatory and Compliance": [
+    "Legal, Regulatory and Compliance",
+    "Regulatory & Compliance",
+    "Legal/Regulatory",
+    "Legal Regulatory and Compliance",
+    "LRC",
+    "REG",
+  ],
 } as const
 
 const DEPARTMENT_SHORT_CODES: Record<CanonicalDepartment, string> = {
   Accounts: "ACC",
+  "Admin & HR": "AHR",
   "Business, Growth and Innovation": "BGI",
+  "Corporate Services": "CS",
   "Executive Management": "EXM",
   "IT and Communications": "ITC",
-  "Admin & HR": "AHR",
-  "Legal, Regulatory and Compliance": "LRC",
   "Operations and Maintenance": "OPM",
   Project: "PRJ",
+  "Regulatory and Compliance": "LRC",
   Technical: "TECH",
 } as const
 

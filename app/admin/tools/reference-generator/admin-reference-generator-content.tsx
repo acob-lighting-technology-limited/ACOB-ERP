@@ -9,6 +9,7 @@ import { PromptDialog } from "@/components/ui/prompt-dialog"
 import { Building2, CheckCircle, Clock, FileText, ListFilter, ShieldCheck, Download } from "lucide-react"
 import type { CorrespondenceRecord, CorrespondenceStatus } from "@/types/correspondence"
 import { getCanonicalDepartmentOrder } from "@/shared/departments"
+import { useDepartments } from "@/hooks/use-departments"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
@@ -39,6 +40,9 @@ export function AdminReferenceGeneratorContent({
   lockedDepartment,
   backLinkHref = "/admin",
 }: AdminReferenceGeneratorContentProps) {
+  const { departments: dynamicDepartments } = useDepartments()
+  const availableDepartments = dynamicDepartments.length > 0 ? dynamicDepartments : getCanonicalDepartmentOrder()
+
   const [records, setRecords] = useState<CorrespondenceRecord[]>(initialRecords)
   const [loadingRecordId, setLoadingRecordId] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<"all" | "external" | "internal">("all")
@@ -430,7 +434,7 @@ export function AdminReferenceGeneratorContent({
             mode: "custom" as const,
             // Server does the actual filtering; keep client-side rows intact.
             filterFn: () => true,
-            options: getCanonicalDepartmentOrder().map((name) => ({ value: name, label: name })),
+            options: availableDepartments.map((name) => ({ value: name, label: name })),
           } satisfies DataTableFilter<CorrespondenceRecord>,
         ]),
   ]

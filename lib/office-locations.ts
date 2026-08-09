@@ -60,10 +60,10 @@ export const OFFICE_LOCATIONS_BY_TYPE: Record<OfficeType, OfficeLocation[]> = {
       description: "IT and Communications Department Office",
     },
     {
-      name: "Legal, Regulatory and Compliance",
+      name: "Regulatory and Compliance",
       type: "department_office",
-      department: "Legal, Regulatory and Compliance",
-      description: "Legal, Regulatory and Compliance Department Office",
+      department: "Regulatory and Compliance",
+      description: "Regulatory and Compliance Department Office",
     },
     {
       name: "Operations and Maintenance",
