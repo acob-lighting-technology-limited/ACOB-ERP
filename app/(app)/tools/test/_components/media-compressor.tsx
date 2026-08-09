@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { apiFetch } from "@/lib/api-client"
 import { Upload, Download, Loader2, FileImage, FileVideo, Minimize2 } from "lucide-react"
 
 export function MediaCompressor() {
@@ -78,7 +79,7 @@ export function MediaCompressor() {
       }
 
       const endpoint = compressorType === "image" ? "/api/compress/image" : "/api/compress/video"
-      const response = await fetch(endpoint, {
+      const response = await apiFetch(endpoint, {
         method: "POST",
         body: formData,
       })
