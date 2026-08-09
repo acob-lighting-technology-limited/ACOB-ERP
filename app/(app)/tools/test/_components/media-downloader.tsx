@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { apiFetch } from "@/lib/api-client"
 import {
   Download,
   Loader2,
@@ -82,7 +83,7 @@ export function MediaDownloader() {
 
       try {
         const endpoint = mediaType === "video" ? "/api/info" : "/api/song/info"
-        const response = await fetch(endpoint, {
+        const response = await apiFetch(endpoint, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -151,7 +152,7 @@ export function MediaDownloader() {
 
     try {
       const endpoint = mediaType === "video" ? "/api/download" : "/api/song/download"
-      const response = await fetch(endpoint, {
+      const response = await apiFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -229,7 +230,7 @@ export function MediaDownloader() {
 
     try {
       const endpoint = mediaType === "video" ? "/api/batch-download" : "/api/song/batch-download"
-      const response = await fetch(endpoint, {
+      const response = await apiFetch(endpoint, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
