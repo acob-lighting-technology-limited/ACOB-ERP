@@ -168,3 +168,73 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
 
   throw new Error("Failed to send email")
 }
+
+export type BatchEmailItemOptions = {
+  to: string
+  subject: string
+  html: string
+  from?: string
+  replyTo?: string
+  listId?: string
+  attachments?: EmailAttachment[]
+}
+
+export type BatchDeliveryResult = {
+  to: string
+  success: boolean
+  emailId?: string | null
+  error?: unknown
+}
+
+export async function sendBatchEmails(
+  items: BatchEmailItemOptions[],
+  batchChunkSize = 50
+): Promise<BatchDeliveryResult[]> {
+  if (!RESEND_API_KEY) {
+    throw new Error("RESEND_API_KEY is not configured")
+  }
+  if (items.length === 0) return []
+
+  const resend = new Resend(RESEND_API_KEY)
+  const results: BatchDeliveryResult[] = []
+
+  for (let i = 0; i < items.length; i += batchChunkSize) {
+    const chunk = items.slice(i, i + batchChunkSize)
+    await waitForRateLimit()
+
+    const payload = chunk.map((item) => ({
+      from: item.from || DEFAULT_FROM,
+      to: [item.to],
+      subject: item.subject,
+      html: item.html,
+      replyTo: item.replyTo,
+      ...(item.listId ? { headers: { "List-Id": item.listId } } : {}),
+      attachments: item.attachments,
+    }))
+
+    try {
+      const res = await resend.batch.send(payload)
+      const resendData = res.data?.data || []
+      const resendError = res.error
+
+      if (resendError) {
+        console.error(`[email][batch] Batch send failed for chunk starting at index ${i}:`, resendError)
+        for (const item of chunk) {
+          results.push({ to: item.to, success: false, error: resendError })
+        }
+      } else {
+        chunk.forEach((item, idx) => {
+          const emailId = resendData[idx]?.id ?? null
+          results.push({ to: item.to, success: true, emailId })
+        })
+      }
+    } catch (err) {
+      console.error(`[email][batch] Exception during batch send at index ${i}:`, err)
+      for (const item of chunk) {
+        results.push({ to: item.to, success: false, error: err })
+      }
+    }
+  }
+
+  return results
+}

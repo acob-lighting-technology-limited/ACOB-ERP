@@ -2,7 +2,7 @@ import { serve } from "https://deno.land/std@0.190.0/http/server.ts"
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.0"
 import { PDFDocument, PDFFont, PDFPage, rgb, StandardFonts } from "npm:pdf-lib@1.17.1"
 import { writeEdgeAuditLog } from "../_shared/audit.ts"
-import { sendEmail } from "../_shared/email.ts"
+import { sendEmail, sendBatchEmails, BatchEmailItemOptions } from "../_shared/email.ts"
 import { EDGE_MAIL_ROUTING, EDGE_SENDERS } from "../_shared/senders.ts"
 import { normalizeDepartmentName } from "../../../shared/departments.ts"
 import {
@@ -1312,52 +1312,16 @@ serve(async (req) => {
       include_minutes: hasMinutes,
     })
 
-    const results = await processRecipientBatch(
-      recipients,
-      DELIVERY_BATCH_SIZE,
-      async (to, index): Promise<DeliveryResult> => {
-        const recipientStartedAt = Date.now()
-        logWeeklyReportEvent(requestStartedAt, "recipient send started", {
-          recipient: to,
-          recipient_index: index + 1,
-          recipient_count: recipients.length,
-        })
+    const batchItems: BatchEmailItemOptions[] = recipients.map((to) => ({
+      from: DEFAULT_SENDER,
+      ...EDGE_MAIL_ROUTING.reports,
+      to,
+      subject,
+      html,
+      attachments,
+    }))
 
-        try {
-          const data = await sendEmail({
-            from: DEFAULT_SENDER,
-            ...EDGE_MAIL_ROUTING.reports,
-            to,
-            subject,
-            html,
-            attachments,
-            traceLabel: `weekly-report:${index + 1}/${recipients.length}:${to}`,
-          })
-          console.log(`[weekly-report] Sent to ${to}. ID: ${data.id}`)
-          logWeeklyReportEvent(requestStartedAt, "recipient send completed", {
-            recipient: to,
-            recipient_index: index + 1,
-            email_id: data.id,
-            recipient_elapsed_ms: Date.now() - recipientStartedAt,
-            send_attempts: data.attempts,
-            send_total_duration_ms: data.totalDurationMs,
-            rate_limit_wait_ms: data.rateLimitWaitMs,
-            resend_api_duration_ms: data.resendApiDurationMs,
-            retry_backoff_ms: data.retryBackoffMs,
-          })
-          return { to, success: true, emailId: data.id }
-        } catch (error) {
-          console.error(`[weekly-report] Failed to send to ${to}:`, JSON.stringify(error))
-          logWeeklyReportEvent(requestStartedAt, "recipient send failed", {
-            recipient: to,
-            recipient_index: index + 1,
-            recipient_elapsed_ms: Date.now() - recipientStartedAt,
-            error: getErrorMessage(error),
-          })
-          return { to, success: false, error }
-        }
-      }
-    )
+    const results: DeliveryResult[] = await sendBatchEmails(batchItems, 50)
 
     logWeeklyReportEvent(requestStartedAt, "send cycle completed", {
       recipient_count: recipients.length,
