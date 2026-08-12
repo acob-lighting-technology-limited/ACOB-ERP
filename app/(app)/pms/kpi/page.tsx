@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { PmsTablePage } from "@/app/admin/hr/pms/_components/pms-table-page"
 import { getCurrentUserPmsData } from "../_lib"
+import { CycleSelector } from "../_components/cycle-selector"
 
 function formatPercent(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? `${value}%` : "-"
@@ -60,8 +61,13 @@ function toQuarterLabel(dateString?: string | null) {
   return `Q${quarter} ${date.getFullYear()}`
 }
 
-export default async function PmsKpiPage() {
-  const { score, goalSummary, profile } = await getCurrentUserPmsData()
+export default async function PmsKpiPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cycle_id?: string }>
+}) {
+  const { cycle_id } = await searchParams
+  const { score, cycles, activeCycleId, goalSummary, profile } = await getCurrentUserPmsData(cycle_id)
   const supabase = await createClient()
 
   const goalIds = score.breakdown.goals.map((goal) => goal.goal_id).filter((id): id is string => Boolean(id))
@@ -146,17 +152,19 @@ export default async function PmsKpiPage() {
   return (
     <PmsTablePage
       title="PMS KPI"
-      description={`Current KPI: ${formatPercent(score.kpi_score)}. Approved goals: ${goalSummary.approved}. Completed goals: ${goalSummary.completed}.`}
+      description={`KPI score for ${score.cycle_name}: ${formatPercent(score.kpi_score)}. Approved goals: ${goalSummary.approved}. Completed goals: ${goalSummary.completed}.`}
       backHref="/pms"
       backLabel="Back to PMS"
       icon="kpi"
+      cycles={cycles}
+      activeCycleId={activeCycleId}
       summaryCards={[
-        { label: "Current KPI", value: formatPercent(score.kpi_score) },
+        { label: "KPI Score", value: formatPercent(score.kpi_score) },
         { label: "Approved Goals", value: goalSummary.approved },
         { label: "Completed Goals", value: goalSummary.completed },
       ]}
       tableTitle="KPI Goal Breakdown"
-      tableDescription="Approved department goals contributing to your current KPI score."
+      tableDescription={`Approved department goals contributing to your KPI score in ${score.cycle_name}.`}
       rows={rows}
       columns={[
         { key: "cycle", label: "Cycle" },
