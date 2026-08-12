@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { StatCard } from "@/components/ui/stat-card"
 import { getCurrentUserPmsData } from "./_lib"
+import { CycleSelector } from "./_components/cycle-selector"
 
 const pmsLinks = [
   {
@@ -55,8 +56,14 @@ function formatPercent(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? `${value}%` : "-"
 }
 
-export default async function PmsPage() {
-  const { profile, score, goalSummary, attendance, latestReview } = await getCurrentUserPmsData()
+export default async function PmsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cycle_id?: string }>
+}) {
+  const { cycle_id } = await searchParams
+  const { profile, score, cycles, activeCycleId, goalSummary, attendance, latestReview } =
+    await getCurrentUserPmsData(cycle_id)
   const employeeName = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ") || "Employee"
 
   return (
@@ -66,6 +73,7 @@ export default async function PmsPage() {
         description={`Track your live performance scores across KPI, goals, attendance, CBT, behaviour, and reviews${profile?.department ? ` in ${profile.department}` : ""}.`}
         icon={Award}
         backLink={{ href: "/profile", label: "Back to Dashboard" }}
+        actions={<CycleSelector cycles={cycles} activeCycleId={activeCycleId} />}
       />
 
       <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-6">
