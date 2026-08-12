@@ -15,6 +15,7 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "@/components/ui/data-table"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { exportPmsRowsToExcel, exportPmsRowsToPdf } from "@/lib/pms/export"
+import { matchesCadence as matchesCadenceFor, pickCurrentCycle, type PmsCadence } from "@/lib/pms/cadence"
 import { toLocalISODate } from "@/lib/utils/date"
 import { IndividualAttendanceExpandedRow } from "./individual-attendance-expanded-row"
 import { apiFetch } from "@/lib/api-client"
@@ -40,23 +41,6 @@ type MetricSnapshotPayload = {
     department: Record<string, unknown>[]
     cycle: Record<string, unknown>[]
   }
-}
-
-/**
- * Does a cycle's review_type belong to the chosen cadence?
- *
- * review_type is free text in the database, so match loosely: "quarter" covers
- * "quarterly", and biannual/semi-annual spellings are folded together. Annual
- * deliberately excludes those so "Annual" does not swallow "Bi-Annual".
- */
-function matchesCadenceFor(cadence: string, reviewType: string | null): boolean {
-  if (cadence === "all") return true
-  const value = (reviewType || "").toLowerCase().replace(/[\s_-]/g, "")
-  if (cadence === "quarterly") return value.includes("quarter")
-  if (cadence === "biannual") return value.includes("biannual") || value.includes("semiannual")
-  if (cadence === "annual")
-    return value.includes("annual") && !value.includes("biannual") && !value.includes("semiannual")
-  return true
 }
 
 function asString(value: unknown) {
@@ -115,10 +99,15 @@ function MetricAddDialog({
     professional_conduct: "",
   })
 
+  const addableCycles = useMemo(() => {
+    return cycles.filter((c) => matchesCadenceFor("quarterly", c.review_type))
+  }, [cycles])
+
   useEffect(() => {
     if (!open) return
     setUserId(initialUserId || "")
-    setCycleId(initialCycleId || cycles[0]?.id || "")
+    const validInitial = addableCycles.find((c) => c.id === initialCycleId)
+    setCycleId(validInitial?.id || addableCycles[0]?.id || "")
     setScoreValue("")
     setStrengths("")
     setAreasForImprovement("")
@@ -131,7 +120,7 @@ function MetricAddDialog({
       loyalty: "",
       professional_conduct: "",
     })
-  }, [open, users, cycles, initialUserId, initialCycleId])
+  }, [open, users, cycles, addableCycles, initialUserId, initialCycleId])
 
   useEffect(() => {
     if (!open || !userId || !cycleId) return
@@ -305,7 +294,7 @@ function MetricAddDialog({
                 <SelectValue placeholder="Select cycle" />
               </SelectTrigger>
               <SelectContent>
-                {cycles.map((cycle) => (
+                {addableCycles.map((cycle) => (
                   <SelectItem key={cycle.id} value={cycle.id}>
                     {cycle.name}
                   </SelectItem>
@@ -416,13 +405,20 @@ export function PmsMetricTabsPage({
   const [processedRawRows, setProcessedRawRows] = useState<Record<string, unknown>[]>([])
   const [data, setData] = useState<MetricSnapshotPayload | null>(null)
   const [cycleId, setCycleId] = useState("")
-  // Cycle cadence filter. Narrows the Cycle picker to quarterly / biannual /
-  // annual so a long history of cycles stays navigable.
-  const [cycleType, setCycleType] = useState("all")
+  // Cycle cadence filter. PMS is scored quarterly, so every metric page opens on
+  // the quarterly cadence and the quarter that contains today; biannual/annual
+  // are opt-in via the picker.
+  const [cycleType, setCycleType] = useState<PmsCadence>("quarterly")
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null)
   const hasLoadedSnapshotRef = useRef(false)
+  // Read inside the fetch effect without making the cadence a fetch dependency:
+  // changing cadence already re-selects the cycle, which refetches on its own.
+  const cycleTypeRef = useRef(cycleType)
+  useEffect(() => {
+    cycleTypeRef.current = cycleType
+  }, [cycleType])
   const router = useRouter()
 
   useEffect(() => {
@@ -447,7 +443,19 @@ export function PmsMetricTabsPage({
         if (!active || !payload?.data) return
         setData(payload.data)
         hasLoadedSnapshotRef.current = true
-        if (!cycleId && payload.data.selected_cycle_id) setCycleId(payload.data.selected_cycle_id)
+        if (!cycleId) {
+          // The API picks its default cycle purely by date window, so it can hand
+          // back a mid-year or annual cycle while the Quarterly cadence is active.
+          // Only adopt it when it belongs to the cadence on screen.
+          const cadence = cycleTypeRef.current
+          const available = payload.data.cycles || []
+          const suggested = available.find((c) => c.id === payload.data?.selected_cycle_id)
+          const next =
+            suggested && matchesCadenceFor(cadence, suggested.review_type)
+              ? suggested
+              : pickCurrentCycle(available, toLocalISODate(), cadence)
+          if (next) setCycleId(next.id)
+        }
       } catch (error) {
         if (active) toast.error(error instanceof Error ? error.message : "Failed to fetch data")
       } finally {
@@ -463,7 +471,19 @@ export function PmsMetricTabsPage({
     }
   }, [metric, cycleId, refreshKey])
 
-  const rawRows = useMemo(() => data?.rows[tab] || [], [data, tab])
+  // Rows are computed server-side over whichever cycle the API resolved. If that
+  // cycle is outside the selected cadence (no quarterly cycle exists yet, say),
+  // showing its numbers under "Quarterly" would be wrong — show nothing instead.
+  const loadedCycleInCadence = useMemo(() => {
+    const loadedId = cycleId || data?.selected_cycle_id
+    const loaded = (data?.cycles || []).find((c) => c.id === loadedId)
+    return !loaded || matchesCadenceFor(cycleType, loaded.review_type)
+  }, [data, cycleId, cycleType])
+
+  const rawRows = useMemo(
+    () => (loadedCycleInCadence ? data?.rows[tab] || [] : []),
+    [data, tab, loadedCycleInCadence]
+  )
 
   // Column keys used for both DataTable headings and export
   const columnKeys = useMemo(() => {
@@ -523,6 +543,7 @@ export function PmsMetricTabsPage({
     result.push({
       key: "cycle_type",
       label: "Cadence",
+      defaultValues: ["quarterly"],
       options: [
         { value: "all", label: "All cadences" },
         { value: "quarterly", label: "Quarterly" },
@@ -534,15 +555,17 @@ export function PmsMetricTabsPage({
       render: (values, onChange) => (
         <Select
           value={values[0] || cycleType}
-          onValueChange={(next) => {
+          onValueChange={(value) => {
+            const next = value as PmsCadence
             onChange([next])
             setCycleType(next)
             // If the active cycle is not in the new cadence, jump to the most
             // recent one that is, so the table never shows a stale window.
             const stillVisible = allCycles.find((c) => c.id === cycleId && matchesCadenceFor(next, c.review_type))
             if (!stillVisible) {
-              const fallback = allCycles.find((c) => matchesCadenceFor(next, c.review_type))
-              if (fallback) setCycleId(fallback.id)
+              // No cycle in this cadence: clear the selection rather than leave a
+              // foreign cycle's window driving the table.
+              setCycleId(allCycles.find((c) => matchesCadenceFor(next, c.review_type))?.id ?? "")
             }
           }}
         >
@@ -566,8 +589,10 @@ export function PmsMetricTabsPage({
       mode: "custom",
       filterFn: () => true,
       render: (values, onChange) => {
-        const activeCycleName = allCycles.find((c) => c.id === cycleId)?.name || ""
-        const currentValue = values[0] || activeCycleName
+        // Never display a cycle the cadence filter has hidden.
+        const activeCycleName = visibleCycles.find((c) => c.id === cycleId)?.name || ""
+        const selected = values[0] || activeCycleName
+        const currentValue = visibleCycles.some((c) => c.name === selected) ? selected : ""
         return (
           <Select
             value={currentValue}

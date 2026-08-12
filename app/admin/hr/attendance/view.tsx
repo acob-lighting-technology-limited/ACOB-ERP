@@ -132,15 +132,18 @@ interface CalendarDay {
  */
 function daySourceLabel(day: CalendarDay): string {
   if (day.status === "absent") return "—"
+  const editor = day.manualBy || day.record?.editor_first_name
   if (day.record) {
     const s = labelSource(day.record)
-    // A manually-set record (e.g. on_leave/OOS/waiver) reports as plain "Manual" —
-    // attach who set it when we know.
-    if (s === "Manual" && day.manualBy) return `Manual (${day.manualBy})`
+    // A manually-set record (e.g. on_leave/OOS/waiver/AWP/LWP) reports as "Manual" or "Mixed" —
+    // attach who set/approved it when known.
+    if ((s === "Manual" || s === "Mixed" || s.startsWith("Manual")) && editor) {
+      return `Manual (${editor})`
+    }
     if (s && s !== "—") return s
   }
-  // No record but a derived manual status (holiday/leave/exempt).
-  if (day.manualBy) return `Manual (${day.manualBy})`
+  // Derived manual status (holiday/leave/exempt/manual override)
+  if (editor) return `Manual (${editor})`
   switch (day.status) {
     case "holiday":
     case "on_leave":
@@ -1024,21 +1027,25 @@ export function AttendanceReportsPage({
         </Badge>
       ),
     },
-    {
-      key: "exempt_toggle",
-      label: "",
-      render: (_r) => (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7"
-          onClick={() => setManagerOpen(true)}
-          title="Open Attendance Manager"
-        >
-          <Pencil className="h-3.5 w-3.5" />
-        </Button>
-      ),
-    },
+    ...(!lockedDepartment
+      ? [
+          {
+            key: "exempt_toggle",
+            label: "",
+            render: (_r: AttendanceReport) => (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7"
+                onClick={() => setManagerOpen(true)}
+                title="Open Attendance Manager"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </Button>
+            ),
+          },
+        ]
+      : []),
   ]
 
   const reportFilters: DataTableFilter<AttendanceReport>[] = [
@@ -1114,10 +1121,12 @@ export function AttendanceReportsPage({
             <Mail className="mr-2 h-4 w-4" />
             Reports
           </Button>
-          <Button variant="outline" onClick={() => setManagerOpen(true)} size="sm">
-            <Settings2 className="mr-2 h-4 w-4" />
-            Attendance Manager
-          </Button>
+          {!lockedDepartment && (
+            <Button variant="outline" onClick={() => setManagerOpen(true)} size="sm">
+              <Settings2 className="mr-2 h-4 w-4" />
+              Attendance Manager
+            </Button>
+          )}
           <Button variant="outline" onClick={() => setIsExportOpen(true)} disabled={reports.length === 0} size="sm">
             <Download className="mr-2 h-4 w-4" />
             Export
@@ -1192,19 +1201,20 @@ export function AttendanceReportsPage({
         monthOptions={monthOptions}
       />
 
-      <AttendanceManagerDialog
-        open={managerOpen}
-        onOpenChange={setManagerOpen}
-        reports={reports}
-        yearMonth={yearMonth}
-        holidays={holidays}
-        onHolidaysChanged={() => {
-          void loadHolidays()
-          void generateReport()
-        }}
-        onReportChanged={() => void generateReport()}
-        lockedDepartment={lockedDepartment}
-      />
+      {!lockedDepartment && (
+        <AttendanceManagerDialog
+          open={managerOpen}
+          onOpenChange={setManagerOpen}
+          reports={reports}
+          yearMonth={yearMonth}
+          holidays={holidays}
+          onHolidaysChanged={() => {
+            void loadHolidays()
+            void generateReport()
+          }}
+          onReportChanged={() => void generateReport()}
+        />
+      )}
 
       <AttendanceReportDialog open={reportDialogOpen} onOpenChange={setReportDialogOpen} />
     </DataTablePage>

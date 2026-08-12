@@ -40,8 +40,11 @@ export interface Review {
   review_cycle_id?: string | null
   reviewer_id?: string | null
   review_cycle: {
+    id: string | null
     name: string
     review_type: string
+    start_date: string | null
+    end_date: string | null
   }
   reviewer: {
     first_name: string
@@ -154,8 +157,11 @@ async function getReviewsData() {
   const hydratedReviews: Review[] = reviewRows.map((review) => ({
     ...review,
     review_cycle: {
+      id: review.cycle?.id || review.review_cycle_id || null,
       name: review.cycle?.name || "Performance Review",
       review_type: review.cycle?.review_type || "standard",
+      start_date: review.cycle?.start_date || null,
+      end_date: review.cycle?.end_date || null,
     },
     reviewer: {
       first_name: review.reviewer?.first_name || "Unknown",

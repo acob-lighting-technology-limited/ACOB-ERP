@@ -23,11 +23,14 @@ import {
 
 import type { Goal } from "@/app/(app)/goals/page"
 import { apiFetch } from "@/lib/api-client"
+import { useCycleFilters } from "@/components/pms/use-cycle-filters"
 
 type ReviewCycle = {
   id: string
   name: string
   review_type: string | null
+  start_date?: string | null
+  end_date?: string | null
 }
 
 type GoalWithCycle = Goal & {
@@ -133,6 +136,11 @@ export function AdminGoalsContent({
     []
   )
 
+  const { filters: goalCycleFilters } = useCycleFilters<GoalWithCycle>({
+    cycles,
+    getRowCycleId: (row) => row.review_cycle_id,
+  })
+
   const goalFilters: DataTableFilter<GoalWithCycle>[] = useMemo(() => {
     return [
       {
@@ -140,15 +148,9 @@ export function AdminGoalsContent({
         label: "Department",
         options: managedDepartments.map((d) => ({ value: d, label: d })),
       },
-      {
-        key: "cycle",
-        label: "Cycle",
-        options: cycles.map((c) => ({ value: c.id, label: c.name })),
-        mode: "custom",
-        filterFn: (row, selected) => selected.includes(row.review_cycle_id || ""),
-      },
+      ...goalCycleFilters,
     ]
-  }, [managedDepartments, cycles])
+  }, [managedDepartments, goalCycleFilters])
 
   // ─── Columns for Cycle View ──────────────────────────────────────────────
   const cycleRows = useMemo(() => {
@@ -208,16 +210,12 @@ export function AdminGoalsContent({
     []
   )
 
-  const cycleFilters: DataTableFilter<(typeof cycleRows)[number]>[] = useMemo(() => {
-    const types = Array.from(new Set(cycleRows.map((r) => r.review_type))).sort()
-    return [
-      {
-        key: "review_type",
-        label: "Review Type",
-        options: types.map((t) => ({ value: t, label: t })),
-      },
-    ]
-  }, [cycleRows])
+  const { filters: cycleTabCycleFilters } = useCycleFilters<(typeof cycleRows)[number]>({
+    cycles,
+    getRowCycleId: (row) => row.id,
+  })
+
+  const cycleFilters: DataTableFilter<(typeof cycleRows)[number]>[] = cycleTabCycleFilters
 
   // ─── Actions ─────────────────────────────────────────────────────────────
   async function handleCreateGoal() {
@@ -359,11 +357,13 @@ export function AdminGoalsContent({
                     <SelectValue placeholder="Select cycle" />
                   </SelectTrigger>
                   <SelectContent>
-                    {cycles.map((cycle) => (
-                      <SelectItem key={cycle.id} value={cycle.id}>
-                        {cycle.name}
-                      </SelectItem>
-                    ))}
+                    {cycles
+                      .filter((cycle) => !cycle.review_type || cycle.review_type.toLowerCase() === "quarterly")
+                      .map((cycle) => (
+                        <SelectItem key={cycle.id} value={cycle.id}>
+                          {cycle.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>

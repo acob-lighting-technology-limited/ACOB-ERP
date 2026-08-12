@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { StatCard } from "@/components/ui/stat-card"
+import { useCycleFilters } from "@/components/pms/use-cycle-filters"
 import { exportPmsRowsToExcel } from "@/lib/pms/export"
 import { toLocalISODate } from "@/lib/utils/date"
 
@@ -38,6 +39,9 @@ type Cycle = {
   id: string
   name: string
   status: string | null
+  review_type?: string | null
+  start_date?: string | null
+  end_date?: string | null
 }
 
 type AnalyticsRow = {
@@ -171,7 +175,15 @@ export function PmsAnalyticsPage({ backLinkHref }: { backLinkHref?: string } = {
     [rows]
   )
 
-  const cycleOptions = useMemo(() => cycles.map((cycle) => ({ value: cycle.id, label: cycle.name })), [cycles])
+  const reviewCycleIdByRowId = useMemo(
+    () => new Map(reviews.map((review) => [review.id, review.review_cycle_id])),
+    [reviews]
+  )
+  const { filters: cycleFilters } = useCycleFilters<AnalyticsRow>({
+    cycles,
+    getRowCycleId: useCallback((row) => reviewCycleIdByRowId.get(row.id) ?? null, [reviewCycleIdByRowId]),
+    cycleLabel: "Quarter",
+  })
 
   const tierOptions = useMemo(
     () =>
@@ -307,20 +319,9 @@ export function PmsAnalyticsPage({ backLinkHref }: { backLinkHref?: string } = {
         options: tierOptions,
         placeholder: "All Tiers",
       },
-      {
-        key: "cycle",
-        label: "Quarter",
-        options: cycleOptions,
-        placeholder: "All Quarters",
-        mode: "custom",
-        filterFn: (row, values) => {
-          if (values.length === 0) return true
-          const review = reviews.find((item) => item.id === row.id)
-          return values.includes(review?.review_cycle_id || "")
-        },
-      },
+      ...cycleFilters,
     ],
-    [cycleOptions, departmentOptions, reviews, tierOptions]
+    [cycleFilters, departmentOptions, tierOptions]
   )
 
   return (

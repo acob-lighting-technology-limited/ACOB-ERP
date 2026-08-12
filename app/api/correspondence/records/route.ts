@@ -338,11 +338,6 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from("correspondence_records")
       .select("*", { count: "exact" })
-      // Order the register by assignment time, not creation time: reference numbers
-      // are minted at approval, so approved_at DESC keeps every dept/year sequence in
-      // clean numeric order (055 above 054). Un-numbered drafts have a null approved_at
-      // and pin to the top (Postgres sorts NULLs first under DESC). created_at breaks ties.
-      .order("approved_at", { ascending: false, nullsFirst: true })
       .order("created_at", { ascending: false })
 
     if ((!isGlobalAdmin && !department) || scopeMine) {

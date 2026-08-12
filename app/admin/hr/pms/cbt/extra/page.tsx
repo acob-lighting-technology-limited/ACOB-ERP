@@ -4,12 +4,24 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import { Brain, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react"
-import { formatWATDate } from "@/lib/utils/date"
+import { formatWATDate, toLocalISODate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
+import { useCycleFilters } from "@/components/pms/use-cycle-filters"
+import { pickCurrentCycle } from "@/lib/pms/cadence"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   Dialog,
   DialogContent,
@@ -140,6 +152,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [editingQuestion, setEditingQuestion] = useState<CbtQuestion | null>(null)
   const [form, setForm] = useState(INITIAL_FORM)
 
@@ -183,25 +196,35 @@ export default function AdminPmsCbtExtraQuestionPage() {
     void loadPage()
   }, [loadPage])
 
-  // Automatically select the active cycle in the URL query params if none is selected
+  // Land on the quarter that contains today. PMS is scored quarterly, and
+  // half-year/annual cycles cover the same dates, so "first active cycle" can
+  // silently open the page on the wrong window.
+  const activeCycleId = useMemo(
+    () => pickCurrentCycle(cycles, toLocalISODate(), "quarterly")?.id || "",
+    [cycles]
+  )
+
   useEffect(() => {
     if (cycles.length > 0 && !searchParams.get("review_cycle_id") && !searchParams.get("cycleId")) {
-      const activeCycle = cycles.find((c) => c.status === "active")
-      if (activeCycle) {
-        router.replace(`/admin/hr/pms/cbt/extra?review_cycle_id=${encodeURIComponent(activeCycle.id)}`, {
+      if (activeCycleId) {
+        router.replace(`/admin/hr/pms/cbt/extra?review_cycle_id=${encodeURIComponent(activeCycleId)}`, {
           scroll: false,
         })
       }
     }
-  }, [cycles, searchParams, router])
+  }, [cycles, searchParams, router, activeCycleId])
 
-  const activeCycleId = useMemo(() => {
-    return cycles.find((cycle) => cycle.status === "active")?.id || cycles[0]?.id || ""
-  }, [cycles])
+  const { filters: cycleFilters, selectedCycleId } = useCycleFilters<CbtQuestion>({
+    cycles,
+    getRowCycleId: (row) => row.review_cycle_id,
+    cycleKey: "review_cycle_id",
+  })
 
+  // The table's cycle filter is the source of truth; the URL keeps a deep link
+  // working and seeds the "add question" form.
   const currentCycleId = useMemo(() => {
-    return searchParams.get("review_cycle_id") || searchParams.get("cycleId") || activeCycleId
-  }, [searchParams, activeCycleId])
+    return selectedCycleId || searchParams.get("review_cycle_id") || searchParams.get("cycleId") || activeCycleId
+  }, [selectedCycleId, searchParams, activeCycleId])
 
   const cycleNameById = useMemo(() => new Map(cycles.map((cycle) => [cycle.id, cycle.name])), [cycles])
   const selectedCycle = useMemo(
@@ -223,17 +246,9 @@ export default function AdminPmsCbtExtraQuestionPage() {
     return formatDate([...dates].sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0])
   }, [filteredQuestions])
 
-  const cycleOptions = useMemo(() => cycles.map((cycle) => ({ value: cycle.id, label: cycle.name })), [cycles])
 
   const filters: DataTableFilter<CbtQuestion>[] = [
-    {
-      key: "review_cycle_id",
-      label: "Cycle",
-      options: cycleOptions,
-      placeholder: "All Cycles",
-      mode: "custom",
-      filterFn: (row, values) => values.length === 0 || values.includes(row.review_cycle_id || ""),
-    },
+    ...cycleFilters,
     {
       key: "correct_option",
       label: "Correct Answer",
@@ -328,7 +343,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
       icon: Trash2,
       variant: "destructive",
       onClick: (question) => {
-        void handleDelete(question.id)
+        setDeleteConfirmId(question.id)
       },
     },
   ]
@@ -429,6 +444,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
       if (!response.ok) throw new Error(responsePayload?.error || "Failed to delete question")
 
       toast.success("Question deleted")
+      setDeleteConfirmId(null)
       await loadPage()
     } catch (deleteError) {
       toast.error(deleteError instanceof Error ? deleteError.message : "Failed to delete question")
@@ -490,7 +506,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
     >
       <DataTable<CbtQuestion>
         key={isLoading ? "loading" : "ready"}
-        data={filteredQuestions}
+        data={questions}
         columns={columns}
         filters={filters}
         getRowId={(question) => question.id}
@@ -601,11 +617,13 @@ export default function AdminPmsCbtExtraQuestionPage() {
                     <SelectValue placeholder="Select cycle" />
                   </SelectTrigger>
                   <SelectContent className="border-white/10 bg-neutral-900 text-white">
-                    {cycles.map((cycle) => (
-                      <SelectItem key={cycle.id} value={cycle.id}>
-                        {cycle.name}
-                      </SelectItem>
-                    ))}
+                    {cycles
+                      .filter((cycle) => !cycle.review_type || cycle.review_type.toLowerCase() === "quarterly")
+                      .map((cycle) => (
+                        <SelectItem key={cycle.id} value={cycle.id}>
+                          {cycle.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -766,6 +784,30 @@ export default function AdminPmsCbtExtraQuestionPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteConfirmId !== null} onOpenChange={(isOpen) => !isOpen && setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Bonus Question?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this CBT bonus question? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingId !== null}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: "destructive" })}
+              disabled={deletingId !== null}
+              onClick={(e) => {
+                e.preventDefault()
+                if (deleteConfirmId) void handleDelete(deleteConfirmId)
+              }}
+            >
+              {deletingId !== null ? "Deleting..." : "Delete Question"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DataTablePage>
   )
 }

@@ -17,9 +17,11 @@ import { StatCard } from "@/components/ui/stat-card"
 import { Badge } from "@/components/ui/badge"
 import type { Goal } from "./page"
 import { apiFetch } from "@/lib/api-client"
+import { useCycleFilters } from "@/components/pms/use-cycle-filters"
 
 type GoalsContentProps = {
   initialGoals: Goal[]
+  cycles?: { id: string; name: string; review_type?: string | null; start_date?: string | null; end_date?: string | null }[]
   canCreateGoal?: boolean
   managedDepartments?: string[]
   pageTitle?: string
@@ -44,6 +46,7 @@ type GoalRow = Goal & {
 
 export function GoalsContent({
   initialGoals,
+  cycles = [],
   canCreateGoal = false,
   managedDepartments = [],
   pageTitle = "Department Goals",
@@ -141,6 +144,11 @@ export function GoalsContent({
     []
   )
 
+  const { filters: cycleFilters } = useCycleFilters<GoalRow>({
+    cycles,
+    getRowCycleId: (row) => row.review_cycle_id,
+  })
+
   const filters = useMemo<DataTableFilter<GoalRow>[]>(
     () => [
       {
@@ -154,18 +162,9 @@ export function GoalsContent({
         ],
         filterFn: (row, selected) => selected.includes(row.approval_status),
       },
-      {
-        key: "cycle",
-        label: "Cycle",
-        mode: "custom",
-        options: Array.from(new Set(rows.map((row) => row.cycleLabel))).map((cycle) => ({
-          value: cycle,
-          label: cycle,
-        })),
-        filterFn: (row, selected) => selected.includes(row.cycleLabel),
-      },
+      ...cycleFilters,
     ],
-    [rows]
+    [cycleFilters]
   )
 
   async function handleCreateGoal() {

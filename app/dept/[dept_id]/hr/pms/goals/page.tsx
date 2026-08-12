@@ -32,7 +32,10 @@ export default async function DeptPmsGoalsPage({ params }: Props) {
           .in("department", managedDepartments)
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as Goal[] }),
-    dataClient.from("review_cycles").select("id, name, review_type").order("start_date", { ascending: false }),
+    dataClient
+      .from("review_cycles")
+      .select("id, name, review_type, start_date, end_date")
+      .order("start_date", { ascending: false }),
   ])
 
   const cycles = cyclesResult.data || []

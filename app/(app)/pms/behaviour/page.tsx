@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server"
 import { BehaviourContent } from "./page-content"
 import { getCurrentUserPmsData } from "../_lib"
+import { CycleSelector } from "../_components/cycle-selector"
 
 type ReviewDetailRow = {
   behaviour_score: number | null
@@ -17,16 +18,27 @@ function normalizeValue(value: unknown) {
   return Number.isFinite(parsed) ? Math.max(0, Math.min(100, parsed)) : null
 }
 
-export default async function PmsBehaviourPage() {
+export default async function PmsBehaviourPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cycle_id?: string }>
+}) {
+  const { cycle_id } = await searchParams
   const supabase = await createClient()
-  const { profile, score } = await getCurrentUserPmsData()
+  const { profile, score, cycles, activeCycleId } = await getCurrentUserPmsData(cycle_id)
 
-  const { data: latestReview } = await supabase
+  let reviewQuery = supabase
     .from("performance_reviews")
     .select(
       "behaviour_score, behaviour_competencies, strengths, areas_for_improvement, manager_comments, review_cycles(name)"
     )
     .eq("user_id", profile?.id || "")
+
+  if (activeCycleId) {
+    reviewQuery = reviewQuery.eq("review_cycle_id", activeCycleId)
+  }
+
+  const { data: latestReview } = await reviewQuery
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle<ReviewDetailRow>()
@@ -51,13 +63,16 @@ export default async function PmsBehaviourPage() {
       rows={rows}
       average={average}
       cycle={
-        Array.isArray(latestReview?.review_cycles)
+        score.cycle_name ||
+        (Array.isArray(latestReview?.review_cycles)
           ? latestReview?.review_cycles[0]?.name || "-"
-          : latestReview?.review_cycles?.name || "-"
+          : latestReview?.review_cycles?.name || "-")
       }
       strengths={latestReview?.strengths || ""}
       areasForImprovement={latestReview?.areas_for_improvement || ""}
       managerComments={latestReview?.manager_comments || ""}
+      cycles={cycles}
+      activeCycleId={activeCycleId}
     />
   )
 }

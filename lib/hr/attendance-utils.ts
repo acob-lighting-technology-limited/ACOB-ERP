@@ -206,9 +206,13 @@ export function dayCredit(
     status === "holiday" ||
     status === "out_of_station" ||
     status === "absent_with_permission" ||
+    status === "absence_with_permission" ||
+    status === "awp" ||
     status === "lateness_with_permission" ||
     status === "early_closure" ||
-    status === "late_resumption"
+    status === "late_resumption" ||
+    status === "leave_without_pay" ||
+    status === "lwp"
   ) {
     return 1.0
   }

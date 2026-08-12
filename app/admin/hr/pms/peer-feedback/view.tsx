@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { Download, MessageSquare, UserRoundSearch, Users } from "lucide-react"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
+import { useCycleFilters } from "@/components/pms/use-cycle-filters"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { StatCard } from "@/components/ui/stat-card"
@@ -38,6 +39,9 @@ type PeerFeedbackRow = {
 type Cycle = {
   id: string
   name: string
+  review_type?: string | null
+  start_date?: string | null
+  end_date?: string | null
 }
 
 function formatName(profile: Profile | null | undefined) {
@@ -124,7 +128,11 @@ export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string 
     [feedback]
   )
 
-  const cycleOptions = useMemo(() => cycles.map((cycle) => ({ value: cycle.id, label: cycle.name })), [cycles])
+  const { filters: cycleFilters } = useCycleFilters<PeerFeedbackRow>({
+    cycles,
+    getRowCycleId: (row) => row.review_cycle_id,
+    cycleLabel: "Quarter",
+  })
 
   const reviewerOptions = useMemo(() => {
     const reviewers = new Map<string, string>()
@@ -233,14 +241,7 @@ export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string 
         mode: "custom",
         filterFn: (row, values) => values.length === 0 || values.includes(row.subject?.department || ""),
       },
-      {
-        key: "cycle",
-        label: "Quarter",
-        options: cycleOptions,
-        placeholder: "All Quarters",
-        mode: "custom",
-        filterFn: (row, values) => values.length === 0 || values.includes(row.review_cycle_id),
-      },
+      ...cycleFilters,
       {
         key: "reviewer",
         label: "Reviewer",
@@ -250,7 +251,7 @@ export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string 
         filterFn: (row, values) => values.length === 0 || values.includes(row.reviewer_user_id),
       },
     ],
-    [cycleOptions, departmentOptions, reviewerOptions]
+    [cycleFilters, departmentOptions, reviewerOptions]
   )
 
   const rowActions: RowAction<PeerFeedbackRow>[] = useMemo(

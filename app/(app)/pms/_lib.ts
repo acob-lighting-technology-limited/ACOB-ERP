@@ -34,7 +34,16 @@ type GoalRow = {
 
 export type IndividualPmsScore = Awaited<ReturnType<typeof computeIndividualPerformanceScore>>
 
-export async function getCurrentUserPmsData() {
+export type ReviewCycleOption = {
+  id: string
+  name: string
+  startDate: string
+  endDate: string
+  status: string
+  reviewType: string | null
+}
+
+export async function getCurrentUserPmsData(cycleId?: string) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -51,7 +60,7 @@ export async function getCurrentUserPmsData() {
     .eq("id", user.id)
     .maybeSingle<ProfileRow>()
 
-  const [{ data: goals }, { data: attendance }, { data: latestReview }] = await Promise.all([
+  const [{ data: goals }, { data: latestReview }, { data: cycleRows }] = await Promise.all([
     profile?.department
       ? supabase
           .from("goals_objectives")
@@ -60,29 +69,56 @@ export async function getCurrentUserPmsData() {
           .returns<GoalRow[]>()
       : Promise.resolve({ data: [] as GoalRow[] }),
     supabase
-      .from("attendance_records")
-      .select("id, date, clock_in, clock_out, total_hours, status")
-      .eq("user_id", user.id)
-      .order("date", { ascending: false })
-      .limit(10)
-      .returns<AttendanceRow[]>(),
-    supabase
       .from("performance_reviews")
       .select("id, created_at, status, final_score")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(1)
       .returns<ReviewRow[]>(),
+    supabase
+      .from("review_cycles")
+      .select("id, name, start_date, end_date, status, review_type")
+      .order("start_date", { ascending: false }),
   ])
 
-  const score = await computeIndividualPerformanceScore(supabase, { userId: user.id })
+  const score = await computeIndividualPerformanceScore(supabase, { userId: user.id, cycleId })
+
+  let attendanceQuery = supabase
+    .from("attendance_records")
+    .select("id, date, clock_in, clock_out, total_hours, status")
+    .eq("user_id", user.id)
+    .order("date", { ascending: false })
+
+  if (score.cycle_start_date && score.cycle_end_date) {
+    attendanceQuery = attendanceQuery.gte("date", score.cycle_start_date).lte("date", score.cycle_end_date)
+  } else {
+    attendanceQuery = attendanceQuery.limit(100)
+  }
+
+  const { data: attendance } = await attendanceQuery.returns<AttendanceRow[]>()
 
   const goalRows = goals || []
   const recentAttendance = attendance || []
+  const cycles: ReviewCycleOption[] = (cycleRows || []).map((c) => ({
+    id: c.id,
+    name: c.name || "Review Cycle",
+    startDate: c.start_date,
+    endDate: c.end_date,
+    status: c.status || "closed",
+    reviewType: c.review_type ?? null,
+  }))
 
   return {
     profile,
     score,
+    cycles,
+    activeCycleId: score.cycle_id,
+    cycle: {
+      id: score.cycle_id,
+      name: score.cycle_name || "Active Review Cycle",
+      startDate: score.cycle_start_date,
+      endDate: score.cycle_end_date,
+    },
     goalSummary: {
       total: goalRows.length,
       approved: goalRows.filter((goal) => goal.approval_status === "approved").length,

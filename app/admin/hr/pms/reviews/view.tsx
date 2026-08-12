@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress"
 import { StatCard } from "@/components/ui/stat-card"
 import { Card, CardContent } from "@/components/ui/card"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
+import { useCycleFilters } from "@/components/pms/use-cycle-filters"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { CreateReviewDialog } from "../../performance/_components/create-review-dialog"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
@@ -40,6 +41,8 @@ type ReviewRow = {
     id: string
     name: string
     review_type: string
+    start_date?: string | null
+    end_date?: string | null
   } | null
 }
 
@@ -362,6 +365,32 @@ export function AdminPmsReviewsPage({
     () => Array.from(new Set(canonicalReviews.map((r) => r.cycle?.name).filter(Boolean) as string[])).sort(),
     [canonicalReviews]
   )
+
+  // Reviews carry their cycle inline; dedupe it into the list the shared cycle
+  // filters need.
+  const cycles = useMemo(() => {
+    const byId = new Map<string, { id: string; name: string; review_type: string | null; start_date?: string | null; end_date?: string | null }>()
+    for (const review of canonicalReviews) {
+      if (review.cycle) byId.set(review.cycle.id, review.cycle)
+    }
+    return Array.from(byId.values())
+  }, [canonicalReviews])
+
+  const { filters: individualCycleFilters } = useCycleFilters<ReviewRow>({
+    cycles,
+    getRowCycleId: (row) => row.review_cycle_id,
+    cycleLabel: "Quarter",
+  })
+  const { filters: deptCycleFilters } = useCycleFilters<DeptRow>({
+    cycles,
+    getRowCycleId: (row) => row.cycleId,
+    cycleLabel: "Quarter",
+  })
+  const { filters: cycleTabCycleFilters } = useCycleFilters<CycleRow>({
+    cycles,
+    getRowCycleId: (row) => row.cycleId,
+    cycleLabel: "Quarter",
+  })
 
   const reviewTypeOptions = useMemo(
     () => Array.from(new Set(canonicalReviews.map((r) => r.cycle?.review_type).filter(Boolean) as string[])).sort(),
@@ -701,12 +730,7 @@ export function AdminPmsReviewsPage({
         options: departmentOptions.map((d) => ({ value: d, label: d })),
         placeholder: "All Departments",
       },
-      {
-        key: "quarter",
-        label: "Quarter",
-        options: quarterOptions.map((q) => ({ value: q, label: q })),
-        placeholder: "All Quarters",
-      },
+      ...individualCycleFilters,
       {
         key: "status",
         label: "Status",
@@ -726,17 +750,12 @@ export function AdminPmsReviewsPage({
         placeholder: "All Types",
       },
     ],
-    [departmentOptions, quarterOptions, reviewTypeOptions]
+    [departmentOptions, individualCycleFilters, reviewTypeOptions]
   )
 
   const deptFilters: DataTableFilter<DeptRow>[] = useMemo(
     () => [
-      {
-        key: "cycle",
-        label: "Quarter",
-        options: quarterOptions.map((q) => ({ value: q, label: q })),
-        placeholder: "All Quarters",
-      },
+      ...deptCycleFilters,
       {
         key: "department",
         label: "Department",
@@ -762,17 +781,12 @@ export function AdminPmsReviewsPage({
         placeholder: "All Statuses",
       },
     ],
-    [quarterOptions, departmentOptions]
+    [deptCycleFilters, departmentOptions]
   )
 
   const cycleFilters: DataTableFilter<CycleRow>[] = useMemo(
     () => [
-      {
-        key: "review_type",
-        label: "Review Type",
-        options: reviewTypeOptions.map((t) => ({ value: t, label: t })),
-        placeholder: "All Types",
-      },
+      ...cycleTabCycleFilters,
       {
         key: "completion",
         label: "Completion",
@@ -792,7 +806,7 @@ export function AdminPmsReviewsPage({
         placeholder: "All Stages",
       },
     ],
-    [reviewTypeOptions]
+    [cycleTabCycleFilters]
   )
 
   // ─── Render ───────────────────────────────────────────────────────────────

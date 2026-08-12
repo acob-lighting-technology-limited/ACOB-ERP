@@ -128,6 +128,100 @@ export function calculatePAYETax(
   }
 }
 
+export interface TaxReformBracketResult {
+  totalReliefs: number
+  netForCRA: number
+  cra: number
+  chargeableIncome: number
+  annualTax: number
+  monthlyTax: number
+  brackets: Array<{
+    label: string
+    amount: number
+    tax: number
+    rate: string
+  }>
+}
+
+/**
+ * Calculates PAYE Tax based on Proposed Tax Reform Schedule:
+ * - Replaces CRA Component 1 & 2 with a Static Statutory Relief of N500,000.
+ * - Band 1: First N800,000 @ 0%
+ * - Band 2: Next N2,200,000 @ 15%
+ * - Band 3: Next N9,000,000 @ 18%
+ * - Band 4: Next N13,000,000 @ 21%
+ * - Band 5: Next N25,000,000 @ 23%
+ * - Band 6: Above N50,000,000 @ 25%
+ */
+export function calculateNewTaxReformPAYE(
+  annualGross: number,
+  pensionEmployee: number,
+  staticReliefConfig: number = 500000
+): TaxReformBracketResult {
+  const pensionRelief = pensionEmployee
+  const staticRelief = staticReliefConfig // Fixed N500,000 statutory relief under Tax Reform
+  const totalReliefs = pensionRelief + staticRelief
+  const netForCRA = Math.max(0, annualGross - pensionRelief)
+  const chargeableIncome = Math.max(0, annualGross - totalReliefs)
+
+  let remaining = chargeableIncome
+  let tax = 0
+
+  // Band 1: First N800,000 @ 0%
+  const b1 = Math.min(remaining, 800000)
+  const t1 = 0
+  remaining -= b1
+
+  // Band 2: Next N2,200,000 @ 15%
+  const b2 = Math.min(remaining, 2200000)
+  const t2 = b2 * 0.15
+  tax += t2
+  remaining -= b2
+
+  // Band 3: Next N9,000,000 @ 18%
+  const b3 = Math.min(remaining, 9000000)
+  const t3 = b3 * 0.18
+  tax += t3
+  remaining -= b3
+
+  // Band 4: Next N13,000,000 @ 21%
+  const b4 = Math.min(remaining, 13000000)
+  const t4 = b4 * 0.21
+  tax += t4
+  remaining -= b4
+
+  // Band 5: Next N25,000,000 @ 23%
+  const b5 = Math.min(remaining, 25000000)
+  const t5 = b5 * 0.23
+  tax += t5
+  remaining -= b5
+
+  // Band 6: Above N50,000,000 @ 25%
+  const b6 = Math.max(0, remaining)
+  const t6 = b6 * 0.25
+  tax += t6
+
+  const minTax = 0.01 * annualGross
+  const statutoryTax = Math.max(tax, minTax)
+
+  return {
+    totalReliefs,
+    netForCRA,
+    cra: staticRelief,
+    chargeableIncome,
+    annualTax: statutoryTax,
+    monthlyTax: statutoryTax / 12,
+    brackets: [
+      { label: "First ₦800,000 @ 0%", amount: b1, tax: t1, rate: "0%" },
+      { label: "Next ₦2,200,000 @ 15%", amount: b2, tax: t2, rate: "15%" },
+      { label: "Next ₦9,000,000 @ 18%", amount: b3, tax: t3, rate: "18%" },
+      { label: "Next ₦13,000,000 @ 21%", amount: b4, tax: t4, rate: "21%" },
+      { label: "Next ₦25,000,000 @ 23%", amount: b5, tax: t5, rate: "23%" },
+      { label: "Above ₦50,000,000 @ 25%", amount: b6, tax: t6, rate: "25%" },
+    ],
+  }
+}
+
 /**
  * Core payroll calculator matching June 2026 Excel models.
  */
@@ -143,6 +237,7 @@ export function calculatePayroll({
   otherDeductions = 0,
   hmoConfig,
   lifeAssuranceConfig,
+  communicationConfig,
 }: {
   monthlyBase: number
   workdays: number
@@ -156,6 +251,7 @@ export function calculatePayroll({
   otherDeductions?: number
   hmoConfig?: number
   lifeAssuranceConfig?: number
+  communicationConfig?: number
 }): PayrollBreakdown {
   const dailyPay = workdays > 0 ? monthlyBase / workdays : 0
   const hourlyRate = dailyPay / 8.5
@@ -173,7 +269,7 @@ export function calculatePayroll({
   const transport = annualBase * 0.1
   const leaveAllowance = annualBase * 0.1
 
-  const communication = 60000 // Fixed per annum (5,000 monthly)
+  const communication = communicationConfig !== undefined ? communicationConfig : 60000 // Default 60,000 per annum (5,000 monthly)
   const hmo = hmoConfig !== undefined ? hmoConfig : 83475 // Fixed per annum
   const lifeAssurance = lifeAssuranceConfig !== undefined ? lifeAssuranceConfig : 43438 // Fixed per annum
 

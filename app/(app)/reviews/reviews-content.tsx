@@ -21,6 +21,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { formatName } from "@/lib/utils"
 import { formatWATDate } from "@/lib/utils/date"
 import { apiFetch } from "@/lib/api-client"
+import { useCycleFilters } from "@/components/pms/use-cycle-filters"
 
 interface ReviewsContentProps {
   initialReviews: Review[]
@@ -137,6 +138,29 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
     },
   ]
 
+  // Reviews carry their cycle inline; dedupe it into the list the shared filters need.
+  const cycles = useMemo(() => {
+    const byId = new Map<string, { id: string; name: string; review_type: string | null; start_date?: string | null; end_date?: string | null }>()
+    for (const review of reviews) {
+      const cycle = review.review_cycle
+      if (cycle?.id) {
+        byId.set(cycle.id, {
+          id: cycle.id,
+          name: cycle.name,
+          review_type: cycle.review_type,
+          start_date: cycle.start_date,
+          end_date: cycle.end_date,
+        })
+      }
+    }
+    return Array.from(byId.values())
+  }, [reviews])
+
+  const { filters: cycleFilters } = useCycleFilters<Review>({
+    cycles,
+    getRowCycleId: (row) => row.review_cycle?.id ?? row.review_cycle_id,
+  })
+
   const filters: DataTableFilter<Review>[] = [
     {
       key: "status",
@@ -147,13 +171,7 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
         { value: "completed", label: "Completed" },
       ],
     },
-    {
-      key: "quarter",
-      label: "Cycle",
-      mode: "custom",
-      options: Array.from(new Set(visibleReviews.map(getQuarterLabel))).map((q) => ({ value: q, label: q })),
-      filterFn: (row, selected) => selected.includes(getQuarterLabel(row)),
-    },
+    ...cycleFilters,
   ]
 
   async function acknowledgeReview() {

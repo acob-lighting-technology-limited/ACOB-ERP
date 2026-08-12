@@ -17,6 +17,7 @@ import {
   deriveUnifiedAttendanceStatus,
   isPermissionAttendanceStatus,
 } from "@/lib/hr/attendance-status"
+import { validateLwpAwpMonthlyQuota } from "@/lib/hr/attendance-quota"
 
 const CreateSchema = z.object({
   user_id: z.string().uuid(),
@@ -390,6 +391,17 @@ export async function POST(request: NextRequest) {
     const isCoveredWithoutTimes =
       status === "waiver" || status === "absent_with_permission" || status === "out_of_station"
     const isLWP = status === "lateness_with_permission"
+
+    const quotaCheck = await validateLwpAwpMonthlyQuota({
+      dataClient,
+      userId: user_id,
+      targetStatus: status,
+      date,
+      isAdminLike: scope.isAdminLike,
+    })
+    if (!quotaCheck.allowed) {
+      return NextResponse.json({ error: quotaCheck.error }, { status: 403 })
+    }
 
     if (clock_in && clock_out && clock_out <= clock_in) {
       return NextResponse.json({ error: "Clock out must be after clock in" }, { status: 400 })

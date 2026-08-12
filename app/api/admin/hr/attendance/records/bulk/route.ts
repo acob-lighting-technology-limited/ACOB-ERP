@@ -13,6 +13,7 @@ import {
 } from "@/lib/hr/attendance-status"
 import { toLocalISODate } from "@/lib/utils/date"
 import { loadAttendancePolicy } from "@/lib/hr/attendance-utils"
+import { validateLwpAwpMonthlyQuota } from "@/lib/hr/attendance-quota"
 
 const log = logger("admin-hr-attendance-records-bulk")
 export const dynamic = "force-dynamic"
@@ -89,6 +90,21 @@ export async function POST(request: NextRequest) {
     const dates = dateRange(start_date, end_date).filter((d) => !isWeekend(d))
     if (dates.length === 0) {
       return NextResponse.json({ error: "No workdays found in the specified date range" }, { status: 400 })
+    }
+
+    if (["lateness_with_permission", "absent_with_permission"].includes(status) && !scope.isAdminLike) {
+      for (const uid of allowedIds) {
+        const check = await validateLwpAwpMonthlyQuota({
+          dataClient,
+          userId: uid,
+          targetStatus: status,
+          date: start_date,
+          isAdminLike: false,
+        })
+        if (!check.allowed) {
+          return NextResponse.json({ error: check.error }, { status: 403 })
+        }
+      }
     }
 
     // Find existing records. Days that already have a record (including real clock-ins)

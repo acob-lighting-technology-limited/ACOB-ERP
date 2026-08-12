@@ -8,6 +8,7 @@ import { CbtAttemptDetail } from "@/components/pms/cbt-attempt-detail"
 import { toast } from "sonner"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "@/components/ui/data-table"
+import { useCycleFilters } from "@/components/pms/use-cycle-filters"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { StatCard } from "@/components/ui/stat-card"
@@ -18,6 +19,8 @@ type ReviewCycle = {
   id: string
   name: string
   review_type: string | null
+  start_date?: string | null
+  end_date?: string | null
 }
 
 type CbtUser = {
@@ -278,10 +281,18 @@ export default function AdminPmsCbtPage() {
     [data.users]
   )
 
-  const cycleOptions = useMemo(
-    () => data.cycles.map((cycle) => ({ value: cycle.id, label: cycle.name })),
-    [data.cycles]
-  )
+  const { filters: individualCycleFilters } = useCycleFilters<IndividualRow>({
+    cycles: data.cycles,
+    getRowCycleId: (row) => row.review_cycle_id,
+  })
+  const { filters: departmentCycleFilters } = useCycleFilters<DepartmentRow>({
+    cycles: data.cycles,
+    getRowCycleId: (row) => row.cycleId,
+  })
+  const { filters: cycleTabCycleFilters } = useCycleFilters<CycleRow>({
+    cycles: data.cycles,
+    getRowCycleId: (row) => row.id,
+  })
 
   const individualColumns: DataTableColumn<IndividualRow>[] = [
     {
@@ -384,14 +395,7 @@ export default function AdminPmsCbtPage() {
       mode: "custom",
       filterFn: (row, values) => values.length === 0 || values.includes(row.user_id),
     },
-    {
-      key: "cycle",
-      label: "Cycle",
-      options: cycleOptions,
-      placeholder: "All Cycles",
-      mode: "custom",
-      filterFn: (row, values) => values.length === 0 || values.includes(row.review_cycle_id),
-    },
+    ...individualCycleFilters,
   ]
 
   const departmentFilters: DataTableFilter<DepartmentRow>[] = [
@@ -401,26 +405,11 @@ export default function AdminPmsCbtPage() {
       options: departmentOptions,
       placeholder: "All Departments",
     },
-    {
-      key: "cycle",
-      label: "Cycle",
-      options: cycleOptions,
-      placeholder: "All Cycles",
-      mode: "custom",
-      filterFn: (row, values) => values.length === 0 || values.includes(row.cycleId),
-    },
+    ...departmentCycleFilters,
   ]
 
   const cycleFilters: DataTableFilter<CycleRow>[] = [
-    {
-      key: "review_type",
-      label: "Review Type",
-      options: Array.from(new Set(data.cycles.map((cycle) => cycle.review_type || "-"))).map((value) => ({
-        value,
-        label: value,
-      })),
-      placeholder: "All Types",
-    },
+    ...cycleTabCycleFilters,
     {
       key: "question_band",
       label: "Question Count",

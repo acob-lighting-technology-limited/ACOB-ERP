@@ -207,6 +207,19 @@ export function AttendanceContent({
     })
   }, [])
 
+  const currentMonthLwpAwpCount = useMemo(() => {
+    const currentYM = toLocalYearMonth()
+    let count = 0
+    for (const day of unifiedDays ?? []) {
+      if (day.date.startsWith(currentYM)) {
+        if (day.status === "lateness_with_permission" || day.status === "absent_with_permission") {
+          count++
+        }
+      }
+    }
+    return count
+  }, [unifiedDays])
+
   const fetchAttendanceData = useCallback(async () => {
     try {
       const ym = toLocalYearMonth()
@@ -831,6 +844,7 @@ export function AttendanceContent({
         <AppealDialog
           row={appealDialogRow}
           open={appealDialogRow !== null}
+          lwpAwpCountThisMonth={currentMonthLwpAwpCount}
           onClose={() => {
             setAppealDialogRow(null)
             setEditAppeal(null)

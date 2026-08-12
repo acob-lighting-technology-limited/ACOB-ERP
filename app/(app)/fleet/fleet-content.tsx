@@ -4,10 +4,20 @@ import { useMemo, useState } from "react"
 import { formatWATDateTime, toLocalISODate } from "@/lib/utils/date"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { CalendarClock, Car, Paperclip, Plus } from "lucide-react"
+import { CalendarClock, Car, Paperclip, Pencil, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   Dialog,
   DialogContent,
@@ -44,6 +54,7 @@ type FleetAttachment = {
 type FleetBooking = {
   id: string
   resource_id: string
+  requester_id: string
   start_at: string
   end_at: string
   reason: string
@@ -53,6 +64,11 @@ type FleetBooking = {
   /** When the approver decided (approved or rejected). */
   reviewed_at?: string | null
   resource?: FleetResource | null
+  requester?: {
+    id: string
+    full_name?: string | null
+    department?: string | null
+  } | null
   reviewer?: {
     id: string
     full_name?: string | null
@@ -96,22 +112,50 @@ async function fetchFleetResources(): Promise<FleetResource[]> {
   return payload.data || []
 }
 
-async function fetchFleetBookings(): Promise<{ bookings: FleetBooking[]; schedule: FleetSchedule[] }> {
-  const response = await apiFetch("/api/fleet/bookings")
+async function fetchFleetBookings(scope: string = "all"): Promise<{ bookings: FleetBooking[]; schedule: FleetSchedule[] }> {
+  const response = await apiFetch(`/api/fleet/bookings?scope=${scope}`)
   if (!response.ok) throw new Error("Failed to load fleet bookings")
   const payload = await response.json()
   return { bookings: payload.data || [], schedule: payload.resource_schedule || [] }
 }
 
+const FLEET_TABS = [
+  { key: "all", label: "General Bookings" },
+  { key: "my", label: "My Requests" },
+]
+
 export function FleetContent() {
   const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState<"all" | "my">("all")
   const [open, setOpen] = useState(false)
+  const [editingId, setEditingId] = useState<string | null>(null)
   const [cancelingId, setCancelingId] = useState<string | null>(null)
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [resourceId, setResourceId] = useState("")
   const [startAt, setStartAt] = useState("")
   const [endAt, setEndAt] = useState("")
   const [reason, setReason] = useState("")
   const [files, setFiles] = useState<File[]>([])
+
+  const resetModalState = () => {
+    setOpen(false)
+    setEditingId(null)
+    setResourceId("")
+    setStartAt("")
+    setEndAt("")
+    setReason("")
+    setFiles([])
+  }
+
+  const handleOpenEdit = (row: FleetBookingRow) => {
+    setEditingId(row.id)
+    setResourceId(row.resource_id)
+    setStartAt(toLocalDateTimeInput(row.start_at))
+    setEndAt(toLocalDateTimeInput(row.end_at))
+    setReason(row.reason)
+    setFiles([])
+    setOpen(true)
+  }
 
   const hasInvalidWindow = useMemo(() => {
     if (!startAt || !endAt) return false
@@ -134,16 +178,18 @@ export function FleetContent() {
     error,
     refetch,
   } = useQuery({
-    queryKey: QUERY_KEYS.fleetBookings(),
-    queryFn: fetchFleetBookings,
+    queryKey: [...QUERY_KEYS.fleetBookings(), activeTab],
+    queryFn: () => fetchFleetBookings(activeTab),
   })
 
   const bookings = useMemo(() => bookingsData?.bookings ?? [], [bookingsData?.bookings])
 
   const selectedResourceSchedule = useMemo(() => {
     if (!resourceId) return []
-    return (bookingsData?.schedule ?? []).filter((slot) => slot.resource_id === resourceId)
-  }, [resourceId, bookingsData?.schedule])
+    return (bookingsData?.schedule ?? []).filter(
+      (slot) => slot.resource_id === resourceId && (editingId ? slot.id !== editingId : true)
+    )
+  }, [resourceId, bookingsData?.schedule, editingId])
 
   /**
    * Days the selected resource is already taken, so the picker can grey them
@@ -197,16 +243,32 @@ export function FleetContent() {
     },
     onSuccess: () => {
       toast.success("Booking application submitted")
-      setOpen(false)
-      setResourceId("")
-      setStartAt("")
-      setEndAt("")
-      setReason("")
-      setFiles([])
+      resetModalState()
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.fleetBookings() })
     },
     onError: (mutationError) => {
       toast.error(mutationError instanceof Error ? mutationError.message : "Failed to submit booking")
+    },
+  })
+
+  const { mutate: updateBooking, isPending: updating } = useMutation({
+    mutationFn: async (payload: { resource_id: string; start_at: string; end_at: string; reason: string }) => {
+      const response = await apiFetch(`/api/fleet/bookings/${editingId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      })
+      const resPayload = await response.json()
+      if (!response.ok) throw new Error(resPayload.error || "Failed to update booking")
+      return resPayload
+    },
+    onSuccess: () => {
+      toast.success("Booking updated")
+      resetModalState()
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.fleetBookings() })
+    },
+    onError: (mutationError) => {
+      toast.error(mutationError instanceof Error ? mutationError.message : "Failed to update booking")
     },
   })
 
@@ -219,25 +281,39 @@ export function FleetContent() {
       toast.error("Please complete all required fields. Reason must be at least 10 characters.")
       return
     }
-    const formData = new FormData()
-    formData.append("resource_id", resourceId)
-    formData.append("start_at", new Date(startAt).toISOString())
-    formData.append("end_at", new Date(endAt).toISOString())
-    formData.append("reason", reason.trim())
-    files.forEach((file) => formData.append("attachments", file))
-    submitBooking(formData)
+
+    if (editingId) {
+      updateBooking({
+        resource_id: resourceId,
+        start_at: new Date(startAt).toISOString(),
+        end_at: new Date(endAt).toISOString(),
+        reason: reason.trim(),
+      })
+    } else {
+      const formData = new FormData()
+      formData.append("resource_id", resourceId)
+      formData.append("start_at", new Date(startAt).toISOString())
+      formData.append("end_at", new Date(endAt).toISOString())
+      formData.append("reason", reason.trim())
+      files.forEach((file) => formData.append("attachments", file))
+      submitBooking(formData)
+    }
   }
 
-  async function handleCancel(bookingId: string) {
+  async function handleDelete(bookingId: string) {
     setCancelingId(bookingId)
     try {
-      const response = await apiFetch(`/api/fleet/bookings/${bookingId}/cancel`, { method: "PATCH" })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || "Failed to cancel booking")
-      toast.success("Booking cancelled")
-      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.fleetBookings() })
+      const response = await apiFetch(`/api/fleet/bookings/${bookingId}`, { method: "DELETE" })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) {
+        throw new Error(payload?.error || "Failed to delete booking")
+      }
+      toast.success("Booking deleted successfully")
+      setDeleteConfirmId(null)
+      await refetch()
+      await queryClient.invalidateQueries({ queryKey: QUERY_KEYS.fleetBookings() })
     } catch (cancelError) {
-      toast.error(cancelError instanceof Error ? cancelError.message : "Failed to cancel booking")
+      toast.error(cancelError instanceof Error ? cancelError.message : "Failed to delete booking")
     } finally {
       setCancelingId(null)
     }
@@ -261,6 +337,18 @@ export function FleetContent() {
         sortable: true,
         accessor: (row) => row.resourceName,
         render: (row) => <span className="font-medium">{row.resourceName}</span>,
+      },
+      {
+        key: "requester",
+        label: "Requested By",
+        sortable: true,
+        accessor: (row) => row.requester?.full_name || "Self",
+        render: (row) => (
+          <div className="text-xs">
+            <p className="font-medium">{row.requester?.full_name || "Self"}</p>
+            {row.requester?.department ? <p className="text-muted-foreground">{row.requester.department}</p> : null}
+          </div>
+        ),
       },
       {
         key: "timeRange",
@@ -370,6 +458,9 @@ export function FleetContent() {
       description="Book shared resources like transport and spaces without time clashes."
       icon={Car}
       backLink={{ href: "/profile", label: "Back to Dashboard" }}
+      tabs={FLEET_TABS}
+      activeTab={activeTab}
+      onTabChange={(tab) => setActiveTab(tab as "all" | "my")}
       actions={
         <Button onClick={() => setOpen(true)} className="gap-2">
           <Plus className="h-4 w-4" />
@@ -422,14 +513,20 @@ export function FleetContent() {
         onRetry={() => {
           void refetch()
         }}
+        forceRowActionsDropdown
         rowActions={[
           {
-            label: "Cancel",
-            onClick: (row) => {
-              void handleCancel(row.id)
-            },
-            hidden: (row) =>
-              !(row.status === "pending" && new Date(row.start_at).getTime() > Date.now()) || cancelingId === row.id,
+            label: "Edit",
+            icon: Pencil,
+            onClick: (row) => handleOpenEdit(row),
+            hidden: (row) => row.status !== "pending",
+          },
+          {
+            label: "Delete",
+            icon: Trash2,
+            variant: "destructive",
+            onClick: (row) => setDeleteConfirmId(row.id),
+            hidden: (row) => row.status !== "pending" || cancelingId === row.id,
           },
         ]}
         expandable={{
@@ -475,11 +572,15 @@ export function FleetContent() {
         urlSync
       />
 
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={resetModalState}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Resource Booking Application</DialogTitle>
-            <DialogDescription>Provide date/time, reason, and optional files (PDF/images).</DialogDescription>
+            <DialogTitle>{editingId ? "Edit Resource Booking" : "Resource Booking Application"}</DialogTitle>
+            <DialogDescription>
+              {editingId
+                ? "Update your pending resource booking request."
+                : "Provide date/time, reason, and optional files (PDF/images)."}
+            </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-2">
@@ -512,8 +613,6 @@ export function FleetContent() {
                         setEndAt("")
                         return
                       }
-                      // Default to a working day: 09:00 start, 17:00 end. The
-                      // time inputs below stay authoritative once edited.
                       setStartAt(withDate(startAt, range.from, "09:00"))
                       if (range.to) setEndAt(withDate(endAt, range.to, "17:00"))
                     }}
@@ -579,16 +678,18 @@ export function FleetContent() {
               <p className="text-muted-foreground text-xs">Minimum 10 characters</p>
             </div>
 
-            <div className="space-y-2">
-              <Label>Attachments (optional)</Label>
-              <Input
-                type="file"
-                accept="application/pdf,image/jpeg,image/jpg,image/png,image/webp"
-                multiple
-                onChange={(event) => setFiles(Array.from(event.target.files || []))}
-              />
-              <p className="text-muted-foreground text-xs">Accepted: PDF, JPG, JPEG, PNG, WEBP (max 10MB each).</p>
-            </div>
+            {!editingId && (
+              <div className="space-y-2">
+                <Label>Attachments (optional)</Label>
+                <Input
+                  type="file"
+                  accept="application/pdf,image/jpeg,image/jpg,image/png,image/webp"
+                  multiple
+                  onChange={(event) => setFiles(Array.from(event.target.files || []))}
+                />
+                <p className="text-muted-foreground text-xs">Accepted: PDF, JPG, JPEG, PNG, WEBP (max 10MB each).</p>
+              </div>
+            )}
 
             {currentWindowConflicts.length > 0 ? (
               <div className="border-destructive/40 bg-destructive/5 rounded border p-3 text-sm">
@@ -599,18 +700,48 @@ export function FleetContent() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
+            <Button variant="outline" onClick={resetModalState}>
               Cancel
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={!canSubmit || submitting || currentWindowConflicts.length > 0 || hasInvalidWindow}
+              disabled={!canSubmit || submitting || updating || currentWindowConflicts.length > 0 || hasInvalidWindow}
             >
-              {submitting ? "Submitting..." : "Submit Application"}
+              {submitting || updating
+                ? editingId
+                  ? "Updating..."
+                  : "Submitting..."
+                : editingId
+                  ? "Update Booking"
+                  : "Submit Application"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={deleteConfirmId !== null} onOpenChange={(isOpen) => !isOpen && setDeleteConfirmId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Resource Booking Request?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this pending resource booking request? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancelingId !== null}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: "destructive" })}
+              disabled={cancelingId !== null}
+              onClick={(e) => {
+                e.preventDefault()
+                if (deleteConfirmId) void handleDelete(deleteConfirmId)
+              }}
+            >
+              {cancelingId !== null ? "Deleting..." : "Delete Booking"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DataTablePage>
   )
 }

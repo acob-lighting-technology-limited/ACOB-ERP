@@ -27,9 +27,6 @@ async function getData() {
   const { data: records } = await dataClient
     .from("correspondence_records")
     .select("*")
-    // Match the API list order: numbers are minted at approval, so approved_at DESC
-    // keeps each sequence numeric (055 above 054); un-numbered drafts (null) pin on top.
-    .order("approved_at", { ascending: false, nullsFirst: true })
     .order("created_at", { ascending: false })
 
   const scopedRecords =

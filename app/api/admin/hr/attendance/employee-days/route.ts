@@ -96,14 +96,23 @@ export async function GET(request: NextRequest) {
       .lte("start_date", monthEnd)
       .gte("end_date", monthStart),
     recordIds.length > 0
-      ? dataClient
-          .from("audit_logs")
-          .select("entity_id, user_id, created_at")
-          .eq("entity_type", "attendance_record")
-          .in("entity_id", recordIds)
-          .order("created_at", { ascending: false })
-          .then((r) => r.data ?? [])
-      : Promise.resolve([] as Array<{ entity_id: string; user_id: string }>),
+      ? Promise.all([
+          dataClient
+            .from("audit_logs")
+            .select("entity_id, user_id, created_at")
+            .in("entity_type", ["attendance_record", "attendance_records"])
+            .in("entity_id", recordIds)
+            .order("created_at", { ascending: false }),
+          dataClient
+            .from("attendance_events")
+            .select("attendance_record_id, actor_id, created_at")
+            .in("attendance_record_id", recordIds)
+            .order("created_at", { ascending: false }),
+        ]).then(([auditRes, eventRes]) => ({
+          auditRows: auditRes.data ?? [],
+          eventRows: eventRes.data ?? [],
+        }))
+      : Promise.resolve({ auditRows: [], eventRows: [] }),
   ])
 
   // Per-day manual actor (priority: holiday > leave > exempt).
@@ -120,10 +129,21 @@ export async function GET(request: NextRequest) {
     if (p.created_by) for (const d of expandRange(p.start_date, p.end_date)) exBy.set(d, p.created_by)
   }
 
-  // Latest editor per record from audit logs.
+  // Latest editor per record from attendance events and audit logs.
   const editorIdByRecordId = new Map<string, string>()
-  for (const lg of auditLogs as Array<{ entity_id: string; user_id: string }>) {
-    if (!editorIdByRecordId.has(lg.entity_id)) editorIdByRecordId.set(lg.entity_id, lg.user_id)
+  const { auditRows = [], eventRows = [] } = auditLogs as {
+    auditRows: Array<{ entity_id: string; user_id: string }>
+    eventRows: Array<{ attendance_record_id: string | null; actor_id: string | null }>
+  }
+  for (const ev of eventRows) {
+    if (ev.attendance_record_id && ev.actor_id && !editorIdByRecordId.has(ev.attendance_record_id)) {
+      editorIdByRecordId.set(ev.attendance_record_id, ev.actor_id)
+    }
+  }
+  for (const lg of auditRows) {
+    if (lg.entity_id && lg.user_id && !editorIdByRecordId.has(lg.entity_id)) {
+      editorIdByRecordId.set(lg.entity_id, lg.user_id)
+    }
   }
 
   // Resolve every actor id → first name in one query.
@@ -179,7 +199,7 @@ export async function GET(request: NextRequest) {
         date,
         record: rec,
         status,
-        manual_by: manualByDate(date),
+        manual_by: manualByDate(date) ?? rec?.editor_first_name ?? null,
         early_closure_time: closeTime,
         late_resumption_time: lateRes,
       }

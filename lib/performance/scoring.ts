@@ -3,6 +3,7 @@ import { toLocalISODate } from "@/lib/utils/date"
 import { deriveUnifiedAttendanceStatus, normalizeStoredAttendanceStatus } from "@/lib/hr/attendance-status"
 import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import { dayCredit, getLateSteps } from "@/lib/hr/attendance-utils"
+import { pickCurrentCycle } from "@/lib/pms/cadence"
 
 type GoalScoreBreakdown = {
   goal_id: string
@@ -38,8 +39,10 @@ type DepartmentMetricBreakdown = {
 
 type ReviewCycleRow = {
   id: string
+  name?: string | null
   start_date: string
   end_date: string
+  status?: string | null
 }
 
 type PerformanceReviewScoreRow = {
@@ -100,13 +103,36 @@ function weightedScore(
 }
 
 async function getCycleWindow(supabase: SupabaseClient, cycleId?: string | null): Promise<ReviewCycleRow | null> {
-  if (!cycleId) return null
-  const { data } = await supabase
+  if (cycleId) {
+    const { data } = await supabase
+      .from("review_cycles")
+      .select("id, name, start_date, end_date, status")
+      .eq("id", cycleId)
+      .maybeSingle<ReviewCycleRow>()
+    if (data) return data
+  }
+
+  // 1. Fall back to the quarterly cycle covering today. PMS is scored quarterly,
+  // and half-year/annual cycles span the same dates — picking "the newest active
+  // cycle" regardless of cadence lets those windows drive quarterly scores.
+  const { data: activeCycles } = await supabase
     .from("review_cycles")
-    .select("id, start_date, end_date")
-    .eq("id", cycleId)
-    .maybeSingle<ReviewCycleRow>()
-  return data ?? null
+    .select("id, name, start_date, end_date, status, review_type")
+    .eq("status", "active")
+    .order("start_date", { ascending: false })
+    .returns<(ReviewCycleRow & { review_type: string | null })[]>()
+
+  const activeCycle = pickCurrentCycle(activeCycles || [], toLocalISODate(), "quarterly")
+  if (activeCycle) return activeCycle
+
+  // 2. Fall back to the most recent quarterly cycle of any status
+  const { data: allCycles } = await supabase
+    .from("review_cycles")
+    .select("id, name, start_date, end_date, status, review_type")
+    .order("start_date", { ascending: false })
+    .returns<(ReviewCycleRow & { review_type: string | null })[]>()
+
+  return pickCurrentCycle(allCycles || [], toLocalISODate(), "quarterly")
 }
 
 export async function computeIndividualPerformanceScore(
@@ -350,6 +376,10 @@ export async function computeIndividualPerformanceScore(
       if (Boolean(profile?.attendance_exempt) || exemptionDateSet.has(day)) continue
 
       const row = recordByDate.get(day)
+      const rawStoredStatus = String((row as { status?: string | null })?.status || "").toLowerCase()
+
+      // Approved Leave Without Pay (LWP): exclude from scorable days so it doesn't penalize attendance score
+      if (rawStoredStatus === "leave_without_pay" || rawStoredStatus === "lwp") continue
 
       // Skip today if the employee is still clocked in (unfinished day).
       if (day === todayIso && row?.clock_in && !row?.clock_out) continue
@@ -369,9 +399,7 @@ export async function computeIndividualPerformanceScore(
 
       // Hourly credit model (10 credits/day; late & early-out each dock ~1/hr).
       // LEWP forgives the early-out hours only — never the late arrival.
-      const earlyOutApproved =
-        normalizeStoredAttendanceStatus((row as { status?: string | null }).status) ===
-        "early_departure_with_permission"
+      const earlyOutApproved = rawStoredStatus === "early_departure_with_permission"
       creditSum += dayCredit(status, row.clock_in, row.clock_out, policy, {
         earlyCloseTime: earlyClose ?? null,
         earlyOutApproved,
@@ -386,7 +414,19 @@ export async function computeIndividualPerformanceScore(
         }
       }
 
-      if (status === "early" || status === "early_closure") presentDays++
+      const normalizedStatus = String(status || "").toLowerCase()
+
+      if (
+        normalizedStatus === "early" ||
+        normalizedStatus === "early_closure" ||
+        normalizedStatus === "absence_with_permission" ||
+        normalizedStatus === "awp" ||
+        normalizedStatus === "absent_with_permission" ||
+        rawStoredStatus === "absence_with_permission" ||
+        rawStoredStatus === "awp"
+      ) {
+        presentDays++
+      }
     }
 
     attendanceBreakdown.present = presentDays
@@ -424,13 +464,33 @@ export async function computeIndividualPerformanceScore(
       .order("created_at", { ascending: false })
       .limit(1)
 
-    if (params.cycleId) {
-      cbtQuery = cbtQuery.eq("review_cycle_id", params.cycleId)
+    if (cycle?.id) {
+      cbtQuery = cbtQuery.eq("review_cycle_id", cycle.id)
     }
 
     const { data: cbtRows } = await cbtQuery
     if (cbtRows && cbtRows.length > 0) {
       cbtScore = roundScore(Number(cbtRows[0]?.cbt_score) || 0)
+    }
+  }
+
+  if (cbtScore === null) {
+    let cbtAttemptQuery = supabase
+      .from("cbt_attempts")
+      .select("score")
+      .eq("profile_id", params.userId)
+      .eq("status", "submitted")
+
+    if (cycle?.id) {
+      cbtAttemptQuery = cbtAttemptQuery.eq("review_cycle_id", cycle.id)
+    }
+
+    const { data: cbtAttempts } = await cbtAttemptQuery
+      .order("submitted_at", { ascending: false })
+      .limit(1)
+
+    if (cbtAttempts && cbtAttempts.length > 0 && typeof cbtAttempts[0]?.score === "number") {
+      cbtScore = roundScore(Number(cbtAttempts[0].score))
     }
   }
 
@@ -487,7 +547,10 @@ export async function computeIndividualPerformanceScore(
 
   return {
     user_id: params.userId,
-    cycle_id: params.cycleId ?? null,
+    cycle_id: cycle?.id ?? params.cycleId ?? null,
+    cycle_name: cycle?.name ?? null,
+    cycle_start_date: cycle?.start_date ?? null,
+    cycle_end_date: cycle?.end_date ?? null,
     kpi_score: kpiScore,
     cbt_score: cbtScore,
     attendance_score: attendanceScore,

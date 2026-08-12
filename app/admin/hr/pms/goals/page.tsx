@@ -46,7 +46,10 @@ async function getAdminGoalPageData() {
           .in("department", managedDepartments)
           .order("created_at", { ascending: false })
       : Promise.resolve({ data: [] as Goal[] }),
-    supabase.from("review_cycles").select("id, name, review_type").order("start_date", { ascending: false }),
+    supabase
+      .from("review_cycles")
+      .select("id, name, review_type, start_date, end_date")
+      .order("start_date", { ascending: false }),
   ])
 
   const cycles = cyclesResult.data || []

@@ -14,6 +14,7 @@ import {
 } from "@/lib/hr/attendance-status"
 import { requireApiAdminScope } from "@/lib/admin/api-scope"
 import { loadAttendancePolicy } from "@/lib/hr/attendance-utils"
+import { validateLwpAwpMonthlyQuota } from "@/lib/hr/attendance-quota"
 
 const log = logger("admin-hr-attendance-record-patch")
 
@@ -93,6 +94,18 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     const isCoveredWithoutTimes =
       nextStatus === "waiver" || nextStatus === "absent_with_permission" || nextStatus === "out_of_station"
     const isLWP = nextStatus === "lateness_with_permission"
+
+    const quotaCheck = await validateLwpAwpMonthlyQuota({
+      dataClient,
+      userId: record.user_id,
+      targetStatus: nextStatus,
+      date: record.date,
+      isAdminLike: auth.scope.isAdminLike,
+      excludeRecordId: record.id,
+    })
+    if (!quotaCheck.allowed) {
+      return NextResponse.json({ error: quotaCheck.error }, { status: 403 })
+    }
 
     if (clockIn && clockOut && clockOut <= clockIn) {
       return NextResponse.json({ error: "Clock out must be after clock in" }, { status: 400 })
