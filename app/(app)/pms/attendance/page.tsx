@@ -6,10 +6,14 @@ function formatPercent(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? `${value}%` : "-"
 }
 
-export default async function PmsAttendancePage() {
-  const { score, attendance } = await getCurrentUserPmsData()
-  // Every record belongs to a quarter, a half-year and a year at once, so each
-  // cadence is its own filterable value rather than one "cycle" column.
+export default async function PmsAttendancePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ cycle_id?: string }>
+}) {
+  const { cycle_id } = await searchParams
+  const { score, cycles, activeCycleId, attendance } = await getCurrentUserPmsData(cycle_id)
+
   const getCadenceLabels = (dateValue: string) => {
     const date = new Date(dateValue)
     const year = date.getFullYear()
@@ -17,6 +21,7 @@ export default async function PmsAttendancePage() {
     const half = date.getMonth() < 6 ? 1 : 2
     return { cycle: `Q${quarter} ${year}`, half: `H${half} ${year}`, year: String(year) }
   }
+
   const rows = attendance.recent.map((record) => ({
     ...getCadenceLabels(record.date),
     month: formatWATDate(record.date, { month: "long" }),
@@ -25,6 +30,7 @@ export default async function PmsAttendancePage() {
     clock_out: record.clock_out || "In progress",
     total_hours: record.total_hours !== null ? `${record.total_hours.toFixed(2)} hrs` : "Pending",
     status: record.status || "unknown",
+    __rawStatus: record.status,
   }))
 
   return (
@@ -34,13 +40,15 @@ export default async function PmsAttendancePage() {
       backHref="/pms"
       backLabel="Back to PMS"
       icon="attendance"
+      cycles={cycles}
+      activeCycleId={activeCycleId}
       summaryCards={[
         { label: "Attendance Score", value: formatPercent(score.attendance_score) },
         { label: "Present Days", value: score.breakdown.attendance.present },
         { label: "Tracked Days", value: score.breakdown.attendance.total },
       ]}
-      tableTitle="Recent Attendance"
-      tableDescription="Your latest attendance entries counted in PMS."
+      tableTitle="Attendance Log"
+      tableDescription={`Attendance entries for ${score.cycle_name || "the selected cycle"}.`}
       rows={rows}
       columns={[
         { key: "cycle", label: "Cycle" },
@@ -51,9 +59,7 @@ export default async function PmsAttendancePage() {
         { key: "status", label: "Status" },
       ]}
       searchPlaceholder="Search attendance records..."
-      filterKey="cycle"
-      filterLabel="Quarter"
-      filterAllLabel="All Quarters"
+      hideSecondaryFilter
       extraFilters={[
         { key: "half", label: "Biannual", allLabel: "All Halves" },
         { key: "year", label: "Annual", allLabel: "All Years" },
