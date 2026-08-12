@@ -4,6 +4,8 @@ import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scop
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { notifyAttendanceMail } from "@/lib/hr/attendance-notify"
+import { loadAttendancePolicy } from "@/lib/hr/attendance-utils"
+import { validateLwpAwpMonthlyQuota } from "@/lib/hr/attendance-quota"
 import { logger } from "@/lib/logger"
 
 const log = logger("admin-hr-attendance-appeals")
@@ -230,6 +232,18 @@ export async function PATCH(request: NextRequest) {
 
     let approvedRecordId: string | null = appeal.attendance_record_id
     if (action === "approve") {
+      const quotaCheck = await validateLwpAwpMonthlyQuota({
+        dataClient,
+        userId: appeal.user_id,
+        targetStatus: appeal.requested_status,
+        date: appeal.appeal_date,
+        isAdminLike: scope.isAdminLike,
+        excludeRecordId: appeal.attendance_record_id,
+      })
+      if (!quotaCheck.allowed) {
+        return NextResponse.json({ error: quotaCheck.error }, { status: 403 })
+      }
+
       // Upsert the attendance record to reflect the approved status
       const { data: upserted, error: upsertError } = await dataClient
         .from("attendance_records")
