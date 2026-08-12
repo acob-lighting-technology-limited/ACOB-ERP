@@ -11,6 +11,12 @@ import { exportPmsRowsToExcel, exportPmsRowsToPdf } from "@/lib/pms/export"
 import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
 import { CbtAttemptDetail } from "@/components/pms/cbt-attempt-detail"
 
+import { Badge } from "@/components/ui/badge"
+import { cn } from "@/lib/utils"
+import { ATTENDANCE_STATUS_LABELS, normalizeStoredAttendanceStatus } from "@/lib/hr/attendance-status"
+import type { ReviewCycleOption } from "@/app/(app)/pms/_lib"
+import { CycleSelector } from "@/app/(app)/pms/_components/cycle-selector"
+
 type IconKey = "kpi" | "goals" | "attendance" | "cbt" | "behaviour" | "reviews"
 type TableColumn = { key: string; label: string }
 type TableRowData = Record<string, unknown> & { __rowId?: string }
@@ -38,6 +44,9 @@ interface PmsTablePageProps {
   extraFilters?: { key: string; label: string; allLabel?: string }[]
   hideSecondaryFilter?: boolean
   cbtExpandable?: boolean
+  headerActions?: React.ReactNode
+  cycles?: ReviewCycleOption[]
+  activeCycleId?: string | null
 }
 
 const iconMap = {
@@ -52,6 +61,53 @@ const iconMap = {
 function normalizeCell(value: unknown) {
   if (value === null || value === undefined || value === "") return "-"
   return String(value)
+}
+
+function renderStatusBadge(rawStatus: unknown) {
+  if (rawStatus === null || rawStatus === undefined || rawStatus === "" || rawStatus === "-") return "-"
+  const strStatus = String(rawStatus)
+  const norm = normalizeStoredAttendanceStatus(strStatus)
+  const label = (norm && ATTENDANCE_STATUS_LABELS[norm]) || strStatus
+
+  let badgeClasses = "bg-muted text-muted-foreground border-muted-foreground/20"
+
+  const s = strStatus.toLowerCase()
+  if (s === "lwp" || s === "lateness_with_permission" || norm === "lateness_with_permission") {
+    badgeClasses = "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+  } else if (
+    s === "awp" ||
+    s === "absence_with_permission" ||
+    s === "absent_with_permission" ||
+    norm === "absent_with_permission"
+  ) {
+    badgeClasses = "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
+  } else if (
+    s === "lewp" ||
+    s === "early_departure_with_permission" ||
+    norm === "early_departure_with_permission"
+  ) {
+    badgeClasses = "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20"
+  } else if (s === "lwop" || s === "leave_without_pay" || norm === "lwop") {
+    badgeClasses = "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
+  } else if (s === "present" || norm === "present") {
+    badgeClasses = "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20"
+  } else if (s === "early" || norm === "early") {
+    badgeClasses = "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+  } else if (s === "late" || norm === "late") {
+    badgeClasses = "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+  } else if (s === "incomplete" || norm === "incomplete") {
+    badgeClasses = "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 border-cyan-500/20"
+  } else if (s === "absent" || norm === "absent") {
+    badgeClasses = "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20"
+  } else if (s === "on_leave" || norm === "on_leave") {
+    badgeClasses = "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20"
+  }
+
+  return (
+    <Badge className={cn("px-2 py-0.5 text-xs font-semibold rounded-md border shadow-none capitalize", badgeClasses)}>
+      {label}
+    </Badge>
+  )
 }
 
 export function PmsTablePage({
@@ -72,6 +128,9 @@ export function PmsTablePage({
   extraFilters,
   hideSecondaryFilter = false,
   cbtExpandable = false,
+  headerActions,
+  cycles,
+  activeCycleId,
 }: PmsTablePageProps) {
   const Icon = iconMap[icon]
   const [isExportOpen, setIsExportOpen] = useState(false)
@@ -88,6 +147,9 @@ export function PmsTablePage({
       initialWidth: index === 0 ? 220 : index === 1 ? 260 : undefined,
       hideOnMobile: index >= 3,
       render: (row) => {
+        if (column.key === "status") {
+          return renderStatusBadge(row.__rawStatus || row.status)
+        }
         const value = normalizeCell(row[column.key])
         return index === 0 ? <span className="font-medium">{value}</span> : value
       },
@@ -120,8 +182,18 @@ export function PmsTablePage({
 
   const filters = useMemo<DataTableFilter<TableRowData>[]>(() => {
     const activeFilters: DataTableFilter<TableRowData>[] = []
+    const hasCycles = Boolean(cycles && cycles.length > 0)
 
-    if (!hideSecondaryFilter) {
+    if (hasCycles && cycles) {
+      activeFilters.push({
+        key: "cycle_selector",
+        label: "Review Cycle",
+        options: cycles.map((c) => ({ value: c.id, label: c.name })),
+        render: () => <CycleSelector cycles={cycles} activeCycleId={activeCycleId} />,
+      })
+    }
+
+    if (!hideSecondaryFilter && (!hasCycles || filterKey !== "cycle")) {
       activeFilters.push({
         key: filterKey,
         label: filterLabel,
@@ -136,20 +208,24 @@ export function PmsTablePage({
       })
     }
 
-    activeFilters.push({
-      key: firstColumnKey,
-      label: firstColumnLabel,
-      placeholder: `All ${firstColumnLabel}`,
-      options: firstColumnOptions,
-      mode: "custom",
-      filterFn: (row, selected) => {
-        if (!selected || selected.length === 0 || selected.includes("all")) return true
-        return selected.includes(normalizeCell(row[firstColumnKey]))
-      },
-      multi: false,
-    })
+    if (!hasCycles || firstColumnKey !== "cycle") {
+      activeFilters.push({
+        key: firstColumnKey,
+        label: firstColumnLabel,
+        placeholder: `All ${firstColumnLabel}`,
+        options: firstColumnOptions,
+        mode: "custom",
+        filterFn: (row, selected) => {
+          if (!selected || selected.length === 0 || selected.includes("all")) return true
+          return selected.includes(normalizeCell(row[firstColumnKey]))
+        },
+        multi: false,
+      })
+    }
 
     for (const extra of extraFilters ?? []) {
+      if (hasCycles && extra.key === "cycle") continue
+
       const options = Array.from(
         new Set(rows.map((row) => normalizeCell(row[extra.key])).filter((value) => value !== "-"))
       )
@@ -172,6 +248,8 @@ export function PmsTablePage({
 
     return activeFilters
   }, [
+    activeCycleId,
+    cycles,
     extraFilters,
     rows,
     filterAllLabel,
@@ -205,16 +283,19 @@ export function PmsTablePage({
       icon={Icon}
       backLink={{ href: backHref, label: backLabel }}
       actions={
-        <Button
-          variant="outline"
-          onClick={() => setIsExportOpen(true)}
-          disabled={rows.length === 0}
-          className="h-8 gap-2"
-          size="sm"
-        >
-          <Download className="h-4 w-4" />
-          Export
-        </Button>
+        <div className="flex items-center gap-2">
+          {headerActions}
+          <Button
+            variant="outline"
+            onClick={() => setIsExportOpen(true)}
+            disabled={rows.length === 0}
+            className="h-8 gap-2"
+            size="sm"
+          >
+            <Download className="h-4 w-4" />
+            Export
+          </Button>
+        </div>
       }
       stats={
         summaryCards.length > 0 ? (
