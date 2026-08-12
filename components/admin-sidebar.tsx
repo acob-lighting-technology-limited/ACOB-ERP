@@ -120,7 +120,6 @@ function buildDeptNavigation(deptId: string): NavItem[] {
         {
           name: "Attendance",
           href: `${base}/hr/attendance`,
-          children: [{ name: "Records", href: `${base}/hr/attendance/records` }],
         },
         { name: "Daily Activity", href: `${base}/hr/reports/daily-activity` },
         { name: "Leave", href: `${base}/hr/leave` },
