@@ -1,4 +1,4 @@
-﻿import { NextRequest, NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import {
   assertBookingWindow,
   assertNoFleetOverlap,
@@ -52,19 +52,24 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
+    const scopeParam = searchParams.get("scope") || searchParams.get("tab") || "all"
+
+    let query = validationClient
+      .from("fleet_bookings")
+      .select(
+        "id, resource_id, requester_id, start_at, end_at, reason, status, admin_note, reviewed_by, reviewed_at, created_at, updated_at, resource:fleet_resources(id, name, resource_type, is_active), requester:profiles!fleet_bookings_requester_id_fkey(id, full_name, department), reviewer:profiles!fleet_bookings_reviewed_by_fkey(id, full_name, department, designation)",
+        { count: "exact" }
+      )
+
+    if (scopeParam === "my") {
+      query = query.eq("requester_id", user.id)
+    }
+
     const {
       data: bookings,
       error,
       count,
-    } = await supabase
-      .from("fleet_bookings")
-      .select(
-        "id, resource_id, requester_id, start_at, end_at, reason, status, admin_note, reviewed_by, reviewed_at, created_at, updated_at, resource:fleet_resources(id, name, resource_type, is_active), reviewer:profiles!fleet_bookings_reviewed_by_fkey(id, full_name, department, designation)",
-        { count: "exact" }
-      )
-      .eq("requester_id", user.id)
-      .order("start_at", { ascending: true })
-      .range(from, to)
+    } = await query.order("start_at", { ascending: false }).range(from, to)
 
     if (error) {
       return NextResponse.json({ error: error.message || "Failed to load bookings" }, { status: 500 })
@@ -205,7 +210,7 @@ export async function POST(request: NextRequest) {
       uploadedPaths.push(filePath)
     }
 
-    const { data: booking, error: bookingError } = await supabase
+    const { data: createdBookings, error: bookingError } = await supabase
       .from("fleet_bookings")
       .insert({
         resource_id: resourceId,
@@ -218,11 +223,12 @@ export async function POST(request: NextRequest) {
       .select(
         "id, resource_id, requester_id, start_at, end_at, reason, status, admin_note, reviewed_by, reviewed_at, created_at, updated_at"
       )
-      .single()
 
-    if (bookingError || !booking) {
+    if (bookingError || !createdBookings || createdBookings.length === 0) {
       throw new Error(bookingError?.message || "Failed to create booking")
     }
+
+    const booking = createdBookings[0]
 
     if (uploadedPaths.length > 0) {
       const attachmentRows = uploadedPaths.map((filePath, index) => {
