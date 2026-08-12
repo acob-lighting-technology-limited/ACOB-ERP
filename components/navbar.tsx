@@ -23,6 +23,7 @@ import {
   ClipboardList,
   Calendar,
   Clock,
+  Settings,
   ShieldCheck,
   PanelLeftClose,
   PanelLeftOpen,
@@ -194,6 +195,12 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
               <Link href="/attendance" className="cursor-pointer">
                 <Clock className="mr-2 h-4 w-4" />
                 Attendance
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/settings" className="cursor-pointer">
+                <Settings className="mr-2 h-4 w-4" />
+                Settings
               </Link>
             </DropdownMenuItem>
             {canAccessAdmin && (
@@ -395,6 +402,18 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
           >
             <Clock className="h-4 w-4" />
             Attendance
+          </Link>
+          <Link
+            href="/settings"
+            className={cn(
+              "flex items-center gap-2 rounded px-4 py-2 text-sm",
+              isAdminMode
+                ? "hover:bg-[var(--navbar-admin-accent-soft,var(--admin-accent-soft))] hover:text-[var(--navbar-admin-primary,var(--admin-primary))]"
+                : "hover:bg-accent"
+            )}
+          >
+            <Settings className="h-4 w-4" />
+            Settings
           </Link>
           {canAccessAdmin && (
             <>

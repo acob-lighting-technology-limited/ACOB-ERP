@@ -113,6 +113,7 @@ export const ORG_MAIL_ROUTING: Record<
   Birthday: { replyTo: ORG_HR_EMAIL, listId: listId("birthday") },
   Payments: { replyTo: ORG_ACCOUNTS_EMAIL, listId: listId("payments") },
   Correspondence: { replyTo: ORG_CORPORATE_SERVICES_EMAIL, listId: listId("correspondence") },
+  Security: { replyTo: ORG_ICT_EMAIL, listId: listId("security") },
 }
 
 /** Dynamic department sender, e.g. "ACOB Finance Department" (label resolved at runtime). */
