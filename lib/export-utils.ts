@@ -29,11 +29,14 @@ import { getSeasonalLogoPaths } from "@/lib/seasonal-branding"
 // Dynamic import keeps it out of the SSR bundle (it requires browser APIs).
 type PptxShapeTypeMap = Record<string, string>
 
+/** A run of text with its own formatting, for mixed-format text boxes. */
+type PptxTextRun = { text: string; options?: Record<string, unknown> }
+
 type PptxSlide = {
   background?: { color: string }
   transition?: { type: string; duration: number }
   addShape: (shapeName: string, options: Record<string, unknown>) => void
-  addText: (text: string, options: Record<string, unknown>) => void
+  addText: (text: string | PptxTextRun[], options: Record<string, unknown>) => void
   addImage: (options: Record<string, unknown>) => void
 }
 
@@ -1086,7 +1089,13 @@ export const exportActionPointToPPTX = async (
         fontFace: "Calibri",
       })
       try {
-        slide.addImage({ path: LOGO_ICON, x: 11.45, y: 0.14, w: 1.7, h: 0.37 })
+        const markBox = logoBoxByHeight(EXPORT_LOGOS.matrixMarkInverse, 0.4)
+        slide.addImage({
+          path: EXPORT_LOGOS.matrixMarkInverse.path,
+          x: 13.33 - 0.3 - markBox.w,
+          y: (0.65 - markBox.h) / 2,
+          ...markBox,
+        })
       } catch {
         /* skip */
       }
@@ -1357,10 +1366,10 @@ export const exportToDocx = async (report: WeeklyReport, meetingDate?: string) =
           docxSectionHeading("WORK DONE", "1A7A4A"),
           ...docxNumberedItems(report.work_done, "No data provided."),
           new Paragraph({ text: "", spacing: { after: 120 } }),
-          docxSectionHeading("TASKS FOR NEW WEEK", "1D6A96"),
+          docxSectionHeading("TASKS FOR NEW WEEK", SECTION_TASKS),
           ...docxNumberedItems(report.tasks_new_week, "No data provided."),
           new Paragraph({ text: "", spacing: { after: 120 } }),
-          docxSectionHeading("CHALLENGES", "B91C1C"),
+          docxSectionHeading("CHALLENGES", SECTION_CHALLENGES),
           ...docxNumberedItems(report.challenges, "No challenges reported."),
         ],
       },
@@ -1621,10 +1630,10 @@ export const exportAllToDocx = async (reports: WeeklyReport[], week: number, yea
       docxSectionHeading("WORK DONE", "1A7A4A"),
       ...docxNumberedItems(report.work_done, "No data provided."),
       new Paragraph({ text: "", spacing: { after: 120 } }),
-      docxSectionHeading("TASKS FOR NEW WEEK", "1D6A96"),
+      docxSectionHeading("TASKS FOR NEW WEEK", SECTION_TASKS),
       ...docxNumberedItems(report.tasks_new_week, "No data provided."),
       new Paragraph({ text: "", spacing: { after: 120 } }),
-      docxSectionHeading("CHALLENGES", "B91C1C"),
+      docxSectionHeading("CHALLENGES", SECTION_CHALLENGES),
       ...docxNumberedItems(report.challenges, "No challenges reported."),
       new Paragraph({ text: "", spacing: { after: 120 } })
     )
@@ -1781,17 +1790,52 @@ export const exportAllToXLSX = async (reports: WeeklyReport[], week: number, yea
 // ACOB brand colours
 const ACOB_GREEN = "1A7A4A" // primary green
 const ACOB_GREEN_LIGHT = "E8F5EE" // light green tint
+// Deep green for the header/footer bars. Still clearly green, but white
+// artwork sits at 9.6:1 against it instead of 5.4:1 on the primary green, so
+// the logos in the bars actually read. (ACOB_DARK is 14.8:1 — that is why the
+// old bar looked black.)
+const ACOB_GREEN_DEEP = "124F32"
 const ACOB_DARK = "0F2D1F" // deep dark green
 const ACOB_SLATE = "334155"
 const ACOB_MUTED = "64748B"
 const ACOB_WHITE = "FFFFFF"
 const ACOB_OFFWHITE = "F8FAF9"
 
-// Logo URLs
-// acob-logo-light.webp = full colour logo (dark text + green) — use on light/white backgrounds
-// acob-logo-dark.webp  = green-only minimal logo — use on dark/green backgrounds
-const LOGO_FULL = getSeasonalLogoPaths("light").full // full ACOB LIGHTING logo
-const LOGO_ICON = getSeasonalLogoPaths("light").icon // green-only icon variant
+// Section accents. Challenges is amber rather than red: every report has the
+// section, so red made a routine "nothing major this week" read as an alarm.
+const SECTION_WORK_DONE = ACOB_GREEN
+const SECTION_TASKS = "1D6A96"
+const SECTION_CHALLENGES = "B45309"
+
+// Export logo assets.
+//
+// These live in /images/exports/ and are deliberately separate from the web
+// assets: PptxGenJS embeds a fresh copy of the image bytes for every addImage
+// call (it does not dedupe), so a 60-slide deck carries 60 copies. They are
+// downscaled to roughly the resolution they are rendered at.
+//
+// `ratio` is the asset's true width/height. Always derive the box from it via
+// the helpers below — passing mismatched w/h to addImage stretches the artwork,
+// which is exactly how the Matrix mark ended up squashed into the old
+// 4.6 x 1.15 box that had been sized for the wide ACOB wordmark.
+const EXPORT_LOGOS = {
+  /** ACOB LIGHTING wordmark, dark text — for white/light backgrounds. */
+  acobFull: { path: "/images/exports/acob-lighting-full.png", ratio: 1200 / 230 },
+  /** ACOB LIGHTING wordmark, white text + anniversary seal — for dark/green backgrounds. */
+  acobInverse: { path: "/images/exports/acob-lighting-inverse.png", ratio: 460 / 120 },
+  /** Matrix "MA" mark, dark text — for white/light backgrounds. */
+  matrixMark: { path: "/images/exports/matrix-mark.png", ratio: 320 / 233 },
+  /** Matrix "MA" mark, white/silver text — for dark/green backgrounds. */
+  matrixMarkInverse: { path: "/images/exports/matrix-mark-inverse.png", ratio: 320 / 245 },
+} as const
+
+type ExportLogo = (typeof EXPORT_LOGOS)[keyof typeof EXPORT_LOGOS]
+
+/** Box of the given height, width derived from the asset's true aspect ratio. */
+const logoBoxByHeight = (logo: ExportLogo, h: number) => ({ w: Number((h * logo.ratio).toFixed(3)), h })
+
+/** Box of the given width, height derived from the asset's true aspect ratio. */
+const logoBoxByWidth = (logo: ExportLogo, w: number) => ({ w, h: Number((w / logo.ratio).toFixed(3)) })
 
 export type WeeklyPptxTheme = "light" | "dark"
 export type WeeklyDeptOrder = "default" | "alpha" | "random"
@@ -1800,9 +1844,11 @@ const getWeeklyPptxThemeColors = (theme: WeeklyPptxTheme = "light") => {
   if (theme === "dark") {
     return {
       canvas: "111111",
-      header: "000000",
+      header: ACOB_GREEN_DEEP,
+      headerMuted: ACOB_GREEN_LIGHT,
+      ghostOnAccent: "14603A",
       accent: ACOB_GREEN,
-      footer: ACOB_GREEN,
+      footer: ACOB_GREEN_DEEP,
       textPrimary: "F5F5F5",
       textMuted: "A3A3A3",
       textInverse: ACOB_WHITE,
@@ -1811,14 +1857,17 @@ const getWeeklyPptxThemeColors = (theme: WeeklyPptxTheme = "light") => {
       separator: "3A3A3A",
       sectionText: "E5E7EB",
       titleFill: ACOB_GREEN,
+      ghost: "1B2A22",
     }
   }
 
   return {
     canvas: ACOB_OFFWHITE,
-    header: ACOB_DARK,
+    header: ACOB_GREEN_DEEP,
+    headerMuted: ACOB_GREEN_LIGHT,
+    ghostOnAccent: "14603A",
     accent: ACOB_GREEN,
-    footer: ACOB_GREEN,
+    footer: ACOB_GREEN_DEEP,
     textPrimary: ACOB_DARK,
     textMuted: ACOB_MUTED,
     textInverse: ACOB_WHITE,
@@ -1827,10 +1876,18 @@ const getWeeklyPptxThemeColors = (theme: WeeklyPptxTheme = "light") => {
     separator: "E2E8F0",
     sectionText: ACOB_SLATE,
     titleFill: ACOB_GREEN,
+    ghost: ACOB_GREEN_LIGHT,
   }
 }
 
-/** Adds the ACOB cover slide. */
+/**
+ * Adds the ACOB cover slide.
+ *
+ * Editorial left-aligned layout: a green rail runs down the left edge and turns
+ * along the bottom into the footer, the ACOB wordmark sits above a left-anchored
+ * title stack, and the week number is set oversized and ghosted behind the right
+ * half of the slide as a graphic element.
+ */
 const addCoverSlide = (
   pres: PptxPresentation,
   week: number,
@@ -1840,143 +1897,164 @@ const addCoverSlide = (
   meetingDate?: string
 ) => {
   const colors = getWeeklyPptxThemeColors(theme)
+  const isDark = theme === "dark"
   const slide = pres.addSlide()
 
-  // White body, dark header/footer only
-  slide.background = { color: theme === "dark" ? colors.canvas : ACOB_WHITE }
+  slide.background = { color: isDark ? colors.canvas : ACOB_WHITE }
 
-  // ── Top dark header bar ───────────────────────────────────────────────────
-  slide.addShape(pres.ShapeType?.rect ?? "rect", {
-    x: 0,
-    y: 0,
-    w: "100%",
-    h: 0.55,
-    fill: { color: colors.header },
-    line: { color: colors.header },
-  })
-  // thin green accent under header
-  slide.addShape(pres.ShapeType?.rect ?? "rect", {
-    x: 0,
+  const railW = 0.3
+  const contentX = 1.05
+
+  // ── Ghosted week numeral (drawn first so everything else sits on top) ──────
+  slide.addText(String(week), {
+    x: 6.9,
     y: 0.55,
-    w: "100%",
-    h: 0.06,
-    fill: { color: colors.accent },
-    line: { color: colors.accent },
-  })
-
-  // ── Centred logo (full ACOB LIGHTING logo) ────────────────────────────────
-  // Logo natural ratio ≈ 4.6 : 1  →  w=4.6, h=1.0
-  // Slide body: y=0.61 → y=6.9  (height = 6.29")
-  // Full visual block height:
-  //   logo(1.0) + gap(0.25) + divider(0) + gap(0.2) + GM(0.7) + gap(0.12) + WR(0.55) + gap(0.2) + pill(0.42) + gap(0.18) + date(0.45) = 4.07
-  //   (+ subtitle 0.5 if present, but centre without it)
-  // Block start = bodyCentre - blockH/2 = (0.61 + 6.29/2) - 4.07/2 = 3.755 - 2.035 = 1.72
-  const blockStart = 1.72
-  const logoW = 4.6
-  const logoH = 1.15
-  const logoX = (13.33 - logoW) / 2
-  try {
-    slide.addImage({
-      path: theme === "dark" ? LOGO_ICON : LOGO_FULL,
-      x: logoX,
-      y: blockStart,
-      w: logoW,
-      h: logoH,
-    })
-  } catch {
-    slide.addText("ACOB LIGHTING TECHNOLOGY LIMITED", {
-      x: 0.5,
-      y: blockStart,
-      w: 12.33,
-      h: logoH,
-      fontSize: 22,
-      bold: true,
-      color: colors.textPrimary,
-      align: "center",
-      fontFace: "Calibri",
-    })
-  }
-
-  // ── Green divider ─────────────────────────────────────────────────────────
-  slide.addShape(pres.ShapeType?.line ?? "line", {
-    x: 1.5,
-    y: blockStart + 1.35,
-    w: 10.33,
-    h: 0,
-    line: { color: colors.accent, width: 1.5 },
-  })
-
-  // ── Main title block ──────────────────────────────────────────────────────
-  const titleStart = blockStart + 1.55
-
-  // "General Meeting"
-  slide.addText("General Meeting", {
-    x: 0.5,
-    y: titleStart,
-    w: 12.33,
-    h: 0.7,
-    fontSize: 40,
+    w: 5.9,
+    h: 4.4,
+    fontSize: 200,
     bold: true,
-    color: colors.textPrimary,
-    align: "center",
-    fontFace: "Calibri",
-  })
-
-  // "Weekly Report"
-  slide.addText("Weekly Report", {
-    x: 0.5,
-    y: titleStart + 0.82,
-    w: 12.33,
-    h: 0.55,
-    fontSize: 26,
-    bold: false,
-    color: colors.accent,
-    align: "center",
-    fontFace: "Calibri",
-  })
-
-  // "Week N" pill
-  const weekLabel = `Week ${week}`
-  slide.addText(weekLabel, {
-    x: 5.4,
-    y: titleStart + 1.57,
-    w: 2.53,
-    h: 0.42,
-    fontSize: 15,
-    bold: true,
-    color: colors.textInverse,
-    fill: { color: colors.accent },
-    align: "center",
+    color: colors.ghost,
+    align: "right",
     valign: "middle",
     fontFace: "Calibri",
   })
 
-  const meetingDateLabel = formatExportMeetingDateLabel(week, year, meetingDate)
-  slide.addText(meetingDateLabel, {
-    x: 0.5,
-    y: titleStart + 2.15,
-    w: 12.33,
-    h: 0.45,
-    fontSize: 16,
-    bold: false,
+  // ── Green rail: left edge, continuing into the bottom footer strip ────────
+  // Matches the footer so the two read as one continuous L, not two greens.
+  slide.addShape(pres.ShapeType?.rect ?? "rect", {
+    x: 0,
+    y: 0,
+    w: railW,
+    h: 7.5,
+    fill: { color: colors.footer },
+    line: { color: colors.footer },
+  })
+
+  // ── Matrix mark, top right ────────────────────────────────────────────────
+  const markLogo = isDark ? EXPORT_LOGOS.matrixMarkInverse : EXPORT_LOGOS.matrixMark
+  const markBox = logoBoxByHeight(markLogo, 0.6)
+  try {
+    slide.addImage({
+      path: markLogo.path,
+      x: 13.33 - 0.6 - markBox.w,
+      y: 0.55,
+      ...markBox,
+    })
+  } catch {
+    /* skip */
+  }
+
+  // ── ACOB LIGHTING wordmark ────────────────────────────────────────────────
+  const wordmark = isDark ? EXPORT_LOGOS.acobInverse : EXPORT_LOGOS.acobFull
+  const wordmarkBox = logoBoxByWidth(wordmark, 4.3)
+  try {
+    slide.addImage({
+      path: wordmark.path,
+      x: contentX,
+      y: 1.0,
+      ...wordmarkBox,
+    })
+  } catch {
+    slide.addText("ACOB LIGHTING TECHNOLOGY LIMITED", {
+      x: contentX,
+      y: 1.0,
+      w: 8,
+      h: wordmarkBox.h,
+      fontSize: 22,
+      bold: true,
+      color: colors.textPrimary,
+      valign: "middle",
+      fontFace: "Calibri",
+    })
+  }
+
+  // ── Title stack ───────────────────────────────────────────────────────────
+  slide.addText("GENERAL MEETING", {
+    x: contentX,
+    y: 2.55,
+    w: 8,
+    h: 0.36,
+    fontSize: 15,
+    bold: true,
+    color: colors.accent,
+    charSpacing: 4,
+    valign: "middle",
+    fontFace: "Calibri",
+  })
+
+  // Optical alignment: large Calibri carries a little left side bearing, so the
+  // hero is nudged left to line its glyph edge up with the eyebrow above it.
+  slide.addText("Weekly Report", {
+    x: contentX - 0.09,
+    y: 2.95,
+    w: 9,
+    h: 1.2,
+    fontSize: 60,
+    bold: true,
+    color: colors.textPrimary,
+    valign: "middle",
+    fontFace: "Calibri",
+  })
+
+  slide.addShape(pres.ShapeType?.rect ?? "rect", {
+    x: contentX,
+    y: 4.28,
+    w: 2.6,
+    h: 0.05,
+    fill: { color: colors.accent },
+    line: { color: colors.accent },
+  })
+
+  slide.addText(formatExportMeetingDateLabel(week, year, meetingDate), {
+    x: contentX,
+    y: 4.55,
+    w: 8,
+    h: 0.44,
+    fontSize: 18,
     color: colors.textMuted,
+    valign: "middle",
+    fontFace: "Calibri",
+  })
+
+  // ── "WEEK N" pill ─────────────────────────────────────────────────────────
+  const pillW = 1.85
+  const pillY = 5.2
+  const pillH = 0.44
+  slide.addShape(pres.ShapeType?.roundRect ?? "roundRect", {
+    x: contentX,
+    y: pillY,
+    w: pillW,
+    h: pillH,
+    rectRadius: 0.22,
+    fill: { color: colors.accent },
+    line: { color: colors.accent },
+  })
+  slide.addText(`WEEK ${week}`, {
+    x: contentX,
+    y: pillY,
+    w: pillW,
+    h: pillH,
+    fontSize: 14,
+    bold: true,
+    color: colors.textInverse,
+    charSpacing: 1,
     align: "center",
+    valign: "middle",
     fontFace: "Calibri",
   })
 
   // Optional subtitle (dept name for single-report export)
   if (subtitle) {
     slide.addText(subtitle, {
-      x: 0.5,
-      y: titleStart + 2.7,
-      w: 12.33,
-      h: 0.4,
-      fontSize: 14,
-      bold: false,
+      x: contentX + pillW + 0.22,
+      y: pillY,
+      w: 6,
+      h: pillH,
+      fontSize: 15,
       color: colors.accent,
-      align: "center",
-      fontFace: "Calibri",
       italic: true,
+      valign: "middle",
+      fontFace: "Calibri",
     })
   }
 
@@ -2010,50 +2088,81 @@ const addCoverSlide = (
 const addDeptTitleSlide = (
   pres: PptxPresentation,
   department: string,
-  submittedBy: string,
+  _submittedBy: string,
   pageNumber?: number,
-  theme: WeeklyPptxTheme = "light"
+  theme: WeeklyPptxTheme = "light",
+  position?: { index: number; total: number }
 ) => {
   const colors = getWeeklyPptxThemeColors(theme)
   const slide = pres.addSlide()
   slide.background = { color: colors.titleFill }
 
-  // Subtle top-right circle decoration
-  slide.addShape(pres.ShapeType?.ellipse ?? "ellipse", {
-    x: 10.5,
-    y: -1.2,
-    w: 4,
-    h: 4,
-    fill: { color: colors.header, transparency: 60 },
-    line: { color: colors.header, transparency: 60 },
+  const contentX = 1.05
+  const pad = (n: number) => String(n).padStart(2, "0")
+
+  // ── Ghosted running-order numeral, mirroring the cover's week number ───────
+  if (position) {
+    slide.addText(pad(position.index), {
+      x: 6.9,
+      y: 1.58,
+      w: 5.6,
+      h: 4.2,
+      fontSize: 190,
+      bold: true,
+      color: colors.ghostOnAccent,
+      align: "right",
+      valign: "middle",
+      fontFace: "Calibri",
+    })
+  }
+
+  // ── Eyebrow ───────────────────────────────────────────────────────────────
+  slide.addText(position ? `DEPARTMENT ${pad(position.index)} OF ${pad(position.total)}` : "DEPARTMENT", {
+    x: contentX,
+    y: 2.75,
+    w: 8,
+    h: 0.36,
+    fontSize: 14,
+    bold: true,
+    color: colors.headerMuted,
+    charSpacing: 4,
+    valign: "middle",
+    fontFace: "Calibri",
   })
 
   slide.addText(department.toUpperCase(), {
-    x: 0.6,
-    y: 2.4,
-    w: 12,
-    h: 1.2,
-    fontSize: 48,
+    x: contentX - 0.08,
+    y: 3.17,
+    w: 11,
+    h: 1.25,
+    fontSize: 54,
     bold: true,
     color: colors.textInverse,
+    valign: "middle",
     fontFace: "Calibri",
-    align: "left",
   })
 
-  slide.addShape(pres.ShapeType?.line ?? "line", {
-    x: 0.6,
-    y: 3.7,
-    w: 5,
-    h: 0,
-    line: { color: colors.textInverse, width: 2, transparency: 40 },
+  slide.addShape(pres.ShapeType?.rect ?? "rect", {
+    x: contentX,
+    y: 4.57,
+    w: 2.6,
+    h: 0.05,
+    fill: { color: colors.textInverse },
+    line: { color: colors.textInverse },
   })
 
-  // slide.addText(`Submitted by: ${submittedBy}`, {
-  //     x: 0.6, y: 3.9, w: 12, h: 0.4,
-  //     fontSize: 16, color: ACOB_WHITE,
-  //     fontFace: "Calibri",
-  //     transparency: 20,
-  // })
+  // ── Footer band: wordmark and page number ─────────────────────────────────
+  const wordmarkBox = logoBoxByHeight(EXPORT_LOGOS.acobInverse, 0.34)
+  try {
+    slide.addImage({
+      path: EXPORT_LOGOS.acobInverse.path,
+      x: 0.55,
+      y: 6.98,
+      ...wordmarkBox,
+    })
+  } catch {
+    /* skip */
+  }
 
   if (typeof pageNumber === "number") {
     slide.addText(String(pageNumber), {
@@ -2193,7 +2302,11 @@ const addDeptIndexSlide = (
 }
 
 const PPTX_WEEKLY_BODY_FONT_SIZE = 14
-const PPTX_WEEKLY_MIN_BODY_FONT_SIZE = 7
+// Floor for shrink-to-fit. Anything under ~10pt is unreadable when projected,
+// so an over-long report should visibly overflow (and get trimmed) rather than
+// silently render at a size nobody in the room can read.
+const PPTX_WEEKLY_MIN_BODY_FONT_SIZE = 10
+const PPTX_WEEKLY_SECTION_TITLE_SIZE = 12
 const PPTX_WEEKLY_LINE_HEIGHT_RATIO = 1.15
 const PPTX_WEEKLY_AVG_CHAR_WIDTH_RATIO = 0.48
 const PPTX_WEEKLY_LINE_SPACING_MULTIPLE = 1.3
@@ -2222,6 +2335,8 @@ const getWeeklyContentBoxes = () => {
   const { headerH, marginX, slideW, footerY } = WEEKLY_CONTENT_LAYOUT
   // Tuned so the full-page Work Done container is ~15.14cm high.
   const bodyBottomSafety = 0.14
+  // Card chrome above the body text: title row + hairline + gap (see addSectionCard).
+  const CARD_HEADER_H = 0.72
   const textBottomSafety = 0.1
   const usableW = slideW - marginX * 2
   const col1W = usableW * (3 / 5)
@@ -2245,7 +2360,7 @@ const getWeeklyContentBoxes = () => {
       w: col1W,
       h: row1H,
       textW: col1W - 0.3,
-      textH: Math.max(0.6, row1H - 0.56 - textBottomSafety),
+      textH: Math.max(0.6, row1H - CARD_HEADER_H - textBottomSafety),
     },
     row1Right: {
       x: col2X,
@@ -2253,7 +2368,7 @@ const getWeeklyContentBoxes = () => {
       w: col2W,
       h: row1H,
       textW: col2W - 0.3,
-      textH: Math.max(0.6, row1H - 0.56 - textBottomSafety),
+      textH: Math.max(0.6, row1H - CARD_HEADER_H - textBottomSafety),
     },
     row2Full: {
       x: marginX,
@@ -2261,7 +2376,7 @@ const getWeeklyContentBoxes = () => {
       w: usableW,
       h: row2H,
       textW: usableW - 0.3,
-      textH: Math.max(0.6, row2H - 0.56 - textBottomSafety),
+      textH: Math.max(0.6, row2H - CARD_HEADER_H - textBottomSafety),
     },
     continuation: {
       x: marginX,
@@ -2269,7 +2384,7 @@ const getWeeklyContentBoxes = () => {
       w: usableW,
       h: availH,
       textW: usableW - 0.3,
-      textH: Math.max(0.6, availH - 0.56 - textBottomSafety),
+      textH: Math.max(0.6, availH - CARD_HEADER_H - textBottomSafety),
     },
     page2Top: {
       x: marginX,
@@ -2277,7 +2392,7 @@ const getWeeklyContentBoxes = () => {
       w: usableW,
       h: page2TopH,
       textW: usableW - 0.3,
-      textH: Math.max(0.6, page2TopH - 0.56 - textBottomSafety),
+      textH: Math.max(0.6, page2TopH - CARD_HEADER_H - textBottomSafety),
     },
     page2Bottom: {
       x: marginX,
@@ -2285,7 +2400,7 @@ const getWeeklyContentBoxes = () => {
       w: usableW,
       h: page2BottomH,
       textW: usableW - 0.3,
-      textH: Math.max(0.6, page2BottomH - 0.56 - textBottomSafety),
+      textH: Math.max(0.6, page2BottomH - CARD_HEADER_H - textBottomSafety),
     },
   }
 }
@@ -2417,7 +2532,7 @@ const getReportSectionPlans = (report: WeeklyReport): WeeklySectionPlan[] => {
     buildWeeklySectionPlan(
       "tasks_new_week",
       "TASKS FOR NEW WEEK",
-      "1D6A96",
+      SECTION_TASKS,
       report.tasks_new_week,
       "No data provided.",
       boxes.page2Top.textW,
@@ -2426,7 +2541,7 @@ const getReportSectionPlans = (report: WeeklyReport): WeeklySectionPlan[] => {
     buildWeeklySectionPlan(
       "challenges",
       "CHALLENGES",
-      "B91C1C",
+      SECTION_CHALLENGES,
       report.challenges,
       "No challenges reported.",
       boxes.page2Bottom.textW,
@@ -2441,7 +2556,8 @@ const addWeeklyHeaderAndFooter = (
   department: string,
   nextDept?: string,
   pageNumber?: number,
-  theme: WeeklyPptxTheme = "light"
+  theme: WeeklyPptxTheme = "light",
+  slidePosition?: { index: number; total: number }
 ) => {
   const colors = getWeeklyPptxThemeColors(theme)
   const { headerH, footerY, footerH } = WEEKLY_CONTENT_LAYOUT
@@ -2455,25 +2571,40 @@ const addWeeklyHeaderAndFooter = (
     line: { color: colors.header },
   })
 
-  slide.addText(department.toUpperCase(), {
+  // Department name, followed inline by its position within this department's
+  // run of slides ("1 OF 2"). The footer is reserved for the *next* department,
+  // so the two never have to share one label.
+  const headerRuns: Array<{ text: string; options: Record<string, unknown> }> = [
+    {
+      text: department.toUpperCase(),
+      options: { fontSize: 16, bold: true, color: colors.textInverse, fontFace: "Calibri" },
+    },
+  ]
+  if (slidePosition && slidePosition.total > 1) {
+    headerRuns.push({
+      text: `    ${slidePosition.index} OF ${slidePosition.total}`,
+      options: { fontSize: 11, bold: true, color: colors.headerMuted, fontFace: "Calibri" },
+    })
+  }
+
+  slide.addText(headerRuns, {
     x: 0.3,
     y: 0,
     w: 9,
     h: headerH,
-    fontSize: 16,
-    bold: true,
-    color: colors.textInverse,
     valign: "middle",
     fontFace: "Calibri",
   })
 
+  // Matrix mark, top right. The header bar is dark in both themes, so this is
+  // always the inverse (white/silver) variant.
+  const markBox = logoBoxByHeight(EXPORT_LOGOS.matrixMarkInverse, 0.45)
   try {
     slide.addImage({
-      path: LOGO_ICON,
-      x: 11.45,
-      y: 0.14,
-      w: 1.7,
-      h: 0.45,
+      path: EXPORT_LOGOS.matrixMarkInverse.path,
+      x: 13.33 - 0.3 - markBox.w,
+      y: (headerH - markBox.h) / 2,
+      ...markBox,
     })
   } catch {
     /* skip */
@@ -2488,8 +2619,22 @@ const addWeeklyHeaderAndFooter = (
     line: { color: colors.footer },
   })
 
+  // ACOB LIGHTING wordmark, bottom left. The footer strip is green in both
+  // themes, so this is always the inverse (white text) variant.
+  const wordmarkBox = logoBoxByHeight(EXPORT_LOGOS.acobInverse, 0.34)
+  try {
+    slide.addImage({
+      path: EXPORT_LOGOS.acobInverse.path,
+      x: 0.3,
+      y: footerY + (footerH - wordmarkBox.h) / 2,
+      ...wordmarkBox,
+    })
+  } catch {
+    /* skip */
+  }
+
   if (nextDept) {
-    slide.addText(`NEXT: ${nextDept}`, {
+    slide.addText(`NEXT: ${nextDept.toUpperCase()}`, {
       x: 7,
       y: footerY,
       w: 6.1,
@@ -2540,23 +2685,40 @@ const addSectionCard = (
     fill: { color: colors.card },
     line: { color: colors.cardBorder, width: 1 },
   })
+
+  // Colour spine down the card's left edge, echoing the rail on the cover and
+  // department slides. Replaces the old filled title bar, which forced the
+  // section label down to 8pt — half the size of the body text under it.
   slide.addShape(pres.ShapeType?.rect ?? "rect", {
-    x: box.x + 0.15,
-    y: box.y + 0.1,
-    w: box.w - 0.3,
-    h: 0.3,
+    x: box.x,
+    y: box.y,
+    w: 0.07,
+    h: box.h,
     fill: { color },
     line: { color, width: 0 },
   })
+
   slide.addText(title, {
-    x: box.x + 0.2,
-    y: box.y + 0.12,
-    w: box.w - 0.4,
-    h: 0.22,
-    fontSize: 8,
+    x: box.x + 0.26,
+    y: box.y + 0.11,
+    w: box.w - 0.46,
+    h: 0.3,
+    fontSize: PPTX_WEEKLY_SECTION_TITLE_SIZE,
     bold: true,
-    color: colors.textInverse,
+    color,
+    charSpacing: 2,
+    valign: "middle",
     fontFace: "Calibri",
+  })
+
+  // Hairline under the title, separating label from content.
+  slide.addShape(pres.ShapeType?.rect ?? "rect", {
+    x: box.x + 0.26,
+    y: box.y + 0.46,
+    w: box.w - 0.5,
+    h: 0.012,
+    fill: { color: colors.separator },
+    line: { color: colors.separator, width: 0 },
   })
   const wrappedText =
     useManualHangingWrap && fontSize > 0
@@ -2567,8 +2729,8 @@ const addSectionCard = (
       : text
 
   slide.addText(wrappedText, {
-    x: box.x + 0.15,
-    y: box.y + 0.46,
+    x: box.x + 0.26,
+    y: box.y + 0.62,
     w: box.textW,
     h: box.textH,
     fontSize,
@@ -2708,7 +2870,7 @@ const addCompactContentSlide = (
     slide,
     boxes.row1Right,
     "TASKS FOR NEW WEEK",
-    "1D6A96",
+    SECTION_TASKS,
     tasksFitted.text,
     tasksFitted.fontSize,
     false,
@@ -2720,7 +2882,7 @@ const addCompactContentSlide = (
     slide,
     boxes.row2Full,
     "CHALLENGES",
-    "B91C1C",
+    SECTION_CHALLENGES,
     challengesFitted.text,
     challengesFitted.fontSize,
     false,
@@ -2737,12 +2899,13 @@ const addWorkDoneSlide = (
   workDonePlan: WeeklySectionPlan,
   nextDept?: string,
   pageNumber?: number,
-  theme: WeeklyPptxTheme = "light"
+  theme: WeeklyPptxTheme = "light",
+  slidePosition?: { index: number; total: number }
 ) => {
   const colors = getWeeklyPptxThemeColors(theme)
   const slide = pres.addSlide()
   slide.background = { color: colors.canvas }
-  addWeeklyHeaderAndFooter(pres, slide, department, nextDept, pageNumber, theme)
+  addWeeklyHeaderAndFooter(pres, slide, department, nextDept, pageNumber, theme, slidePosition)
 
   const boxes = getWeeklyContentBoxes()
   addSectionCard(
@@ -2768,12 +2931,13 @@ const addTasksAndChallengesSlide = (
   challengesPlan: WeeklySectionPlan,
   nextDept?: string,
   pageNumber?: number,
-  theme: WeeklyPptxTheme = "light"
+  theme: WeeklyPptxTheme = "light",
+  slidePosition?: { index: number; total: number }
 ) => {
   const colors = getWeeklyPptxThemeColors(theme)
   const slide = pres.addSlide()
   slide.background = { color: colors.canvas }
-  addWeeklyHeaderAndFooter(pres, slide, department, nextDept, pageNumber, theme)
+  addWeeklyHeaderAndFooter(pres, slide, department, nextDept, pageNumber, theme, slidePosition)
 
   const boxes = getWeeklyContentBoxes()
   addSectionCard(
@@ -2829,19 +2993,39 @@ const renderDepartmentWeeklySlides = (
   departmentPlan: DepartmentPptxPlan,
   nextDepartmentName?: string,
   startPageNumber?: number,
-  theme: WeeklyPptxTheme = "light"
+  theme: WeeklyPptxTheme = "light",
+  position?: { index: number; total: number }
 ) => {
   const { report, workDone, tasks, challenges } = departmentPlan
   const p = Array.isArray(report.profiles) ? report.profiles[0] : report.profiles
   const name = p ? `${p.first_name} ${p.last_name}` : "Employee"
 
   let pageCursor = startPageNumber
-  const titleSlide = addDeptTitleSlide(pres, report.department, name, undefined, theme)
+  const titleSlide = addDeptTitleSlide(
+    pres,
+    report.department,
+    name,
+    pageCursor,
+    theme,
+    position
+  )
   applyWeeklySlideTransition(titleSlide)
   if (typeof pageCursor === "number") pageCursor += 1
 
-  const secondPageLabel = `${report.department} 2`
-  const workDoneSlide = addWorkDoneSlide(pres, report.department, workDone, secondPageLabel, pageCursor, theme)
+  // Both content slides advertise the *next department* in the footer. The
+  // second slide used to show "NEXT: <this dept> 2" instead, which meant you
+  // could not tell what was coming up until you were already on the last slide
+  // of the department. Where you are within the department is now carried by
+  // the "1 OF 2" / "2 OF 2" label in the header.
+  const workDoneSlide = addWorkDoneSlide(
+    pres,
+    report.department,
+    workDone,
+    nextDepartmentName,
+    pageCursor,
+    theme,
+    { index: 1, total: 2 }
+  )
   applyWeeklySlideTransition(workDoneSlide)
   if (typeof pageCursor === "number") pageCursor += 1
 
@@ -2852,7 +3036,8 @@ const renderDepartmentWeeklySlides = (
     challenges,
     nextDepartmentName,
     pageCursor,
-    theme
+    theme,
+    { index: 2, total: 2 }
   )
   applyWeeklySlideTransition(tasksChallengesSlide)
 }
@@ -2862,12 +3047,20 @@ const renderDepartmentCompactSlides = (
   report: WeeklyReport,
   nextDepartmentName?: string,
   contentPageNumber?: number,
-  theme: WeeklyPptxTheme = "light"
+  theme: WeeklyPptxTheme = "light",
+  position?: { index: number; total: number }
 ) => {
   const p = Array.isArray(report.profiles) ? report.profiles[0] : report.profiles
   const name = p ? `${p.first_name} ${p.last_name}` : "Employee"
 
-  const titleSlide = addDeptTitleSlide(pres, report.department, name, undefined, theme)
+  const titleSlide = addDeptTitleSlide(
+    pres,
+    report.department,
+    name,
+    typeof contentPageNumber === "number" ? contentPageNumber - 1 : undefined,
+    theme,
+    position
+  )
   applyWeeklySlideTransition(titleSlide)
 
   const contentSlide = addCompactContentSlide(
@@ -2978,7 +3171,8 @@ export const exportAllToPPTX = async (
         report,
         sortedReports[idx + 1]?.department,
         departmentStartPages[idx] + 1,
-        theme
+        theme,
+        { index: idx + 1, total: sortedReports.length }
       )
     })
   } else {
@@ -2993,7 +3187,8 @@ export const exportAllToPPTX = async (
         departmentPlan,
         departmentPlans[idx + 1]?.report.department,
         departmentPlan.startPage,
-        theme
+        theme,
+        { index: idx + 1, total: departmentPlans.length }
       )
     })
   }
