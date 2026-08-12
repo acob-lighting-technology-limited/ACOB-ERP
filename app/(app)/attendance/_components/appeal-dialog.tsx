@@ -35,6 +35,7 @@ interface AppealDialogProps {
   onClose: () => void
   onSuccess: () => void
   editAppeal?: { id: string; appeal_reason: string } | null
+  lwpAwpCountThisMonth?: number
 }
 
 type RequestedStatus = "absent_with_permission" | "lateness_with_permission" | "out_of_station"
@@ -61,7 +62,14 @@ function getRequestedOptions(status: UnifiedAttendanceStatus): RequestedStatus[]
   return [permission, "out_of_station"]
 }
 
-export function AppealDialog({ row, open, onClose, onSuccess, editAppeal }: AppealDialogProps) {
+export function AppealDialog({
+  row,
+  open,
+  onClose,
+  onSuccess,
+  editAppeal,
+  lwpAwpCountThisMonth = 0,
+}: AppealDialogProps) {
   const [reason, setReason] = useState("")
   const [submitting, setSubmitting] = useState(false)
   const options = getRequestedOptions(row.normalizedStatus)
@@ -78,7 +86,11 @@ export function AppealDialog({ row, open, onClose, onSuccess, editAppeal }: Appe
     setRequestedStatus(getRequestedOptions(row.normalizedStatus)[0])
   }, [editAppeal, open, row.normalizedStatus])
 
-  const isValid = reason.trim().length >= 10
+  const isPermissionRequested =
+    requestedStatus === "lateness_with_permission" || requestedStatus === "absent_with_permission"
+  const isQuotaReached = isPermissionRequested && lwpAwpCountThisMonth >= 3 && !editAppeal
+
+  const isValid = reason.trim().length >= 10 && !isQuotaReached
 
   async function handleSubmit() {
     if (!isValid) return
@@ -132,8 +144,22 @@ export function AppealDialog({ row, open, onClose, onSuccess, editAppeal }: Appe
         </DialogHeader>
 
         <div className="space-y-4 py-2">
+          {/* Monthly LWP/AWP Quota Badge */}
+          <div className="flex items-center justify-between rounded-md border bg-muted/60 px-3 py-2 text-xs">
+            <span className="font-medium text-muted-foreground">Monthly LWP/AWP Quota</span>
+            <Badge variant={lwpAwpCountThisMonth >= 3 ? "destructive" : lwpAwpCountThisMonth >= 2 ? "outline" : "secondary"}>
+              {lwpAwpCountThisMonth} of 3 used this month
+            </Badge>
+          </div>
+
+          {isQuotaReached && (
+            <div className="rounded-md border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300">
+              <strong>Monthly Limit Reached (3/3):</strong> You have used all 3 allowed LWP/AWP permissions for this calendar month. Department leads cannot grant additional LWP/AWP. You can select <em>Out of Station (OOS)</em> or contact an admin.
+            </div>
+          )}
+
           {/* Day info */}
-          <div className="bg-muted/50 space-y-2 rounded-lg border p-3 text-sm">
+          <div className="space-y-2 rounded-lg border bg-muted/50 p-3 text-sm">
             <div className="flex items-center justify-between">
               <span className="text-muted-foreground">Day</span>
               <span className="font-medium">{row.dayLabel}</span>
@@ -153,7 +179,7 @@ export function AppealDialog({ row, open, onClose, onSuccess, editAppeal }: Appe
           {/* Requested status — editing an appeal only changes the reason, so it is fixed there */}
           {editAppeal ? (
             <div className="rounded-lg border-2 border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/30">
-              <p className="text-muted-foreground mb-1 text-xs font-medium tracking-wide uppercase">Requesting</p>
+              <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Requesting</p>
               <p className="text-sm font-semibold text-blue-700 dark:text-blue-400">
                 {REQUESTED_LABELS[requestedStatus]}
               </p>
