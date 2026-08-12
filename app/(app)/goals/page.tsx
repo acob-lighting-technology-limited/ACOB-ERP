@@ -23,10 +23,22 @@ export interface Goal {
   approved_at?: string | null
   department?: string | null
   cycle?: {
+    id?: string
     name: string
+    review_type?: string | null
+    start_date?: string | null
+    end_date?: string | null
   } | null
   linked_tasks?: Array<{ id: string; work_item_number?: string | null; title: string; status: string }>
   linked_help_desk?: Array<{ id: string; ticket_number?: string | null; title: string; status: string }>
+}
+
+type ReviewCycleRow = {
+  id: string
+  name: string
+  review_type: string | null
+  start_date: string | null
+  end_date: string | null
 }
 
 async function getGoalsData() {
@@ -49,9 +61,9 @@ async function getGoalsData() {
 
   const { data: cycles } = await supabase
     .from("review_cycles")
-    .select("id, name")
+    .select("id, name, review_type, start_date, end_date")
     .order("start_date", { ascending: false })
-    .returns<Array<{ id: string; name: string }>>()
+    .returns<ReviewCycleRow[]>()
 
   const cyclesById = new Map((cycles || []).map((cycle) => [cycle.id, cycle]))
 
@@ -121,6 +133,7 @@ async function getGoalsData() {
       linked_help_desk: helpDeskByGoalId.get(goal.id) || [],
     })),
     department: profile?.department || null,
+    cycles: cycles || [],
   }
 }
 
@@ -131,11 +144,12 @@ export default async function GoalsPage() {
     redirect(data.redirect)
   }
 
-  const goalsData = data as { goals: Goal[]; department: string | null }
+  const goalsData = data as { goals: Goal[]; department: string | null; cycles: ReviewCycleRow[] }
 
   return (
     <GoalsContent
       initialGoals={goalsData.goals}
+      cycles={goalsData.cycles}
       canCreateGoal={false}
       summaryCards={[
         { label: "Department", value: goalsData.department || "-" },
