@@ -57,6 +57,8 @@ type GoalCycleRecord = {
   id: string
   name?: string | null
   review_type?: string | null
+  start_date?: string | null
+  end_date?: string | null
 }
 
 type GoalRow = {
@@ -83,7 +85,7 @@ async function attachGoalCycles(supabase: Awaited<ReturnType<typeof createClient
 
   const { data: cycles } = await supabase
     .from("review_cycles")
-    .select("id, name, review_type")
+    .select("id, name, review_type, start_date, end_date")
     .in("id", cycleIds)
     .returns<GoalCycleRecord[]>()
 
