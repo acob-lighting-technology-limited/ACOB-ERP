@@ -344,6 +344,13 @@ export function AdminReferenceGeneratorContent({
       render: (r) => <Badge className={statusBadgeClass(r.status)}>{statusLabel(r.status)}</Badge>,
     },
     {
+      key: "requested_by",
+      label: "Requested by",
+      sortable: true,
+      hideOnMobile: true,
+      accessor: (r) => r.sender_name || "-",
+    },
+    {
       key: "created_by",
       label: "Created by",
       sortable: true,
