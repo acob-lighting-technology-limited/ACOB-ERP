@@ -6,6 +6,9 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 
+import type { ReviewCycleOption } from "../_lib"
+import { CycleSelector } from "../_components/cycle-selector"
+
 type BehaviourRow = {
   competency: string
   value: number
@@ -19,6 +22,9 @@ export function BehaviourContent({
   strengths,
   areasForImprovement,
   managerComments,
+  headerActions,
+  cycles,
+  activeCycleId,
 }: {
   rows: Array<{ competency: string; value: number }>
   average: number | null
@@ -26,6 +32,9 @@ export function BehaviourContent({
   strengths: string
   areasForImprovement: string
   managerComments: string
+  headerActions?: React.ReactNode
+  cycles?: ReviewCycleOption[]
+  activeCycleId?: string | null
 }) {
   const tableRows = useMemo<BehaviourRow[]>(
     () =>
@@ -38,6 +47,12 @@ export function BehaviourContent({
 
   const columns = useMemo<DataTableColumn<BehaviourRow>[]>(
     () => [
+      {
+        key: "cycle",
+        label: "Cycle",
+        sortable: true,
+        accessor: (row) => row.cycle,
+      },
       {
         key: "competency",
         label: "Competency",
@@ -52,33 +67,32 @@ export function BehaviourContent({
         accessor: (row) => row.value,
         render: (row) => `${row.value}%`,
       },
-      {
-        key: "cycle",
-        label: "Cycle",
-        sortable: true,
-        accessor: (row) => row.cycle,
-        hideOnMobile: true,
-      },
     ],
     []
   )
 
-  const filters = useMemo<DataTableFilter<BehaviourRow>[]>(
-    () => [
-      {
-        key: "cycle",
-        label: "Cycle",
-        options: [{ value: cycle || "-", label: cycle || "-" }],
-        multi: false,
-      },
-      {
-        key: "competency",
-        label: "Competency",
-        options: rows.map((row) => ({ value: row.competency, label: row.competency })),
-      },
-    ],
-    [cycle, rows]
-  )
+  const filters = useMemo<DataTableFilter<BehaviourRow>[]>(() => {
+    const list: DataTableFilter<BehaviourRow>[] = []
+
+    if (cycles && cycles.length > 0) {
+      list.push({
+        key: "cycle_selector",
+        label: "Review Cycle",
+        options: cycles.map((c) => ({ value: c.id, label: c.name })),
+        render: () => <CycleSelector cycles={cycles} activeCycleId={activeCycleId} />,
+      })
+    }
+
+    // The cycle selector above already scopes the page to one cycle; a second
+    // single-option "Cycle" dropdown was just noise.
+    list.push({
+      key: "competency",
+      label: "Competency",
+      options: rows.map((row) => ({ value: row.competency, label: row.competency })),
+    })
+
+    return list
+  }, [activeCycleId, cycles, rows])
 
   return (
     <DataTablePage
@@ -86,6 +100,7 @@ export function BehaviourContent({
       description="Your behaviour review by competency with manager notes."
       icon={ShieldCheck}
       backLink={{ href: "/pms", label: "Back to PMS" }}
+      actions={headerActions}
       stats={
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <StatCard
