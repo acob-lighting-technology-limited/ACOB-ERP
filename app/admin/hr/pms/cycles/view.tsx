@@ -5,6 +5,7 @@ import { Calendar, CheckCircle2, Loader2, Lock, Plus, RefreshCw, Trash2 } from "
 import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
+import { useCycleFilters } from "@/components/pms/use-cycle-filters"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -279,8 +280,16 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
     []
   )
 
+  // Rows here are the cycles themselves, so only the cadence half applies.
+  const { filters: cadenceFilters } = useCycleFilters<ReviewCycle>({
+    cycles,
+    getRowCycleId: (cycle) => cycle.id,
+    includeCyclePicker: false,
+  })
+
   const filters: DataTableFilter<ReviewCycle>[] = useMemo(
     () => [
+      ...cadenceFilters,
       {
         key: "status",
         label: "Status",
@@ -294,7 +303,7 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
         placeholder: "All Review Types",
       },
     ],
-    [reviewTypeOptions]
+    [cadenceFilters, reviewTypeOptions]
   )
 
   const rowActions: RowAction<ReviewCycle>[] = useMemo(
