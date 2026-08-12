@@ -381,11 +381,13 @@ export function CreateReviewDialog({
                       <SelectValue placeholder="Select review cycle" />
                     </SelectTrigger>
                     <SelectContent>
-                      {cycles.map((cycle) => (
-                        <SelectItem key={cycle.id} value={cycle.id}>
-                          {cycle.name} ({cycle.review_type})
-                        </SelectItem>
-                      ))}
+                      {cycles
+                        .filter((cycle) => !cycle.review_type || cycle.review_type.toLowerCase() === "quarterly")
+                        .map((cycle) => (
+                          <SelectItem key={cycle.id} value={cycle.id}>
+                            {cycle.name}
+                          </SelectItem>
+                        ))}
                     </SelectContent>
                   </Select>
                   {cycles.length === 0 ? (
