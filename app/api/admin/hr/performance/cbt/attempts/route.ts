@@ -29,7 +29,11 @@ type AttemptJoinRow = {
     department: string | null
   } | null
   review_cycles: {
+    id: string
     name: string
+    review_type: string | null
+    start_date: string | null
+    end_date: string | null
   } | null
 }
 
@@ -73,7 +77,11 @@ export async function GET(request: NextRequest) {
           department
         ),
         review_cycles (
-          name
+          id,
+          name,
+          review_type,
+          start_date,
+          end_date
         )
       `
       )
