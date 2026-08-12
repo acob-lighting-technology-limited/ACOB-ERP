@@ -5,9 +5,12 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
 import { computeIndividualPerformanceScore } from "@/lib/performance/scoring"
 import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
+import { pickCurrentCycle } from "@/lib/pms/cadence"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
 import { dayCredit, toLocalISODate, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+
+import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 
 const log = logger("hr-performance-metric-snapshot")
 
@@ -26,6 +29,7 @@ type ScopedUserRow = {
   first_name: string | null
   last_name: string | null
   department: string | null
+  employment_status: string | null
 }
 
 type ReviewCycleRow = {
@@ -120,15 +124,19 @@ export async function GET(request: NextRequest) {
       departments = scopedDepts.length > 0 ? scopedDepts : []
     }
 
-    const { data: users } =
+    const { data: rawUsers } =
       departments.length > 0
         ? await dataClient
             .from("profiles")
-            .select("id, first_name, last_name, department")
+            .select("id, first_name, last_name, department, employment_status")
             .in("department", departments)
             .order("first_name", { ascending: true })
             .returns<ScopedUserRow[]>()
         : { data: [] as ScopedUserRow[] }
+
+    const users = (rawUsers || []).filter((u) =>
+      isAssignableEmploymentStatus(u.employment_status, { allowLegacyNullStatus: true })
+    )
 
     const { data: cycles } = await dataClient
       .from("review_cycles")
@@ -143,11 +151,10 @@ export async function GET(request: NextRequest) {
     // newest cycle by start_date alone means that once the latest cycle ends,
     // every metric is computed over a window that has already closed — which is
     // why attendance renders blank for the current period.
+    // PMS is scored quarterly, and half-year/annual cycles cover the same dates,
+    // so restrict the default to the quarterly cadence before matching on today.
     const todayForCycle = toLocalISODate()
-    const currentCycle = context.cycles.find(
-      (cycle) =>
-        cycle.start_date && cycle.end_date && cycle.start_date <= todayForCycle && cycle.end_date >= todayForCycle
-    )
+    const currentCycle = pickCurrentCycle(context.cycles, todayForCycle, "quarterly")
     const selectedCycleId = parsed.data.cycle_id || currentCycle?.id || context.cycles[0]?.id || null
 
     const selectedCycle = context.cycles.find((cycle) => cycle.id === selectedCycleId) || null
