@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react"
 import { Brain, FileClock, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
+import { useCycleFilters } from "@/components/pms/use-cycle-filters"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -32,7 +33,11 @@ type AttemptRow = {
     department: string | null
   } | null
   review_cycles: {
+    id: string
     name: string
+    review_type: string | null
+    start_date: string | null
+    end_date: string | null
   } | null
 }
 
@@ -152,6 +157,20 @@ export default function CbtDetailsLogPage() {
     []
   )
 
+  // Attempts carry their cycle inline; dedupe it into the list the shared filters need.
+  const cycles = useMemo(() => {
+    const byId = new Map<string, NonNullable<AttemptRow["review_cycles"]>>()
+    for (const row of data) {
+      if (row.review_cycles?.id) byId.set(row.review_cycles.id, row.review_cycles)
+    }
+    return Array.from(byId.values())
+  }, [data])
+
+  const { filters: cycleFilters } = useCycleFilters<AttemptRow>({
+    cycles,
+    getRowCycleId: (row) => row.review_cycle_id,
+  })
+
   const filters: DataTableFilter<AttemptRow>[] = useMemo(
     () => [
       {
@@ -171,8 +190,9 @@ export default function CbtDetailsLogPage() {
           .map((dept) => ({ value: dept, label: dept })),
         placeholder: "All Departments",
       },
+      ...cycleFilters,
     ],
-    [data]
+    [data, cycleFilters]
   )
 
   return (
