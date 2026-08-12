@@ -6,6 +6,7 @@ import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
+import { useCycleFilters } from "@/components/pms/use-cycle-filters"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -57,7 +58,7 @@ type DevelopmentPlan = {
   review?: { id: string } | null
 }
 
-type Cycle = { id: string; name: string }
+type Cycle = { id: string; name: string; review_type?: string | null; start_date?: string | null; end_date?: string | null }
 
 const FOCUS_LABELS: Record<string, string> = {
   general: "General",
@@ -212,7 +213,12 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
     [plans]
   )
 
-  const cycleOptions = useMemo(() => cycles.map((cycle) => ({ value: cycle.id, label: cycle.name })), [cycles])
+  const { filters: cycleFilters } = useCycleFilters<DevelopmentPlan>({
+    cycles,
+    getRowCycleId: (plan) => plan.review_cycle_id,
+    cycleKey: "review_cycle",
+    cycleLabel: "Quarter",
+  })
 
   const focusOptions = useMemo(() => Object.entries(FOCUS_LABELS).map(([value, label]) => ({ value, label })), [])
 
@@ -445,14 +451,7 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
         ],
         placeholder: "All Statuses",
       },
-      {
-        key: "review_cycle",
-        label: "Quarter",
-        options: cycleOptions,
-        placeholder: "All Quarters",
-        mode: "custom",
-        filterFn: (plan, values) => values.length === 0 || values.includes(plan.review_cycle_id || ""),
-      },
+      ...cycleFilters,
       {
         key: "focus_area",
         label: "Focus Area",
@@ -460,7 +459,7 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
         placeholder: "All Focus Areas",
       },
     ],
-    [cycleOptions, departmentOptions, focusOptions]
+    [cycleFilters, departmentOptions, focusOptions]
   )
 
   const rowActions: RowAction<DevelopmentPlan>[] = [
@@ -647,11 +646,13 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">None</SelectItem>
-                    {cycles.map((cycle) => (
-                      <SelectItem key={cycle.id} value={cycle.id}>
-                        {cycle.name}
-                      </SelectItem>
-                    ))}
+                    {cycles
+                      .filter((cycle) => !cycle.review_type || cycle.review_type.toLowerCase() === "quarterly")
+                      .map((cycle) => (
+                        <SelectItem key={cycle.id} value={cycle.id}>
+                          {cycle.name}
+                        </SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>
