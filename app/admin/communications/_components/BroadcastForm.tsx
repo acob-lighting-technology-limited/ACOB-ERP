@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { stripHtmlToText } from "./composer-utils"
 
 const log = logger("broadcast-form")
 
@@ -28,11 +29,14 @@ interface BroadcastFormProps {
   setBroadcastDepartment: (value: string) => void
   broadcastPreparedById: string
   setBroadcastPreparedById: (value: string) => void
+  broadcastReplyToEmail: string
+  setBroadcastReplyToEmail: (value: string) => void
   broadcastSubject: string
   setBroadcastSubject: (value: string) => void
   broadcastBodyHtml: string
   setBroadcastBodyHtml: (value: string) => void
   broadcastPreparedByOptions: Employee[]
+  broadcastReplyToOptions: { email: string; label: string }[]
   departmentOptions: string[]
   attachments: File[]
   setAttachments: (files: File[]) => void
@@ -47,18 +51,111 @@ function escapeHtml(text: string) {
     .replaceAll("'", "&#39;")
 }
 
-function convertPlainTextToEditorHtml(text: string) {
-  const normalized = text.replace(/\r\n/g, "\n").trim()
-  if (!normalized) return "<p><br></p>"
+function parseInlineMarkdown(text: string): string {
+  let html = escapeHtml(text)
 
-  const paragraphs = normalized
-    .split(/\n\s*\n/)
-    .map((paragraph) => paragraph.trim())
-    .filter(Boolean)
+  // 1. Inline code: `code` -> <code>code</code>
+  html = html.replace(/`([^`]+)`/g, "<code>$1</code>")
 
-  if (paragraphs.length === 0) return "<p><br></p>"
+  // 2. Bold: **bold** -> <strong>bold</strong>
+  html = html.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
 
-  return paragraphs.map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`).join("")
+  // 3. Italic: *italic* or _italic_ -> <em>italic</em>
+  html = html.replace(/\*([^*]+)\*/g, "<em>$1</em>")
+  html = html.replace(/_([^_]+)_/g, "<em>$1</em>")
+
+  // 4. Links: [text](url) -> <a href="url" target="_blank" rel="noopener noreferrer">text</a>
+  // Only permit HTTP and HTTPS URLs for safety
+  html = html.replace(
+    /\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g,
+    '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+  )
+
+  return html
+}
+
+function convertMarkdownToHtml(text: string): string {
+  const lines = text.split(/\r?\n/)
+  const result: string[] = []
+
+  let currentListType: "ul" | "ol" | null = null
+  let currentParagraphLines: string[] = []
+
+  const closeList = () => {
+    if (currentListType === "ul") {
+      result.push("</ul>")
+    } else if (currentListType === "ol") {
+      result.push("</ol>")
+    }
+    currentListType = null
+  }
+
+  const closeParagraph = () => {
+    if (currentParagraphLines.length > 0) {
+      result.push(`<p>${currentParagraphLines.join("<br>")}</p>`)
+      currentParagraphLines = []
+    }
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const trimmed = line.trim()
+
+    if (!trimmed) {
+      closeList()
+      closeParagraph()
+      continue
+    }
+
+    // Check for headers: #, ##, ###
+    const headerMatch = trimmed.match(/^(#{1,6})\s+(.*)$/)
+    if (headerMatch) {
+      closeList()
+      closeParagraph()
+      const level = headerMatch[1].length
+      const headerText = parseInlineMarkdown(headerMatch[2])
+      result.push(`<h${level}>${headerText}</h${level}>`)
+      continue
+    }
+
+    // Check for unordered list item: * or - or •
+    const ulMatch = trimmed.match(/^([*-]|\u2022)\s+(.*)$/)
+    if (ulMatch) {
+      closeParagraph()
+      if (currentListType !== "ul") {
+        closeList()
+        result.push("<ul>")
+        currentListType = "ul"
+      }
+      const itemText = parseInlineMarkdown(ulMatch[2])
+      result.push(`<li>${itemText}</li>`)
+      continue
+    }
+
+    // Check for ordered list item: 1.
+    const olMatch = trimmed.match(/^(\d+)\.\s+(.*)$/)
+    if (olMatch) {
+      closeParagraph()
+      if (currentListType !== "ol") {
+        closeList()
+        result.push("<ol>")
+        currentListType = "ol"
+      }
+      const itemText = parseInlineMarkdown(olMatch[2])
+      result.push(`<li>${itemText}</li>`)
+      continue
+    }
+
+    // Standard paragraph line
+    closeList()
+    currentParagraphLines.push(parseInlineMarkdown(trimmed))
+  }
+
+  closeList()
+  closeParagraph()
+
+  const finalHtml = result.filter(Boolean).join("")
+  return finalHtml || "<p><br></p>"
 }
 
 function buildPreparedByMailto(email: string, subject: string) {
@@ -72,11 +169,14 @@ export function BroadcastForm({
   setBroadcastDepartment,
   broadcastPreparedById,
   setBroadcastPreparedById,
+  broadcastReplyToEmail,
+  setBroadcastReplyToEmail,
   broadcastSubject,
   setBroadcastSubject,
   broadcastBodyHtml,
   setBroadcastBodyHtml,
   broadcastPreparedByOptions,
+  broadcastReplyToOptions,
   departmentOptions,
   attachments,
   setAttachments,
@@ -84,6 +184,7 @@ export function BroadcastForm({
   const editorRef = useRef<HTMLDivElement | null>(null)
   const savedRangeRef = useRef<Range | null>(null)
   const [linkDialogOpen, setLinkDialogOpen] = useState(false)
+  const isBodyEmpty = !stripHtmlToText(broadcastBodyHtml)
 
   const selectedPreparedBy =
     broadcastPreparedById === "none"
@@ -195,7 +296,7 @@ export function BroadcastForm({
       if (!pastedText) return
 
       event.preventDefault()
-      runEditorCommand("insertHTML", convertPlainTextToEditorHtml(pastedText))
+      runEditorCommand("insertHTML", convertMarkdownToHtml(pastedText))
     },
     [runEditorCommand]
   )
@@ -217,7 +318,7 @@ export function BroadcastForm({
         onConfirm={handleLinkConfirm}
       />
       <div className="space-y-3">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <div className="space-y-2">
             <Label htmlFor="broadcast-department">Department</Label>
             <Select value={broadcastDepartment} onValueChange={setBroadcastDepartment}>
@@ -252,6 +353,24 @@ export function BroadcastForm({
               </SelectContent>
             </Select>
             <p className="text-muted-foreground text-xs">This will appear as &quot;Prepared by&quot; in the footer.</p>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="broadcast-reply-to">Reply-to email</Label>
+            <Select value={broadcastReplyToEmail} onValueChange={setBroadcastReplyToEmail}>
+              <SelectTrigger id="broadcast-reply-to" className="w-full">
+                <SelectValue placeholder="Select reply-to email" />
+              </SelectTrigger>
+              <SelectContent>
+                {broadcastReplyToOptions.map((option) => (
+                  <SelectItem key={option.email} value={option.email}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-xs">
+              Defaults to the selected Prepared by person. Replies to this broadcast go to the email chosen here.
+            </p>
           </div>
         </div>
 
@@ -378,16 +497,23 @@ export function BroadcastForm({
                 <Redo2 className="h-4 w-4" />
               </Button>
             </div>
-            <div
-              ref={editorRef}
-              contentEditable
-              suppressContentEditableWarning
-              className="bg-background text-foreground min-h-[220px] rounded-b-lg border p-4 text-[15px] leading-7 break-words outline-none focus:ring-2 focus:ring-orange-500 [&_a]:font-medium [&_a]:text-blue-600 [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-blue-700 [&_br]:content-[''] [&_div]:my-0 [&_div+div]:mt-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-0 [&_p+*]:mt-4 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-6"
-              onInput={(e) => setBroadcastBodyHtml(DOMPurify.sanitize((e.currentTarget as HTMLDivElement).innerHTML))}
-              onPaste={handlePaste}
-              onKeyUp={saveCurrentSelection}
-              onMouseUp={saveCurrentSelection}
-            />
+            <div className="relative">
+              {isBodyEmpty && (
+                <p className="text-muted-foreground pointer-events-none absolute top-4 left-4 text-[15px] leading-7">
+                  Type your message here...
+                </p>
+              )}
+              <div
+                ref={editorRef}
+                contentEditable
+                suppressContentEditableWarning
+                className="bg-background text-foreground min-h-[220px] rounded-b-lg border p-4 text-[15px] leading-7 break-words outline-none focus:ring-2 focus:ring-orange-500 [&_a]:font-medium [&_a]:text-blue-600 [&_a]:underline [&_a]:underline-offset-2 hover:[&_a]:text-blue-700 [&_br]:content-[''] [&_div]:my-0 [&_div+div]:mt-4 [&_ol]:list-decimal [&_ol]:pl-6 [&_p]:my-0 [&_p+*]:mt-4 [&_strong]:font-semibold [&_ul]:list-disc [&_ul]:pl-6"
+                onInput={(e) => setBroadcastBodyHtml(DOMPurify.sanitize((e.currentTarget as HTMLDivElement).innerHTML))}
+                onPaste={handlePaste}
+                onKeyUp={saveCurrentSelection}
+                onMouseUp={saveCurrentSelection}
+              />
+            </div>
             <p className="text-muted-foreground text-xs">
               Paste text from Word or type directly. Use the chain icon for web links and the mail icon for reply links
               to the selected Prepared by person.
