@@ -7,6 +7,7 @@ import { writeAuditLog } from "@/lib/audit/write-audit"
 import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
+import { applyLunchBreak } from "@/lib/hr/attendance-ssot"
 
 const log = logger("hikvision-events")
 
@@ -110,8 +111,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
       const clockInTs = new Date(`${prevDate}T${prev.clock_in}Z`).getTime()
       const cappedOutTs = new Date(`${prevDate}T${cappedOut}Z`).getTime()
       const rawHours = Math.max(0, (cappedOutTs - clockInTs) / (1000 * 60 * 60))
-      const breakDuration = rawHours >= 5 ? 60 : 0
-      const totalHours = rawHours - breakDuration / 60
+      const { breakMinutes: breakDuration, workedHours: totalHours } = applyLunchBreak(rawHours)
 
       const status = deriveUnifiedAttendanceStatus(
         {
@@ -256,8 +256,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
     const clockIn = new Date(`${date}T${existing.clock_in}Z`)
     const clockOut = new Date(`${date}T${time}Z`)
     const rawHours = Math.max(0, (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60))
-    const breakDuration = rawHours >= 5 ? 60 : 0
-    const totalHours = rawHours - breakDuration / 60
+    const { breakMinutes: breakDuration, workedHours: totalHours } = applyLunchBreak(rawHours)
 
     const status = deriveUnifiedAttendanceStatus(
       {
