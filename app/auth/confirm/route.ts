@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { NextResponse } from "next/server"
 
 import { logger } from "@/lib/logger"
+import { writeLoginLog } from "@/lib/auth/login-log"
 
 const log = logger("auth-confirm")
 
@@ -53,6 +54,24 @@ export async function GET(request: Request) {
   if (error) {
     log.error("Confirm error:", error.message)
     return NextResponse.redirect(new URL(`/auth/error?message=${encodeURIComponent(error.message)}`, request.url))
+  }
+
+  // verifyOtp above established a full session, so this is a sign-in and must
+  // be recorded like any other. Recovery and magic links land here rather than
+  // in /auth/callback, which is why they used to be missing from the logs.
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (user) {
+    await writeLoginLog({
+      supabase,
+      headers: request.headers,
+      userId: user.id,
+      authMethod: "otp",
+      source: "auth_confirm",
+      userEmail: user.email,
+    })
   }
 
   // For invites, redirect to set-password page
