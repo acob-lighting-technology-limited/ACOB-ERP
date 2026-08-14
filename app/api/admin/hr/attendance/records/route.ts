@@ -10,6 +10,7 @@ import { resolvePendingAppealOnManualStatus } from "@/lib/hr/attendance-appeals"
 import { notifyAttendanceInApp } from "@/lib/hr/attendance-notify"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
 import { toLocalISODate, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
+import { applyLunchBreak } from "@/lib/hr/attendance-ssot"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
 import {
@@ -442,9 +443,9 @@ export async function POST(request: NextRequest) {
       const inMs = new Date(`${date}T${clock_in}Z`).getTime()
       const outMs = new Date(`${date}T${clock_out}Z`).getTime()
       const rawHours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
-      const breakDuration = rawHours >= 5 ? 60 : 0
-      insert.total_hours = rawHours - breakDuration / 60
-      insert.break_duration = breakDuration
+      const { breakMinutes, workedHours } = applyLunchBreak(rawHours)
+      insert.total_hours = workedHours
+      insert.break_duration = breakMinutes
     }
 
     const { data: created, error } = await dataClient.from("attendance_records").insert(insert).select().single()
