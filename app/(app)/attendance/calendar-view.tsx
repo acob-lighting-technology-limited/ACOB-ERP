@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
-import { dayCredit, toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
+import { toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
+import { computeAttendanceDay, attendanceRateFrom } from "@/lib/hr/attendance-ssot"
 import { ATTENDANCE_STATUS_COLORS, ATTENDANCE_STATUS_LABELS } from "@/lib/hr/attendance-status"
 import type { AttendanceRecord } from "./page"
 
@@ -132,11 +133,15 @@ export function EmployeeCalendarView() {
       return true
     })
     if (scorable.length === 0) return { monthAttendanceRate: null, monthAbsentRate: null }
-    let credits = 0
+    let hoursLost = 0
     for (const d of scorable) {
-      credits += dayCredit(d.status, d.record?.clock_in ?? null, d.record?.clock_out ?? null)
+      hoursLost += computeAttendanceDay({
+        status: d.status,
+        clockIn: d.record?.clock_in ?? null,
+        clockOut: d.record?.clock_out ?? null,
+      }).hoursLost
     }
-    const monthAttendanceRate = Math.round((credits / scorable.length) * 100)
+    const monthAttendanceRate = Math.round(attendanceRateFrom(hoursLost, scorable.length))
     const absentCount = scorable.filter((d) => d.status === "absent").length
     const monthAbsentRate = Math.round((absentCount / scorable.length) * 100)
     return { monthAttendanceRate, monthAbsentRate }
