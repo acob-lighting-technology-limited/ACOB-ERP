@@ -46,6 +46,7 @@ import {
   MANUAL_ATTENDANCE_STATUS_OPTIONS,
   getManualStatusEditOptions,
 } from "@/lib/hr/attendance-status"
+import { computeAttendanceDay, applyLunchBreak } from "@/lib/hr/attendance-ssot"
 import { StatusBadge, labelSource } from "./_components/status-badge"
 import { apiFetch } from "@/lib/api-client"
 
@@ -75,6 +76,7 @@ interface AttendanceReport {
   attendance_rate: number
   overtime_hours?: number
   avg_clock_in_minutes?: number | null
+  avg_clock_out_minutes?: number | null
   appeal_count?: number
   attendance_exempt?: boolean
   attendance_exempt_until?: string | null
@@ -287,47 +289,21 @@ function getHourBreakdown(
   const workEnd = 17 * 60
   const workMinutes = Math.max(0, Math.min(outMin, workEnd) - Math.max(inMin, workStart))
 
-  // Subtract 1 hour from work hours only if total time in office >= 5 hours
-  const hasLunch = total >= 5
-  const work = Math.max(0, workMinutes / 60 - (hasLunch ? 1.0 : 0.0))
+  // The lunch break is earned on total time in office, but comes off the in-window hours.
+  const { breakMinutes } = applyLunchBreak(total)
+  const work = Math.max(0, workMinutes / 60 - breakMinutes / 60)
   const overtime = Math.max(0, total - workMinutes / 60)
 
-  // 1. Calculate Lateness Hours
-  let lateness = 0
-  const graceMin = 8 * 60 + 20 // 08:20 AM
-  const nineMin = 9 * 60 // 09:00 AM
+  // Hours missed come from the SSOT, so this row agrees with payroll, the HR
+  // report and the employee's own view to the minute.
+  const { hoursLost: missed } = computeAttendanceDay({
+    status: "present",
+    clockIn: record.clock_in,
+    clockOut: record.clock_out,
+    earlyCloseTime: earlyClosureTime ?? null,
+    lateResumptionTime: lateResumptionTime ?? null,
+  })
 
-  // If clock-in is after 4:00 PM (16:00), they are considered absent (8.5 hrs missed)
-  if (inMin > 16 * 60) {
-    return { total, work, overtime, missed: 8.5 }
-  }
-
-  if (lateResumptionTime) {
-    const [rh, rm] = lateResumptionTime.split(":").map(Number)
-    if (!isNaN(rh) && !isNaN(rm)) {
-      const resumptionMin = rh * 60 + rm
-      if (inMin > resumptionMin) {
-        lateness = Math.ceil((inMin - resumptionMin) / 60)
-      }
-    }
-  } else {
-    if (inMin > graceMin) {
-      if (inMin <= nineMin) {
-        lateness = 0.5
-      } else {
-        lateness = Math.ceil((inMin - nineMin) / 60)
-      }
-    }
-  }
-
-  // 2. Calculate Early Departure Hours (capped at 5:00 PM or early closure close time)
-  let earlyDeparture = 0
-  const effectiveEnd = earlyClosureTime ? (parseTimeToMinutes(earlyClosureTime) ?? workEnd) : workEnd
-  if (outMin < effectiveEnd) {
-    earlyDeparture = Math.ceil((effectiveEnd - outMin) / 60)
-  }
-
-  const missed = lateness + earlyDeparture
   return { total, work, overtime, missed }
 }
 
