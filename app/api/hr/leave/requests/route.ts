@@ -326,6 +326,7 @@ export async function GET(request: NextRequest) {
     if (!paginationParsed.success) {
       return NextResponse.json({ error: "Invalid pagination params" }, { status: 400 })
     }
+    const wantsPage = searchParams.has("page") || searchParams.has("limit")
     const status = searchParams.get("status")
     const userId = searchParams.get("user_id")
     const all = searchParams.get("all") === "true"
@@ -388,7 +389,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { from, to } = getPaginationRange(paginationParsed.data)
-    const { data: requests, error, count } = await query.range(from, to)
+    const { data: requests, error, count } = wantsPage ? await query.range(from, to) : await query
     if (error) {
       return NextResponse.json({ error: `Failed to fetch leave requests: ${error.message}` }, { status: 500 })
     }
@@ -639,9 +640,9 @@ export async function GET(request: NextRequest) {
       reliever_commitments: relieverCommitments,
       pagination: {
         page: paginationParsed.data.page,
-        limit: paginationParsed.data.per_page,
+        limit: wantsPage ? paginationParsed.data.per_page : count || enriched.length || paginationParsed.data.per_page,
         total: count || 0,
-        total_pages: count ? Math.ceil(count / paginationParsed.data.per_page) : 0,
+        total_pages: wantsPage && count ? Math.ceil(count / paginationParsed.data.per_page) : count ? 1 : 0,
       },
     })
   } catch (error) {
