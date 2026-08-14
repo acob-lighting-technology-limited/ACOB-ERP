@@ -4,15 +4,13 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
 import { normalizeDepartmentName } from "@/shared/departments"
 import {
-  missedHours,
-  dayCredit,
   toLocalISODate,
   toLocalYearMonth,
   monthBounds,
   getWorkdaysInRange,
   timeToMinutes,
-  overtimeHoursFor,
 } from "@/lib/hr/attendance-utils"
+import { computeAttendanceDay, attendanceRateFrom, overtimeHoursFor, NET_DAY_HOURS } from "@/lib/hr/attendance-ssot"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
@@ -200,7 +198,9 @@ export async function GET(request: NextRequest) {
         attendance_credits = 0,
         overtime_hours = 0,
         clock_in_minutes_sum = 0,
-        clock_in_days = 0
+        clock_in_days = 0,
+        clock_out_minutes_sum = 0,
+        clock_out_days = 0
       let available_days = 0
 
       for (const workday of periodWorkdays) {
@@ -214,7 +214,7 @@ export async function GET(request: NextRequest) {
         if (ctx.isOnUnpaidLeave(profile.id, workday)) {
           available_days++
           absent_days++
-          total_missed_hours += policy.totalCredits ?? 10
+          total_missed_hours += NET_DAY_HOURS
           continue
         }
         if (ctx.isOnLeave(profile.id, workday)) {
@@ -255,11 +255,9 @@ export async function GET(request: NextRequest) {
         // Now we are at scorable/available days!
         available_days++
 
-        const totalCredits = policy.totalCredits ?? 10
-
         if (!rec) {
           absent_days++
-          total_missed_hours += totalCredits
+          total_missed_hours += NET_DAY_HOURS
           continue
         }
 
@@ -287,18 +285,23 @@ export async function GET(request: NextRequest) {
           else if (derived === "incomplete") incomplete_days++
           else late_days++
 
-          const earlyOutApproved = rec.status === "early_departure_with_permission"
-          const credit = dayCredit(derived, rec.clock_in, rec.clock_out, policy, {
+          const day = computeAttendanceDay({
+            status: derived,
+            clockIn: rec.clock_in,
+            clockOut: rec.clock_out,
+            policy,
             earlyCloseTime: earlyClose ?? null,
-            earlyOutApproved,
+            earlyOutApproved: rec.status === "early_departure_with_permission",
             lateResumptionTime: lateRes ?? null,
           })
-          attendance_credits += credit
+          // Credits stay a 0–1 fraction of the day, now derived from the hours
+          // figure payroll charges from rather than a parallel scale.
+          attendance_credits += day.hoursWorked / NET_DAY_HOURS
           total_hours += Number(rec.total_hours ?? 0)
-          total_missed_hours += totalCredits - credit * totalCredits
+          total_missed_hours += day.hoursLost
         } else {
           absent_days++
-          total_missed_hours += totalCredits
+          total_missed_hours += NET_DAY_HOURS
         }
 
         const clockInMin = timeToMinutes(rec.clock_in)
@@ -306,12 +309,18 @@ export async function GET(request: NextRequest) {
           clock_in_minutes_sum += clockInMin
           clock_in_days++
         }
+        const clockOutMin = timeToMinutes(rec.clock_out)
+        if (clockOutMin !== null) {
+          clock_out_minutes_sum += clockOutMin
+          clock_out_days++
+        }
         overtime_hours += overtimeHoursFor(rec.clock_out, policy)
       }
 
       const total_working_days = available_days
-      const attendance_rate =
-        total_working_days > 0 ? Math.round((attendance_credits / total_working_days) * 10000) / 100 : 0
+      // Derived from the same hours figure payroll charges from, so the displayed
+      // percentage can never drift from the money.
+      const attendance_rate = total_working_days > 0 ? attendanceRateFrom(total_missed_hours, total_working_days) : 0
 
       const name = `${String(profile.first_name || "").trim()} ${String(profile.last_name || "").trim()}`.trim()
       return {
@@ -339,15 +348,102 @@ export async function GET(request: NextRequest) {
         attendance_exempt: Boolean(profile.attendance_exempt),
         overtime_hours: Math.round(overtime_hours * 10) / 10,
         avg_clock_in_minutes: clock_in_days > 0 ? Math.round(clock_in_minutes_sum / clock_in_days) : null,
+        avg_clock_out_minutes: clock_out_days > 0 ? Math.round(clock_out_minutes_sum / clock_out_days) : null,
         appeal_count: appealCountByEmployee.get(profile.id) ?? 0,
+        clock_in_minutes_sum,
+        clock_in_days,
+        clock_out_minutes_sum,
+        clock_out_days,
       }
     })
+
+    type DeptAccumulator = {
+      department: string
+      employee_count: number
+      attendance_rate_sum: number
+      clock_in_minutes_sum: number
+      clock_in_days: number
+      clock_out_minutes_sum: number
+      clock_out_days: number
+      total_hours: number
+      overtime_hours: number
+      absent_days: number
+      incomplete_days: number
+      appeal_count: number
+    }
+
+    const deptMap = new Map<string, DeptAccumulator>()
+    for (const summary of summaries) {
+      const deptName = summary.department
+      if (!deptMap.has(deptName)) {
+        deptMap.set(deptName, {
+          department: deptName,
+          employee_count: 0,
+          attendance_rate_sum: 0,
+          clock_in_minutes_sum: 0,
+          clock_in_days: 0,
+          clock_out_minutes_sum: 0,
+          clock_out_days: 0,
+          total_hours: 0,
+          overtime_hours: 0,
+          absent_days: 0,
+          incomplete_days: 0,
+          appeal_count: 0,
+        })
+      }
+      const dept = deptMap.get(deptName)!
+      dept.employee_count += 1
+      dept.attendance_rate_sum += summary.attendance_rate
+      dept.clock_in_minutes_sum += summary.clock_in_minutes_sum
+      dept.clock_in_days += summary.clock_in_days
+      dept.clock_out_minutes_sum += summary.clock_out_minutes_sum
+      dept.clock_out_days += summary.clock_out_days
+      dept.total_hours += summary.total_hours
+      dept.overtime_hours += summary.overtime_hours
+      dept.absent_days += summary.absent_days
+      dept.incomplete_days += summary.incomplete_days ?? 0
+      dept.appeal_count += summary.appeal_count ?? 0
+    }
+
+    const departmentStats = Array.from(deptMap.values())
+      .map((dept) => ({
+        department: dept.department,
+        employee_count: dept.employee_count,
+        avg_attendance_rate:
+          dept.employee_count > 0 ? Math.round((dept.attendance_rate_sum / dept.employee_count) * 100) / 100 : 0,
+        avg_clock_in_minutes:
+          dept.clock_in_days > 0 ? Math.round(dept.clock_in_minutes_sum / dept.clock_in_days) : null,
+        avg_clock_out_minutes:
+          dept.clock_out_days > 0 ? Math.round(dept.clock_out_minutes_sum / dept.clock_out_days) : null,
+        total_hours: Math.round(dept.total_hours * 10) / 10,
+        avg_total_hours: dept.employee_count > 0 ? Math.round((dept.total_hours / dept.employee_count) * 10) / 10 : 0,
+        overtime_hours: Math.round(dept.overtime_hours * 10) / 10,
+        avg_overtime_hours:
+          dept.employee_count > 0 ? Math.round((dept.overtime_hours / dept.employee_count) * 10) / 10 : 0,
+        absent_days: dept.absent_days,
+        avg_absent_days: dept.employee_count > 0 ? Math.round((dept.absent_days / dept.employee_count) * 10) / 10 : 0,
+        incomplete_days: dept.incomplete_days,
+        avg_incomplete_days:
+          dept.employee_count > 0 ? Math.round((dept.incomplete_days / dept.employee_count) * 10) / 10 : 0,
+        appeal_count: dept.appeal_count,
+        avg_appeal_count: dept.employee_count > 0 ? Math.round((dept.appeal_count / dept.employee_count) * 10) / 10 : 0,
+      }))
+      .sort((a, b) => a.department.localeCompare(b.department))
+
+    // Remove internal tracking fields before returning employee summaries
+    const cleanSummaries = summaries.map(
+      ({ clock_in_minutes_sum, clock_in_days, clock_out_minutes_sum, clock_out_days, ...rest }) => rest
+    )
 
     const visibleDepartments = Array.from(
       new Set(allowedProfiles.map((profile) => String(profile.department || "").trim()).filter(Boolean))
     ).sort((a, b) => a.localeCompare(b))
 
-    return NextResponse.json({ data: summaries, departments: visibleDepartments })
+    return NextResponse.json({
+      data: cleanSummaries,
+      departments: visibleDepartments,
+      department_stats: departmentStats,
+    })
   } catch (error) {
     log.error({ err: String(error) }, "Failed to load attendance reports")
     return NextResponse.json({ error: "An error occurred" }, { status: 500 })
