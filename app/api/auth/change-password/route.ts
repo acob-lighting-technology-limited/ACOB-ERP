@@ -6,6 +6,7 @@ import { sendNotificationEmail } from "@/lib/notifications/email-gateway"
 import { withSubjectPrefix } from "@/lib/notifications/subject-policy"
 import { renderPasswordChangedEmail } from "@/lib/email-templates/password-changed"
 import { writeAuditLog } from "@/lib/audit/write-audit"
+import { writeLoginLog, REAUTH_SOURCE } from "@/lib/auth/login-log"
 
 const log = logger("change-password")
 
@@ -50,6 +51,18 @@ export async function POST(req: Request) {
         if (signInError) {
           return NextResponse.json({ error: "Current password is incorrect" }, { status: 400 })
         }
+
+        // Supabase records this verification as a `login` in
+        // auth.audit_log_entries even though the user never signed in. Tag a
+        // matching row so reconciliation can tell it apart from a real login.
+        await writeLoginLog({
+          supabase,
+          headers: req.headers,
+          userId: user.id,
+          authMethod: "password",
+          source: REAUTH_SOURCE,
+          userEmail: user.email,
+        })
       }
     }
 
