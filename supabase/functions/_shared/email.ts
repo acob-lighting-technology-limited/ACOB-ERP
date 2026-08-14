@@ -71,9 +71,10 @@ export async function sendEmail(options: SendEmailOptions): Promise<SendEmailRes
     subject: options.subject,
     html: options.html,
     replyTo: options.replyTo,
+    reply_to: options.replyTo, // Ensure compatibility with Resend API snake_case format
     ...(options.listId ? { headers: { "List-Id": options.listId } } : {}),
     attachments: options.attachments,
-  }
+  } as any
   const traceLabel = options.traceLabel || payload.subject
   const recipientsCount = payload.to.length
   const attachmentsCount = options.attachments?.length || 0

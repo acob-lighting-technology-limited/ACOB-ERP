@@ -23,6 +23,8 @@ type BroadcastRequestBody = {
   broadcastPreparedByName?: string
   broadcastPreparedByDesignation?: string
   broadcastPreparedByDepartment?: string
+  broadcastPreparedByEmail?: string
+  broadcastReplyToEmail?: string
   requestedByUserId?: string
   attachments?: {
     filename?: string
@@ -81,11 +83,12 @@ function buildBroadcastSender(department: string): string {
 }
 
 /**
- * Correspondence is written by a real person, so replies go to the lead of the
- * department it was sent on behalf of — resolved per send, since it genuinely
- * varies. Falls back to the HR mailbox when the department has no lead set.
+ * Correspondence is written by a real person, so replies should reach that
+ * person directly. Falls back to the department lead (resolved per send,
+ * since it genuinely varies), then to the HR mailbox, if the sender has no
+ * email on file.
  */
-async function resolveDepartmentReplyTo(
+async function resolveDepartmentLeadReplyTo(
   // deno-lint-ignore no-explicit-any
   supabase: any,
   department: string
@@ -108,6 +111,20 @@ async function resolveDepartmentReplyTo(
   } catch {
     return fallback
   }
+}
+
+async function resolveBroadcastReplyTo(
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
+  department: string,
+  replyToEmail: string | undefined,
+  preparedByEmail: string | undefined
+): Promise<string> {
+  const selectedReplyTo = normalizeEmail(replyToEmail)
+  if (selectedReplyTo) return selectedReplyTo
+  const senderEmail = normalizeEmail(preparedByEmail)
+  if (senderEmail) return senderEmail
+  return resolveDepartmentLeadReplyTo(supabase, department)
 }
 
 function withSubjectPrefix(moduleName: string, subject: string): string {
@@ -305,6 +322,8 @@ serve(async (req) => {
     const broadcastPreparedByName = body.broadcastPreparedByName as string | undefined
     const broadcastPreparedByDesignation = body.broadcastPreparedByDesignation as string | undefined
     const broadcastPreparedByDepartment = body.broadcastPreparedByDepartment as string | undefined
+    const broadcastPreparedByEmail = body.broadcastPreparedByEmail as string | undefined
+    const broadcastReplyToEmail = body.broadcastReplyToEmail as string | undefined
     const requestedByUserId = (body.requestedByUserId as string | undefined) || null
     const attachments = Array.isArray(body.attachments)
       ? body.attachments
@@ -339,7 +358,7 @@ serve(async (req) => {
       broadcastPreparedByDepartment
     )
     const from = buildBroadcastSender(department)
-    const replyTo = await resolveDepartmentReplyTo(supabase, department)
+    const replyTo = await resolveBroadcastReplyTo(supabase, department, broadcastReplyToEmail, broadcastPreparedByEmail)
 
     // ── Idempotency claim ────────────────────────────────────────────────────
     // Claim this broadcast before sending. A retry (or concurrent duplicate)
