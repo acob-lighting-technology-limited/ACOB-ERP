@@ -1,4 +1,5 @@
-import { missedHours, getWorkdaysInRange } from "@/lib/hr/attendance-utils"
+import { getWorkdaysInRange } from "@/lib/hr/attendance-utils"
+import { computeAttendanceDay, NET_DAY_HOURS } from "@/lib/hr/attendance-ssot"
 import { toLocalISODate } from "@/lib/utils/date"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import type { AttendancePolicy } from "@/lib/org-config"
@@ -254,9 +255,9 @@ export function calculatePayroll({
   communicationConfig?: number
 }): PayrollBreakdown {
   const dailyPay = workdays > 0 ? monthlyBase / workdays : 0
-  const hourlyRate = dailyPay / 8.5
+  const hourlyRate = dailyPay / NET_DAY_HOURS
 
-  // Lateness Surcharge: (Pay/Day / 8.5) * Missed Hours
+  // Lateness Surcharge: (Pay/Day / net day hours) * Missed Hours
   const latenessSurcharge = hourlyRate * missedHours
 
   // Absent Surcharge: Pay/Day * Absent Days
@@ -409,10 +410,13 @@ export interface PayrollAttendanceRecord {
 }
 
 /**
- * Single source of truth for turning a month of attendance records into the two
- * payroll surcharge inputs (missed hours, absent days). Reuses the canonical
- * `missedHours()` lateness/early-departure math so the bulk run, single-employee
- * calc, and client preview can never disagree.
+ * Turns a month of attendance records into the two payroll surcharge inputs
+ * (missed hours, absent days) by delegating every day to `computeAttendanceDay()`,
+ * so the bulk run, single-employee calc, client preview, HR reports and PMS
+ * scoring all charge from one set of numbers.
+ *
+ * A full day of missed hours and an absent day cost the same money — `hourlyRate`
+ * is `dailyPay / NET_DAY_HOURS` — so the split here is purely for reporting.
  */
 export function derivePayrollAttendance(params: {
   userId: string
@@ -447,26 +451,25 @@ export function derivePayrollAttendance(params: {
 
     if (isCoveredPayrollStatus(status)) continue
 
-    if (status === "absent") {
+    const day = computeAttendanceDay({
+      status,
+      clockIn: rec?.clock_in ?? null,
+      clockOut: rec?.clock_out ?? null,
+      policy,
+      earlyCloseTime: closeTime,
+      lateResumptionTime: lateRes,
+    })
+
+    if (day.covered) continue
+
+    // A day costing the full net shift is billed as an absent day rather than
+    // hours, so it reads correctly on the payslip. The money is identical.
+    if (day.isAbsent) {
       absentDaysCount++
       continue
     }
 
-    const inTime = rec?.clock_in || null
-    const outTime = rec?.clock_out || null
-
-    if (!inTime || !outTime) {
-      absentDaysCount++
-      continue
-    }
-
-    const [ih, im] = inTime.split(":").map(Number)
-    if (!isNaN(ih) && !isNaN(im) && ih * 60 + im > 16 * 60) {
-      // Arrived after the 4:00 PM cutoff — counts as a full day absent.
-      absentDaysCount++
-    } else {
-      missedHoursCount += missedHours(inTime, outTime, lateRes, closeTime)
-    }
+    missedHoursCount += day.hoursLost
   }
 
   return { missedHours: missedHoursCount, absentDays: absentDaysCount }
