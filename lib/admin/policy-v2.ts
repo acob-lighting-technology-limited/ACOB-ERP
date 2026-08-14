@@ -44,6 +44,7 @@ export type AdminRouteKeyV2 =
   | "reports.weekly"
   | "reports.other"
   | "security.networkActivity"
+  | "security.bypassOverride"
   | "settings.main"
   | "tasks.main"
   | "tools.main"
@@ -79,6 +80,7 @@ export const GRANTABLE_ADMIN_ROUTES: AdminRouteKeyV2[] = [
   "settings.main",
   "auditlogs.main",
   "security.networkActivity",
+  "security.bypassOverride",
 ]
 
 export interface AccessContextV2 {
@@ -133,6 +135,9 @@ export function resolveAdminRouteKeyV2(pathname: string): AdminRouteKeyV2 {
   if (pathname.startsWith("/admin/audit-logs")) return "auditlogs.main"
   if (pathname.startsWith("/admin/dev")) return "dev.main"
   if (pathname.startsWith("/admin/settings")) return "settings.main"
+  // Onboarding lists every account and its sign-in state — same account-admin
+  // surface as Settings → Users, so it gates on the same route key.
+  if (pathname.startsWith("/admin/onboarding")) return "settings.main"
   if (pathname.startsWith("/admin/communications/meetings")) return "communications.meetings"
   if (pathname.startsWith("/admin/communications/broadcast")) return "communications.broadcast"
   if (pathname.startsWith("/admin/communications")) return "communications.main"
@@ -156,6 +161,7 @@ export function resolveAdminRouteKeyV2(pathname: string): AdminRouteKeyV2 {
   if (pathname.startsWith("/admin/job-descriptions")) return "jobdescriptions.main"
   if (pathname.startsWith("/admin/notifications")) return "notifications.main"
   if (pathname.startsWith("/admin/purchasing")) return "purchasing.main"
+  if (pathname.startsWith("/admin/security/bypass-override")) return "security.bypassOverride"
   if (pathname.startsWith("/admin/security/network-activity")) return "security.networkActivity"
   if (pathname.startsWith("/admin/reports")) {
     if (pathname.includes("/weekly-reports")) return "reports.weekly"
@@ -175,6 +181,8 @@ export function getRoutePolicyV2(route: AdminRouteKeyV2): RoutePolicyV2 {
     case "settings.main":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: null }
     case "security.networkActivity":
+      return { visibility: "none", mutations: "none", adminOnly: true, domain: null }
+    case "security.bypassOverride":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: null }
     case "communications.meetings":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: "communications" }
