@@ -202,6 +202,16 @@ function SetupAccountContent() {
 
       if (error) throw error
 
+      // Verifying the code signs the user in, so record it like any other
+      // sign-in — otherwise account setup and reset are invisible in
+      // /admin/dev/login-logs.
+      await apiFetch("/api/dev/login-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ authMethod: "otp" }),
+        keepalive: true,
+      }).catch((logErr) => log.warn("dev login log failed (setup-account otp)", logErr))
+
       // OTP verified — session is now established, show password form
       setIsRecoveryMode(true)
       toast.success("Code verified! Now create your password.")
