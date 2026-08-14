@@ -171,7 +171,8 @@ export async function GET(request: Request) {
     if (Number.isFinite(week) && week > 0) query = query.eq("meeting_week", week)
     if (Number.isFinite(year) && year > 0) query = query.eq("meeting_year", year)
 
-    const { data, error, count } = await query.range(from, to)
+    const wantsPage = searchParams.has("page") || searchParams.has("per_page")
+    const { data, error, count } = wantsPage ? await query.range(from, to) : await query
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     const rows = data || []
@@ -204,7 +205,14 @@ export async function GET(request: Request) {
       })
     )
 
-    return NextResponse.json(paginatedResponse(withLockState, count || 0, pagination))
+    const responsePagination = wantsPage
+      ? pagination
+      : {
+          ...pagination,
+          per_page: count || withLockState.length || 25,
+        }
+
+    return NextResponse.json(paginatedResponse(withLockState, count || 0, responsePagination))
   } catch (error) {
     log.error({ err: String(error) }, "GET /api/reports/kss-roster failed")
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })

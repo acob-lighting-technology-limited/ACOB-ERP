@@ -1,4 +1,17 @@
-@import "tailwindcss";
+/*
+ * Tailwind v4 otherwise auto-detects sources from the repository root. Besides
+ * needlessly watching migrations and scripts, that lets Windows reserved
+ * device entries such as `nul` reach Turbopack's dependency graph and crash
+ * CSS compilation. Keep the scan limited to code that can render UI.
+ */
+@import "tailwindcss" source(none);
+@source "./";
+@source "../components";
+@source "../config";
+@source "../hooks";
+@source "../lib";
+@source "../providers";
+@source "../shared";
 @import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *));

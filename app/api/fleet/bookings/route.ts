@@ -41,6 +41,7 @@ export async function GET(request: NextRequest) {
     }
     const pagination = paginationParsed.data
     const { from, to } = getPaginationRange(pagination)
+    const wantsPage = searchParams.has("page") || searchParams.has("per_page")
 
     const supabase = await createClient()
     const validationClient = getServiceRoleClientOrFallback(supabase)
@@ -65,11 +66,8 @@ export async function GET(request: NextRequest) {
       query = query.eq("requester_id", user.id)
     }
 
-    const {
-      data: bookings,
-      error,
-      count,
-    } = await query.order("start_at", { ascending: false }).range(from, to)
+    const orderedQuery = query.order("start_at", { ascending: false })
+    const { data: bookings, error, count } = wantsPage ? await orderedQuery.range(from, to) : await orderedQuery
 
     if (error) {
       return NextResponse.json({ error: error.message || "Failed to load bookings" }, { status: 500 })
@@ -108,7 +106,10 @@ export async function GET(request: NextRequest) {
       .limit(500)
 
     return NextResponse.json({
-      ...paginatedResponse(data, count || 0, pagination),
+      ...paginatedResponse(data, count || 0, {
+        ...pagination,
+        per_page: wantsPage ? pagination.per_page : count || data.length || pagination.per_page,
+      }),
       resource_schedule: resourceSchedule || [],
     })
   } catch (error) {

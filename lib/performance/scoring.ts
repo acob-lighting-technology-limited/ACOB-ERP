@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { toLocalISODate } from "@/lib/utils/date"
 import { deriveUnifiedAttendanceStatus, normalizeStoredAttendanceStatus } from "@/lib/hr/attendance-status"
 import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
-import { dayCredit, getLateSteps } from "@/lib/hr/attendance-utils"
+import { computeAttendanceDay, NET_DAY_HOURS } from "@/lib/hr/attendance-ssot"
 import { pickCurrentCycle } from "@/lib/pms/cadence"
 
 type GoalScoreBreakdown = {
@@ -397,21 +397,21 @@ export async function computeIndividualPerformanceScore(
         policy
       )
 
-      // Hourly credit model (10 credits/day; late & early-out each dock ~1/hr).
+      // Hours-lost model, shared with payroll and HR reports via the SSOT.
       // LEWP forgives the early-out hours only — never the late arrival.
-      const earlyOutApproved = rawStoredStatus === "early_departure_with_permission"
-      creditSum += dayCredit(status, row.clock_in, row.clock_out, policy, {
+      const dayResult = computeAttendanceDay({
+        status,
+        clockIn: row.clock_in,
+        clockOut: row.clock_out,
+        policy,
         earlyCloseTime: earlyClose ?? null,
-        earlyOutApproved,
+        earlyOutApproved: rawStoredStatus === "early_departure_with_permission",
       })
+      creditSum += dayResult.hoursWorked / NET_DAY_HOURS
 
-      const clockInRaw = String((row as { clock_in?: string | null }).clock_in || "")
-      if (clockInRaw && status !== "absent" && status !== "incomplete") {
-        const lateSteps = getLateSteps(clockInRaw, policy)
-        if (lateSteps > 0) {
-          lateDays += 1
-          latePenaltyStepsTotal += lateSteps
-        }
+      if (status !== "absent" && status !== "incomplete" && dayResult.lateBracket > 0) {
+        lateDays += 1
+        latePenaltyStepsTotal += dayResult.lateBracket
       }
 
       const normalizedStatus = String(status || "").toLowerCase()
@@ -485,9 +485,7 @@ export async function computeIndividualPerformanceScore(
       cbtAttemptQuery = cbtAttemptQuery.eq("review_cycle_id", cycle.id)
     }
 
-    const { data: cbtAttempts } = await cbtAttemptQuery
-      .order("submitted_at", { ascending: false })
-      .limit(1)
+    const { data: cbtAttempts } = await cbtAttemptQuery.order("submitted_at", { ascending: false }).limit(1)
 
     if (cbtAttempts && cbtAttempts.length > 0 && typeof cbtAttempts[0]?.score === "number") {
       cbtScore = roundScore(Number(cbtAttempts[0].score))

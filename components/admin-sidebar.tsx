@@ -29,6 +29,7 @@ import {
   ShieldCheck,
   FlaskConical,
   User,
+  UserCheck,
   Building2,
   Bot,
   FolderKanban,
@@ -409,6 +410,13 @@ const adminNavigation: NavItem[] = [
   },
   {
     section: "compliance",
+    name: "Onboarding",
+    href: "/admin/onboarding",
+    icon: UserCheck,
+    roles: ["developer", "super_admin"],
+  },
+  {
+    section: "compliance",
     name: "Settings",
     href: "/admin/settings",
     icon: Target,
@@ -427,6 +435,13 @@ const adminNavigation: NavItem[] = [
     href: "/admin/security/network-activity",
     icon: ShieldCheck,
     roles: ["developer", "super_admin", "admin"],
+  },
+  {
+    section: "security",
+    name: "Bypass & Override",
+    href: "/admin/security/bypass-override",
+    icon: ShieldAlert,
+    roles: ["developer", "super_admin"],
   },
   {
     section: "dev",
