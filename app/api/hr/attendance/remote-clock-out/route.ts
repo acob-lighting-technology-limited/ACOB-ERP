@@ -7,6 +7,7 @@ import { writeAuditLog } from "@/lib/audit/write-audit"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { toLocalISODate, toLocalTimeString, toLocalYearMonth } from "@/lib/utils/date"
 import { distanceMetres, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
+import { applyLunchBreak } from "@/lib/hr/attendance-ssot"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { matchSelfieToReference } from "@/lib/azure/face"
 import { getOneDriveService } from "@/lib/onedrive"
@@ -160,15 +161,20 @@ export async function POST(request: NextRequest) {
     // ── Calculate total_hours & status ───────────────────────────────────────
     const inMs = new Date(`${today}T${record.clock_in}`).getTime()
     const outMs = new Date(`${today}T${clockOutTime}`).getTime()
-    const total_hours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
-    const status = deriveUnifiedAttendanceStatus({
-      record: { clock_in: record.clock_in, clock_out: clockOutTime, waived: false },
-      recordDate: today,
-    }, policy)
+    const rawHours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
+    const { breakMinutes: break_duration, workedHours: total_hours } = applyLunchBreak(rawHours)
+    const status = deriveUnifiedAttendanceStatus(
+      {
+        record: { clock_in: record.clock_in, clock_out: clockOutTime, waived: false },
+        recordDate: today,
+      },
+      policy
+    )
 
     const updateData: Record<string, unknown> = {
       clock_out: clockOutTime,
       total_hours,
+      break_duration,
       status,
       clock_out_source: "remote_web",
       selfie_out_url: selfieOutUrl,

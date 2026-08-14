@@ -350,6 +350,37 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
+  // Check access for standalone CBT page or its backing session API route
+  const isCbtPageOrSessionApi =
+    pathname === "/cbt" ||
+    pathname.startsWith("/cbt/") ||
+    pathname === "/api/hr/performance/cbt/session" ||
+    pathname.startsWith("/api/hr/performance/cbt/session/")
+
+  if (isCbtPageOrSessionApi && user) {
+    const scope = await resolveAdminScope(supabase, user.id)
+    const baseRole = scope ? scope.role : null
+
+    const isAllowed =
+      baseRole === "developer" ||
+      baseRole === "super_admin" ||
+      (baseRole === "admin" &&
+        scope &&
+        Array.isArray(scope.adminRoutes) &&
+        (scope.adminRoutes.includes("hr.pms.cbt.manage") ||
+          scope.adminRoutes.includes("hr.pms") ||
+          scope.adminRoutes.includes("hr.main")))
+
+    if (!isAllowed) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+      const url = request.nextUrl.clone()
+      url.pathname = "/profile"
+      return NextResponse.redirect(url)
+    }
+  }
+
   // CSRF: validate Origin for state-changing requests.
   // First of two layers — the double-submit token check below is the second,
   // enforced fail-closed for cookie-authenticated mutations.

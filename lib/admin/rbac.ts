@@ -82,7 +82,7 @@ const SECTION_TO_ROUTES: Partial<Record<AdminSection, AdminRouteKeyV2[]>> = {
   projects: [],
   purchasing: ["purchasing.main"],
   reports: ["reports.weekly", "reports.other"],
-  security: ["security.networkActivity"],
+  security: ["security.networkActivity", "security.bypassOverride"],
   settings: ["settings.main"],
   tasks: ["tasks.main"],
   admin: [],

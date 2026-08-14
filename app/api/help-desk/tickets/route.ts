@@ -107,6 +107,7 @@ export async function GET(request: NextRequest) {
     }
     const pagination = paginationParsed.data
     const { from, to } = getPaginationRange(pagination)
+    const wantsPage = searchParams.has("page") || searchParams.has("per_page")
     const scope = searchParams.get("scope") || "mine"
     const status = searchParams.get("status")
     const requestedDepartment = searchParams.get("department")
@@ -153,7 +154,7 @@ export async function GET(request: NextRequest) {
       query = query.eq("status", status)
     }
 
-    const { data, error, count } = await query.range(from, to)
+    const { data, error, count } = wantsPage ? await query.range(from, to) : await query
     if (error) throw error
 
     const rows = (data as HelpDeskTicketRow[] | null) || []
@@ -174,7 +175,12 @@ export async function GET(request: NextRequest) {
       comment_count: commentCountMap.get(row.id) || 0,
     }))
 
-    return NextResponse.json(paginatedResponse(rowsWithCounts, count || 0, pagination))
+    return NextResponse.json(
+      paginatedResponse(rowsWithCounts, count || 0, {
+        ...pagination,
+        per_page: wantsPage ? pagination.per_page : count || rowsWithCounts.length || pagination.per_page,
+      })
+    )
   } catch (error) {
     log.error({ err: String(error) }, "Unhandled error in GET")
     return NextResponse.json({ error: `Failed to fetch tickets: ${describeError(error)}` }, { status: 500 })

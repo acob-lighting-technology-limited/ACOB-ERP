@@ -7,7 +7,8 @@ import { computeIndividualPerformanceScore } from "@/lib/performance/scoring"
 import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { pickCurrentCycle } from "@/lib/pms/cadence"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
-import { dayCredit, toLocalISODate, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
+import { toLocalISODate, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
+import { computeAttendanceDay, attendanceRateFrom } from "@/lib/hr/attendance-ssot"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 
 import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
@@ -284,7 +285,7 @@ export async function GET(request: NextRequest) {
       if (metric === "attendance") {
         // Batch attendance computation — same logic as /api/hr/attendance/reports.
         // Enumerate every workday in the cycle window, score each day using the
-        // canonical deriveUnifiedAttendanceStatus + dayCredit path, and use the
+        // canonical deriveUnifiedAttendanceStatus + computeAttendanceDay path, and use the
         // total workday count (not just days with records) as the denominator.
         const todayIso = toLocalISODate()
         const cycleStart = selectedCycle?.start_date ?? null
@@ -329,7 +330,7 @@ export async function GET(request: NextRequest) {
 
           for (const userId of candidateUserIds) {
             const empRecords = recordsByUser.get(userId) ?? new Map<string, AttendanceRecordRow>()
-            let creditSum = 0
+            let hoursLostSum = 0
             let scorableDays = 0
 
             for (const day of workdays) {
@@ -347,10 +348,16 @@ export async function GET(request: NextRequest) {
               scorableDays++
               if (onUnpaidLeave) continue // zero credit for the day
               const status = deriveUnifiedAttendanceStatus({ record: rec ?? undefined, recordDate: day }, policy)
-              creditSum += dayCredit(status, rec?.clock_in ?? undefined, rec?.clock_out ?? undefined, policy)
+              const dayResult = computeAttendanceDay({
+                status,
+                clockIn: rec?.clock_in ?? null,
+                clockOut: rec?.clock_out ?? null,
+                policy,
+              })
+              hoursLostSum += dayResult.hoursLost
             }
 
-            rateByUser.set(userId, scorableDays > 0 ? Math.round((creditSum / scorableDays) * 10000) / 100 : null)
+            rateByUser.set(userId, scorableDays > 0 ? attendanceRateFrom(hoursLostSum, scorableDays) : null)
           }
         }
 

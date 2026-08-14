@@ -7,6 +7,7 @@ import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { toLocalISODate, toLocalTimeString } from "@/lib/utils/date"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { loadAttendancePolicy } from "@/lib/hr/attendance-utils"
+import { applyLunchBreak } from "@/lib/hr/attendance-ssot"
 
 const log = logger("hr-attendance-clock-out")
 
@@ -53,8 +54,7 @@ export async function PATCH(_request: NextRequest) {
     const clockIn = new Date(`${today}T${record.clock_in}`)
     const clockOut = new Date(`${today}T${clockOutTime}`)
     const totalHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
-    const breakDuration = totalHours >= 5 ? 60 : 0
-    const workHours = totalHours - breakDuration / 60
+    const { breakMinutes: breakDuration, workedHours: workHours } = applyLunchBreak(totalHours)
 
     const status = deriveUnifiedAttendanceStatus(
       {

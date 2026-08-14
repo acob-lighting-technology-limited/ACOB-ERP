@@ -122,10 +122,11 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
   const [meetingPreparedById, setMeetingPreparedById] = useState("none")
 
   // Broadcast fields
-  const [broadcastSubject, setBroadcastSubject] = useState("Administrative Notice")
-  const [broadcastBodyHtml, setBroadcastBodyHtml] = useState("<p>Type your message here...</p>")
+  const [broadcastSubject, setBroadcastSubject] = useState("")
+  const [broadcastBodyHtml, setBroadcastBodyHtml] = useState("<p><br></p>")
   const [broadcastDepartment, setBroadcastDepartment] = useState(currentUser?.department || "Admin & HR")
   const [broadcastPreparedById, setBroadcastPreparedById] = useState("none")
+  const [broadcastReplyToEmail, setBroadcastReplyToEmail] = useState("")
   const [broadcastAttachments, setBroadcastAttachments] = useState<File[]>([])
 
   // Delivery timing
@@ -255,6 +256,18 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
     [employees, broadcastPreparedById]
   )
 
+  const broadcastReplyToOptions = useMemo(() => {
+    const options = new Map<string, { email: string; label: string }>()
+    for (const employee of employees) {
+      for (const candidate of [employee.company_email, employee.additional_email]) {
+        const email = (candidate || "").trim().toLowerCase()
+        if (!email) continue
+        options.set(email, { email, label: `${employee.full_name} (${email})` })
+      }
+    }
+    return Array.from(options.values()).sort((a, b) => a.label.localeCompare(b.label))
+  }, [employees])
+
   // ── Effects ────────────────────────────────────────────────────────────────
   useEffect(() => {
     if (mode === "communications") return
@@ -334,6 +347,17 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
       setBroadcastPreparedById(preferred || broadcastPreparedByOptions[0].id)
     }
   }, [broadcastPreparedById, broadcastPreparedByOptions, currentUserName])
+
+  useEffect(() => {
+    const senderEmail = (
+      selectedBroadcastPreparedBy?.company_email ||
+      selectedBroadcastPreparedBy?.additional_email ||
+      ""
+    )
+      .trim()
+      .toLowerCase()
+    setBroadcastReplyToEmail(senderEmail)
+  }, [selectedBroadcastPreparedBy])
 
   useEffect(() => {
     if (reminderType !== "meeting") return
@@ -621,6 +645,10 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
         toast.error("Prepared by is required")
         return
       }
+      if (!broadcastReplyToEmail) {
+        toast.error("Reply-to email is required")
+        return
+      }
     }
 
     if (reminderType === "meeting" && !selectedMeetingPreparedBy?.full_name) {
@@ -698,6 +726,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
               reminderType === "admin_broadcast"
                 ? selectedBroadcastPreparedBy?.department || broadcastDepartment
                 : undefined,
+            broadcastReplyToEmail: reminderType === "admin_broadcast" ? broadcastReplyToEmail : undefined,
             attachments:
               reminderType === "admin_broadcast" && broadcastAttachments.length > 0
                 ? broadcastAttachments.map((file) => file.name)
@@ -796,6 +825,9 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
         payload.broadcastPreparedByName = selectedBroadcastPreparedBy?.full_name || null
         payload.broadcastPreparedByDesignation = selectedBroadcastPreparedBy?.designation || null
         payload.broadcastPreparedByDepartment = selectedBroadcastPreparedBy?.department || broadcastDepartment
+        payload.broadcastPreparedByEmail =
+          selectedBroadcastPreparedBy?.company_email || selectedBroadcastPreparedBy?.additional_email || null
+        payload.broadcastReplyToEmail = broadcastReplyToEmail
         if (broadcastAttachments.length > 0) {
           payload.attachments = await Promise.all(broadcastAttachments.map((file) => encodeFileToBase64(file)))
         }
@@ -993,11 +1025,14 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
                   setBroadcastDepartment={setBroadcastDepartment}
                   broadcastPreparedById={broadcastPreparedById}
                   setBroadcastPreparedById={setBroadcastPreparedById}
+                  broadcastReplyToEmail={broadcastReplyToEmail}
+                  setBroadcastReplyToEmail={setBroadcastReplyToEmail}
                   broadcastSubject={broadcastSubject}
                   setBroadcastSubject={setBroadcastSubject}
                   broadcastBodyHtml={broadcastBodyHtml}
                   setBroadcastBodyHtml={setBroadcastBodyHtml}
                   broadcastPreparedByOptions={broadcastPreparedByOptions}
+                  broadcastReplyToOptions={broadcastReplyToOptions}
                   departmentOptions={departmentOptions}
                   attachments={broadcastAttachments}
                   setAttachments={setBroadcastAttachments}

@@ -316,6 +316,7 @@ export async function GET(request: NextRequest) {
       per_page: paginationParsed.data.limit,
     })
     const { from, to } = getPaginationRange(pagination)
+    const wantsPage = searchParams.has("page") || searchParams.has("limit")
     const letterTypeParam = searchParams.get("letter_type")
     const status = paginationParsed.data.status || searchParams.get("status")
     const department = searchParams.get("department")
@@ -370,7 +371,7 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const { data, error, count } = await query.range(from, to)
+    const { data, error, count } = wantsPage ? await query.range(from, to) : await query
     if (error) throw error
 
     const records = (data || []) as CreatedCorrespondenceRecord[]
@@ -438,9 +439,12 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       data: enrichedData as any[],
       total: count || 0,
-      page: paginationParsed.data.page,
-      limit: paginationParsed.data.limit,
-      pagination: paginatedResponse(enrichedData as any[], count || 0, pagination).pagination,
+      page: pagination.page,
+      limit: wantsPage ? pagination.per_page : count || enrichedData.length || pagination.per_page,
+      pagination: paginatedResponse(enrichedData as any[], count || 0, {
+        ...pagination,
+        per_page: wantsPage ? pagination.per_page : count || enrichedData.length || pagination.per_page,
+      }).pagination,
     })
   } catch (error) {
     log.error({ err: String(error) }, "Error in GET /api/correspondence/records:")

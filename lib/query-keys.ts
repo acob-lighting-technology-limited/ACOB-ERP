@@ -65,6 +65,9 @@ export const QUERY_KEYS = {
   // Dev login logs
   devLoginLogs: () => ["dev-login-logs"],
 
+  // Admin onboarding (account sign-in status)
+  adminOnboarding: () => ["admin-onboarding"],
+
   // Dev AcoBot logs
   acobotLogs: () => ["acobot-logs"],
 

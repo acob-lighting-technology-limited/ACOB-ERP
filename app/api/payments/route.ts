@@ -117,6 +117,7 @@ export async function GET(request: Request) {
     }
     const pagination = paginationParsed.data
     const { from, to } = getPaginationRange(pagination)
+    const wantsPage = searchParams.has("page") || searchParams.has("per_page")
 
     const departmentId = searchParams.get("department_id")
     const paymentType = searchParams.get("payment_type")
@@ -194,11 +195,17 @@ export async function GET(request: Request) {
       query = query.neq("status", "cancelled")
     }
 
-    const { data: payments, error, count } = await query.range(from, to)
+    const { data: payments, error, count } = wantsPage ? await query.range(from, to) : await query
 
     if (error) throw error
 
-    return NextResponse.json(paginatedResponse(payments || [], count || 0, pagination))
+    const rows = payments || []
+    return NextResponse.json(
+      paginatedResponse(rows, count || 0, {
+        ...pagination,
+        per_page: wantsPage ? pagination.per_page : count || rows.length || pagination.per_page,
+      })
+    )
   } catch (error) {
     log.error({ err: String(error) }, "Error fetching payments:")
     return apiError("Failed to fetch payments", ApiErrorCode.INTERNAL_ERROR, 500)
