@@ -1,38 +1,57 @@
 {
-  "generatedAt": "2026-07-10T09:26:45.522Z",
+  "generatedAt": "2026-08-14T09:21:13.011Z",
   "summary": {
-    "totalPages": 217,
-    "missingLoading": 0,
-    "headerViolations": 0,
+    "totalPages": 233,
+    "missingLoading": 13,
+    "headerViolations": 3,
     "tableViolations": 0,
     "statsViolations": 0,
-    "modalViolations": 0,
+    "modalViolations": 2,
     "adHocEmptyStatePages": 2,
     "adHocErrorStatePages": 0,
-    "adHocSectionPages": 2,
-    "adHocFormFieldPages": 5
+    "adHocSectionPages": 1,
+    "adHocFormFieldPages": 4
   },
   "violations": {
-    "missingLoading": [],
-    "header": [],
+    "missingLoading": [
+      "app/(app)/payroll",
+      "app/(app)/requisition/[id]",
+      "app/(app)/settings/notifications",
+      "app/(app)/settings/profile",
+      "app/(app)/settings/security",
+      "app/(app)/tools/test",
+      "app/admin/hr/employees/attendance",
+      "app/admin/hr/employees/lunch",
+      "app/admin/hr/employees/payroll",
+      "app/admin/hr/payroll",
+      "app/admin/hr/payroll/[id]",
+      "app/admin/hr/payroll/dummy",
+      "app/launch"
+    ],
+    "header": [
+      "app/(app)/requisition/[id]/page.tsx",
+      "app/birthday/page.tsx",
+      "app/launch/page.tsx"
+    ],
     "table": [],
     "stats": [],
-    "modal": [],
+    "modal": [
+      "app/(app)/lunch/_components/lunch-review-dialog.tsx",
+      "app/admin/hr/payroll/view.tsx"
+    ],
     "adHocEmptyStatePages": [
       "app/(app)/pms/development-plans/page.tsx",
       "app/(app)/pms/peer-feedback/page.tsx"
     ],
     "adHocErrorStatePages": [],
     "adHocSectionPages": [
-      "app/birthday/page.tsx",
-      "app/kss/page.tsx"
+      "app/birthday/page.tsx"
     ],
     "adHocFormFieldPages": [
       "app/(app)/pms/peer-feedback/page.tsx",
       "app/admin/hr/pms/cbt/extra/page.tsx",
       "app/admin/hr/pms/cbt/question/page.tsx",
-      "app/admin/hr/site-locations/page.tsx",
-      "app/cbt/page.tsx"
+      "app/admin/hr/site-locations/page.tsx"
     ]
   }
 }
