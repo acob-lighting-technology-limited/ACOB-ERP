@@ -7,31 +7,26 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
+  Bell,
   ChevronsUpDown,
   ChevronRight,
   LayoutDashboard,
-  Package,
   ClipboardList,
   Ticket,
   FileText,
-  ScrollText,
+  Landmark,
+  MessageSquare,
   LogOut,
   Settings,
-  CreditCard,
-  Calendar,
-  Target,
   FileBarChart,
   FileCode2,
   Megaphone,
   Wrench,
-  ShieldAlert,
-  ShieldEllipsis,
   ShieldCheck,
   FlaskConical,
   User,
-  UserCheck,
+  Users,
   Building2,
-  Bot,
   FolderKanban,
 } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
@@ -114,17 +109,14 @@ function buildDeptNavigation(deptId: string): NavItem[] {
       section: "management",
       name: "HR",
       href: `${base}/hr`,
-      icon: Calendar,
+      icon: Users,
       roles: [],
       children: [
         { name: "Employees", href: `${base}/hr/employees` },
-        {
-          name: "Attendance",
-          href: `${base}/hr/attendance`,
-        },
-        { name: "Daily Activity", href: `${base}/hr/reports/daily-activity` },
+        // No "Departments" here — the dept shell is already scoped to one
+        // department, so the org-wide department list belongs to /admin only.
+        { name: "Attendance", href: `${base}/hr/attendance` },
         { name: "Leave", href: `${base}/hr/leave` },
-        { name: "Departments", href: `${base}/hr/departments` },
         { name: "Office Location", href: `${base}/hr/office-location` },
         {
           name: "PMS",
@@ -147,16 +139,21 @@ function buildDeptNavigation(deptId: string): NavItem[] {
     },
     {
       section: "management",
-      name: "Finance",
+      name: "Accounts",
       href: `${base}/finance`,
-      icon: CreditCard,
+      icon: Landmark,
       roles: [],
       children: [
-        { name: "Payments", href: `${base}/finance/payments` },
         { name: "Requisitions", href: `${base}/finance/requisitions` },
+        { name: "Payments", href: `${base}/finance/payments` },
         { name: "Bills", href: `${base}/finance/bills` },
         { name: "Invoices", href: `${base}/finance/invoices` },
-        { name: "Reports", href: `${base}/finance/reports` },
+        { name: "Finance Reports", href: `${base}/finance/reports` },
+        {
+          name: "Assets",
+          href: `${base}/assets`,
+          children: [{ name: "Issues", href: `${base}/assets/issues` }],
+        },
       ],
     },
     {
@@ -171,13 +168,6 @@ function buildDeptNavigation(deptId: string): NavItem[] {
       name: "Help Desk",
       href: `${base}/help-desk`,
       icon: Ticket,
-      roles: [],
-    },
-    {
-      section: "operations",
-      name: "Assets",
-      href: `${base}/assets`,
-      icon: Package,
       roles: [],
     },
     {
@@ -210,7 +200,7 @@ function buildDeptNavigation(deptId: string): NavItem[] {
       section: "operations",
       name: "Feedback",
       href: `${base}/feedback`,
-      icon: ScrollText,
+      icon: MessageSquare,
       roles: [],
     },
     {
@@ -262,17 +252,20 @@ const adminNavigation: NavItem[] = [
     section: "management",
     name: "HR",
     href: "/admin/hr",
-    icon: Calendar,
+    icon: Users,
     roles: ["developer", "super_admin", "admin"],
     children: [
       { name: "Employees", href: "/admin/hr/employees" },
       { name: "Departments", href: "/admin/hr/departments" },
+      { name: "Onboarding", href: "/admin/onboarding" },
+      { name: "Job Descriptions", href: "/admin/job-descriptions" },
       { name: "Attendance", href: "/admin/hr/employees/attendance" },
       { name: "Leave", href: "/admin/hr/leave" },
-      { name: "Payroll", href: "/admin/hr/employees/payroll" },
       { name: "Lunch Register", href: "/admin/hr/employees/lunch" },
+      // Fleet only — /admin/hr/resources is a re-export of the same page.
       { name: "Fleet", href: "/admin/hr/fleet" },
-      { name: "Resources", href: "/admin/hr/resources" },
+      { name: "Office Location", href: "/admin/hr/office-location" },
+      { name: "Site Locations", href: "/admin/hr/site-locations" },
       {
         name: "PMS",
         href: "/admin/hr/pms",
@@ -290,24 +283,6 @@ const adminNavigation: NavItem[] = [
           { name: "Attendance", href: "/admin/hr/pms/attendance" },
         ],
       },
-      { name: "Office Location", href: "/admin/hr/office-location" },
-    ],
-  },
-  {
-    section: "management",
-    name: "Finance",
-    href: "/admin/finance",
-    icon: CreditCard,
-    roles: ["developer", "super_admin", "admin"],
-    children: [
-      { name: "Requisitions", href: "/admin/finance/requisitions" },
-      { name: "Payments", href: "/admin/finance/payments" },
-      { name: "Bills", href: "/admin/finance/bills" },
-      { name: "Invoices", href: "/admin/finance/invoices" },
-      { name: "Reports", href: "/admin/finance/reports" },
-      { name: "Orders", href: "/admin/purchasing/orders" },
-      { name: "Receipts", href: "/admin/purchasing/receipts" },
-      { name: "Suppliers", href: "/admin/purchasing/suppliers" },
     ],
   },
   {
@@ -323,6 +298,48 @@ const adminNavigation: NavItem[] = [
     href: "/admin/tasks",
     icon: ClipboardList,
     roles: ["developer", "super_admin", "admin"],
+  },
+  {
+    // Single item with an expansion, mirroring HR. Each descendant keeps its own
+    // grantable route key — the sidebar filters children individually (see
+    // filterNavChildren), so nesting them here does not collapse the gates.
+    section: "management",
+    name: "Accounts",
+    href: "/admin/finance",
+    icon: Landmark,
+    roles: ["developer", "super_admin", "admin"],
+    children: [
+      { name: "Requisitions", href: "/admin/finance/requisitions" },
+      { name: "Payments", href: "/admin/finance/payments" },
+      { name: "Bills", href: "/admin/finance/bills" },
+      { name: "Invoices", href: "/admin/finance/invoices" },
+      { name: "Payroll", href: "/admin/payroll" },
+      { name: "Finance Reports", href: "/admin/finance/reports" },
+      {
+        name: "Purchasing",
+        href: "/admin/purchasing",
+        children: [
+          { name: "Orders", href: "/admin/purchasing/orders" },
+          { name: "Receipts", href: "/admin/purchasing/receipts" },
+          { name: "Suppliers", href: "/admin/purchasing/suppliers" },
+        ],
+      },
+      {
+        name: "Assets",
+        href: "/admin/assets",
+        children: [{ name: "Issues", href: "/admin/assets/issues" }],
+      },
+      {
+        name: "Inventory",
+        href: "/admin/inventory",
+        children: [
+          { name: "Products", href: "/admin/inventory/products" },
+          { name: "Categories", href: "/admin/inventory/categories" },
+          { name: "Warehouses", href: "/admin/inventory/warehouses" },
+          { name: "Movements", href: "/admin/inventory/movements" },
+        ],
+      },
+    ],
   },
   {
     section: "operations",
@@ -385,9 +402,9 @@ const adminNavigation: NavItem[] = [
   },
   {
     section: "operations",
-    name: "Assets",
-    href: "/admin/assets",
-    icon: Package,
+    name: "Notifications",
+    href: "/admin/notifications",
+    icon: Bell,
     roles: ["developer", "super_admin", "admin"],
   },
   {
@@ -402,101 +419,62 @@ const adminNavigation: NavItem[] = [
     ],
   },
   {
-    section: "compliance",
-    name: "Audit Logs",
+    // Former "System" and "Security" sections merged into one expandable item,
+    // same pattern as Accounts. Each descendant keeps its own route key.
+    section: "operations",
+    name: "System & Security",
     href: "/admin/audit-logs",
-    icon: ScrollText,
-    roles: ["developer", "super_admin"],
-  },
-  {
-    section: "compliance",
-    name: "Onboarding",
-    href: "/admin/onboarding",
-    icon: UserCheck,
-    roles: ["developer", "super_admin"],
-  },
-  {
-    section: "compliance",
-    name: "Settings",
-    href: "/admin/settings",
-    icon: Target,
-    roles: ["developer", "super_admin"],
+    icon: ShieldCheck,
+    roles: ["developer", "super_admin", "admin"],
     children: [
-      { name: "Users", href: "/admin/settings/users" },
-      { name: "Roles", href: "/admin/settings/roles" },
-      { name: "Company", href: "/admin/settings/company" },
-      { name: "Mail", href: "/admin/settings/mail" },
-      { name: "Maintenance", href: "/admin/settings/maintenance" },
+      { name: "Audit Logs", href: "/admin/audit-logs" },
+      { name: "Network Activity", href: "/admin/security/network-activity" },
+      { name: "Bypass & Override", href: "/admin/security/bypass-override" },
+      {
+        name: "Settings",
+        href: "/admin/settings",
+        children: [
+          { name: "Users", href: "/admin/settings/users" },
+          { name: "Roles", href: "/admin/settings/roles" },
+          { name: "Company", href: "/admin/settings/company" },
+          { name: "Attendance Policy", href: "/admin/settings/attendance" },
+          { name: "Mail", href: "/admin/settings/mail" },
+          { name: "Maintenance", href: "/admin/settings/maintenance" },
+        ],
+      },
     ],
   },
   {
-    section: "security",
-    name: "Security",
-    href: "/admin/security/network-activity",
-    icon: ShieldCheck,
-    roles: ["developer", "super_admin", "admin"],
-  },
-  {
-    section: "security",
-    name: "Bypass & Override",
-    href: "/admin/security/bypass-override",
-    icon: ShieldAlert,
-    roles: ["developer", "super_admin"],
-  },
-  {
-    section: "dev",
-    name: "Login Logs",
-    href: "/admin/dev/login-logs",
-    icon: ScrollText,
-    roles: ["developer"],
-  },
-  {
-    section: "dev",
-    name: "Role Escalations",
-    href: "/admin/dev/role-escalations",
-    icon: ShieldEllipsis,
-    roles: ["developer"],
-  },
-  {
-    section: "dev",
-    name: "Security Events",
-    href: "/admin/dev/security-events",
-    icon: ShieldAlert,
-    roles: ["developer"],
-  },
-  {
-    section: "dev",
-    name: "Tests",
-    href: "/admin/dev/tests",
+    // Its own collapsible item, separate from System & Security. Developer-only —
+    // /admin/dev resolves to dev.main, which canAccessRouteV2 gates to the
+    // developer role, so the whole branch is hidden from admin / super_admin.
+    section: "operations",
+    name: "Developer",
+    href: "/admin/dev",
     icon: FlaskConical,
     roles: ["developer"],
-  },
-  {
-    section: "dev",
-    name: "ACOBot",
-    href: "/admin/dev/acobot",
-    icon: Bot,
-    roles: ["developer"],
+    children: [
+      { name: "Login Logs", href: "/admin/dev/login-logs" },
+      { name: "Role Escalations", href: "/admin/dev/role-escalations" },
+      { name: "Security Events", href: "/admin/dev/security-events" },
+      { name: "Impersonation", href: "/admin/dev/impersonation" },
+      { name: "UI Errors", href: "/admin/dev/ui-errors" },
+      { name: "Tests", href: "/admin/dev/tests" },
+      { name: "ACOBot", href: "/admin/dev/acobot" },
+    ],
   },
 ]
 const adminSections = [
   { key: "overview", label: "Overview" },
   { key: "management", label: "Management" },
   { key: "operations", label: "Operations" },
-  { key: "compliance", label: "Compliance" },
-  { key: "security", label: "Security" },
-  { key: "dev", label: "DEV" },
 ]
 
 const ADMIN_ROUTE_ALIASES: Record<string, string[]> = {
-  // Finance — purchasing and payments have their own top-level prefixes
-  "/admin/finance": ["/admin/purchasing"],
-  // Assets — inventory lives at a separate prefix
-  "/admin/assets": ["/admin/inventory"],
-  // Tools — feedback is now surfaced through tools
+  // Finance — legacy /admin/payments/* redirects into the finance surface.
+  "/admin/finance": ["/admin/payments"],
+  // Tools — feedback is surfaced through tools.
   "/admin/tools": ["/admin/feedback"],
-  // HR — employees are sometimes accessed at /admin/employees (flat) in addition to /admin/hr/employees
-  // Communications — correspondence is logically part of communications
 }
 
 export function AdminSidebar({ user, profile, adminScopeMode = "global", deptId, deptConsoleHref }: AdminSidebarProps) {
@@ -623,9 +601,41 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global", deptId,
   // In the dept shell use dept-scoped hrefs; roles[] is empty so canAccessRoute
   // is bypassed — access is already guarded by requireDeptScope on the server.
   const activeNavigation = deptId ? buildDeptNavigation(deptId) : adminNavigation
+
+  /**
+   * Children and grandchildren carry their own grantable route keys (a nested
+   * "Inventory" resolves to inventory.main, not to its parent's key), so they
+   * are filtered individually rather than inheriting the parent's visibility.
+   * A branch survives if it is reachable itself or if any descendant is; when
+   * only a descendant is reachable, the branch link retargets to it so the
+   * parent never points at a page the viewer is blocked from.
+   */
+  const filterNavChildren = (children: NavChild[] | undefined): NavChild[] | undefined => {
+    if (!children) return undefined
+    const kept: NavChild[] = []
+    for (const child of children) {
+      const grandchildren = child.children?.filter((gc) => canAccessRoute([], gc.href))
+      const selfAllowed = canAccessRoute([], child.href)
+      if (!selfAllowed && !grandchildren?.length) continue
+      kept.push({
+        ...child,
+        href: selfAllowed ? child.href : grandchildren![0].href,
+        children: grandchildren?.length ? grandchildren : undefined,
+      })
+    }
+    return kept.length ? kept : undefined
+  }
+
   const filteredNavigation = deptId
     ? activeNavigation
-    : activeNavigation.filter((item) => canAccessRoute(item.roles, item.href))
+    : activeNavigation.reduce<NavItem[]>((acc, item) => {
+        const children = filterNavChildren(item.children)
+        const selfAllowed = canAccessRoute(item.roles, item.href)
+        if (!selfAllowed && !children) return acc
+        acc.push({ ...item, href: selfAllowed ? item.href : children![0].href, children })
+        return acc
+      }, [])
+
   const groupedNavigation = adminSections
     .map((section) => ({
       ...section,
