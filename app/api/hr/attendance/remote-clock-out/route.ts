@@ -162,7 +162,7 @@ export async function POST(request: NextRequest) {
     const inMs = new Date(`${today}T${record.clock_in}`).getTime()
     const outMs = new Date(`${today}T${clockOutTime}`).getTime()
     const rawHours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
-    const { breakMinutes: break_duration, workedHours: total_hours } = applyLunchBreak(rawHours)
+    const { breakMinutes: break_duration, workedHours: total_hours } = applyLunchBreak(rawHours, policy)
     const status = deriveUnifiedAttendanceStatus(
       {
         record: { clock_in: record.clock_in, clock_out: clockOutTime, waived: false },
