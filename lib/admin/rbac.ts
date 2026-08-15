@@ -25,6 +25,7 @@ export type AdminSection =
   | "notification"
   | "onedrive"
   | "payments"
+  | "payroll"
   | "projects"
   | "purchasing"
   | "reports"
@@ -79,6 +80,9 @@ const SECTION_TO_ROUTES: Partial<Record<AdminSection, AdminRouteKeyV2[]>> = {
   notification: ["notifications.main"],
   onedrive: [],
   payments: ["finance.main"],
+  // hr.main kept alongside payroll.main so admins who held HR before payroll was
+  // split out of it are not locked out (mirrors canAccessRouteV2).
+  payroll: ["payroll.main", "hr.main"],
   projects: [],
   purchasing: ["purchasing.main"],
   reports: ["reports.weekly", "reports.other"],
