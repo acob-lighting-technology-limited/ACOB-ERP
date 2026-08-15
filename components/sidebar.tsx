@@ -5,27 +5,22 @@ import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import { motion } from "framer-motion"
 import {
-  Award,
-  Calendar,
-  Car,
   ChevronsUpDown,
   ChevronRight,
   ClipboardList,
-  Clock,
-  CreditCard,
   FileCode2,
   FileCheck2,
   FileBarChart,
   FileText,
+  Landmark,
   LayoutDashboard,
   LogOut,
-  Package,
   Settings,
   ShieldCheck,
   Ticket,
   User,
+  UserCheck,
   Users,
-  Utensils,
   Wrench,
   FolderKanban,
 } from "lucide-react"
@@ -75,84 +70,119 @@ interface SidebarProps {
 type NavSubChild = { name: string; href: string }
 type NavChild = { name: string; href: string; children?: NavSubChild[] }
 type NavItemDef = { name: string; href: string; icon: React.ElementType; children?: NavChild[] }
+type NavSectionDef = { key: string; label: string; items: NavItemDef[] }
 
-const navigation: NavItemDef[] = [
-  { name: "Home", href: "/profile", icon: LayoutDashboard },
-  { name: "Directory", href: "/directory", icon: Users },
-  { name: "Projects", href: "/project", icon: FolderKanban },
-  { name: "Tasks", href: "/tasks", icon: ClipboardList },
-  { name: "Help Desk", href: "/help-desk", icon: Ticket },
+/**
+ * Section keys/labels mirror the admin + dept sidebars so the same feature sits
+ * under the same heading on every surface.
+ */
+const navigationSections: NavSectionDef[] = [
   {
-    name: "Reports",
-    href: "/reports",
-    icon: FileBarChart,
-    children: [
+    key: "workspace",
+    label: "Workspace",
+    items: [
+      { name: "Dashboard", href: "/profile", icon: LayoutDashboard },
+      { name: "Directory", href: "/directory", icon: Users },
+    ],
+  },
+  {
+    key: "management",
+    label: "Management",
+    items: [
       {
-        name: "General Meeting",
-        href: "/reports/general-meeting",
+        name: "HR",
+        href: "/attendance",
+        icon: UserCheck,
         children: [
-          { name: "Action Tracker", href: "/reports/general-meeting/action-tracker" },
-          { name: "KSS", href: "/reports/general-meeting/kss" },
-          { name: "Minutes of Meeting", href: "/reports/general-meeting/minutes-of-meeting" },
-          { name: "Weekly Reports", href: "/reports/general-meeting/weekly-reports" },
+          { name: "Attendance", href: "/attendance" },
+          { name: "Leave", href: "/leave" },
+          { name: "Lunch", href: "/lunch" },
+          { name: "Shared Resources", href: "/resources" },
+          {
+            name: "PMS",
+            href: "/pms",
+            children: [
+              { name: "Goals", href: "/pms/goals" },
+              { name: "KPI", href: "/pms/kpi" },
+              { name: "Reviews", href: "/pms/reviews" },
+              { name: "Peer Feedback", href: "/pms/peer-feedback" },
+              { name: "Development Plans", href: "/pms/development-plans" },
+              { name: "Behaviour", href: "/pms/behaviour" },
+              { name: "CBT", href: "/pms/cbt" },
+              { name: "Attendance", href: "/pms/attendance" },
+            ],
+          },
         ],
       },
-      { name: "Daily Activity", href: "/reports/daily-activity" },
+      {
+        name: "Accounts",
+        href: "/payments",
+        icon: Landmark,
+        children: [
+          { name: "Requisitions", href: "/requisition" },
+          { name: "Payments", href: "/payments" },
+          { name: "Payroll", href: "/payroll" },
+          { name: "Assets", href: "/assets" },
+        ],
+      },
+      { name: "Projects", href: "/project", icon: FolderKanban },
     ],
   },
-  { name: "Assets", href: "/assets", icon: Package },
-  { name: "Payments", href: "/payments", icon: CreditCard },
-  { name: "Requisitions", href: "/requisition", icon: FileCheck2 },
   {
-    name: "Documentation",
-    href: "/documentation",
-    icon: FileText,
-    children: [
-      { name: "Internal", href: "/documentation/internal" },
-      { name: "Department", href: "/documentation/department" },
-    ],
-  },
-  { name: "Correspondence", href: "/correspondence", icon: FileCode2 },
-  {
-    name: "Tools",
-    href: "/tools",
-    icon: Wrench,
-    children: [
-      { name: "Signature", href: "/tools/signature" },
-      { name: "Signature Anniversary", href: "/tools/signature-anniversary" },
-      { name: "Job Description", href: "/tools/job-description" },
-      { name: "Watermark", href: "/tools/watermark" },
-      { name: "Media & PDF Suite", href: "/tools/test" },
+    key: "operations",
+    label: "Operations",
+    items: [
+      { name: "Tasks", href: "/tasks", icon: ClipboardList },
+      { name: "Help Desk", href: "/help-desk", icon: Ticket },
+      {
+        name: "Reports",
+        href: "/reports",
+        icon: FileBarChart,
+        children: [
+          {
+            name: "General Meeting",
+            href: "/reports/general-meeting",
+            children: [
+              { name: "Action Tracker", href: "/reports/general-meeting/action-tracker" },
+              { name: "KSS", href: "/reports/general-meeting/kss" },
+              { name: "Minutes of Meeting", href: "/reports/general-meeting/minutes-of-meeting" },
+              { name: "Weekly Reports", href: "/reports/general-meeting/weekly-reports" },
+            ],
+          },
+        ],
+      },
+      { name: "Correspondence", href: "/correspondence", icon: FileCode2 },
+      {
+        name: "Documentation",
+        href: "/documentation",
+        icon: FileText,
+        children: [
+          { name: "Internal", href: "/documentation/internal" },
+          { name: "Department", href: "/documentation/department" },
+        ],
+      },
+      {
+        name: "Tools",
+        href: "/tools",
+        icon: Wrench,
+        children: [
+          { name: "Signature", href: "/tools/signature" },
+          { name: "Signature Anniversary", href: "/tools/signature-anniversary" },
+          { name: "Job Description", href: "/tools/job-description" },
+          { name: "Watermark", href: "/tools/watermark" },
+          { name: "Media & PDF Suite", href: "/tools/test" },
+          { name: "Feedback", href: "/feedback" },
+        ],
+      },
     ],
   },
 ]
+
+const allNavItems: NavItemDef[] = navigationSections.flatMap((section) => section.items)
 
 const NAV_ROUTE_ALIASES: Record<string, string[]> = {
   "/tools": ["/feedback"],
 }
-
-const hrNavigation: NavItemDef[] = [
-  { name: "Leave", href: "/leave", icon: Calendar },
-  { name: "Attendance", href: "/attendance", icon: Clock },
-  { name: "Lunch", href: "/lunch", icon: Utensils },
-  { name: "Shared Resources", href: "/resources", icon: Car },
-  { name: "Payroll", href: "/payroll", icon: FileText },
-  {
-    name: "PMS",
-    href: "/pms",
-    icon: Award,
-    children: [
-      { name: "Goals", href: "/pms/goals" },
-      { name: "KPI", href: "/pms/kpi" },
-      { name: "Reviews", href: "/pms/reviews" },
-      { name: "Peer Feedback", href: "/pms/peer-feedback" },
-      { name: "Development Plans", href: "/pms/development-plans" },
-      { name: "Behaviour", href: "/pms/behaviour" },
-      { name: "CBT", href: "/pms/cbt" },
-      { name: "Attendance", href: "/pms/attendance" },
-    ],
-  },
-]
 
 export function Sidebar({ user, profile, canAccessAdmin, deptConsoleHref }: SidebarProps) {
   const pathname = usePathname()
@@ -202,8 +232,7 @@ export function Sidebar({ user, profile, canAccessAdmin, deptConsoleHref }: Side
 
   useEffect(() => {
     if (!pathname) return
-    const allNav = [...navigation, ...hrNavigation]
-    for (const item of allNav) {
+    for (const item of allNavItems) {
       if (!item.children) continue
       for (const child of item.children) {
         const childActive = pathname === child.href || pathname.startsWith(child.href + "/")
@@ -294,163 +323,162 @@ export function Sidebar({ user, profile, canAccessAdmin, deptConsoleHref }: Side
       <div className={cn("transition-[padding] duration-300 ease-in-out", isCollapsed ? "px-2 py-2" : "px-3 py-2")} />
 
       <nav className="scrollbar-custom flex-1 space-y-0.5 overflow-y-auto px-2.5 py-3">
-        {[...navigation, null, ...hrNavigation].map((item, idx) => {
-          if (item === null) {
-            return isCollapsed ? (
-              <div key="hr-divider" className="mx-1.5 my-1.5 border-t" />
+        {navigationSections.map((section) => (
+          <div key={section.key} className="space-y-0.5">
+            {isCollapsed ? (
+              section.key !== "workspace" && <div className="mx-1.5 my-1.5 border-t" />
             ) : (
-              <p
-                key="hr-divider"
-                className="text-muted-foreground mt-2 mb-1 px-3 text-[11px] font-medium tracking-wider uppercase"
-              >
-                HR &amp; Attendance
-              </p>
-            )
-          }
+              <p className="text-muted-foreground px-3 pt-1 pb-1 text-[11px] font-semibold">{section.label}</p>
+            )}
+            {section.items.map((item) => {
+              const hasChildren = !isCollapsed && item.children && item.children.length > 0
+              const isOpen = openSections.has(item.href)
+              const isActive = isNavItemActive(item.href)
+              const hasActiveChild = item.children?.some(
+                (child) =>
+                  pathname === child.href ||
+                  pathname?.startsWith(child.href + "/") ||
+                  child.children?.some((gc) => pathname === gc.href || pathname?.startsWith(gc.href + "/"))
+              )
+              const highlighted = isActive || Boolean(hasActiveChild)
+              const activeCls = "bg-primary text-primary-foreground shadow-sm"
+              const inactiveCls = "text-muted-foreground hover:bg-accent hover:text-foreground"
 
-          const hasChildren = !isCollapsed && item.children && item.children.length > 0
-          const isOpen = openSections.has(item.href)
-          const isActive = isNavItemActive(item.href)
-          const hasActiveChild = item.children?.some(
-            (child) =>
-              pathname === child.href ||
-              pathname?.startsWith(child.href + "/") ||
-              child.children?.some((gc) => pathname === gc.href || pathname?.startsWith(gc.href + "/"))
-          )
-          const highlighted = isActive || Boolean(hasActiveChild)
-          const activeCls = "bg-primary text-primary-foreground shadow-sm"
-          const inactiveCls = "text-muted-foreground hover:bg-accent hover:text-foreground"
-
-          return (
-            <div key={item.name}>
-              {hasChildren ? (
-                <div
-                  className={cn(
-                    "flex min-h-[36px] items-center rounded-md text-sm font-medium transition-colors duration-150",
-                    highlighted ? activeCls : inactiveCls
-                  )}
-                >
-                  <Link
-                    href={item.href}
-                    onClick={() => setIsMobileMenuOpen(false)}
-                    className="flex flex-1 items-center gap-2.5 px-3 py-2"
-                  >
-                    <item.icon className="h-4 w-4 shrink-0" />
-                    <span className="flex-1 overflow-hidden whitespace-nowrap">{item.name}</span>
-                  </Link>
-                  <button
-                    onClick={() => toggleSection(item.href)}
-                    className="flex items-center px-2 py-2"
-                    aria-label={isOpen ? "Collapse" : "Expand"}
-                  >
-                    <ChevronRight
-                      className={cn("h-3.5 w-3.5 shrink-0 transition-transform duration-200", isOpen && "rotate-90")}
-                    />
-                  </button>
-                </div>
-              ) : (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Link
-                      href={item.href}
-                      onClick={() => setIsMobileMenuOpen(false)}
+              return (
+                <div key={item.name}>
+                  {hasChildren ? (
+                    <div
                       className={cn(
-                        "flex items-center rounded-md transition-[padding,gap,background-color,color] duration-300 ease-in-out",
-                        isCollapsed ? "justify-center px-2.5 py-2" : "gap-2.5 px-3 py-2",
-                        "min-h-[36px] text-sm font-medium",
+                        "flex min-h-[36px] items-center rounded-md text-sm font-medium transition-colors duration-150",
                         highlighted ? activeCls : inactiveCls
                       )}
                     >
-                      <item.icon className="h-4 w-4 shrink-0" />
-                      <span className={labelCls}>{item.name}</span>
-                    </Link>
-                  </TooltipTrigger>
-                  {isCollapsed && <TooltipContent side="right">{item.name}</TooltipContent>}
-                </Tooltip>
-              )}
+                      <Link
+                        href={item.href}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className="flex flex-1 items-center gap-2.5 px-3 py-2"
+                      >
+                        <item.icon className="h-4 w-4 shrink-0" />
+                        <span className="flex-1 overflow-hidden whitespace-nowrap">{item.name}</span>
+                      </Link>
+                      <button
+                        onClick={() => toggleSection(item.href)}
+                        className="flex items-center px-2 py-2"
+                        aria-label={isOpen ? "Collapse" : "Expand"}
+                      >
+                        <ChevronRight
+                          className={cn(
+                            "h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+                            isOpen && "rotate-90"
+                          )}
+                        />
+                      </button>
+                    </div>
+                  ) : (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Link
+                          href={item.href}
+                          onClick={() => setIsMobileMenuOpen(false)}
+                          className={cn(
+                            "flex items-center rounded-md transition-[padding,gap,background-color,color] duration-300 ease-in-out",
+                            isCollapsed ? "justify-center px-2.5 py-2" : "gap-2.5 px-3 py-2",
+                            "min-h-[36px] text-sm font-medium",
+                            highlighted ? activeCls : inactiveCls
+                          )}
+                        >
+                          <item.icon className="h-4 w-4 shrink-0" />
+                          <span className={labelCls}>{item.name}</span>
+                        </Link>
+                      </TooltipTrigger>
+                      {isCollapsed && <TooltipContent side="right">{item.name}</TooltipContent>}
+                    </Tooltip>
+                  )}
 
-              {hasChildren && isOpen && (
-                <div className="mt-0.5 ml-3 space-y-0.5 border-l pl-2">
-                  {item.children!.map((child) => {
-                    const hasSubChildren = child.children && child.children.length > 0
-                    const isSubOpen = openSubSections.has(child.href)
-                    const isChildActive = pathname === child.href || pathname?.startsWith(child.href + "/")
-                    const hasActiveGrandchild = child.children?.some(
-                      (gc) => pathname === gc.href || pathname?.startsWith(gc.href + "/")
-                    )
-                    const childHighlighted = isChildActive || Boolean(hasActiveGrandchild)
+                  {hasChildren && isOpen && (
+                    <div className="mt-0.5 ml-3 space-y-0.5 border-l pl-2">
+                      {item.children!.map((child) => {
+                        const hasSubChildren = child.children && child.children.length > 0
+                        const isSubOpen = openSubSections.has(child.href)
+                        const isChildActive = pathname === child.href || pathname?.startsWith(child.href + "/")
+                        const hasActiveGrandchild = child.children?.some(
+                          (gc) => pathname === gc.href || pathname?.startsWith(gc.href + "/")
+                        )
+                        const childHighlighted = isChildActive || Boolean(hasActiveGrandchild)
 
-                    return (
-                      <div key={child.href}>
-                        {hasSubChildren ? (
-                          <div
-                            className={cn(
-                              "flex min-h-[32px] items-center rounded-md text-sm font-medium transition-colors duration-150",
-                              childHighlighted ? activeCls : inactiveCls
-                            )}
-                          >
-                            <Link
-                              href={child.href}
-                              onClick={() => setIsMobileMenuOpen(false)}
-                              className="flex flex-1 items-center px-2 py-1.5"
-                            >
-                              {child.name}
-                            </Link>
-                            <button
-                              onClick={() => toggleSubSection(child.href)}
-                              className="flex items-center px-1.5 py-1.5"
-                              aria-label={isSubOpen ? "Collapse" : "Expand"}
-                            >
-                              <ChevronRight
+                        return (
+                          <div key={child.href}>
+                            {hasSubChildren ? (
+                              <div
                                 className={cn(
-                                  "h-3 w-3 shrink-0 transition-transform duration-200",
-                                  isSubOpen && "rotate-90"
+                                  "flex min-h-[32px] items-center rounded-md text-sm font-medium transition-colors duration-150",
+                                  childHighlighted ? activeCls : inactiveCls
                                 )}
-                              />
-                            </button>
-                          </div>
-                        ) : (
-                          <Link
-                            href={child.href}
-                            onClick={() => setIsMobileMenuOpen(false)}
-                            className={cn(
-                              "flex min-h-[32px] items-center rounded-md px-2 py-1.5 text-sm font-medium transition-colors duration-150",
-                              isChildActive ? activeCls : inactiveCls
-                            )}
-                          >
-                            {child.name}
-                          </Link>
-                        )}
-
-                        {hasSubChildren && isSubOpen && (
-                          <div className="mt-0.5 ml-2 space-y-0.5 border-l pl-2">
-                            {child.children!.map((grandchild) => {
-                              const isGcActive =
-                                pathname === grandchild.href || pathname?.startsWith(grandchild.href + "/")
-                              return (
+                              >
                                 <Link
-                                  key={grandchild.href}
-                                  href={grandchild.href}
+                                  href={child.href}
                                   onClick={() => setIsMobileMenuOpen(false)}
-                                  className={cn(
-                                    "flex min-h-[28px] items-center rounded-md px-2 py-1 text-sm font-medium transition-colors duration-150",
-                                    isGcActive ? activeCls : inactiveCls
-                                  )}
+                                  className="flex flex-1 items-center px-2 py-1.5"
                                 >
-                                  {grandchild.name}
+                                  {child.name}
                                 </Link>
-                              )
-                            })}
+                                <button
+                                  onClick={() => toggleSubSection(child.href)}
+                                  className="flex items-center px-1.5 py-1.5"
+                                  aria-label={isSubOpen ? "Collapse" : "Expand"}
+                                >
+                                  <ChevronRight
+                                    className={cn(
+                                      "h-3 w-3 shrink-0 transition-transform duration-200",
+                                      isSubOpen && "rotate-90"
+                                    )}
+                                  />
+                                </button>
+                              </div>
+                            ) : (
+                              <Link
+                                href={child.href}
+                                onClick={() => setIsMobileMenuOpen(false)}
+                                className={cn(
+                                  "flex min-h-[32px] items-center rounded-md px-2 py-1.5 text-sm font-medium transition-colors duration-150",
+                                  isChildActive ? activeCls : inactiveCls
+                                )}
+                              >
+                                {child.name}
+                              </Link>
+                            )}
+
+                            {hasSubChildren && isSubOpen && (
+                              <div className="mt-0.5 ml-2 space-y-0.5 border-l pl-2">
+                                {child.children!.map((grandchild) => {
+                                  const isGcActive =
+                                    pathname === grandchild.href || pathname?.startsWith(grandchild.href + "/")
+                                  return (
+                                    <Link
+                                      key={grandchild.href}
+                                      href={grandchild.href}
+                                      onClick={() => setIsMobileMenuOpen(false)}
+                                      className={cn(
+                                        "flex min-h-[28px] items-center rounded-md px-2 py-1 text-sm font-medium transition-colors duration-150",
+                                        isGcActive ? activeCls : inactiveCls
+                                      )}
+                                    >
+                                      {grandchild.name}
+                                    </Link>
+                                  )
+                                })}
+                              </div>
+                            )}
                           </div>
-                        )}
-                      </div>
-                    )
-                  })}
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
-              )}
-            </div>
-          )
-        })}
+              )
+            })}
+          </div>
+        ))}
       </nav>
 
       <div className="border-t px-2.5 py-2.5">
