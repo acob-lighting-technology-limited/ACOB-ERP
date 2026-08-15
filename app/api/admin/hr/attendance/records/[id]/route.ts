@@ -131,7 +131,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       const inMs = new Date(`${record.date}T${clockIn}Z`).getTime()
       const outMs = new Date(`${record.date}T${clockOut}Z`).getTime()
       const rawHours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
-      const { breakMinutes, workedHours } = applyLunchBreak(rawHours)
+      const { breakMinutes, workedHours } = applyLunchBreak(rawHours, policy)
       updates.total_hours = workedHours
       updates.break_duration = breakMinutes
     } else {
