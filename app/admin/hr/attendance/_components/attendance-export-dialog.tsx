@@ -48,8 +48,6 @@ type AttendanceRow = {
   absent_days?: number
   total_hours?: number
   total_missed_hours?: number
-  attendance_credits?: number
-  attendance_rate?: number
 }
 
 type LunchRow = {
@@ -65,46 +63,42 @@ const LUNCH_HEADERS = ["S/N", "Name", "Employee No", "Department", "Lunch Count"
 const HEADERS = [
   "Name",
   "Department",
-  "Total Days",
-  "Early",
+  "Hrs Missed",
+  "Total Hours",
   "Present",
+  "Absent",
+  "Early",
   "Late",
-  "LWP",
   "Incomplete",
-  "Exempted",
-  "OOS",
+  "LWP",
   "AWP",
+  "OOS",
   "Leave",
   "Holiday",
+  "Exemption",
   "Waiver",
-  "Absent",
-  "Total Hours",
-  "Hrs Missed",
-  "Credit",
-  "Attendance Rate",
 ]
 
 function toRow(r: AttendanceRow): (string | number)[] {
   return [
     r.user_name ?? "",
     r.department ?? "",
-    r.total_days ?? 0,
+    Number(r.total_missed_hours ?? 0).toFixed(1),
+    Number(r.total_hours ?? 0).toFixed(1),
+    // Present is shown against the workdays available in the period, so the figure
+    // reads on its own without a separate Total Days column.
+    `${r.present_days ?? 0} / ${r.total_days ?? 0}`,
+    r.absent_days ?? 0,
     r.early_days ?? 0,
-    r.present_days ?? 0,
     r.late_days ?? 0,
-    r.lateness_with_permission_days ?? 0,
     r.incomplete_days ?? 0,
-    r.exempted_days ?? 0,
-    r.out_of_station_days ?? 0,
+    r.lateness_with_permission_days ?? 0,
     r.absent_with_permission_days ?? 0,
+    r.out_of_station_days ?? 0,
     r.leave_days ?? 0,
     r.holiday_days ?? 0,
+    r.exempted_days ?? 0,
     r.waived_days ?? 0,
-    r.absent_days ?? 0,
-    Number(r.total_hours ?? 0).toFixed(1),
-    Number(r.total_missed_hours ?? 0).toFixed(1),
-    `${Number(r.attendance_credits ?? 0).toFixed(2)} / ${r.total_days ?? 0}`,
-    `${r.attendance_rate ?? 0}%`,
   ]
 }
 
