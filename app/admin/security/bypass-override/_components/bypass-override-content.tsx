@@ -37,6 +37,12 @@ export type EnrichedBypassLog = AuditLogRow & {
     company_email: string
     department: string | null
   } | null
+  correspondence?: {
+    subject: string
+    reference_number: string
+    originator: { first_name: string; last_name: string; company_email: string; department: string | null } | null
+    responsible: { first_name: string; last_name: string; company_email: string; department: string | null } | null
+  } | null
 }
 
 function getBypassSummary(log: EnrichedBypassLog): string {
@@ -102,6 +108,119 @@ function getBypassType(row: EnrichedBypassLog): string {
   return "Policy Override"
 }
 
+function getBypassReason(row: EnrichedBypassLog): string {
+  const newVals = (row.new_values || {}) as any
+  const oldVals = (row.old_values || {}) as any
+  const meta = (row.metadata || {}) as any
+
+  return (
+    newVals.manual_comment ||
+    newVals.reason ||
+    newVals.comment ||
+    newVals.comments ||
+    meta.reason ||
+    meta.comment ||
+    meta.comments ||
+    meta.justification ||
+    newVals.justification ||
+    oldVals.manual_comment ||
+    oldVals.reason ||
+    oldVals.comment ||
+    "No justification provided"
+  )
+}
+
+function getBypassTarget(row: EnrichedBypassLog): string {
+  const entityType = String(row.entity_type || "").toLowerCase()
+  const newVals = (row.new_values || {}) as any
+  const oldVals = (row.old_values || {}) as any
+
+  if (row.correspondence) {
+    return `Correspondence: ${row.correspondence.subject} (${row.correspondence.reference_number})`
+  }
+
+  if (row.target) {
+    return `${row.target.first_name} ${row.target.last_name} (${row.target.company_email || "No email"})`
+  }
+
+  if (entityType.includes("requisition")) {
+    return `Requisition #${newVals.requisition_number || oldVals.requisition_number || row.entity_id}`
+  }
+
+  if (entityType.includes("correspondence")) {
+    return `Correspondence Document #${newVals.unique_code || oldVals.unique_code || row.entity_id}`
+  }
+
+  return `Entity ID: ${row.entity_id || "Unknown"}`
+}
+
+function getDetailedChanges(row: EnrichedBypassLog) {
+  const entityType = String(row.entity_type || "").toLowerCase()
+  const newVals = (row.new_values || {}) as any
+  const oldVals = (row.old_values || {}) as any
+  const meta = (row.metadata || {}) as any
+  const details: { label: string; value: string }[] = []
+
+  if (entityType.includes("requisition")) {
+    const amount = newVals.amount || oldVals.amount
+    if (amount) {
+      details.push({ label: "Amount", value: `₦${Number(amount).toLocaleString()}` })
+    }
+    const dept = newVals.department_name || oldVals.department_name || row.department
+    if (dept) {
+      details.push({ label: "Department", value: String(dept) })
+    }
+    const stages = newVals.bypassed_stages || meta.bypassed_stages || []
+    if (Array.isArray(stages) && stages.length > 0) {
+      details.push({ label: "Bypassed Stages", value: stages.join(", ") })
+    }
+  } else if (entityType.includes("leave_request")) {
+    if (newVals.start_date) details.push({ label: "Start Date", value: String(newVals.start_date) })
+    if (newVals.end_date) details.push({ label: "End Date", value: String(newVals.end_date) })
+    if (newVals.days_count) details.push({ label: "Total Days", value: String(newVals.days_count) })
+  } else if (entityType.includes("attendance")) {
+    const date = newVals.date || oldVals.date
+    if (date) details.push({ label: "Work Date", value: String(date) })
+    if (oldVals.status && newVals.status) {
+      details.push({ label: "Status Change", value: `${oldVals.status} → ${newVals.status}` })
+    } else if (newVals.status) {
+      details.push({ label: "New Status", value: String(newVals.status) })
+    }
+    if (newVals.clock_in) details.push({ label: "Clock In", value: String(newVals.clock_in) })
+    if (newVals.clock_out) details.push({ label: "Clock Out", value: String(newVals.clock_out) })
+    if (newVals.clock_in_source || newVals.source) {
+      details.push({ label: "Source", value: String(newVals.clock_in_source || newVals.source) })
+    }
+  } else if (entityType.includes("correspondence") && row.correspondence) {
+    const orig = row.correspondence.originator
+    if (orig) {
+      details.push({
+        label: "Created By (Requester)",
+        value: `${orig.first_name} ${orig.last_name} (${orig.company_email})`,
+      })
+    }
+    const resp = row.correspondence.responsible
+    if (resp) {
+      details.push({
+        label: "Responsible Officer",
+        value: `${resp.first_name} ${resp.last_name} (${resp.company_email || "No email"})`,
+      })
+    }
+  }
+
+  return details
+}
+
+function getRequestedBy(row: EnrichedBypassLog): string {
+  if (row.correspondence?.originator) {
+    return `${row.correspondence.originator.first_name} ${row.correspondence.originator.last_name}`
+  }
+  if (row.target) {
+    return `${row.target.first_name} ${row.target.last_name}`
+  }
+  return "System / N/A"
+}
+
 function toCsv(rows: EnrichedBypassLog[]) {
   const headers = [
     "Time",
@@ -116,7 +235,13 @@ function toCsv(rows: EnrichedBypassLog[]) {
   const body = rows.map((r) => {
     const actorName = r.actor ? `${r.actor.first_name} ${r.actor.last_name}` : "System"
     const actorEmail = r.actor ? r.actor.company_email : ""
-    const targetName = r.target ? `${r.target.first_name} ${r.target.last_name}` : ""
+    const targetName = r.correspondence
+      ? r.correspondence.originator
+        ? `${r.correspondence.originator.first_name} ${r.correspondence.originator.last_name}`
+        : ""
+      : r.target
+        ? `${r.target.first_name} ${r.target.last_name}`
+        : ""
     const ip = (r.metadata as any)?.ip_address || ""
     return [
       r.created_at,
@@ -213,12 +338,20 @@ export function BypassOverrideContent({ rows, error }: { rows: EnrichedBypassLog
         render: (row) => <Badge variant="outline">{getBypassType(row)}</Badge>,
       },
       {
-        key: "summary",
-        label: "Activity Summary",
-        accessor: (row) => getBypassSummary(row),
+        key: "requested_by",
+        label: "Requested By",
+        accessor: (row) => getRequestedBy(row),
         resizable: true,
-        initialWidth: 420,
-        render: (row) => <span className="text-sm font-medium">{getBypassSummary(row)}</span>,
+        initialWidth: 320,
+        render: (row) => {
+          const orig = row.correspondence?.originator || row.target
+          return (
+            <div className="flex flex-col text-xs">
+              <span className="font-medium">{orig ? `${orig.first_name} ${orig.last_name}` : "System / N/A"}</span>
+              <span className="text-muted-foreground">{orig?.company_email || ""}</span>
+            </div>
+          )
+        },
       },
       {
         key: "actor",
@@ -373,28 +506,52 @@ export function BypassOverrideContent({ rows, error }: { rows: EnrichedBypassLog
         }}
         error={error}
         expandable={{
-          render: (row) => (
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="rounded-lg border p-4">
-                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Before Alteration</p>
-                <pre className="mt-2 overflow-x-auto text-xs whitespace-pre-wrap">
-                  {JSON.stringify(row.old_values || {}, null, 2)}
-                </pre>
+          render: (row) => {
+            const reason = getBypassReason(row)
+            const target = getBypassTarget(row)
+            const details = getDetailedChanges(row)
+
+            return (
+              <div className="bg-muted/40 space-y-4 rounded-lg border-2 p-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div>
+                    <h4 className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
+                      Activity Summary
+                    </h4>
+                    <p className="text-primary mt-1 text-sm font-semibold">{getBypassSummary(row)}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
+                      Target / Subject
+                    </h4>
+                    <p className="mt-1 text-sm font-semibold">{target}</p>
+                  </div>
+                  <div>
+                    <h4 className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
+                      Bypass Reason / Comments
+                    </h4>
+                    <p className="bg-background mt-1 rounded border p-2 text-sm italic">&ldquo;{reason}&rdquo;</p>
+                  </div>
+                </div>
+
+                {details.length > 0 && (
+                  <div>
+                    <h4 className="text-muted-foreground mb-2 text-xs font-bold tracking-wider uppercase">
+                      Detailed Properties
+                    </h4>
+                    <div className="bg-background grid grid-cols-2 gap-3 rounded-lg border p-3 sm:grid-cols-3 md:grid-cols-4">
+                      {details.map((item, idx) => (
+                        <div key={idx} className="flex flex-col">
+                          <span className="text-muted-foreground text-[10px] font-bold uppercase">{item.label}</span>
+                          <span className="mt-0.5 text-xs font-medium">{item.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="rounded-lg border p-4">
-                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">After Alteration</p>
-                <pre className="mt-2 overflow-x-auto text-xs whitespace-pre-wrap">
-                  {JSON.stringify(row.new_values || {}, null, 2)}
-                </pre>
-              </div>
-              <div className="rounded-lg border p-4">
-                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Action Metadata</p>
-                <pre className="mt-2 overflow-x-auto text-xs whitespace-pre-wrap">
-                  {JSON.stringify(row.metadata || {}, null, 2)}
-                </pre>
-              </div>
-            </div>
-          ),
+            )
+          },
         }}
         viewToggle
         cardRenderer={(row) => (
