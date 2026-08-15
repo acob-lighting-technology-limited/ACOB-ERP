@@ -41,7 +41,9 @@ async function processHikvisionEvent(event: ParsedEvent) {
     .select("value")
     .eq("key", "attendance_policy")
     .maybeSingle()
-  const policy = (settingRow?.value as AttendancePolicy) || DEFAULT_ATTENDANCE_POLICY
+  // Merged over the defaults so a policy row saved before a field existed still
+  // resolves that field rather than coming back undefined.
+  const policy = { ...DEFAULT_ATTENDANCE_POLICY, ...((settingRow?.value as Partial<AttendancePolicy>) ?? {}) }
 
   const { dateTime, AccessControllerEvent: ace } = event
   const { employeeNoString, attendanceStatus } = ace
@@ -111,7 +113,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
       const clockInTs = new Date(`${prevDate}T${prev.clock_in}Z`).getTime()
       const cappedOutTs = new Date(`${prevDate}T${cappedOut}Z`).getTime()
       const rawHours = Math.max(0, (cappedOutTs - clockInTs) / (1000 * 60 * 60))
-      const { breakMinutes: breakDuration, workedHours: totalHours } = applyLunchBreak(rawHours)
+      const { breakMinutes: breakDuration, workedHours: totalHours } = applyLunchBreak(rawHours, policy)
 
       const status = deriveUnifiedAttendanceStatus(
         {
@@ -256,7 +258,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
     const clockIn = new Date(`${date}T${existing.clock_in}Z`)
     const clockOut = new Date(`${date}T${time}Z`)
     const rawHours = Math.max(0, (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60))
-    const { breakMinutes: breakDuration, workedHours: totalHours } = applyLunchBreak(rawHours)
+    const { breakMinutes: breakDuration, workedHours: totalHours } = applyLunchBreak(rawHours, policy)
 
     const status = deriveUnifiedAttendanceStatus(
       {
