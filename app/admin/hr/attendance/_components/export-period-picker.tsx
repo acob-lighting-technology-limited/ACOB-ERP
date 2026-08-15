@@ -46,7 +46,7 @@ export function useExportPeriod() {
     let cancelled = false
     async function load() {
       try {
-        const res = await apiFetch("/api/admin/hr/payroll/periods", { cache: "no-store" })
+        const res = await apiFetch("/api/admin/payroll/periods", { cache: "no-store" })
         const payload = (await res.json().catch(() => null)) as { data?: PayrollPeriodOption[] } | null
         if (!cancelled && res.ok) setPayrollPeriods(payload?.data ?? [])
       } catch (err) {
@@ -119,10 +119,7 @@ export function ExportPeriodFields({
     <div className="space-y-4">
       <div className="space-y-2">
         <Label>Period</Label>
-        <Select
-          value={picker.periodType}
-          onValueChange={(v) => picker.setPeriodType(v as ExportPeriodType)}
-        >
+        <Select value={picker.periodType} onValueChange={(v) => picker.setPeriodType(v as ExportPeriodType)}>
           <SelectTrigger>
             <SelectValue />
           </SelectTrigger>
@@ -187,8 +184,8 @@ export function ExportPeriodFields({
           </Select>
           {selectedPayroll && (
             <p className="text-muted-foreground text-xs">
-              Covers {selectedPayroll.start_date} → {selectedPayroll.end_date} — the exact days this payroll run
-              charges for.
+              Covers {selectedPayroll.start_date} → {selectedPayroll.end_date} — the exact days this payroll run charges
+              for.
             </p>
           )}
         </div>
