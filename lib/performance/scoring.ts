@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 import { toLocalISODate } from "@/lib/utils/date"
 import { deriveUnifiedAttendanceStatus, normalizeStoredAttendanceStatus } from "@/lib/hr/attendance-status"
 import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
-import { computeAttendanceDay, NET_DAY_HOURS } from "@/lib/hr/attendance-ssot"
+import { computeAttendanceDay, netDayHoursFor } from "@/lib/hr/attendance-ssot"
 import { pickCurrentCycle } from "@/lib/pms/cadence"
 
 type GoalScoreBreakdown = {
@@ -147,7 +147,10 @@ export async function computeIndividualPerformanceScore(
     .select("value")
     .eq("key", "attendance_policy")
     .maybeSingle()
-  const policy = (settingRow?.value as AttendancePolicy) || DEFAULT_ATTENDANCE_POLICY
+  // Merged over the defaults so a policy row saved before a field existed still
+  // resolves that field rather than coming back undefined.
+  const policy = { ...DEFAULT_ATTENDANCE_POLICY, ...((settingRow?.value as Partial<AttendancePolicy>) ?? {}) }
+  const netDay = netDayHoursFor(policy)
 
   const { data: profile } = await supabase
     .from("profiles")
@@ -407,7 +410,7 @@ export async function computeIndividualPerformanceScore(
         earlyCloseTime: earlyClose ?? null,
         earlyOutApproved: rawStoredStatus === "early_departure_with_permission",
       })
-      creditSum += dayResult.hoursWorked / NET_DAY_HOURS
+      creditSum += dayResult.hoursWorked / netDay
 
       if (status !== "absent" && status !== "incomplete" && dayResult.lateBracket > 0) {
         lateDays += 1
