@@ -9,6 +9,7 @@ import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { resolvePendingAppealOnManualStatus } from "@/lib/hr/attendance-appeals"
 import { notifyAttendanceInApp } from "@/lib/hr/attendance-notify"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
+import { formatEmployeeName } from "@/lib/hr/employee-name"
 import { toLocalISODate, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 import { applyLunchBreak } from "@/lib/hr/attendance-ssot"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
@@ -179,7 +180,7 @@ export async function GET(request: NextRequest) {
 
     const records = rows.map((r) => {
       const p = profileMap.get(r.user_id)
-      const name = p?.full_name?.trim() || [p?.first_name, p?.last_name].filter(Boolean).join(" ") || "Unknown"
+      const name = formatEmployeeName(p)
 
       const closeTime = ctx.earlyCloseTime(r.date)
       const derivedStatus = deriveUnifiedAttendanceStatus(
@@ -281,7 +282,7 @@ export async function GET(request: NextRequest) {
         const lateRes = ctx.lateResumptionTime(day)
 
         for (const p of missing) {
-          const name = p.full_name?.trim() || [p.first_name, p.last_name].filter(Boolean).join(" ") || "Unknown"
+          const name = formatEmployeeName(p)
           const derivedStatus = deriveUnifiedAttendanceStatus(
             {
               record: null,
@@ -327,7 +328,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ records })
+    // Newest day first, then by surname within a day. Without the name tiebreak
+    // the roster falls back to Postgres row order, which looks random and shifts
+    // between requests. Synthetic "missing-" rows are appended per employee, so
+    // they need the same ordering as real records.
+    records.sort((a, b) => {
+      const byDate = String(b.date ?? "").localeCompare(String(a.date ?? ""))
+      if (byDate !== 0) return byDate
+      return String(a.user_name ?? "").localeCompare(String(b.user_name ?? ""))
+    })
+
+    // The active policy travels with the payload so client-side day breakdowns
+    // charge the same hours the server does, instead of falling back to defaults.
+    return NextResponse.json({ records, policy })
   } catch (error) {
     log.error({ err: String(error) }, "Error in GET /api/admin/hr/attendance/records")
     return NextResponse.json({ error: "An error occurred" }, { status: 500 })
@@ -443,7 +456,7 @@ export async function POST(request: NextRequest) {
       const inMs = new Date(`${date}T${clock_in}Z`).getTime()
       const outMs = new Date(`${date}T${clock_out}Z`).getTime()
       const rawHours = Math.max(0, (outMs - inMs) / (1000 * 60 * 60))
-      const { breakMinutes, workedHours } = applyLunchBreak(rawHours)
+      const { breakMinutes, workedHours } = applyLunchBreak(rawHours, policy)
       insert.total_hours = workedHours
       insert.break_duration = breakMinutes
     }
