@@ -19,6 +19,8 @@ import { StatCard } from "@/components/ui/stat-card"
 import { Users, Clock, AlertCircle, FileText, Pencil, ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
 import { toLocalISODate, isLate } from "@/lib/hr/attendance-utils"
+import { computeAttendanceDay } from "@/lib/hr/attendance-ssot"
+import { type AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import { MANUAL_ATTENDANCE_STATUS_OPTIONS, isEarlyDeparture } from "@/lib/hr/attendance-status"
 import { StatusBadge, formatTime, labelSource } from "./status-badge"
 import { apiFetch } from "@/lib/api-client"
@@ -30,19 +32,48 @@ function parseTimeToMinutes(value: string | null | undefined): number | null {
   return h * 60 + m
 }
 
-function getHourBreakdown(r: AttendanceRecord) {
+function getHourBreakdown(r: AttendanceRecord, policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY) {
   const inMin = parseTimeToMinutes(r.clock_in)
   const outMin = parseTimeToMinutes(r.clock_out)
+
+  // One punch only — surface what the day actually costs (the recorded side's
+  // bracket plus the incomplete penalty) instead of a dash. Work stays blank
+  // because the missing half of the day is unverifiable.
+  if ((inMin === null) !== (outMin === null)) {
+    const { hoursLost } = computeAttendanceDay({
+      status: "incomplete",
+      clockIn: r.clock_in,
+      clockOut: r.clock_out,
+      policy,
+      earlyCloseTime: r.early_closure_time ?? null,
+      lateResumptionTime: r.late_resumption_time ?? null,
+    })
+    return { total: null, work: null, overtime: null, missed: hoursLost }
+  }
+
   if (inMin === null || outMin === null || outMin <= inMin) {
-    return { total: null, work: null, overtime: null }
+    return { total: null, work: null, overtime: null, missed: null }
   }
   const total = (outMin - inMin) / 60
-  const workStart = 8 * 60
-  const workEnd = 17 * 60
-  const workMinutes = Math.max(0, Math.min(outMin, workEnd) - Math.max(inMin, workStart))
-  const work = workMinutes / 60
-  const overtime = Math.max(0, total - work)
-  return { total, work, overtime }
+
+  // Work, missed and overtime all come from the SSOT. Work and missed sit on the
+  // bracketed 8.5-hour scale and always add up to the net day; overtime is strictly
+  // time past the configured shift end, so arriving early is not overtime.
+  // Only "total" is raw clock time.
+  const {
+    hoursLost: missed,
+    hoursWorked: work,
+    overtimeHours: overtime,
+  } = computeAttendanceDay({
+    status: r.status,
+    clockIn: r.clock_in,
+    clockOut: r.clock_out,
+    policy,
+    earlyCloseTime: r.early_closure_time ?? null,
+    lateResumptionTime: r.late_resumption_time ?? null,
+  })
+
+  return { total, work, overtime, missed }
 }
 
 interface AttendanceRecord {
@@ -76,6 +107,9 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
   const [editRecord, setEditRecord] = useState<AttendanceRecord | null>(null)
   const [editForm, setEditForm] = useState({ status: "", manual_comment: "" })
   const [saving, setSaving] = useState(false)
+  // Served by the records API so day breakdowns here charge the same hours the
+  // server did. Defaults only apply until the first response lands.
+  const [policy, setPolicy] = useState<AttendancePolicy>(DEFAULT_ATTENDANCE_POLICY)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -86,6 +120,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to load roster")
       setRecords(payload.records || [])
+      if (payload?.policy) setPolicy({ ...DEFAULT_ATTENDANCE_POLICY, ...payload.policy })
     } catch {
       toast.error("Failed to load daily roster")
     } finally {
@@ -241,25 +276,42 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
       align: "center",
     },
     {
-      key: "total_hours",
-      label: "Total Hr",
+      key: "work_hours",
+      label: "Work Hour",
       sortable: true,
-      accessor: (r) => r.total_hours ?? 0,
+      accessor: (r) => getHourBreakdown(r, policy).work ?? 0,
       render: (r) => {
-        const { total } = getHourBreakdown(r)
-        return <span>{total != null ? `${total.toFixed(1)}h` : "—"}</span>
+        const { work } = getHourBreakdown(r, policy)
+        return <span>{work != null ? `${work.toFixed(1)}h` : "—"}</span>
       },
       align: "center",
       hideOnMobile: true,
     },
     {
-      key: "work_hours",
-      label: "Work Hour",
+      key: "missed_hours",
+      label: "Missed",
       sortable: true,
-      accessor: (r) => getHourBreakdown(r).work ?? 0,
+      accessor: (r) => getHourBreakdown(r, policy).missed ?? 0,
       render: (r) => {
-        const { work } = getHourBreakdown(r)
-        return <span>{work != null ? `${work.toFixed(1)}h` : "—"}</span>
+        const { missed } = getHourBreakdown(r, policy)
+        if (missed == null) return <span className="text-muted-foreground">—</span>
+        return missed > 0 ? (
+          <span className="text-orange-500">{missed.toFixed(1)}h</span>
+        ) : (
+          <span className="text-muted-foreground">0.0h</span>
+        )
+      },
+      align: "center",
+      hideOnMobile: true,
+    },
+    {
+      key: "total_hours",
+      label: "Total Hr",
+      sortable: true,
+      accessor: (r) => r.total_hours ?? 0,
+      render: (r) => {
+        const { total } = getHourBreakdown(r, policy)
+        return <span>{total != null ? `${total.toFixed(1)}h` : "—"}</span>
       },
       align: "center",
       hideOnMobile: true,
@@ -268,9 +320,9 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
       key: "overtime",
       label: "Over Time",
       sortable: true,
-      accessor: (r) => getHourBreakdown(r).overtime ?? 0,
+      accessor: (r) => getHourBreakdown(r, policy).overtime ?? 0,
       render: (r) => {
-        const { overtime } = getHourBreakdown(r)
+        const { overtime } = getHourBreakdown(r, policy)
         return overtime != null && overtime >= 0.05 ? (
           <span className="font-medium text-orange-600 dark:text-orange-400">+{overtime.toFixed(1)}h</span>
         ) : (
