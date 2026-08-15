@@ -239,6 +239,19 @@ export default function WeeklyReportsPortal() {
   })
 
   const meetingDate = lockState?.meetingDate || getDefaultMeetingDateIso(weekFilter, yearFilter)
+  const canMutateFilteredWeek = lockState?.canMutate ?? !lockState?.isLocked
+
+  const managedDepartments = useMemo(
+    () => [profile?.department, ...(profile?.lead_departments || [])].filter((d): d is string => Boolean(d)),
+    [profile?.department, profile?.lead_departments]
+  )
+
+  const canMutateReport = (report: WeeklyReport) => {
+    const normalizedReportDepartment = normalizeDepartmentName(report.department)
+    return managedDepartments.some((department) =>
+      getDepartmentAliases(department).includes(normalizedReportDepartment)
+    )
+  }
 
   const openAllPptxModeDialog = () => {
     setPendingPptxExport({ kind: "all" })
@@ -535,6 +548,24 @@ export default function WeeklyReportsPortal() {
           }
         }}
         rowActions={[
+          {
+            label: "Edit",
+            onClick: (report) => {
+              if (!canMutateFilteredWeek) {
+                return
+              }
+              if (!canMutateReport(report)) {
+                return
+              }
+              setSelectedReportParams({
+                week: report.week_number,
+                year: report.year,
+                dept: report.department,
+              })
+              setIsDialogOpen(true)
+            },
+            hidden: (report) => !canMutateFilteredWeek || !canMutateReport(report),
+          },
           {
             label: "Export",
             onClick: (report) => {
