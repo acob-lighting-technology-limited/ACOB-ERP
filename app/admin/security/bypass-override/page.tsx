@@ -142,11 +142,55 @@ export default async function BypassOverridePage() {
   // Sort back to descending order (latest first)
   dedupedLogs.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 
+  // Fetch correspondence records for enrichment
+  const correspondenceIds = Array.from(
+    new Set(
+      dedupedLogs
+        .filter((l) => String(l.entity_type).includes("correspondence"))
+        .map((l) => l.entity_id)
+        .filter(Boolean)
+    )
+  ) as string[]
+
+  const correspondenceMap = new Map<
+    string,
+    {
+      id: string
+      subject: string
+      reference_number: string
+      originator_id: string
+      responsible_officer_id: string | null
+      department_name: string | null
+    }
+  >()
+
+  if (correspondenceIds.length > 0) {
+    const { data: records } = await dataClient
+      .from("correspondence_records")
+      .select("id, subject, reference_number, originator_id, responsible_officer_id, department_name")
+      .in("id", correspondenceIds)
+
+    if (records) {
+      for (const r of records) {
+        correspondenceMap.set(r.id, r)
+      }
+    }
+  }
+
   const userIds = new Set<string>()
   for (const log of dedupedLogs) {
     if (log.user_id) userIds.add(log.user_id)
     const targetId = getTargetUserId(log)
     if (targetId) userIds.add(targetId)
+
+    // Add correspondence users
+    if (log.entity_id && String(log.entity_type).includes("correspondence")) {
+      const corr = correspondenceMap.get(log.entity_id)
+      if (corr) {
+        if (corr.originator_id) userIds.add(corr.originator_id)
+        if (corr.responsible_officer_id) userIds.add(corr.responsible_officer_id)
+      }
+    }
   }
 
   const profilesMap = new Map<
@@ -176,10 +220,26 @@ export default async function BypassOverridePage() {
     const targetId = getTargetUserId(log)
     const target = targetId ? profilesMap.get(targetId) || null : null
 
+    let correspondence = null
+    if (log.entity_id && String(log.entity_type).includes("correspondence")) {
+      const corr = correspondenceMap.get(log.entity_id)
+      if (corr) {
+        const originator = profilesMap.get(corr.originator_id) || null
+        const responsible = corr.responsible_officer_id ? profilesMap.get(corr.responsible_officer_id) || null : null
+        correspondence = {
+          subject: corr.subject,
+          reference_number: corr.reference_number,
+          originator,
+          responsible,
+        }
+      }
+    }
+
     return {
       ...log,
       actor,
       target,
+      correspondence,
     }
   })
 
