@@ -278,6 +278,12 @@
 ─────────────────────────────────────────────────────────────────────────── */
 html {
   --scrollbar-thumb: var(--primary);
+
+  /* Clearance for the fixed AcoBot launcher (right-5 bottom-5, h-14 w-14). Every
+     app shell reserves this at the bottom of its content so nothing that lands in
+     the bottom-right corner — table pagination, row action menus, sticky bars —
+     ends up underneath it. Keep in sync with the launcher's size + offset. */
+  --fab-safe-area: 5.5rem;
 }
 
 /* Surface accent for everything that renders OUTSIDE .admin-shell but still
