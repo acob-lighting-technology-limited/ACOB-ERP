@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Loader2, Save } from "lucide-react"
 import { AttendancePolicy } from "@/lib/org-config"
+import { grossDayHoursFor, netDayHoursFor } from "@/lib/hr/attendance-ssot"
 import { apiFetch } from "@/lib/api-client"
 
 interface AttendanceFormProps {
@@ -20,6 +21,10 @@ export function AttendanceForm({ initialPolicy }: AttendanceFormProps) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [formData, setFormData] = useState<AttendancePolicy>(initialPolicy)
+
+  // Shown back to the admin so the effect of a change is obvious before saving.
+  const grossDayHours = grossDayHoursFor(formData)
+  const netDayHours = netDayHoursFor(formData)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -47,7 +52,8 @@ export function AttendanceForm({ initialPolicy }: AttendanceFormProps) {
           body: JSON.stringify({
             ...formData,
             incompletePenalty: Number(formData.incompletePenalty),
-            totalCredits: Number(formData.totalCredits),
+            lunchMinutes: Number(formData.lunchMinutes),
+            lunchQualifyingHours: Number(formData.lunchQualifyingHours),
           }),
         })
 
@@ -118,11 +124,11 @@ export function AttendanceForm({ initialPolicy }: AttendanceFormProps) {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="incompletePenalty">Incomplete Punch Penalty (Credits)</Label>
+              <Label htmlFor="incompletePenalty">Incomplete Punch Penalty (Hours)</Label>
               <Input
                 id="incompletePenalty"
                 type="number"
-                step="0.1"
+                step="0.5"
                 min="0"
                 max="9"
                 value={formData.incompletePenalty}
@@ -131,26 +137,55 @@ export function AttendanceForm({ initialPolicy }: AttendanceFormProps) {
                 className="w-full font-medium"
               />
               <p className="text-muted-foreground text-[11px]">
-                Deduction applied when an employee misses clock-out. Default is 1.0.
+                Hours charged when an employee misses a punch, on top of the side that was recorded. Default is 1.0.
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="totalCredits">Total Credit Pool (Credits)</Label>
+              <Label htmlFor="lunchMinutes">Lunch Break (Minutes)</Label>
               <Input
-                id="totalCredits"
+                id="lunchMinutes"
                 type="number"
-                min="1"
-                max="24"
-                value={formData.totalCredits}
-                onChange={(e) => setFormData({ ...formData, totalCredits: Number(e.target.value) })}
+                step="5"
+                min="0"
+                max="240"
+                value={formData.lunchMinutes}
+                onChange={(e) => setFormData({ ...formData, lunchMinutes: Number(e.target.value) })}
                 required
                 className="w-full font-medium"
               />
               <p className="text-muted-foreground text-[11px]">
-                Total credit budget for a full workday. Default is 10.
+                Unpaid break deducted from a qualifying day. Default is 30 minutes.
               </p>
             </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="lunchQualifyingHours">Lunch Qualifying Day (Hours)</Label>
+              <Input
+                id="lunchQualifyingHours"
+                type="number"
+                step="0.5"
+                min="0"
+                max="24"
+                value={formData.lunchQualifyingHours}
+                onChange={(e) => setFormData({ ...formData, lunchQualifyingHours: Number(e.target.value) })}
+                required
+                className="w-full font-medium"
+              />
+              <p className="text-muted-foreground text-[11px]">
+                Shortest day that earns the lunch break. Default is 5 hours.
+              </p>
+            </div>
+          </div>
+
+          <div className="bg-muted/40 rounded-lg border p-4">
+            <p className="text-muted-foreground text-[11px]">
+              A full working day is{" "}
+              <span className="text-foreground font-semibold">{netDayHours.toFixed(2)} hours</span> —{" "}
+              {grossDayHours.toFixed(2)}h from {formData.startTime} to {formData.endTime}, less the{" "}
+              {formData.lunchMinutes}-minute lunch. Every penalty in the system is capped at this figure, and arriving
+              after {formData.lateCutoff} costs one hour per hour-bracket.
+            </p>
           </div>
 
           <div className="flex items-start justify-between gap-4 rounded-lg border p-4">
