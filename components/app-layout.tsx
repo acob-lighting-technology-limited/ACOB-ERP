@@ -54,7 +54,9 @@ export async function AppLayout({ children }: AppLayoutProps) {
         canAccessAdmin={canAccessAdmin}
         deptConsoleHref={deptConsoleHref}
       />
-      <SidebarContent>{children}</SidebarContent>
+      <SidebarContent>
+        <div className="pb-[max(var(--fab-safe-area),env(safe-area-inset-bottom))]">{children}</div>
+      </SidebarContent>
       <AcoBot userName={profile?.first_name ?? profile?.full_name ?? null} />
     </div>
   )
