@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getRequestScope } from "@/lib/admin/api-scope"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { logger } from "@/lib/logger"
-import { PayrollPeriodsPage } from "@/app/admin/hr/payroll/view"
+import { PayrollPeriodsPage } from "./view"
 
 const log = logger("payroll-periods-page")
 export const dynamic = "force-dynamic"

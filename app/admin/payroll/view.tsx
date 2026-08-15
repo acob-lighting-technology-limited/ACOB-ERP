@@ -148,7 +148,7 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
       label: "Actions",
       render: (row: PayrollPeriod) => (
         <Button asChild size="sm" variant="outline">
-          <Link href={`/admin/hr/payroll/${row.id}`}>
+          <Link href={`/admin/payroll/${row.id}`}>
             <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> Open Worksheet
           </Link>
         </Button>
@@ -225,7 +225,7 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
       label: "Actions",
       render: (e: DbPayrollEntry) => (
         <Button asChild size="sm" variant="outline">
-          <Link href={`/admin/hr/payroll/${e.payroll_period_id}`}>
+          <Link href={`/admin/payroll/${e.payroll_period_id}`}>
             <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> Worksheet
           </Link>
         </Button>
@@ -275,7 +275,7 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
 
     setLoading(true)
     try {
-      const res = await apiFetch("/api/admin/hr/payroll/periods", {
+      const res = await apiFetch("/api/admin/payroll/periods", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(periodForm),

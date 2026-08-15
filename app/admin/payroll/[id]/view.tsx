@@ -59,7 +59,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
   useEffect(() => {
     async function loadData() {
       try {
-        const res = await fetch(`/api/admin/hr/payroll/run?payroll_period_id=${period.id}`)
+        const res = await fetch(`/api/admin/payroll/run?payroll_period_id=${period.id}`)
         const payload = await res.json()
         if (!res.ok) throw new Error(payload.error || "Failed to load worksheet")
         setRows(payload.data || [])
@@ -119,7 +119,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
         })),
       }
 
-      const res = await apiFetch("/api/admin/hr/payroll/run", {
+      const res = await apiFetch("/api/admin/payroll/run", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -459,7 +459,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
       title={`Worksheet: ${period.name}`}
       description={`Disbursement schedule for payroll cycle from ${period.start_date} to ${period.end_date}.`}
       icon={FileText}
-      backLink={{ href: "/admin/hr/payroll", label: "Back to Payroll List" }}
+      backLink={{ href: "/admin/payroll", label: "Back to Payroll List" }}
       stats={stats}
       actions={actions}
     >
@@ -477,7 +477,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
           // The period filter navigates rather than filtering — each period is its own
           // worksheet route. Mirrors the attendance report's month filter.
           const nextPeriod = selected.period?.[0]
-          if (nextPeriod && nextPeriod !== period.id) router.push(`/admin/hr/payroll/${nextPeriod}`)
+          if (nextPeriod && nextPeriod !== period.id) router.push(`/admin/payroll/${nextPeriod}`)
         }}
         emptyIcon={FileText}
         emptyTitle="No employees to calculate"

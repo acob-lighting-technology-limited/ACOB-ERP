@@ -30,10 +30,7 @@ async function getDummyInitialData() {
         .select("id, full_name, employee_number, department, employment_status")
         .eq("employment_status", "active")
         .order("full_name", { ascending: true }),
-      db
-        .from("employee_salaries")
-        .select("user_id, basic_salary, is_active")
-        .eq("is_active", true),
+      db.from("employee_salaries").select("user_id, basic_salary, is_active").eq("is_active", true),
     ])
 
     const salaryMap = new Map<string, number>(
