@@ -40,6 +40,7 @@ export type AdminRouteKeyV2 =
   | "inventory.main"
   | "jobdescriptions.main"
   | "notifications.main"
+  | "payroll.main"
   | "purchasing.main"
   | "reports.weekly"
   | "reports.other"
@@ -61,6 +62,7 @@ export const GRANTABLE_ADMIN_ROUTES: AdminRouteKeyV2[] = [
   "hr.pms.cbt.manage",
   "jobdescriptions.main",
   "finance.main",
+  "payroll.main",
   "purchasing.main",
   "assets.main",
   "assets.issues",
@@ -148,6 +150,12 @@ export function resolveAdminRouteKeyV2(pathname: string): AdminRouteKeyV2 {
   if (pathname.startsWith("/admin/feedback")) return "feedback.main"
   if (pathname.startsWith("/admin/finance")) return "finance.main"
   if (pathname.startsWith("/admin/help-desk")) return "helpdesk.main"
+  // Payroll owns its own key. The two legacy HR paths still resolve here so the
+  // redirect stubs behave identically to the new /admin/payroll route — this
+  // must stay above the /admin/hr fallthrough below.
+  if (pathname.startsWith("/admin/payroll")) return "payroll.main"
+  if (pathname.startsWith("/admin/hr/payroll")) return "payroll.main"
+  if (pathname.startsWith("/admin/hr/employees/payroll")) return "payroll.main"
   if (pathname.startsWith("/admin/hr/pms/cbt/question")) return "hr.pms.cbt.manage"
   if (/^\/admin\/hr\/pms\/cbt\/[^/]+$/.test(pathname)) return "hr.pms.cbt.manage"
   if (pathname.startsWith("/admin/hr/pms")) return "hr.pms"
@@ -186,6 +194,10 @@ export function getRoutePolicyV2(route: AdminRouteKeyV2): RoutePolicyV2 {
       return { visibility: "none", mutations: "none", adminOnly: true, domain: null }
     case "communications.meetings":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: "communications" }
+    case "payroll.main":
+      // Salary data spans the whole org and the pages already require isAdminLike,
+      // so department leads never see it — adminOnly matches the runtime guard.
+      return { visibility: "none", mutations: "none", adminOnly: true, domain: "finance" }
     case "hr.fleet":
       return { visibility: "none", mutations: "none", adminOnly: true, domain: "hr" }
     case "hr.resources":
@@ -282,6 +294,11 @@ export function canAccessRouteV2(context: AccessContextV2, route: AdminRouteKeyV
     }
     if (route === "hr.pms") {
       return adminHasRoute(context, "hr.pms") || adminHasRoute(context, "hr.main")
+    }
+    // Payroll moved out of HR into Accounts and gained its own key. Admins who
+    // already held full HR keep access so the split is not a lockout.
+    if (route === "payroll.main") {
+      return adminHasRoute(context, "payroll.main") || adminHasRoute(context, "hr.main")
     }
     if (route === "hr.pms.cbt.manage") {
       // CBT is part of PMS now — granting PMS (or full HR) covers it.
