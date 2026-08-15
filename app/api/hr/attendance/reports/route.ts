@@ -10,10 +10,11 @@ import {
   getWorkdaysInRange,
   timeToMinutes,
 } from "@/lib/hr/attendance-utils"
-import { computeAttendanceDay, attendanceRateFrom, overtimeHoursFor, NET_DAY_HOURS } from "@/lib/hr/attendance-ssot"
+import { computeAttendanceDay, attendanceRateFrom, overtimeHoursFor, netDayHoursFor } from "@/lib/hr/attendance-ssot"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
+import { formatEmployeeName } from "@/lib/hr/employee-name"
 import { logger } from "@/lib/logger"
 
 const log = logger("hr-attendance-reports-api")
@@ -70,7 +71,10 @@ export async function GET(request: NextRequest) {
       .select("value")
       .eq("key", "attendance_policy")
       .maybeSingle()
-    const policy = (settingRow?.value as AttendancePolicy) || DEFAULT_ATTENDANCE_POLICY
+    const policy = { ...DEFAULT_ATTENDANCE_POLICY, ...((settingRow?.value as Partial<AttendancePolicy>) ?? {}) }
+    // Net expected hours for one full day under the active policy — the cap on
+    // what any single day can cost, and the denominator for the rate.
+    const netDay = netDayHoursFor(policy)
 
     const scopedDepartmentSet =
       routeAccess.dataScope === "all"
@@ -214,7 +218,7 @@ export async function GET(request: NextRequest) {
         if (ctx.isOnUnpaidLeave(profile.id, workday)) {
           available_days++
           absent_days++
-          total_missed_hours += NET_DAY_HOURS
+          total_missed_hours += netDay
           continue
         }
         if (ctx.isOnLeave(profile.id, workday)) {
@@ -257,18 +261,21 @@ export async function GET(request: NextRequest) {
 
         if (!rec) {
           absent_days++
-          total_missed_hours += NET_DAY_HOURS
+          total_missed_hours += netDay
           continue
         }
 
+        // Covered days earn the full net day, so Hours + Hrs Missed always reconciles
+        // to 8.5 × available days across the whole summary.
         if (derived === "out_of_station") {
           out_of_station_days++
           attendance_credits += 1.0
+          total_hours += netDay
         } else if (derived === "lateness_with_permission") {
           lateness_with_permission_days++
           present_days++
           attendance_credits += 1.0
-          total_hours += Number(rec.total_hours ?? 0)
+          total_hours += netDay
         } else if (
           derived === "early" ||
           derived === "late" ||
@@ -296,12 +303,12 @@ export async function GET(request: NextRequest) {
           })
           // Credits stay a 0–1 fraction of the day, now derived from the hours
           // figure payroll charges from rather than a parallel scale.
-          attendance_credits += day.hoursWorked / NET_DAY_HOURS
-          total_hours += Number(rec.total_hours ?? 0)
+          attendance_credits += day.hoursWorked / netDay
+          total_hours += day.hoursWorked
           total_missed_hours += day.hoursLost
         } else {
           absent_days++
-          total_missed_hours += NET_DAY_HOURS
+          total_missed_hours += netDay
         }
 
         const clockInMin = timeToMinutes(rec.clock_in)
@@ -320,9 +327,10 @@ export async function GET(request: NextRequest) {
       const total_working_days = available_days
       // Derived from the same hours figure payroll charges from, so the displayed
       // percentage can never drift from the money.
-      const attendance_rate = total_working_days > 0 ? attendanceRateFrom(total_missed_hours, total_working_days) : 0
+      const attendance_rate =
+        total_working_days > 0 ? attendanceRateFrom(total_missed_hours, total_working_days, policy) : 0
 
-      const name = `${String(profile.first_name || "").trim()} ${String(profile.last_name || "").trim()}`.trim()
+      const name = formatEmployeeName(profile)
       return {
         user_id: profile.id,
         employee_no: String(profile.employee_number || "").trim(),
@@ -342,7 +350,7 @@ export async function GET(request: NextRequest) {
         leave_days,
         holiday_days,
         attendance_credits: Math.round(attendance_credits * 100) / 100,
-        total_hours,
+        total_hours: Math.round(total_hours * 10) / 10,
         total_missed_hours: Math.round(total_missed_hours * 10) / 10,
         attendance_rate,
         attendance_exempt: Boolean(profile.attendance_exempt),
@@ -430,10 +438,13 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => a.department.localeCompare(b.department))
 
-    // Remove internal tracking fields before returning employee summaries
-    const cleanSummaries = summaries.map(
-      ({ clock_in_minutes_sum, clock_in_days, clock_out_minutes_sum, clock_out_days, ...rest }) => rest
-    )
+    // Remove internal tracking fields before returning employee summaries.
+    // Sorted by name so the table, the S/N column and the export are stable and
+    // identical run to run — profiles come back in Postgres heap order otherwise,
+    // which shifts as rows are updated.
+    const cleanSummaries = summaries
+      .map(({ clock_in_minutes_sum, clock_in_days, clock_out_minutes_sum, clock_out_days, ...rest }) => rest)
+      .sort((a, b) => a.user_name.localeCompare(b.user_name))
 
     const visibleDepartments = Array.from(
       new Set(allowedProfiles.map((profile) => String(profile.department || "").trim()).filter(Boolean))
@@ -443,6 +454,9 @@ export async function GET(request: NextRequest) {
       data: cleanSummaries,
       departments: visibleDepartments,
       department_stats: departmentStats,
+      // The active policy travels with the payload so client-side day breakdowns
+      // charge the same hours this route did, instead of falling back to defaults.
+      policy,
     })
   } catch (error) {
     log.error({ err: String(error) }, "Failed to load attendance reports")
