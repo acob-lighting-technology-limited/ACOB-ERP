@@ -171,9 +171,14 @@ export const HELP_DESK_SLA: Record<"urgent" | "high" | "medium" | "low", SlaBudg
 export interface AttendancePolicy {
   startTime: string // e.g. "08:00"
   endTime: string // e.g. "17:00"
-  lateCutoff: string // e.g. "08:20"
-  incompletePenalty: number // e.g. 1.0 (credits)
-  totalCredits: number // e.g. 10
+  /** End of the arrival grace period. Clock-ins after this are late. e.g. "08:20" */
+  lateCutoff: string
+  /** Hours charged when one punch is missing, on top of the side that was recorded. */
+  incompletePenalty: number // e.g. 1.0 (hours)
+  /** Unpaid lunch break deducted from a qualifying day. */
+  lunchMinutes: number // e.g. 30
+  /** Shortest day, in hours, that earns the lunch break. */
+  lunchQualifyingHours: number // e.g. 5
   /** When true, manual alterations and appeal decisions email the employee + Admin & HR lead. */
   emailNotificationsEnabled: boolean
 }
@@ -183,6 +188,7 @@ export const DEFAULT_ATTENDANCE_POLICY: AttendancePolicy = {
   endTime: "17:00",
   lateCutoff: "08:20",
   incompletePenalty: 1.0,
-  totalCredits: 10,
+  lunchMinutes: 30,
+  lunchQualifyingHours: 5,
   emailNotificationsEnabled: true,
 }

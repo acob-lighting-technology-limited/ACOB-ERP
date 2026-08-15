@@ -25,7 +25,7 @@ import type { AttendanceRecord } from "./page"
 import { logger } from "@/lib/logger"
 import { RemoteCheckinModal } from "@/components/attendance/remote-checkin-modal"
 import { toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
-import { computeAttendanceDay, attendanceRateFrom, applyLunchBreak } from "@/lib/hr/attendance-ssot"
+import { computeAttendanceDay, attendanceRateFrom } from "@/lib/hr/attendance-ssot"
 import {
   ATTENDANCE_STATUS_COLORS,
   ATTENDANCE_STATUS_LABELS,
@@ -50,7 +50,6 @@ type AttendanceRow = AttendanceRecord & {
   monthLabel: string
   calculatedTotalHours: number | null
   workHours: number | null
-  overtimeHours: number | null
   missedHoursValue: number | null
   normalizedStatus: UnifiedAttendanceStatus
 }
@@ -91,26 +90,13 @@ function calculateHourBreakdown(
   const inMinutes = parseClockToMinutes(clockIn)
   const outMinutes = parseClockToMinutes(clockOut)
   if (inMinutes === null || outMinutes === null || outMinutes <= inMinutes) {
-    return { total: null, work: null, overtime: null, missed: null }
+    return { total: null, work: null, missed: null }
   }
 
-  const totalMinutes = outMinutes - inMinutes
-  const totalHours = minutesToHours(totalMinutes)
-
-  const workStart = 8 * 60
-  const workEnd = 17 * 60
-  const overlapStart = Math.max(inMinutes, workStart)
-  const overlapEnd = Math.min(outMinutes, workEnd)
-
-  const rawWorkMinutes = Math.max(0, overlapEnd - overlapStart)
-  // The lunch break is earned on total time in office, but comes off the in-window hours.
-  const { breakMinutes } = applyLunchBreak(totalHours)
-  const workMinutes = Math.max(0, rawWorkMinutes - breakMinutes)
-  const overtimeMinutes = Math.max(0, totalMinutes - rawWorkMinutes)
-
-  // Hours missed come from the SSOT, so this row agrees with payroll and the
-  // HR report to the minute.
-  const { hoursLost } = computeAttendanceDay({
+  // Work and missed hours both come from the SSOT, on the same bracketed 8.5-hour
+  // scale, so they always add up to the net day. Only "total" reflects raw clock
+  // minutes — it is time in the office, not hours credited.
+  const { hoursLost, hoursWorked } = computeAttendanceDay({
     status: "present",
     clockIn,
     clockOut,
@@ -119,9 +105,8 @@ function calculateHourBreakdown(
   })
 
   return {
-    total: totalHours,
-    work: minutesToHours(workMinutes),
-    overtime: minutesToHours(overtimeMinutes),
+    total: minutesToHours(outMinutes - inMinutes),
+    work: hoursWorked,
     missed: hoursLost,
   }
 }
@@ -170,14 +155,6 @@ export function AttendanceContent({
   const [editAppeal, setEditAppeal] = useState<AppealRecord | null>(null)
   const [cancelAppealId, setCancelAppealId] = useState<string | null>(null)
   const [isCancellingAppeal, setIsCancellingAppeal] = useState(false)
-  const currentMonthLabel = useMemo(() => {
-    return new Date().toLocaleDateString("en-US", {
-      month: "long",
-      year: "numeric",
-      timeZone: "Africa/Lagos",
-    })
-  }, [])
-
   const currentMonthLwpAwpCount = useMemo(() => {
     const currentYM = toLocalYearMonth()
     let count = 0
@@ -282,7 +259,6 @@ export function AttendanceContent({
             monthLabel,
             calculatedTotalHours: null,
             workHours: null,
-            overtimeHours: null,
             missedHoursValue: null,
             normalizedStatus,
           } as AttendanceRow
@@ -291,7 +267,7 @@ export function AttendanceContent({
         const normalizedStatus =
           (unified.status as AttendanceRow["normalizedStatus"]) || normalizeStatus(existing, workday)
         const breakdown = isCoveredStatus(normalizedStatus)
-          ? { total: null, work: null, overtime: null, missed: null }
+          ? { total: null, work: null, missed: null }
           : calculateHourBreakdown(
               existing.clock_in,
               existing.clock_out,
@@ -308,7 +284,6 @@ export function AttendanceContent({
           monthLabel,
           calculatedTotalHours: breakdown.total,
           workHours: breakdown.work,
-          overtimeHours: breakdown.overtime,
           missedHoursValue: breakdown.missed,
           normalizedStatus,
         } as AttendanceRow
@@ -316,12 +291,13 @@ export function AttendanceContent({
       .sort((a, b) => b.date.localeCompare(a.date))
   }, [unifiedDays])
 
-  // Seed filteredRows with current month's rows on first load so stat cards align with default filter
+  // No month is pre-selected, so seed filteredRows with everything fetched and let
+  // the stat cards reflect the full range until the user picks a month.
   useEffect(() => {
     if (rows.length > 0) {
-      setFilteredRows(rows.filter((r) => r.monthLabel === currentMonthLabel))
+      setFilteredRows(rows)
     }
-  }, [rows, currentMonthLabel])
+  }, [rows])
 
   const columns = useMemo<DataTableColumn<AttendanceRow>[]>(
     () => [
@@ -358,13 +334,6 @@ export function AttendanceContent({
         ),
       },
       {
-        key: "total_hours",
-        label: "Total Hours",
-        sortable: true,
-        accessor: (row) => row.calculatedTotalHours || row.total_hours || 0,
-        render: (row) => (row.calculatedTotalHours != null ? `${row.calculatedTotalHours.toFixed(2)} hrs` : "-"),
-      },
-      {
         key: "work_hours",
         label: "Work Hour",
         sortable: true,
@@ -388,13 +357,11 @@ export function AttendanceContent({
         hideOnMobile: true,
       },
       {
-        key: "overtime_hours",
-        label: "Overtime",
+        key: "total_hours",
+        label: "Total Hours",
         sortable: true,
-        accessor: (row) => row.overtimeHours || 0,
-        render: (row) =>
-          row.overtimeHours != null && row.overtimeHours >= 0.05 ? `${row.overtimeHours.toFixed(2)} hrs` : "-",
-        hideOnMobile: true,
+        accessor: (row) => row.calculatedTotalHours || row.total_hours || 0,
+        render: (row) => (row.calculatedTotalHours != null ? `${row.calculatedTotalHours.toFixed(2)} hrs` : "-"),
       },
       {
         key: "status",
@@ -488,11 +455,10 @@ export function AttendanceContent({
           value: month,
           label: month,
         })),
-        defaultValues: [currentMonthLabel],
         filterFn: (row, selected) => selected.includes(row.monthLabel),
       },
     ],
-    [rows, currentMonthLabel]
+    [rows]
   )
 
   const todayIso = toLocalISODate()
@@ -526,7 +492,7 @@ export function AttendanceContent({
   }, [filteredRows, todayIso])
 
   function exportCSV() {
-    const headers = ["Date", "Day", "Clock In", "Clock Out", "Total Hours", "Work Hour", "Overtime", "Status"]
+    const headers = ["Date", "Day", "Clock In", "Clock Out", "Total Hours", "Work Hour", "Status"]
     const csvRows = rows.map((row) => [
       row.dateLabel,
       row.dayLabel,
@@ -534,7 +500,6 @@ export function AttendanceContent({
       row.clock_out || "-",
       row.calculatedTotalHours != null ? row.calculatedTotalHours.toFixed(2) : "-",
       row.workHours != null ? row.workHours.toFixed(2) : "-",
-      row.overtimeHours != null ? row.overtimeHours.toFixed(2) : "-",
       row.normalizedStatus,
     ])
     const csv = [headers, ...csvRows].map((row) => row.join(",")).join("\n")

@@ -35,6 +35,7 @@ export const ADMIN_ROUTE_GROUPS: RouteGroup[] = [
     routes: [
       { key: "finance.main", label: "Finance", hint: "Payments, Bills, Invoices & Finance Reports" },
       { key: "purchasing.main", label: "Purchasing", hint: "Orders, Receipts & Suppliers" },
+      { key: "payroll.main", label: "Payroll", hint: "Payroll periods & entries — salary data" },
     ],
   },
   {

@@ -1194,9 +1194,12 @@ export function DataTable<TData>({
             <div className="border-t">{tableInner}</div>
           )}
 
-          {/* Pagination inside the card footer */}
+          {/* Pagination inside the card footer. Left-aligned on purpose: the AcoBot
+              launcher is fixed to the bottom-right of the viewport, so controls pinned
+              to the right edge here sit under it whenever the footer scrolls through
+              that band. */}
           {pagination && totalPages > 1 && !isLoading && !error && (
-            <div className="flex items-center justify-between border-t px-4 py-3 text-sm">
+            <div className="flex items-center gap-4 border-t px-4 py-3 text-sm">
               <p className="text-muted-foreground">
                 Page {activePage + 1} of {totalPages}
               </p>

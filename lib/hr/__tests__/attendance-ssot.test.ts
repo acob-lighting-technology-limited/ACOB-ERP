@@ -5,8 +5,11 @@ import {
   lateBracketFor,
   earlyBracketFor,
   attendanceRateFrom,
+  applyLunchBreak,
+  netDayHoursFor,
   NET_DAY_HOURS,
 } from "@/lib/hr/attendance-ssot"
+import { DEFAULT_ATTENDANCE_POLICY, type AttendancePolicy } from "@/lib/org-config"
 
 /**
  * The agreed penalty table is the contract for payroll, HR reports, the staff
@@ -218,6 +221,69 @@ describe("overtime is tracked separately from penalties", () => {
     const result = computeAttendanceDay({ status: "present", clockIn: "08:00", clockOut: "19:00" })
     assert.equal(result.overtimeHours, 2)
     assert.equal(result.hoursLost, 0)
+  })
+})
+
+describe("management settings drive the maths", () => {
+  const policyWith = (overrides: Partial<AttendancePolicy>): AttendancePolicy => ({
+    ...DEFAULT_ATTENDANCE_POLICY,
+    ...overrides,
+  })
+
+  it("a longer grace period forgives an arrival that would otherwise be late", () => {
+    const policy = policyWith({ lateCutoff: "08:45" })
+    // 08:30 is late under the default 08:20 cutoff, but inside a 08:45 grace.
+    assert.equal(lateBracketFor("08:30"), 1)
+    assert.equal(lateBracketFor("08:30", policy), 0)
+  })
+
+  it("the incomplete penalty is whatever management set", () => {
+    const policy = policyWith({ incompletePenalty: 3 })
+    const result = computeAttendanceDay({ status: "incomplete", clockIn: "08:00", clockOut: null, policy })
+    assert.equal(result.hoursLost, 3)
+  })
+
+  it("a zero incomplete penalty charges nothing for a clean but unfinished day", () => {
+    const policy = policyWith({ incompletePenalty: 0 })
+    const result = computeAttendanceDay({ status: "incomplete", clockIn: "08:00", clockOut: null, policy })
+    assert.equal(result.hoursLost, 0)
+  })
+
+  it("a changed lunch length changes the net day and the absence charge", () => {
+    const policy = policyWith({ lunchMinutes: 60 })
+    assert.equal(netDayHoursFor(policy), 8)
+    assert.equal(computeAttendanceDay({ status: "absent", policy }).hoursLost, 8)
+  })
+
+  it("a changed shift length changes the net day", () => {
+    // 08:00–15:00 is a 7h shift, less the 30-minute lunch.
+    const policy = policyWith({ endTime: "15:00" })
+    assert.equal(netDayHoursFor(policy), 6.5)
+  })
+
+  it("the lunch break follows the configured minutes and qualifying length", () => {
+    const policy = policyWith({ lunchMinutes: 45, lunchQualifyingHours: 6 })
+    // A 5-hour day no longer qualifies once the threshold moves to 6 hours.
+    assert.deepEqual(applyLunchBreak(5, policy), { breakMinutes: 0, workedHours: 5 })
+    assert.deepEqual(applyLunchBreak(7, policy), { breakMinutes: 45, workedHours: 6.25 })
+  })
+
+  it("shifting the whole shift moves both the brackets and the net day", () => {
+    // A 09:00–18:00 shift with a 09:20 grace cutoff.
+    const policy = policyWith({ startTime: "09:00", endTime: "18:00", lateCutoff: "09:20" })
+    assert.equal(netDayHoursFor(policy), 8.5)
+    assert.equal(lateBracketFor("09:20", policy), 0)
+    assert.equal(lateBracketFor("09:21", policy), 1)
+    assert.equal(lateBracketFor("10:00", policy), 1)
+    assert.equal(lateBracketFor("10:01", policy), 2)
+    assert.equal(earlyBracketFor("18:00", "18:00", "09:00"), 0)
+    assert.equal(earlyBracketFor("17:30", "18:00", "09:00"), 1)
+  })
+
+  it("the rate is measured against the configured net day", () => {
+    const policy = policyWith({ lunchMinutes: 60 })
+    // 8h net day: losing 4h is exactly half.
+    assert.equal(attendanceRateFrom(4, 1, policy), 50)
   })
 })
 

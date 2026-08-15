@@ -34,12 +34,35 @@ import { timeToMinutes } from "@/lib/hr/attendance-utils"
  * late resumption, AWP/LWP/OOS) cost 0 hours and never reach the bracket maths.
  */
 
-/** Gross scheduled shift length, 08:00–17:00. */
+/** Gross scheduled shift length under the default policy, 08:00–17:00. */
 export const GROSS_DAY_HOURS = 9
-/** Unpaid lunch break, in minutes. Deducted once per qualifying day. */
+/** Unpaid lunch break in minutes under the default policy. */
 export const LUNCH_MINUTES = 30
-/** Net expected hours per full working day (gross less lunch). */
+/**
+ * Net expected hours per full working day under the DEFAULT policy.
+ *
+ * Prefer `netDayHoursFor(policy)` anywhere the active policy is available — this
+ * constant only matches while management leaves the shift times and lunch at
+ * their defaults. It exists for display surfaces that have no policy to hand.
+ */
 export const NET_DAY_HOURS = GROSS_DAY_HOURS - LUNCH_MINUTES / 60
+
+/** Gross shift length in hours for a policy, from its start and end times. */
+export function grossDayHoursFor(policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY): number {
+  const startMin = timeToMinutes(policy.startTime)
+  const endMin = timeToMinutes(policy.endTime)
+  if (startMin === null || endMin === null || endMin <= startMin) return GROSS_DAY_HOURS
+  return (endMin - startMin) / 60
+}
+
+/**
+ * Net expected hours for a full working day under a policy — the shift length
+ * less the unpaid lunch break. This is the ceiling on what a single day can cost.
+ */
+export function netDayHoursFor(policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY): number {
+  const lunch = policy.lunchMinutes ?? LUNCH_MINUTES
+  return Math.max(0, grossDayHoursFor(policy) - lunch / 60)
+}
 
 /**
  * Statuses where the day is covered and costs the employee nothing.
@@ -163,8 +186,6 @@ export function overtimeHoursFor(
   return (outMin - endMin) / 60
 }
 
-const clampLost = (hours: number) => Math.max(0, Math.min(NET_DAY_HOURS, hours))
-
 /**
  * The one calculation. Resolves a single employee-day into the hours it cost.
  */
@@ -172,18 +193,19 @@ export function computeAttendanceDay(input: AttendanceDayInput): AttendanceDayRe
   const policy = input.policy ?? DEFAULT_ATTENDANCE_POLICY
   const status = String(input.status || "").toLowerCase()
   const { clockIn, clockOut } = input
+  const netDay = netDayHoursFor(policy)
 
   const build = (
     hoursLost: number,
     breakdown: string,
     extra?: { covered?: boolean; lateBracket?: number; earlyBracket?: number }
   ): AttendanceDayResult => {
-    const lost = clampLost(hoursLost)
+    const lost = Math.max(0, Math.min(netDay, hoursLost))
     return {
       status,
       hoursLost: lost,
-      hoursWorked: Math.max(0, NET_DAY_HOURS - lost),
-      isAbsent: lost >= NET_DAY_HOURS,
+      hoursWorked: Math.max(0, netDay - lost),
+      isAbsent: lost >= netDay,
       covered: extra?.covered ?? false,
       overtimeHours: overtimeHoursFor(clockOut, policy),
       lateBracket: extra?.lateBracket ?? 0,
@@ -199,7 +221,7 @@ export function computeAttendanceDay(input: AttendanceDayInput): AttendanceDayRe
 
   // 2. No punches at all.
   if (status === "absent" || (!clockIn && !clockOut)) {
-    return build(NET_DAY_HOURS, `Absent — full day (${NET_DAY_HOURS}h) lost`)
+    return build(netDay, `Absent — full day (${netDay}h) lost`)
   }
 
   const effectiveEnd = input.earlyCloseTime || policy.endTime
@@ -234,18 +256,23 @@ export function computeAttendanceDay(input: AttendanceDayInput): AttendanceDayRe
   return build(lateBracket + earlyBracket, breakdown, { lateBracket, earlyBracket })
 }
 
-/** Shortest day that earns a lunch break, in hours. */
-const LUNCH_QUALIFYING_HOURS = 5
-
 /**
  * Splits a raw clocked span into the unpaid lunch break and the hours actually
  * credited. Every write path that stores `total_hours` / `break_duration` must
  * use this — the rule was previously copy-pasted across five routes and omitted
  * entirely from remote clock-out, which quietly credited remote staff an extra
  * hour a day.
+ *
+ * Both the break length and the qualifying day length come from the policy, so
+ * management can change them in settings without a deploy.
  */
-export function applyLunchBreak(rawHours: number): { breakMinutes: number; workedHours: number } {
-  const breakMinutes = rawHours >= LUNCH_QUALIFYING_HOURS ? LUNCH_MINUTES : 0
+export function applyLunchBreak(
+  rawHours: number,
+  policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY
+): { breakMinutes: number; workedHours: number } {
+  const qualifying = policy.lunchQualifyingHours ?? 5
+  const lunch = policy.lunchMinutes ?? LUNCH_MINUTES
+  const breakMinutes = rawHours >= qualifying ? lunch : 0
   return { breakMinutes, workedHours: Math.max(0, rawHours - breakMinutes / 60) }
 }
 
@@ -254,8 +281,12 @@ export function applyLunchBreak(rawHours: number): { breakMinutes: number; worke
  * score (PMS weighting, dashboard rates). Always derived from `hoursLost` so it
  * can never drift from the hours figure payroll uses.
  */
-export function attendanceRateFrom(hoursLost: number, days = 1): number {
-  const expected = NET_DAY_HOURS * Math.max(1, days)
+export function attendanceRateFrom(
+  hoursLost: number,
+  days = 1,
+  policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY
+): number {
+  const expected = netDayHoursFor(policy) * Math.max(1, days)
   const worked = Math.max(0, expected - hoursLost)
   return Math.round((worked / expected) * 10000) / 100
 }

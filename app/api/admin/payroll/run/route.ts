@@ -197,7 +197,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ data: result.rows, status: result.period.status })
   } catch (error) {
-    log.error({ err: String(error) }, "Unhandled error in GET /api/admin/hr/payroll/run")
+    log.error({ err: String(error) }, "Unhandled error in GET /api/admin/payroll/run")
     return NextResponse.json({ error: "An error occurred" }, { status: 500 })
   }
 }
@@ -383,7 +383,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ success: true, entries: savedRows })
   } catch (error) {
-    log.error({ err: String(error) }, "Unhandled error in POST /api/admin/hr/payroll/run")
+    log.error({ err: String(error) }, "Unhandled error in POST /api/admin/payroll/run")
     return NextResponse.json({ error: "An error occurred" }, { status: 500 })
   }
 }

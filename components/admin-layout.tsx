@@ -74,7 +74,7 @@ export async function AdminLayout({ children }: AdminLayoutProps) {
         deptConsoleHref={deptConsoleHref}
       />
       <SidebarContent>
-        <div className="min-h-screen bg-[var(--admin-content-bg)]">
+        <div className="min-h-screen bg-[var(--admin-content-bg)] pb-[max(var(--fab-safe-area),env(safe-area-inset-bottom))]">
           <AdminContextRibbon
             role={profile.role}
             department={profile.department}

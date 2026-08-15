@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button"
 import { DailyRosterView } from "./_components/daily-roster-view"
 import { CalendarView } from "./_components/calendar-view"
 import type { EmployeeOption } from "./_components/calendar-view"
-import { ExceptionsView } from "./_components/exceptions-view"
 import { AppealsView } from "./_components/appeals-view"
 import { LeaderboardView } from "./_components/leaderboard-view"
 import { AttendanceManagerDialog } from "./_components/attendance-manager-dialog"
@@ -46,7 +45,8 @@ import {
   MANUAL_ATTENDANCE_STATUS_OPTIONS,
   getManualStatusEditOptions,
 } from "@/lib/hr/attendance-status"
-import { computeAttendanceDay, applyLunchBreak } from "@/lib/hr/attendance-ssot"
+import { computeAttendanceDay, netDayHoursFor } from "@/lib/hr/attendance-ssot"
+import { type AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import { StatusBadge, labelSource } from "./_components/status-badge"
 import { apiFetch } from "@/lib/api-client"
 
@@ -256,7 +256,8 @@ function getHourBreakdown(
   record: DayRecord | null,
   status?: string,
   lateResumptionTime?: string | null,
-  earlyClosureTime?: string | null
+  earlyClosureTime?: string | null,
+  policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY
 ) {
   const covered =
     status === "waiver" ||
@@ -273,11 +274,23 @@ function getHourBreakdown(
     return { total, work: null, overtime: null, missed: null }
   }
   if (!record || (!record.clock_in && !record.clock_out)) {
-    if (status === "absent") return { total: null, work: null, overtime: null, missed: 9 }
+    // An absent day costs the net shift (8.5h), not the gross 9h — lunch is never worked.
+    if (status === "absent") return { total: null, work: 0, overtime: null, missed: netDayHoursFor(policy) }
     return { total: null, work: null, overtime: null, missed: null }
   }
-  if (record.clock_in && !record.clock_out) {
-    return { total: null, work: null, overtime: null, missed: null }
+  // One punch only — surface what the day actually costs (the recorded side's
+  // bracket plus the incomplete penalty) instead of a dash. Work stays blank
+  // because the missing half of the day is unverifiable.
+  if (Boolean(record.clock_in) !== Boolean(record.clock_out)) {
+    const { hoursLost } = computeAttendanceDay({
+      status: "incomplete",
+      clockIn: record.clock_in,
+      clockOut: record.clock_out,
+      policy,
+      earlyCloseTime: earlyClosureTime ?? null,
+      lateResumptionTime: lateResumptionTime ?? null,
+    })
+    return { total: null, work: null, overtime: null, missed: hoursLost }
   }
   const inMin = parseTimeToMinutes(record.clock_in)
   const outMin = parseTimeToMinutes(record.clock_out)
@@ -285,21 +298,20 @@ function getHourBreakdown(
     return { total: null, work: null, overtime: null, missed: null }
   }
   const total = (outMin - inMin) / 60
-  const workStart = 8 * 60
-  const workEnd = 17 * 60
-  const workMinutes = Math.max(0, Math.min(outMin, workEnd) - Math.max(inMin, workStart))
 
-  // The lunch break is earned on total time in office, but comes off the in-window hours.
-  const { breakMinutes } = applyLunchBreak(total)
-  const work = Math.max(0, workMinutes / 60 - breakMinutes / 60)
-  const overtime = Math.max(0, total - workMinutes / 60)
-
-  // Hours missed come from the SSOT, so this row agrees with payroll, the HR
-  // report and the employee's own view to the minute.
-  const { hoursLost: missed } = computeAttendanceDay({
+  // Work, missed and overtime all come from the SSOT. Work and missed sit on the
+  // bracketed 8.5-hour scale and always add up to the net day; overtime is strictly
+  // time past the configured shift end, so arriving early is not overtime.
+  // Only "total" is raw clock time.
+  const {
+    hoursLost: missed,
+    hoursWorked: work,
+    overtimeHours: overtime,
+  } = computeAttendanceDay({
     status: "present",
     clockIn: record.clock_in,
     clockOut: record.clock_out,
+    policy,
     earlyCloseTime: earlyClosureTime ?? null,
     lateResumptionTime: lateResumptionTime ?? null,
   })
@@ -310,10 +322,11 @@ function getHourBreakdown(
 interface EmployeeExpandProps {
   report: AttendanceReport
   yearMonth: string
+  policy: AttendancePolicy
   onRecordChanged?: (userId: string) => void
 }
 
-function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExpandProps) {
+function EmployeeExpandPanel({ report, yearMonth, policy, onRecordChanged }: EmployeeExpandProps) {
   const [days, setDays] = useState<CalendarDay[] | null>(null)
   const [editTarget, setEditTarget] = useState<{ date: string; record: DayRecord | null } | null>(null)
   const [editForm, setEditForm] = useState({
@@ -503,15 +516,15 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
           <span>Status</span>
           <span>In</span>
           <span>Out</span>
-          <span>Total</span>
           <span>Work</span>
           <span>Missed</span>
+          <span>Total</span>
           <span>Overtime</span>
           <span>Source</span>
           <span></span>
         </div>
         {visibleDays.map((day) => {
-          const hours = getHourBreakdown(day.record, day.status, day.lateResumptionTime, day.earlyClosureTime)
+          const hours = getHourBreakdown(day.record, day.status, day.lateResumptionTime, day.earlyClosureTime, policy)
           return (
             <div
               key={day.date}
@@ -546,13 +559,13 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
                   "—"
                 )}
               </span>
-              <span className="text-xs">{formatHours(hours.total ?? day.record?.total_hours ?? null)}</span>
               <span className="text-xs">{formatHours(hours.work)}</span>
               <span
                 className={`text-xs ${hours.missed !== null && hours.missed > 0 ? "text-orange-500" : "text-muted-foreground"}`}
               >
                 {hours.missed !== null ? formatHours(hours.missed) : "—"}
               </span>
+              <span className="text-xs">{formatHours(hours.total ?? day.record?.total_hours ?? null)}</span>
               <span className="text-xs">
                 {hours.overtime != null && hours.overtime >= 0.05 ? formatHours(hours.overtime) : "—"}
               </span>
@@ -726,14 +739,13 @@ function EmployeeExpandPanel({ report, yearMonth, onRecordChanged }: EmployeeExp
   )
 }
 
-type AttendanceTab = "summary" | "daily" | "calendar" | "exceptions" | "appeals" | "leaderboard"
+type AttendanceTab = "summary" | "daily" | "calendar" | "appeals" | "leaderboard"
 
 const ATTENDANCE_TABS: DataTableTab[] = [
   { key: "daily", label: "Daily Roster" },
   { key: "summary", label: "Summary" },
   { key: "leaderboard", label: "Leaderboard" },
   { key: "calendar", label: "Calendar" },
-  { key: "exceptions", label: "Exceptions" },
   { key: "appeals", label: "Appeals" },
 ]
 
@@ -752,6 +764,9 @@ export function AttendanceReportsPage({
   // Rows currently visible in the table (after search + filters + sort).
   const [processedReports, setProcessedReports] = useState<AttendanceReport[]>([])
   const [departments, setDepartments] = useState<string[]>([])
+  // Served by the reports API so day breakdowns here charge the same hours the
+  // server did. Defaults only apply until the first response lands.
+  const [policy, setPolicy] = useState<AttendancePolicy>(DEFAULT_ATTENDANCE_POLICY)
   const [yearMonth, setYearMonth] = useState(currentYearMonth)
   const [periodMode, setPeriodMode] = useState<"month" | "quarter">("month")
   const [quarter, setQuarter] = useState<"Q1" | "Q2" | "Q3" | "Q4">("Q1")
@@ -811,6 +826,7 @@ export function AttendanceReportsPage({
       const payload = (await response.json().catch(() => null)) as {
         data?: AttendanceReport[]
         departments?: string[]
+        policy?: AttendancePolicy
         error?: string
       } | null
       if (!response.ok) throw new Error(payload?.error ?? "Failed to load attendance report")
@@ -824,6 +840,7 @@ export function AttendanceReportsPage({
         }))
       )
       setDepartments(lockedDepartment ? [lockedDepartment] : (payload?.departments ?? []))
+      if (payload?.policy) setPolicy({ ...DEFAULT_ATTENDANCE_POLICY, ...payload.policy })
     } catch (error) {
       log.error("Error generating report:", error)
       setReports([])
@@ -942,6 +959,28 @@ export function AttendanceReportsPage({
       hideOnMobile: true,
     },
     {
+      key: "incomplete_days",
+      label: "Incomplete",
+      sortable: true,
+      accessor: (r) => r.incomplete_days ?? 0,
+      render: (r) => <span className="text-cyan-600">{r.incomplete_days ?? 0}</span>,
+      align: "center",
+      hideOnMobile: true,
+    },
+    {
+      key: "lwp_awp_days",
+      label: "LWP/AWP",
+      sortable: true,
+      accessor: (r) => (r.lateness_with_permission_days ?? 0) + (r.absent_with_permission_days ?? 0),
+      render: (r) => (
+        <span className="text-amber-600">
+          {(r.lateness_with_permission_days ?? 0) + (r.absent_with_permission_days ?? 0)}
+        </span>
+      ),
+      align: "center",
+      hideOnMobile: true,
+    },
+    {
       key: "total_hours",
       label: "Hours",
       sortable: true,
@@ -964,64 +1003,6 @@ export function AttendanceReportsPage({
       align: "center",
       hideOnMobile: true,
     },
-    {
-      key: "attendance_credits",
-      label: "Credit",
-      sortable: true,
-      accessor: (r) => r.attendance_credits ?? 0,
-      hideOnMobile: true,
-      render: (r) => {
-        const credit = r.attendance_credits ?? 0
-        const total = r.total_days
-        return (
-          <span className="text-xs">
-            <span
-              className={
-                credit / total >= 0.8
-                  ? "font-medium text-emerald-600"
-                  : credit / total >= 0.6
-                    ? "text-yellow-600"
-                    : "font-medium text-red-600"
-              }
-            >
-              {credit.toFixed(2)}
-            </span>
-            <span className="text-muted-foreground"> / {total}</span>
-          </span>
-        )
-      },
-      align: "center",
-    },
-    {
-      key: "attendance_rate",
-      label: "Rate",
-      sortable: true,
-      accessor: (r) => r.attendance_rate,
-      render: (r) => (
-        <Badge variant={r.attendance_rate >= 80 ? "default" : r.attendance_rate >= 60 ? "secondary" : "destructive"}>
-          {r.attendance_rate.toFixed(2)}%
-        </Badge>
-      ),
-    },
-    ...(!lockedDepartment
-      ? [
-          {
-            key: "exempt_toggle",
-            label: "",
-            render: (_r: AttendanceReport) => (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => setManagerOpen(true)}
-                title="Open Attendance Manager"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </Button>
-            ),
-          },
-        ]
-      : []),
   ]
 
   const reportFilters: DataTableFilter<AttendanceReport>[] = [
@@ -1049,26 +1030,6 @@ export function AttendanceReportsPage({
       defaultValues: [yearMonth],
       mode: "custom",
       filterFn: () => true,
-    },
-    {
-      key: "rate_band",
-      label: "Attendance Band",
-      options: [
-        { value: "excellent", label: "80%+" },
-        { value: "watch", label: "60-79%" },
-        { value: "risk", label: "Below 60%" },
-      ],
-      placeholder: "All Bands",
-      mode: "custom",
-      filterFn: (r, values) => {
-        if (values.length === 0) return true
-        return values.some((v) => {
-          if (v === "excellent") return r.attendance_rate >= 80
-          if (v === "watch") return r.attendance_rate >= 60 && r.attendance_rate < 80
-          if (v === "risk") return r.attendance_rate < 60
-          return false
-        })
-      },
     },
   ]
 
@@ -1140,7 +1101,6 @@ export function AttendanceReportsPage({
       {activeTab === "daily" && <DailyRosterView departments={departments} lockedDepartment={lockedDepartment} />}
       {activeTab === "leaderboard" && <LeaderboardView departments={departments} lockedDepartment={lockedDepartment} />}
       {activeTab === "calendar" && <CalendarView employees={employeeOptions} />}
-      {activeTab === "exceptions" && <ExceptionsView departments={departments} lockedDepartment={lockedDepartment} />}
       {activeTab === "appeals" && <AppealsView lockedDepartment={lockedDepartment} />}
       {activeTab === "summary" && (
         <DataTable<AttendanceReport>
@@ -1161,7 +1121,12 @@ export function AttendanceReportsPage({
           }}
           expandable={{
             render: (r) => (
-              <EmployeeExpandPanel report={r} yearMonth={yearMonth} onRecordChanged={refreshSingleEmployeeSummary} />
+              <EmployeeExpandPanel
+                report={r}
+                yearMonth={yearMonth}
+                policy={policy}
+                onRecordChanged={refreshSingleEmployeeSummary}
+              />
             ),
           }}
           emptyTitle={loading ? "Loading attendance report…" : "No attendance report"}

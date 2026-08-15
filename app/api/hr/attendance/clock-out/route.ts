@@ -54,7 +54,7 @@ export async function PATCH(_request: NextRequest) {
     const clockIn = new Date(`${today}T${record.clock_in}`)
     const clockOut = new Date(`${today}T${clockOutTime}`)
     const totalHours = (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60)
-    const { breakMinutes: breakDuration, workedHours: workHours } = applyLunchBreak(totalHours)
+    const { breakMinutes: breakDuration, workedHours: workHours } = applyLunchBreak(totalHours, policy)
 
     const status = deriveUnifiedAttendanceStatus(
       {
