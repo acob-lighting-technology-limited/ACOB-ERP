@@ -9,9 +9,9 @@ import { getRequestScope } from "@/lib/admin/api-scope"
 export default async function CbtLayout({ children }: { children: React.ReactNode }) {
   const scope = await getRequestScope()
 
-  // Block if: no scope, or user is a lead / admin in lead mode
-  const isGlobalAdmin = scope?.isAdminLike === true && scope.scopeMode !== "lead"
-  if (!isGlobalAdmin) {
+  // Strictly enforce super_admin and developer access
+  const canAccessCbt = scope?.role === "super_admin" || scope?.role === "developer"
+  if (!canAccessCbt) {
     redirect("/admin/hr/pms")
   }
 

@@ -6,6 +6,12 @@ import type { Database } from "@/types/database"
 
 export const DEFAULT_NOTIFICATION_SENDER = ORG_NOTIFICATION_SENDER
 
+export interface EmailAttachment {
+  filename: string
+  /** Raw file bytes. Encoded to base64 for the Resend API at send time. */
+  content: Uint8Array
+}
+
 interface SendEmailInput {
   to: string[]
   subject: string
@@ -15,6 +21,11 @@ interface SendEmailInput {
   replyTo?: string
   /** RFC 2919 List-Id so recipients can filter this stream. Invisible to readers. */
   listId?: string
+  /**
+   * Files to attach. Keep the total well under ~40MB — Resend rejects above that,
+   * and most corporate mailboxes reject far sooner.
+   */
+  attachments?: EmailAttachment[]
 }
 
 export type SendNotificationEmailResult =
@@ -59,6 +70,14 @@ export async function sendNotificationEmail(input: SendEmailInput): Promise<Send
     html: input.html,
     ...(input.replyTo ? { replyTo: input.replyTo } : {}),
     ...(input.listId ? { headers: { "List-Id": input.listId } } : {}),
+    ...(input.attachments?.length
+      ? {
+          attachments: input.attachments.map((file) => ({
+            filename: file.filename,
+            content: Buffer.from(file.content).toString("base64"),
+          })),
+        }
+      : {}),
   })
 
   if (error) throw new Error(error.message || "Failed to send email")

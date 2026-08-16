@@ -32,6 +32,7 @@ type Attempt = {
   correct_answers: number
   total_questions: number
   submitted_at: string | null
+  cbt_details: { tab_switch_count?: number } | null
 }
 
 export function CbtAttemptDetail({ profileId, reviewCycleId }: CbtAttemptDetailProps) {
@@ -140,6 +141,25 @@ export function CbtAttemptDetail({ profileId, reviewCycleId }: CbtAttemptDetailP
             <span className="text-foreground text-lg font-semibold">
               {attempt.correct_answers} / {attempt.total_questions}
             </span>
+          </div>
+          <div className="bg-border h-8 w-[1px]" />
+          <div className="text-right">
+            <span className="text-muted-foreground block text-xs">Tab Switches</span>
+            {(() => {
+              const count = attempt.cbt_details?.tab_switch_count ?? 0
+              return (
+                <Badge
+                  variant="outline"
+                  className={
+                    count > 0
+                      ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                      : "border-border text-foreground"
+                  }
+                >
+                  {count}
+                </Badge>
+              )
+            })()}
           </div>
         </div>
       </div>

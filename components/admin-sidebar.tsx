@@ -28,6 +28,7 @@ import {
   Users,
   Building2,
   FolderKanban,
+  TrendingUp,
 } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
 import { createClient } from "@/lib/supabase/client"
@@ -118,23 +119,29 @@ function buildDeptNavigation(deptId: string): NavItem[] {
         { name: "Attendance", href: `${base}/hr/attendance` },
         { name: "Leave", href: `${base}/hr/leave` },
         { name: "Office Location", href: `${base}/hr/office-location` },
-        {
-          name: "PMS",
-          href: `${base}/hr/pms`,
-          children: [
-            { name: "Analytics", href: `${base}/hr/pms/analytics` },
-            { name: "Cycles", href: `${base}/hr/pms/cycles` },
-            { name: "Goals", href: `${base}/hr/pms/goals` },
-            { name: "KPI", href: `${base}/hr/pms/kpi` },
-            { name: "Reviews", href: `${base}/hr/pms/reviews` },
-            { name: "Peer Feedback", href: `${base}/hr/pms/peer-feedback` },
-            { name: "Development Plans", href: `${base}/hr/pms/development-plans` },
-            { name: "Behaviour", href: `${base}/hr/pms/behaviour` },
-            { name: "Competencies", href: `${base}/hr/pms/competencies` },
-            { name: "CBT", href: `${base}/hr/pms/cbt` },
-            { name: "Attendance", href: `${base}/hr/pms/attendance` },
-          ],
-        },
+      ],
+    },
+    {
+      // Split out of HR — it had grown to 11 sub-items nested three levels
+      // deep. Routes are unchanged (still /hr/pms/*), only the sidebar
+      // grouping moved.
+      section: "management",
+      name: "PMS",
+      href: `${base}/hr/pms`,
+      icon: TrendingUp,
+      roles: [],
+      children: [
+        { name: "Analytics", href: `${base}/hr/pms/analytics` },
+        { name: "Cycles", href: `${base}/hr/pms/cycles` },
+        { name: "Goals", href: `${base}/hr/pms/goals` },
+        { name: "KPI", href: `${base}/hr/pms/kpi` },
+        { name: "Reviews", href: `${base}/hr/pms/reviews` },
+        { name: "Peer Feedback", href: `${base}/hr/pms/peer-feedback` },
+        { name: "Development Plans", href: `${base}/hr/pms/development-plans` },
+        { name: "Behaviour", href: `${base}/hr/pms/behaviour` },
+        { name: "Competencies", href: `${base}/hr/pms/competencies` },
+        { name: "CBT", href: `${base}/hr/pms/cbt` },
+        { name: "Attendance", href: `${base}/hr/pms/attendance` },
       ],
     },
     {
@@ -266,23 +273,29 @@ const adminNavigation: NavItem[] = [
       { name: "Fleet", href: "/admin/hr/fleet" },
       { name: "Office Location", href: "/admin/hr/office-location" },
       { name: "Site Locations", href: "/admin/hr/site-locations" },
-      {
-        name: "PMS",
-        href: "/admin/hr/pms",
-        children: [
-          { name: "Analytics", href: "/admin/hr/pms/analytics" },
-          { name: "Cycles", href: "/admin/hr/pms/cycles" },
-          { name: "Goals", href: "/admin/hr/pms/goals" },
-          { name: "KPI", href: "/admin/hr/pms/kpi" },
-          { name: "Reviews", href: "/admin/hr/pms/reviews" },
-          { name: "Peer Feedback", href: "/admin/hr/pms/peer-feedback" },
-          { name: "Development Plans", href: "/admin/hr/pms/development-plans" },
-          { name: "Behaviour", href: "/admin/hr/pms/behaviour" },
-          { name: "Competencies", href: "/admin/hr/pms/competencies" },
-          { name: "CBT", href: "/admin/hr/pms/cbt" },
-          { name: "Attendance", href: "/admin/hr/pms/attendance" },
-        ],
-      },
+    ],
+  },
+  {
+    // Split out of HR — it had grown to 11 sub-items nested three levels
+    // deep. Routes are unchanged (still /admin/hr/pms/*), only the sidebar
+    // grouping moved.
+    section: "management",
+    name: "PMS",
+    href: "/admin/hr/pms",
+    icon: TrendingUp,
+    roles: ["developer", "super_admin", "admin"],
+    children: [
+      { name: "Analytics", href: "/admin/hr/pms/analytics" },
+      { name: "Cycles", href: "/admin/hr/pms/cycles" },
+      { name: "Goals", href: "/admin/hr/pms/goals" },
+      { name: "KPI", href: "/admin/hr/pms/kpi" },
+      { name: "Reviews", href: "/admin/hr/pms/reviews" },
+      { name: "Peer Feedback", href: "/admin/hr/pms/peer-feedback" },
+      { name: "Development Plans", href: "/admin/hr/pms/development-plans" },
+      { name: "Behaviour", href: "/admin/hr/pms/behaviour" },
+      { name: "Competencies", href: "/admin/hr/pms/competencies" },
+      { name: "CBT", href: "/admin/hr/pms/cbt" },
+      { name: "Attendance", href: "/admin/hr/pms/attendance" },
     ],
   },
   {
@@ -419,9 +432,7 @@ const adminNavigation: NavItem[] = [
     ],
   },
   {
-    // Former "System" and "Security" sections merged into one expandable item,
-    // same pattern as Accounts. Each descendant keeps its own route key.
-    section: "operations",
+    section: "compliance",
     name: "System & Security",
     href: "/admin/audit-logs",
     icon: ShieldCheck,
@@ -430,25 +441,29 @@ const adminNavigation: NavItem[] = [
       { name: "Audit Logs", href: "/admin/audit-logs" },
       { name: "Network Activity", href: "/admin/security/network-activity" },
       { name: "Bypass & Override", href: "/admin/security/bypass-override" },
-      {
-        name: "Settings",
-        href: "/admin/settings",
-        children: [
-          { name: "Users", href: "/admin/settings/users" },
-          { name: "Roles", href: "/admin/settings/roles" },
-          { name: "Company", href: "/admin/settings/company" },
-          { name: "Attendance Policy", href: "/admin/settings/attendance" },
-          { name: "Mail", href: "/admin/settings/mail" },
-          { name: "Maintenance", href: "/admin/settings/maintenance" },
-        ],
-      },
     ],
   },
   {
-    // Its own collapsible item, separate from System & Security. Developer-only —
+    section: "compliance",
+    name: "Settings",
+    href: "/admin/settings",
+    icon: Settings,
+    roles: ["developer", "super_admin", "admin"],
+    children: [
+      { name: "Users", href: "/admin/settings/users" },
+      { name: "Roles", href: "/admin/settings/roles" },
+      { name: "Company", href: "/admin/settings/company" },
+      { name: "Attendance Policy", href: "/admin/settings/attendance" },
+      { name: "CBT Settings", href: "/admin/settings/cbt" },
+      { name: "Mail", href: "/admin/settings/mail" },
+      { name: "Maintenance", href: "/admin/settings/maintenance" },
+    ],
+  },
+  {
+    // Its own collapsible item under Compliance. Developer-only —
     // /admin/dev resolves to dev.main, which canAccessRouteV2 gates to the
     // developer role, so the whole branch is hidden from admin / super_admin.
-    section: "operations",
+    section: "compliance",
     name: "Developer",
     href: "/admin/dev",
     icon: FlaskConical,
@@ -468,6 +483,7 @@ const adminSections = [
   { key: "overview", label: "Overview" },
   { key: "management", label: "Management" },
   { key: "operations", label: "Operations" },
+  { key: "compliance", label: "Compliance" },
 ]
 
 const ADMIN_ROUTE_ALIASES: Record<string, string[]> = {

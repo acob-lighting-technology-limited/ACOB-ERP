@@ -16,6 +16,25 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ── Breakpoints ──────────────────────────────────────────────────────────
+   `xl` is lowered from Tailwind's default 1280px to 1200px.
+
+   A 13.3" FHD laptop (Dell Latitude 5310 and similar) runs at Windows' 150%
+   recommended scaling, which yields a 1280px logical viewport. Subtract the
+   ~5px page scrollbar (`::-webkit-scrollbar { width: 0.3em }` below) and the
+   media-query width lands at ~1275px — missing the 1280px `xl` breakpoint by
+   five pixels. Every `xl:grid-cols-*` in the app therefore silently dropped a
+   column tier on those machines, which read to users as the UI being "zoomed"
+   and showing less information.
+
+   1200px clears that with headroom while staying above `lg` (1024px). All 41
+   `xl:` utilities in this codebase are layout density only (grid-cols, gap,
+   flex-row, items-end) — nothing depends on `xl` meaning literally 1280px.
+─────────────────────────────────────────────────────────────────────────── */
+@theme {
+  --breakpoint-xl: 1200px;
+}
+
 :root {
   color-scheme: light;
   /* Updated color tokens to use green (hsl(120, 100%, 25%)) as primary brand color */

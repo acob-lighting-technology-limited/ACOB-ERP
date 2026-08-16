@@ -3,15 +3,26 @@
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Brain, Eye, RefreshCw } from "lucide-react"
+import { Brain, Eye, RefreshCw, RotateCcw } from "lucide-react"
 import { CbtAttemptDetail } from "@/components/pms/cbt-attempt-detail"
 import { toast } from "sonner"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "@/components/ui/data-table"
 import { useCycleFilters } from "@/components/pms/use-cycle-filters"
-import { Button } from "@/components/ui/button"
+import { Button, buttonVariants } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { StatCard } from "@/components/ui/stat-card"
+import { apiFetch } from "@/lib/api-client"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 type TabKey = "individual" | "department" | "cycle"
 
@@ -34,6 +45,7 @@ type CbtScore = {
   user_id: string
   review_cycle_id: string
   cbt_score: number | null
+  tab_switch_count?: number
 }
 
 type CbtPayload = {
@@ -50,6 +62,7 @@ type IndividualRow = {
   department: string
   cycle: string
   cbt_score: number | null
+  tab_switch_count: number
 }
 
 type DepartmentRow = {
@@ -95,9 +108,24 @@ function IndividualCard({ row }: { row: IndividualRow }) {
           {scoreLabel(row.cbt_score)}
         </Badge>
       </div>
-      <div className="text-sm">
-        <p className="text-muted-foreground text-xs">Cycle</p>
-        <p>{row.cycle}</p>
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div>
+          <p className="text-muted-foreground text-xs">Cycle</p>
+          <p>{row.cycle}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground text-xs">Tab Switches</p>
+          <Badge
+            variant="outline"
+            className={
+              row.tab_switch_count > 0
+                ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                : "border-border text-muted-foreground"
+            }
+          >
+            {row.tab_switch_count}
+          </Badge>
+        </div>
       </div>
     </div>
   )
@@ -121,7 +149,7 @@ function DepartmentCard({ row }: { row: DepartmentRow }) {
   )
 }
 
-function CycleCard({ row, onView }: { row: CycleRow; onView: (row: CycleRow) => void }) {
+function CycleCard({ row, onView }: { row: CycleRow; onView?: (row: CycleRow) => void }) {
   return (
     <div className="space-y-3 rounded-xl border p-4">
       <div className="flex items-start justify-between gap-3">
@@ -141,14 +169,18 @@ function CycleCard({ row, onView }: { row: CycleRow; onView: (row: CycleRow) => 
           <p>{row.questions}</p>
         </div>
       </div>
-      <Button size="sm" variant="outline" onClick={() => onView(row)}>
-        View Cycle
-      </Button>
+      {onView && (
+        <Button size="sm" variant="outline" onClick={() => onView(row)}>
+          Manage Questions
+        </Button>
+      )}
     </div>
   )
 }
 
-export default function AdminPmsCbtPage() {
+export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
+  const isLeadView = Boolean(deptId)
+  const basePath = deptId ? `/dept/${deptId}/hr/pms/cbt` : "/admin/hr/pms/cbt"
   const router = useRouter()
   const [tab, setTab] = useState<TabKey>("individual")
   const [selectedCycleId, setSelectedCycleId] = useState("all")
@@ -158,6 +190,8 @@ export default function AdminPmsCbtPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const hasLoadedSnapshotRef = useRef(false)
+  const [resetConfirmRow, setResetConfirmRow] = useState<IndividualRow | null>(null)
+  const [isResetting, setIsResetting] = useState(false)
 
   const loadCbtSnapshot = useCallback(async () => {
     if (hasLoadedSnapshotRef.current) {
@@ -223,6 +257,7 @@ export default function AdminPmsCbtPage() {
           department: user?.department || "-",
           cycle: cycleNameById.get(score.review_cycle_id) || "-",
           cbt_score: score.cbt_score,
+          tab_switch_count: score.tab_switch_count ?? 0,
         }
       }),
     [cycleNameById, data.scores, usersById]
@@ -324,6 +359,25 @@ export default function AdminPmsCbtPage() {
           {scoreLabel(row.cbt_score)}
         </Badge>
       ),
+    },
+    {
+      key: "tab_switch_count",
+      label: "Tab Switches",
+      sortable: true,
+      accessor: (row) => row.tab_switch_count,
+      render: (row) => (
+        <Badge
+          variant="outline"
+          className={
+            row.tab_switch_count > 0
+              ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+              : "border-border text-muted-foreground"
+          }
+        >
+          {row.tab_switch_count}
+        </Badge>
+      ),
+      hideOnMobile: true,
     },
   ]
 
@@ -432,13 +486,51 @@ export default function AdminPmsCbtPage() {
     },
   ]
 
-  const cycleRowActions: RowAction<CycleRow>[] = [
+  // Regular CBT questions are authored by the department lead who owns them —
+  // admins never get a "Manage Questions" action here, only the score/count
+  // view (see the API-level content redaction in the questions route).
+  const cycleRowActions: RowAction<CycleRow>[] = isLeadView
+    ? [
+        {
+          label: "Manage Questions",
+          icon: Eye,
+          onClick: (row) => router.push(`${basePath}/question?cycleId=${encodeURIComponent(row.id)}`),
+        },
+      ]
+    : []
+
+  const individualRowActions: RowAction<IndividualRow>[] = [
     {
-      label: "Manage Questions",
-      icon: Eye,
-      onClick: (row) => router.push(`/admin/hr/pms/cbt/question?cycleId=${encodeURIComponent(row.id)}`),
+      label: "Reset CBT Attempt",
+      icon: RotateCcw,
+      variant: "destructive",
+      onClick: (row) => setResetConfirmRow(row),
     },
   ]
+
+  async function handleResetAttempt() {
+    if (!resetConfirmRow) return
+    setIsResetting(true)
+    try {
+      const response = await apiFetch("/api/admin/hr/performance/cbt/attempts/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          profile_id: resetConfirmRow.user_id,
+          review_cycle_id: resetConfirmRow.review_cycle_id,
+        }),
+      })
+      const payload = await response.json().catch(() => null)
+      if (!response.ok) throw new Error(payload?.error || "Failed to reset CBT attempt")
+      toast.success(payload?.message || "CBT attempt reset")
+      setResetConfirmRow(null)
+      void loadCbtSnapshot()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to reset CBT attempt")
+    } finally {
+      setIsResetting(false)
+    }
+  }
 
   const activeRowCount =
     tab === "individual" ? individualRows.length : tab === "department" ? departmentRows.length : cycleRows.length
@@ -454,7 +546,7 @@ export default function AdminPmsCbtPage() {
       title="PMS CBT"
       description="Review CBT results by employee, department, or cycle, then open the question manager to add or edit CBT tests."
       icon={Brain}
-      backLink={{ href: "/admin/hr/pms", label: "Back to PMS" }}
+      backLink={{ href: deptId ? `/dept/${deptId}/hr/pms` : "/admin/hr/pms", label: "Back to PMS" }}
       tabs={TABS}
       activeTab={tab}
       onTabChange={(value) => setTab(value as TabKey)}
@@ -464,14 +556,21 @@ export default function AdminPmsCbtPage() {
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
           </Button>
-          <Link href="/admin/hr/pms/cbt/extra">
-            <Button variant="outline" size="sm">
-              Bonus Questions
-            </Button>
-          </Link>
-          <Link href="/admin/hr/pms/cbt/question">
-            <Button size="sm">Create Test</Button>
-          </Link>
+          {isLeadView ? (
+            // Bonus questions are an admin-only concern (leads can't author
+            // for the "Bonus" pseudo-department), so this stays hidden here.
+            <Link href={`${basePath}/question`}>
+              <Button size="sm">Create Test</Button>
+            </Link>
+          ) : (
+            // Regular question creation moved to the owning department lead —
+            // admins keep Bonus Questions only.
+            <Link href="/admin/hr/pms/cbt/extra">
+              <Button variant="outline" size="sm">
+                Bonus Questions
+              </Button>
+            </Link>
+          )}
         </div>
       }
       stats={
@@ -521,6 +620,7 @@ export default function AdminPmsCbtPage() {
           isLoading={isInitialLoading}
           error={error}
           onRetry={() => void loadCbtSnapshot()}
+          rowActions={individualRowActions}
           expandable={{
             render: (row) => <CbtAttemptDetail profileId={row.user_id} reviewCycleId={row.review_cycle_id} />,
           }}
@@ -609,7 +709,11 @@ export default function AdminPmsCbtPage() {
           cardRenderer={(row) => (
             <CycleCard
               row={row}
-              onView={(item) => router.push(`/admin/hr/pms/cbt/question?cycleId=${encodeURIComponent(item.id)}`)}
+              onView={
+                isLeadView
+                  ? (item) => router.push(`${basePath}/question?cycleId=${encodeURIComponent(item.id)}`)
+                  : undefined
+              }
             />
           )}
           emptyTitle="No CBT cycles found"
@@ -618,6 +722,32 @@ export default function AdminPmsCbtPage() {
           skeletonRows={6}
         />
       ) : null}
+
+      <AlertDialog open={resetConfirmRow !== null} onOpenChange={(isOpen) => !isOpen && setResetConfirmRow(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reset CBT attempt?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This deletes {resetConfirmRow?.employee}&apos;s CBT attempt for {resetConfirmRow?.cycle} and clears their
+              recorded score. They will be able to retake the assessment for this cycle from scratch. This can&apos;t be
+              undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isResetting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className={buttonVariants({ variant: "destructive" })}
+              disabled={isResetting}
+              onClick={(event) => {
+                event.preventDefault()
+                void handleResetAttempt()
+              }}
+            >
+              {isResetting ? "Resetting..." : "Reset Attempt"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DataTablePage>
   )
 }

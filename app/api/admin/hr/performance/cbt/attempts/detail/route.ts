@@ -40,7 +40,7 @@ export async function GET(request: NextRequest) {
 
     const { data: attempt, error: attemptError } = await dataClient
       .from("cbt_attempts")
-      .select("id, question_ids, answers, score, correct_answers, total_questions, submitted_at")
+      .select("id, question_ids, answers, score, correct_answers, total_questions, submitted_at, cbt_details")
       .eq("profile_id", profileId)
       .eq("review_cycle_id", reviewCycleId)
       .eq("status", "submitted")

@@ -1,21 +1,16 @@
 "use client"
 
 import { useEffect } from "react"
-import { useParams, useRouter } from "next/navigation"
+import { useRouter } from "next/navigation"
 
+// Regular CBT questions moved to the department-lead view; there's no
+// admin-side cycle deep link to send this to anymore.
 export default function AdminPmsCbtCycleRedirectPage() {
-  const params = useParams<{ cycleId: string }>()
   const router = useRouter()
 
   useEffect(() => {
-    const cycleId = String(params.cycleId || "")
-    if (!cycleId) {
-      router.replace("/admin/hr/pms/cbt/question")
-      return
-    }
-
-    router.replace(`/admin/hr/pms/cbt/question?cycleId=${encodeURIComponent(cycleId)}`)
-  }, [params.cycleId, router])
+    router.replace("/admin/hr/pms/cbt")
+  }, [router])
 
   return null
 }

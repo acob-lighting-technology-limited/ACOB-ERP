@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { Brain, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Brain, ChevronLeft, ChevronRight, AlertCircle, Clock, Eye, EyeOff } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -34,6 +34,11 @@ type SessionData = {
   attempt_id: string
   is_resume?: boolean
   is_completed?: boolean
+  cbt_settings?: {
+    time_per_question_seconds: number
+    total_questions_count: number
+    total_time_seconds: number
+  }
   candidate: {
     first_name: string | null
     last_name: string | null
@@ -51,23 +56,6 @@ type ResultData = {
   total_questions: number
 }
 
-const MONTH_OPTIONS = [
-  { value: "1", label: "January" },
-  { value: "2", label: "February" },
-  { value: "3", label: "March" },
-  { value: "4", label: "April" },
-  { value: "5", label: "May" },
-  { value: "6", label: "June" },
-  { value: "7", label: "July" },
-  { value: "8", label: "August" },
-  { value: "9", label: "September" },
-  { value: "10", label: "October" },
-  { value: "11", label: "November" },
-  { value: "12", label: "December" },
-]
-
-const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => String(i + 1))
-
 export default function CbtPage() {
   const [candidateOptions, setCandidateOptions] = useState<CandidateOption[]>([])
   const [cycles, setCycles] = useState<ReviewCycleOption[]>([])
@@ -78,14 +66,12 @@ export default function CbtPage() {
   const [testStarted, setTestStarted] = useState(false)
   const [result, setResult] = useState<ResultData | null>(null)
   const [currentIndex, setCurrentIndex] = useState(0)
+  const [showPassword, setShowPassword] = useState(false)
   const [answers, setAnswers] = useState<Record<string, "A" | "B" | "C" | "D">>({})
   const [form, setForm] = useState({
-    last_name: "",
     company_email: "",
     review_cycle_id: "",
-    dob_day: "",
-    dob_month: "",
-    dob_year: "",
+    password: "",
   })
 
   const selectedCycleName = useMemo(() => {
@@ -137,10 +123,48 @@ export default function CbtPage() {
           }
         }
       }
+      const savedTabSwitches = localStorage.getItem(`acob_cbt_tabswitch_${session.attempt_id}`)
+      if (savedTabSwitches && !isNaN(Number(savedTabSwitches))) {
+        tabSwitchCountRef.current = Number(savedTabSwitches)
+        setTabSwitchCount(Number(savedTabSwitches))
+      }
     } catch (e) {
       console.error("Failed to load saved CBT state:", e)
     }
   }, [session])
+
+  // Track when the candidate leaves the tab (switches tab / minimizes /
+  // switches app) during an active test, and warn them it's recorded and
+  // visible to admins — see the "Tab Switches" column on the admin CBT page.
+  const [tabSwitchCount, setTabSwitchCount] = useState(0)
+  const tabSwitchCountRef = useRef(0)
+
+  useEffect(() => {
+    if (!session || !testStarted) return
+
+    let leftWhileHidden = false
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        tabSwitchCountRef.current += 1
+        setTabSwitchCount(tabSwitchCountRef.current)
+        leftWhileHidden = true
+        try {
+          localStorage.setItem(`acob_cbt_tabswitch_${session.attempt_id}`, String(tabSwitchCountRef.current))
+        } catch (e) {}
+      } else if (leftWhileHidden) {
+        leftWhileHidden = false
+        toast.warning(
+          `Tab switch detected (${tabSwitchCountRef.current} so far). This is recorded and visible to admins reviewing your test.`
+        )
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibilityChange)
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange)
+    }
+  }, [session, testStarted])
 
   // Save CBT state to localStorage on answers or currentIndex change
   useEffect(() => {
@@ -175,10 +199,114 @@ export default function CbtPage() {
       window.removeEventListener("beforeunload", handleBeforeUnload)
     }
   }, [session, testStarted])
+  const submitSession = useCallback(async () => {
+    if (!session) return
+    setSubmitting(true)
+    try {
+      const response = await apiFetch("/api/hr/performance/cbt/session", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          attempt_id: session.attempt_id,
+          answers,
+          tab_switch_count: tabSwitchCountRef.current,
+        }),
+      })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || "Failed to submit CBT")
+      setResult(payload.data)
+      setSession(null)
+      try {
+        localStorage.removeItem("acob_cbt_state")
+        localStorage.removeItem(`acob_cbt_tabswitch_${session.attempt_id}`)
+      } catch (e) {}
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to submit CBT")
+    } finally {
+      setSubmitting(false)
+    }
+  }, [answers, session])
+
+  const [timeLeftSeconds, setTimeLeftSeconds] = useState<number | null>(null)
+
+  // Manage overall exam timer
+  const autoSubmittedRef = useRef(false)
+
+  useEffect(() => {
+    if (!session || !testStarted) {
+      setTimeLeftSeconds(null)
+      return
+    }
+
+    const totalSeconds = session.cbt_settings?.total_time_seconds ?? session.questions.length * 45
+    const storageKey = `acob_cbt_timer_${session.attempt_id}`
+
+    // Store an absolute deadline, not a remaining-seconds snapshot. A
+    // snapshot only ticks down while setInterval actually fires, and browsers
+    // throttle/suspend timers in backgrounded tabs — so a snapshot model
+    // effectively "pauses" the clock the moment you switch away, letting
+    // someone leave the tab open for hours with no time cost. A fixed
+    // deadline keeps draining in real wall-clock time regardless of
+    // backgrounding, while still surviving a reload with no bonus or loss
+    // (remaining is always just expiresAt - now).
+    let expiresAt: number
+    const storedExpiresAt = localStorage.getItem(storageKey)
+    if (storedExpiresAt && !isNaN(Number(storedExpiresAt))) {
+      expiresAt = Number(storedExpiresAt)
+    } else {
+      expiresAt = Date.now() + totalSeconds * 1000
+      localStorage.setItem(storageKey, String(expiresAt))
+    }
+
+    autoSubmittedRef.current = false
+
+    const updateTimer = () => {
+      const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000))
+      setTimeLeftSeconds(remaining)
+
+      // Guarded by the ref (not clearInterval here, to dodge referencing
+      // `interval` before its declaration below runs) — the effect's own
+      // cleanup clears the interval once `session` is set to null on submit.
+      if (remaining <= 0 && !autoSubmittedRef.current) {
+        autoSubmittedRef.current = true
+        toast.warning("Time's up! Your CBT assessment is being automatically submitted.")
+        try {
+          localStorage.removeItem(storageKey)
+        } catch (e) {}
+        void submitSession()
+      }
+    }
+
+    updateTimer()
+    const interval = setInterval(updateTimer, 1000)
+
+    return () => clearInterval(interval)
+  }, [session, testStarted, submitSession])
+
+  const formatTimeLeft = (seconds: number) => {
+    const m = Math.floor(seconds / 60)
+    const s = seconds % 60
+    return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
+  }
+
   const answeredCount = useMemo(
     () => (session ? session.questions.filter((question) => Boolean(answers[question.id])).length : 0),
     [answers, session]
   )
+
+  // On the resume screen, show what's actually left on the clock rather than
+  // the full allowance — the deadline keeps counting down in real time even
+  // while the candidate is away, so this reflects genuine elapsed time.
+  const resumeTimeLeftSeconds = useMemo(() => {
+    if (!session || !session.is_resume || session.is_completed) return null
+    try {
+      const storedExpiresAt = localStorage.getItem(`acob_cbt_timer_${session.attempt_id}`)
+      if (!storedExpiresAt || isNaN(Number(storedExpiresAt))) return null
+      return Math.max(0, Math.floor((Number(storedExpiresAt) - Date.now()) / 1000))
+    } catch (e) {
+      return null
+    }
+  }, [session])
 
   const startSession = async () => {
     setStarting(true)
@@ -199,32 +327,6 @@ export default function CbtPage() {
       toast.error(error instanceof Error ? error.message : "Failed to start CBT")
     } finally {
       setStarting(false)
-    }
-  }
-
-  const submitSession = async () => {
-    if (!session) return
-    setSubmitting(true)
-    try {
-      const response = await apiFetch("/api/hr/performance/cbt/session", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          attempt_id: session.attempt_id,
-          answers,
-        }),
-      })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || "Failed to submit CBT")
-      setResult(payload.data)
-      setSession(null)
-      try {
-        localStorage.removeItem("acob_cbt_state")
-      } catch (e) {}
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to submit CBT")
-    } finally {
-      setSubmitting(false)
     }
   }
 
@@ -251,12 +353,9 @@ export default function CbtPage() {
                   localStorage.removeItem("acob_cbt_state")
                 } catch (e) {}
                 setForm({
-                  last_name: "",
                   company_email: "",
                   review_cycle_id: "",
-                  dob_day: "",
-                  dob_month: "",
-                  dob_year: "",
+                  password: "",
                 })
               }}
             >
@@ -326,6 +425,16 @@ export default function CbtPage() {
                   <span>Total Questions</span>
                   <span className="font-medium text-white">{session.questions.length}</span>
                 </div>
+                <div className="flex justify-between border-b border-white/5 pb-2">
+                  <span>{resumeTimeLeftSeconds !== null ? "Time Remaining" : "Total Time Allowed"}</span>
+                  <span className="font-mono font-medium text-amber-400">
+                    {resumeTimeLeftSeconds !== null
+                      ? formatTimeLeft(resumeTimeLeftSeconds)
+                      : `${((session.cbt_settings?.total_time_seconds ?? session.questions.length * 45) / 60)
+                          .toFixed(1)
+                          .replace(/\.0$/, "")} mins (overall timer)`}
+                  </span>
+                </div>
                 {session.is_completed ? (
                   <>
                     <div className="flex justify-between border-b border-white/5 pb-2">
@@ -388,12 +497,9 @@ export default function CbtPage() {
                 if (session.is_completed) {
                   setSession(null)
                   setForm({
-                    last_name: "",
                     company_email: "",
                     review_cycle_id: "",
-                    dob_day: "",
-                    dob_month: "",
-                    dob_year: "",
+                    password: "",
                   })
                 } else {
                   setTestStarted(true)
@@ -417,7 +523,13 @@ export default function CbtPage() {
       : standardQuestions.filter((q) => Boolean(answers[q.id])).length
 
     return (
-      <main className="flex min-h-screen items-center justify-center bg-black p-6 text-white">
+      <main className="relative flex min-h-screen items-center justify-center bg-black p-6 text-white">
+        {submitting && (
+          <div className="animate-in fade-in absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/80 backdrop-blur-sm duration-150">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
+            <p className="text-sm font-medium text-slate-200">Submitting your test…</p>
+          </div>
+        )}
         <div className="animate-in fade-in zoom-in w-full max-w-4xl space-y-6 duration-300">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
@@ -427,8 +539,26 @@ export default function CbtPage() {
               </p>
               <h1 className="mt-2 text-3xl font-semibold">{session.candidate.first_name}, keep going</h1>
             </div>
-            <div className="rounded-full border border-white/10 bg-neutral-900 px-4 py-2 text-sm">
-              {answeredCountToShow} / {totalQuestionsToShow} answered
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-2 font-mono text-sm font-semibold text-amber-400">
+                <Clock className="h-4 w-4 animate-pulse text-amber-400" />
+                <span>
+                  {formatTimeLeft(
+                    timeLeftSeconds ?? session.cbt_settings?.total_time_seconds ?? session.questions.length * 45
+                  )}
+                </span>
+              </div>
+              <div className="rounded-full border border-white/10 bg-neutral-900 px-4 py-2 text-sm">
+                {answeredCountToShow} / {totalQuestionsToShow} answered
+              </div>
+              {tabSwitchCount > 0 && (
+                <div className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400">
+                  <AlertCircle className="h-4 w-4" />
+                  <span>
+                    {tabSwitchCount} tab {tabSwitchCount === 1 ? "switch" : "switches"} recorded
+                  </span>
+                </div>
+              )}
             </div>
           </div>
 
@@ -504,13 +634,7 @@ export default function CbtPage() {
     )
   }
 
-  const isFormValid =
-    form.last_name &&
-    form.company_email &&
-    form.review_cycle_id &&
-    form.dob_day &&
-    form.dob_month &&
-    /^\d{4}$/.test(form.dob_year)
+  const isFormValid = Boolean(form.company_email && form.review_cycle_id && form.password)
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-black p-6 text-white">
@@ -521,9 +645,9 @@ export default function CbtPage() {
               <Brain className="h-6 w-6 text-white" />
             </div>
             <div>
-              <CardTitle className="text-3xl">CBT Verification</CardTitle>
+              <CardTitle className="text-3xl">CBT Login Verification</CardTitle>
               <CardDescription className="text-slate-300">
-                Select your review cycle, email address, and verify using your last name and date of birth.
+                Select your review cycle, email address, and enter your password to start the assessment.
               </CardDescription>
             </div>
           </div>
@@ -570,63 +694,25 @@ export default function CbtPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="last_name">Last Name</Label>
-              <Input
-                id="last_name"
-                value={form.last_name}
-                onChange={(event) => setForm((current) => ({ ...current, last_name: event.target.value }))}
-                className="h-10 border-white/10 bg-white/5 text-white"
-                placeholder="Enter last name"
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Date of Birth</Label>
-            <div className="grid grid-cols-3 gap-3">
-              <Select
-                value={form.dob_day}
-                onValueChange={(value) => setForm((current) => ({ ...current, dob_day: value }))}
-              >
-                <SelectTrigger className="border-white/10 bg-white/5 text-white">
-                  <SelectValue placeholder="Day (DD)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {DAY_OPTIONS.map((day) => (
-                    <SelectItem key={day} value={day}>
-                      {day.padStart(2, "0")}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Select
-                value={form.dob_month}
-                onValueChange={(value) => setForm((current) => ({ ...current, dob_month: value }))}
-              >
-                <SelectTrigger className="border-white/10 bg-white/5 text-white">
-                  <SelectValue placeholder="Month" />
-                </SelectTrigger>
-                <SelectContent>
-                  {MONTH_OPTIONS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              <Input
-                id="dob_year"
-                type="password"
-                maxLength={4}
-                value={form.dob_year}
-                onChange={(event) =>
-                  setForm((current) => ({ ...current, dob_year: event.target.value.replace(/\D/g, "") }))
-                }
-                placeholder="Year (YYYY)"
-                className="h-10 border-white/10 bg-white/5 text-white"
-              />
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  value={form.password}
+                  onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                  className="h-10 border-white/10 bg-white/5 pr-10 text-white"
+                  placeholder="Enter your password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute top-1/2 right-3 -translate-y-1/2 text-slate-400 transition hover:text-white"
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
           </div>
 

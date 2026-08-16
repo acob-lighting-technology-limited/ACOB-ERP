@@ -97,7 +97,7 @@ export async function AdminPmsPage({ basePath }: { basePath?: string } = {}) {
   const base = basePath ?? "/admin"
   const { departments, scopedUserCount, summary } = await getAdminPmsData()
   const scope = await getRequestScope()
-  const canAccessCbt = scope?.isAdminLike === true && scope.scopeMode !== "lead"
+  const canAccessCbt = scope?.role === "super_admin" || scope?.role === "developer"
   const visibleLinks = adminPmsLinks
     .filter((item) => item.href !== "/admin/hr/pms/cbt" || canAccessCbt)
     .map((item) => ({ ...item, href: item.href.replace("/admin", base) }))

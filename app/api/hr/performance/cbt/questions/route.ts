@@ -98,7 +98,25 @@ export async function GET(request: NextRequest) {
 
     if (error) throw error
 
-    return NextResponse.json({ data: data || [] })
+    // Regular (non-bonus) questions are authored by the department lead who
+    // owns them, not admins — admins get to see that questions exist (for the
+    // per-cycle count) but never the content or answer key, so a lead's test
+    // can't be leaked or biased from the admin side. Bonus questions are
+    // admin-authored, so those stay fully visible to admins.
+    const isGlobalAdmin = contextResult.context.actingContext === "global_admin"
+    const responseData =
+      isGlobalAdmin && !fetchBonus
+        ? (data || []).map((question) => ({
+            id: question.id,
+            review_cycle_id: question.review_cycle_id,
+            department: question.department,
+            is_active: question.is_active,
+            created_at: question.created_at,
+            is_bonus: question.is_bonus,
+          }))
+        : data || []
+
+    return NextResponse.json({ data: responseData })
   } catch (error) {
     log.error({ err: String(error) }, "Failed to load CBT questions")
     return NextResponse.json({ error: "Failed to load CBT questions" }, { status: 500 })
@@ -132,8 +150,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
     }
 
-    // A lead may only author questions for a department they lead; global
-    // admins are unrestricted.
+    // Regular (non-bonus) questions can only be authored by the department
+    // lead who owns them — admins never get to write (or therefore see) a
+    // department's test content, so scoring stays impartial. Bonus questions
+    // remain an admin-only concern.
+    if (contextResult.context.actingContext === "global_admin" && !parsed.data.is_bonus) {
+      return NextResponse.json(
+        { error: "Only the department lead can create CBT questions for their department." },
+        { status: 403 }
+      )
+    }
+
     if (!canMutateV2(contextResult.context, "hr.pms.cbt.manage", parsed.data.department)) {
       return NextResponse.json({ error: "You can only manage CBT questions for your own department" }, { status: 403 })
     }

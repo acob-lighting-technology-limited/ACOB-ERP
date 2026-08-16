@@ -121,9 +121,9 @@ export function EmployeeCalendarView() {
   const cells = buildCalendarCells(calendarMonth)
   const daysByDate = new Map<string, UnifiedDay>((days ?? []).map((d) => [d.date, d]))
 
-  // Monthly attendance & absent rate for the selected calendar month
-  const { monthAttendanceRate, monthAbsentRate } = useMemo(() => {
-    if (!days || days.length === 0) return { monthAttendanceRate: null, monthAbsentRate: null }
+  // Monthly work & missed hours for the selected calendar month
+  const { monthWorkedHours, monthMissedHours } = useMemo(() => {
+    if (!days || days.length === 0) return { monthWorkedHours: null, monthMissedHours: null }
     const todayIso = toLocalISODate()
     const scorable = days.filter((d) => {
       const s = d.status
@@ -132,24 +132,27 @@ export function EmployeeCalendarView() {
       if (d.date === todayIso && d.record?.clock_in && !d.record?.clock_out) return false
       return true
     })
-    if (scorable.length === 0) return { monthAttendanceRate: null, monthAbsentRate: null }
-    let hoursLost = 0
+    if (scorable.length === 0) return { monthWorkedHours: null, monthMissedHours: null }
+    let workedSum = 0
+    let missedSum = 0
     for (const d of scorable) {
-      hoursLost += computeAttendanceDay({
+      const dayResult = computeAttendanceDay({
         status: d.status,
         clockIn: d.record?.clock_in ?? null,
         clockOut: d.record?.clock_out ?? null,
-      }).hoursLost
+      })
+      workedSum += dayResult.hoursWorked
+      missedSum += dayResult.hoursLost
     }
-    const monthAttendanceRate = Math.round(attendanceRateFrom(hoursLost, scorable.length))
-    const absentCount = scorable.filter((d) => d.status === "absent").length
-    const monthAbsentRate = Math.round((absentCount / scorable.length) * 100)
-    return { monthAttendanceRate, monthAbsentRate }
+    return {
+      monthWorkedHours: Math.round(workedSum * 10) / 10,
+      monthMissedHours: Math.round(missedSum * 10) / 10,
+    }
   }, [days])
 
   return (
     <div>
-      {/* Month navigator + monthly rate stats */}
+      {/* Month navigator + monthly hour stats */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-1">
           <Button
@@ -171,35 +174,15 @@ export function EmployeeCalendarView() {
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        {!loading && monthAttendanceRate !== null && (
+        {!loading && monthWorkedHours !== null && (
           <div className="flex items-center gap-3">
             <div className="min-w-[90px] rounded-lg border px-3 py-1.5 text-center">
-              <p className="text-muted-foreground mb-1 text-[11px] leading-none">Monthly Attendance</p>
-              <p
-                className={`text-sm leading-none font-semibold ${
-                  monthAttendanceRate >= 80
-                    ? "text-emerald-600"
-                    : monthAttendanceRate >= 60
-                      ? "text-yellow-600"
-                      : "text-red-600"
-                }`}
-              >
-                {monthAttendanceRate}%
-              </p>
+              <p className="text-muted-foreground mb-1 text-[11px] leading-none">Work Hours</p>
+              <p className="text-sm leading-none font-semibold text-emerald-600">{monthWorkedHours} hrs</p>
             </div>
             <div className="min-w-[90px] rounded-lg border px-3 py-1.5 text-center">
-              <p className="text-muted-foreground mb-1 text-[11px] leading-none">Monthly Absent</p>
-              <p
-                className={`text-sm leading-none font-semibold ${
-                  monthAbsentRate <= 10
-                    ? "text-emerald-600"
-                    : monthAbsentRate <= 25
-                      ? "text-yellow-600"
-                      : "text-red-600"
-                }`}
-              >
-                {monthAbsentRate}%
-              </p>
+              <p className="text-muted-foreground mb-1 text-[11px] leading-none">Missed Hours</p>
+              <p className="text-sm leading-none font-semibold text-amber-600">{monthMissedHours} hrs</p>
             </div>
           </div>
         )}
