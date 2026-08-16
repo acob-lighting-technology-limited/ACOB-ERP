@@ -13,9 +13,6 @@ async function getPeriodsData() {
     const scope = await getRequestScope()
     if (!scope?.isAdminLike) return undefined
 
-    // Service-role read: the register spans every employee's entries, which RLS only
-    // grants to the exact `admin` role — the same reason the leave balances route
-    // uses it. Access is already gated by the isAdminLike check above.
     const db = getServiceRoleClientOrFallback(supabase)
 
     const [{ data: periods }, { data: entries }] = await Promise.all([
@@ -32,8 +29,6 @@ async function getPeriodsData() {
         .order("created_at", { ascending: false }),
     ])
 
-    // PostgREST returns embedded relations as arrays; flatten to the single row each
-    // FK actually points at so the client can read `entry.user.full_name` directly.
     const first = <T,>(value: T | T[] | null | undefined): T | null =>
       Array.isArray(value) ? (value[0] ?? null) : (value ?? null)
 

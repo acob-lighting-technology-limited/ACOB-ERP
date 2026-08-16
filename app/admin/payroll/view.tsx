@@ -20,7 +20,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { FileText, Plus, DollarSign, Calendar, ClipboardList } from "lucide-react"
+import { ManageGrossSalaryDialog } from "@/components/hr/manage-gross-salary-dialog"
+import { FileText, Plus, DollarSign, Calendar, ClipboardList, Calculator } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-client"
 
@@ -129,126 +130,134 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
         row.status === "completed" ? (
           <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20">Locked / Paid</Badge>
         ) : (
-          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-600">
+          <Badge variant="outline" className="border-amber-500/30 text-amber-500">
             Draft
           </Badge>
         ),
     },
     {
-      key: "total_amount",
-      label: "Total Disbursed",
-      render: (row: PayrollPeriod) => (
-        <span className="font-medium">
-          ₦{Number(row.total_amount).toLocaleString("en-US", { minimumFractionDigits: 2 })}
-        </span>
-      ),
-    },
-    {
       key: "actions",
-      label: "Actions",
+      label: "Worksheet",
       render: (row: PayrollPeriod) => (
-        <Button asChild size="sm" variant="outline">
+        <Button asChild size="sm" variant={row.status === "completed" ? "outline" : "default"}>
           <Link href={`/admin/payroll/${row.id}`}>
-            <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> Open Worksheet
+            {row.status === "completed" ? "View Published Payslips" : "Open Worksheet"}
           </Link>
         </Button>
       ),
     },
   ]
 
-  // ── Payroll Register: every entry across every period ──────────────────────
-  const entries = initialData.entries
-  const money = (value: unknown) => `₦${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`
-
   const registerColumns = [
     {
       key: "employee",
       label: "Employee",
-      accessor: (e: DbPayrollEntry) => e.user?.full_name || "—",
+      accessor: (row: DbPayrollEntry) => row.user?.full_name || "Unknown",
       sortable: true,
-      render: (e: DbPayrollEntry) => (
-        <div className="min-w-0">
-          <p className="text-foreground truncate font-medium">{e.user?.full_name || "Unknown"}</p>
-          <p className="text-muted-foreground truncate font-mono text-[11px]">{e.user?.employee_number || "—"}</p>
+      render: (row: DbPayrollEntry) => (
+        <div>
+          <p className="text-foreground font-medium">{row.user?.full_name || "Unknown"}</p>
+          <p className="text-muted-foreground font-mono text-xs">{row.user?.employee_number || "N/A"}</p>
         </div>
+      ),
+    },
+    {
+      key: "department",
+      label: "Department",
+      accessor: (row: DbPayrollEntry) => row.user?.department || "General",
+      sortable: true,
+      render: (row: DbPayrollEntry) => (
+        <span className="text-muted-foreground text-xs">{row.user?.department || "General"}</span>
       ),
     },
     {
       key: "period",
       label: "Period",
-      accessor: (e: DbPayrollEntry) => e.payroll_periods?.name || "—",
+      accessor: (row: DbPayrollEntry) => row.payroll_periods?.name || "N/A",
       sortable: true,
-      render: (e: DbPayrollEntry) => <span className="font-medium">{e.payroll_periods?.name || "—"}</span>,
+      render: (row: DbPayrollEntry) => (
+        <div>
+          <p className="text-foreground font-medium">{row.payroll_periods?.name || "N/A"}</p>
+          <p className="text-muted-foreground text-[11px]">Pay Date: {row.payroll_periods?.pay_date || "N/A"}</p>
+        </div>
+      ),
     },
     {
-      key: "department",
-      label: "Department",
-      accessor: (e: DbPayrollEntry) => e.user?.department || "—",
-      render: (e: DbPayrollEntry) => <span className="text-muted-foreground text-xs">{e.user?.department || "—"}</span>,
+      key: "basic_salary",
+      label: "Base Salary",
+      render: (row: DbPayrollEntry) => (
+        <span className="font-mono text-xs font-medium">
+          ₦
+          {Number(row.basic_salary || row.breakdown?.monthlyBase || 0).toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+          })}
+        </span>
+      ),
     },
     {
       key: "gross_salary",
       label: "Gross Pay",
-      accessor: (e: DbPayrollEntry) => Number(e.gross_salary || 0) + Number(e.bonus || 0),
-      sortable: true,
-      render: (e: DbPayrollEntry) => <span>{money(Number(e.gross_salary || 0) + Number(e.bonus || 0))}</span>,
+      render: (row: DbPayrollEntry) => (
+        <span className="font-mono text-xs font-semibold text-blue-600 dark:text-blue-400">
+          ₦
+          {Number(row.gross_salary || row.breakdown?.monthlyGross || 0).toLocaleString("en-US", {
+            minimumFractionDigits: 2,
+          })}
+        </span>
+      ),
+    },
+    {
+      key: "tax_amount",
+      label: "PAYE Tax",
+      render: (row: DbPayrollEntry) => (
+        <span className="font-mono text-xs text-amber-600 dark:text-amber-400">
+          ₦{Number(row.tax_amount || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+        </span>
+      ),
     },
     {
       key: "total_deductions",
       label: "Deductions",
-      accessor: (e: DbPayrollEntry) => Number(e.total_deductions || 0),
-      sortable: true,
-      render: (e: DbPayrollEntry) => <span className="text-red-600">-{money(e.total_deductions)}</span>,
+      render: (row: DbPayrollEntry) => (
+        <span className="font-mono text-xs text-red-600 dark:text-red-400">
+          ₦{Number(row.total_deductions || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+        </span>
+      ),
     },
     {
       key: "net_salary",
-      label: "Net Pay",
-      accessor: (e: DbPayrollEntry) => Number(e.net_salary || 0),
-      sortable: true,
-      render: (e: DbPayrollEntry) => <span className="font-semibold text-emerald-600">{money(e.net_salary)}</span>,
+      label: "Net Take-Home",
+      render: (row: DbPayrollEntry) => (
+        <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+          ₦{Number(row.net_salary || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+        </span>
+      ),
     },
     {
       key: "status",
-      label: "Status",
-      accessor: (e: DbPayrollEntry) => e.payroll_periods?.status || "draft",
-      render: (e: DbPayrollEntry) =>
-        e.payroll_periods?.status === "completed" ? (
-          <Badge className="bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20">Paid</Badge>
-        ) : (
-          <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-600">
-            Draft
-          </Badge>
-        ),
-    },
-    {
-      key: "actions",
-      label: "Actions",
-      render: (e: DbPayrollEntry) => (
-        <Button asChild size="sm" variant="outline">
-          <Link href={`/admin/payroll/${e.payroll_period_id}`}>
-            <ClipboardList className="mr-1.5 h-3.5 w-3.5" /> Worksheet
-          </Link>
-        </Button>
+      label: "Run Status",
+      render: (row: DbPayrollEntry) => (
+        <Badge
+          variant={row.payroll_periods?.status === "completed" ? "default" : "outline"}
+          className={
+            row.payroll_periods?.status === "completed"
+              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              : "border-amber-500/30 text-amber-600"
+          }
+        >
+          {row.payroll_periods?.status === "completed" ? "Published" : "Draft Run"}
+        </Badge>
       ),
     },
   ]
 
   const registerFilters: DataTableFilter<DbPayrollEntry>[] = [
     {
-      key: "period",
-      label: "Month",
-      icon: <Calendar className="h-3.5 w-3.5" />,
-      placeholder: "Filter by month",
-      mode: "custom",
-      options: periods.map((p) => ({ value: p.id, label: p.name })),
-      filterFn: (row, selected) => selected.includes(row.payroll_period_id || ""),
-    },
-    {
       key: "department",
       label: "Department",
       placeholder: "Filter by department",
       mode: "custom",
-      options: [...new Set(entries.map((e) => e.user?.department).filter(Boolean) as string[])]
+      options: [...new Set(initialData.entries.map((e) => e.user?.department).filter(Boolean) as string[])]
         .sort()
         .map((d) => ({ value: d, label: d })),
       filterFn: (row, selected) => selected.includes(row.user?.department || ""),
@@ -322,73 +331,81 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
   )
 
   const actions = initialData.isAdmin ? (
-    <Dialog open={openPeriod} onOpenChange={setOpenPeriod}>
-      <DialogTrigger asChild>
-        <Button size="sm">
-          <Plus className="mr-1.5 h-4 w-4" /> Create Period
-        </Button>
-      </DialogTrigger>
-      <DialogContent>
-        <form onSubmit={handleCreatePeriod}>
-          <DialogHeader>
-            <DialogTitle>Create Payroll Period</DialogTitle>
-            <DialogDescription>Set up a monthly cycle dates configuration.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="name">Period Name</Label>
-              <Input
-                id="name"
-                placeholder="e.g. June 2026"
-                value={periodForm.name}
-                onChange={(e) => setPeriodForm({ ...periodForm, name: e.target.value })}
-                required
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
+    <div className="flex items-center gap-2">
+      <ManageGrossSalaryDialog />
+      <Button asChild variant="outline" size="sm">
+        <Link href="/admin/payroll/calculator">
+          <Calculator className="mr-1.5 h-4 w-4" /> Payroll Calculator
+        </Link>
+      </Button>
+      <Dialog open={openPeriod} onOpenChange={setOpenPeriod}>
+        <DialogTrigger asChild>
+          <Button size="sm">
+            <Plus className="mr-1.5 h-4 w-4" /> Create Period
+          </Button>
+        </DialogTrigger>
+        <DialogContent>
+          <form onSubmit={handleCreatePeriod}>
+            <DialogHeader>
+              <DialogTitle>Create Payroll Period</DialogTitle>
+              <DialogDescription>Set up a monthly cycle dates configuration.</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="start_date">Start Date</Label>
+                <Label htmlFor="name">Period Name</Label>
                 <Input
-                  id="start_date"
-                  type="date"
-                  value={periodForm.start_date}
-                  onChange={(e) => setPeriodForm({ ...periodForm, start_date: e.target.value })}
+                  id="name"
+                  placeholder="e.g. June 2026"
+                  value={periodForm.name}
+                  onChange={(e) => setPeriodForm({ ...periodForm, name: e.target.value })}
                   required
                 />
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="start_date">Start Date</Label>
+                  <Input
+                    id="start_date"
+                    type="date"
+                    value={periodForm.start_date}
+                    onChange={(e) => setPeriodForm({ ...periodForm, start_date: e.target.value })}
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="end_date">End Date</Label>
+                  <Input
+                    id="end_date"
+                    type="date"
+                    value={periodForm.end_date}
+                    onChange={(e) => setPeriodForm({ ...periodForm, end_date: e.target.value })}
+                    required
+                  />
+                </div>
+              </div>
               <div className="space-y-2">
-                <Label htmlFor="end_date">End Date</Label>
+                <Label htmlFor="pay_date">Target Pay Date</Label>
                 <Input
-                  id="end_date"
+                  id="pay_date"
                   type="date"
-                  value={periodForm.end_date}
-                  onChange={(e) => setPeriodForm({ ...periodForm, end_date: e.target.value })}
+                  value={periodForm.pay_date}
+                  onChange={(e) => setPeriodForm({ ...periodForm, pay_date: e.target.value })}
                   required
                 />
               </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="pay_date">Disbursement / Pay Date</Label>
-              <Input
-                id="pay_date"
-                type="date"
-                value={periodForm.pay_date}
-                onChange={(e) => setPeriodForm({ ...periodForm, pay_date: e.target.value })}
-                required
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setOpenPeriod(false)}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading}>
-              Create
-            </Button>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setOpenPeriod(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={loading}>
+                Create
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
   ) : null
 
   return (
@@ -415,7 +432,7 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
         />
       ) : (
         <DataTable<DbPayrollEntry>
-          data={entries}
+          data={initialData.entries}
           columns={registerColumns}
           getRowId={(row) => row.id || `${row.payroll_period_id}-${row.user_id}`}
           pagination={{ pageSize: 50 }}
