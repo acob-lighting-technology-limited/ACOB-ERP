@@ -9,7 +9,7 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { Download, MailX, RefreshCw, Users, UserCheck, UserX } from "lucide-react"
+import { Download, RefreshCw, Users, UserCheck, UserX } from "lucide-react"
 
 export interface OnboardingRow {
   id: string
@@ -108,12 +108,15 @@ export function OnboardingContent() {
   const meta = data?.meta ?? null
 
   const stats = useMemo(() => {
-    const total = rows.length
-    const signedIn = rows.filter((row) => row.has_signed_in).length
-    const neverSignedIn = total - signedIn
-    const unconfirmed = rows.filter((row) => !row.email_confirmed).length
-    const rate = total > 0 ? Math.round((signedIn / total) * 100) : 0
-    return { total, signedIn, neverSignedIn, unconfirmed, rate }
+    // Exited staff are gone, not "not yet onboarded" — excluded so they don't
+    // inflate "Never Signed In" with people who will never sign in again.
+    const current = rows.filter((row) => row.employment_status !== "exited")
+    const total = current.length
+    const onboardable = current.filter((row) => row.email && row.email.trim() !== "").length
+    const signedIn = current.filter((row) => row.has_signed_in).length
+    const neverSignedIn = onboardable - signedIn
+    const rate = onboardable > 0 ? Math.round((signedIn / onboardable) * 100) : 0
+    return { total, onboardable, signedIn, neverSignedIn, rate }
   }, [rows])
 
   const departmentOptions = useMemo(
@@ -221,15 +224,6 @@ export function OnboardingContent() {
         defaultVisible: false,
         render: (row) => <span className="capitalize">{row.employment_status.replace(/_/g, " ")}</span>,
       },
-      {
-        key: "email_confirmed",
-        label: "Email Confirmed",
-        sortable: true,
-        accessor: (row) => (row.email_confirmed ? "Confirmed" : "Not confirmed"),
-        hideOnMobile: true,
-        defaultVisible: false,
-        render: (row) => (row.email_confirmed ? "Confirmed" : "Not confirmed"),
-      },
     ],
     []
   )
@@ -258,14 +252,9 @@ export function OnboardingContent() {
         key: "employment_status",
         label: "Employment Status",
         options: employmentStatusOptions,
-      },
-      {
-        key: "email_confirmed",
-        label: "Email Confirmed",
-        options: [
-          { value: "Confirmed", label: "Confirmed" },
-          { value: "Not confirmed", label: "Not confirmed" },
-        ],
+        // Exited staff are excluded by default — they're gone, not part of the
+        // onboarding pipeline.
+        defaultValues: employmentStatusOptions.map((option) => option.value).filter((value) => value !== "exited"),
       },
       {
         key: "has_email",
@@ -274,6 +263,7 @@ export function OnboardingContent() {
           { value: "With Email", label: "With Email" },
           { value: "Without Email", label: "Without Email" },
         ],
+        defaultValues: ["With Email"],
         filterFn: (row, selected) =>
           selected.includes(row.email && row.email.trim() !== "" ? "With Email" : "Without Email"),
       },
@@ -295,18 +285,27 @@ export function OnboardingContent() {
   return (
     <DataTablePage
       title="Onboarding"
-      description="Every account on the platform and whether the person has ever signed in."
+      description="Every staff profile, including not-yet-onboarded placeholders, and whether the person has ever signed in."
       icon={UserCheck}
       backLink={{ href: "/admin", label: "Back to Admin" }}
     >
       <div className="space-y-6">
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
-            title="Accounts"
+            title="Profiles"
             value={stats.total}
             icon={Users}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
+            description="All profile records, including not-yet-onboarded placeholders"
+          />
+          <StatCard
+            title="Onboardable"
+            value={stats.onboardable}
+            icon={UserCheck}
+            iconBgColor="bg-indigo-500/10"
+            iconColor="text-indigo-500"
+            description="Have an email and can sign in"
           />
           <StatCard
             title="Signed In"
@@ -314,7 +313,7 @@ export function OnboardingContent() {
             icon={UserCheck}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
-            description={`${stats.rate}% activated`}
+            description={`${stats.rate}% of onboardable`}
           />
           <StatCard
             title="Never Signed In"
@@ -322,13 +321,7 @@ export function OnboardingContent() {
             icon={UserX}
             iconBgColor="bg-red-500/10"
             iconColor="text-red-500"
-          />
-          <StatCard
-            title="Email Unconfirmed"
-            value={stats.unconfirmed}
-            icon={MailX}
-            iconBgColor="bg-amber-500/10"
-            iconColor="text-amber-500"
+            description="Onboardable but haven't logged in yet"
           />
         </div>
 

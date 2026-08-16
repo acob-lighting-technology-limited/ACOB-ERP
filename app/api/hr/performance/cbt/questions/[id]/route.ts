@@ -38,22 +38,37 @@ async function getAuthorizedContext() {
  * Confirms the caller may manage the department that owns this question.
  *
  * These handlers address a question by id alone, so without this a department
- * lead could edit or delete another department's CBT bank. Global admins pass
- * through unchanged.
+ * lead could edit or delete another department's CBT bank.
+ *
+ * Global admins never get to read or edit a regular (non-bonus) question's
+ * content — that's the department lead's own test, and admin visibility would
+ * defeat the impartiality boundary enforced on GET. A blind moderation delete
+ * (removing a flagged/broken question without ever seeing it) is still
+ * allowed when `allowContentBlindDelete` is set. Bonus questions remain fully
+ * admin-manageable, since admins author those themselves.
  */
 async function assertCanManageQuestion(
   dataClient: { from: (table: string) => any },
   context: AccessContextV2,
-  questionId: string
+  questionId: string,
+  options: { allowContentBlindDelete?: boolean } = {}
 ): Promise<NextResponse | null> {
   const { data: existing } = await dataClient
     .from("cbt_questions")
-    .select("department")
+    .select("department, is_bonus")
     .eq("id", questionId)
     .maybeSingle()
 
-  const department = (existing as { department?: string | null } | null)?.department ?? null
+  const row = existing as { department?: string | null; is_bonus?: boolean | null } | null
+  const department = row?.department ?? null
   if (!department) return NextResponse.json({ error: "Question not found" }, { status: 404 })
+
+  if (context.actingContext === "global_admin") {
+    if (!row?.is_bonus && !options.allowContentBlindDelete) {
+      return NextResponse.json({ error: "Only the owning department lead can edit this question." }, { status: 403 })
+    }
+    return null
+  }
 
   if (!canMutateV2(context, "hr.pms.cbt.manage", department)) {
     return NextResponse.json({ error: "You can only manage CBT questions for your own department" }, { status: 403 })
@@ -153,7 +168,9 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const deleteDenied = await assertCanManageQuestion(dataClient, contextResult.context, params.id)
+    const deleteDenied = await assertCanManageQuestion(dataClient, contextResult.context, params.id, {
+      allowContentBlindDelete: true,
+    })
     if (deleteDenied) return deleteDenied
 
     const { error } = await dataClient.from("cbt_questions").delete().eq("id", params.id)

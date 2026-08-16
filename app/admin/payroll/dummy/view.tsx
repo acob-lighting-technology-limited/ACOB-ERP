@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import {
   Dialog,
@@ -22,7 +23,7 @@ import {
   calculateNewTaxReformPAYE,
   type PayrollBreakdown,
 } from "@/lib/hr/payroll-utils"
-import type { EmployeeSalaryPreset } from "./page"
+import type { EmployeeSalaryPreset } from "../calculator/page"
 import {
   Calculator,
   DollarSign,
@@ -109,8 +110,8 @@ export function DummyPayrollCalculatorPage({ initialData }: DummyPayrollPageProp
 
   // Direct alteration handler for Monthly Gross Salary
   const handleGrossChange = (newGross: number) => {
-    const safeGross = Math.max(communicationAllowance, newGross)
-    setMonthlyBaseInput(safeGross - communicationAllowance)
+    const safeGross = Math.max(0, newGross)
+    setMonthlyBaseInput(Math.max(0, safeGross - communicationAllowance))
     setApprovedStatus("pending")
   }
 
@@ -262,22 +263,6 @@ export function DummyPayrollCalculatorPage({ initialData }: DummyPayrollPageProp
       description="Interactively adjust gross salary, simulate payroll calculations, compare baseline vs altered pay, and preview approval figures."
       icon={Calculator}
       backLink={{ href: "/admin/payroll", label: "Back to Payroll" }}
-      actions={
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" onClick={handleReset}>
-            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-            Reset to Baseline
-          </Button>
-          <Button
-            size="sm"
-            className={approvedStatus === "approved" ? "bg-emerald-600 text-white hover:bg-emerald-700" : ""}
-            onClick={() => setApprovalDialogOpen(true)}
-          >
-            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-            {approvedStatus === "approved" ? "Approved Summary" : "Simulate Approval"}
-          </Button>
-        </div>
-      }
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
@@ -370,18 +355,18 @@ export function DummyPayrollCalculatorPage({ initialData }: DummyPayrollPageProp
                 <Label htmlFor="employee-preset" className="text-xs font-medium whitespace-nowrap">
                   Load Employee:
                 </Label>
-                <select
-                  id="employee-preset"
-                  value={selectedEmpId}
-                  onChange={(e) => handleEmployeeChange(e.target.value)}
-                  className="border-input bg-background focus:ring-ring h-9 rounded-md border px-3 py-1 text-xs shadow-sm focus:ring-1 focus:outline-none"
-                >
-                  {employees.map((emp) => (
-                    <option key={emp.id} value={emp.id}>
-                      {emp.full_name} ({emp.department}) — Base: ₦{emp.basic_salary.toLocaleString()}
-                    </option>
-                  ))}
-                </select>
+                <Select value={selectedEmpId} onValueChange={(val) => handleEmployeeChange(val)}>
+                  <SelectTrigger id="employee-preset" className="h-9 w-[320px] text-xs sm:w-[420px]">
+                    <SelectValue placeholder="Select employee..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.map((emp) => (
+                      <SelectItem key={emp.id} value={emp.id}>
+                        {emp.full_name} ({emp.department}) — Base: ₦{emp.basic_salary.toLocaleString()}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             )}
           </div>
@@ -405,9 +390,10 @@ export function DummyPayrollCalculatorPage({ initialData }: DummyPayrollPageProp
                   id="gross-salary"
                   type="number"
                   step="1000"
-                  value={currentGrossSalary}
-                  onChange={(e) => handleGrossChange(parseFloat(e.target.value) || 0)}
-                  className="text-primary h-11 pl-8 font-mono text-lg font-bold"
+                  value={currentGrossSalary || ""}
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => handleGrossChange(e.target.value === "" ? 0 : parseFloat(e.target.value) || 0)}
+                  className="text-primary h-11 [appearance:textfield] pl-8 font-mono text-lg font-bold [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 />
               </div>
 
@@ -516,9 +502,10 @@ export function DummyPayrollCalculatorPage({ initialData }: DummyPayrollPageProp
                   <Input
                     id="base-salary"
                     type="number"
-                    value={monthlyBaseInput}
-                    onChange={(e) => handleBaseChange(parseFloat(e.target.value) || 0)}
-                    className="mt-1 h-8 font-mono text-xs"
+                    value={monthlyBaseInput || ""}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => handleBaseChange(e.target.value === "" ? 0 : parseFloat(e.target.value) || 0)}
+                    className="mt-1 h-8 [appearance:textfield] font-mono text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                 </div>
 
@@ -529,9 +516,12 @@ export function DummyPayrollCalculatorPage({ initialData }: DummyPayrollPageProp
                   <Input
                     id="comm-allowance"
                     type="number"
-                    value={communicationAllowance}
-                    onChange={(e) => handleCommunicationChange(parseFloat(e.target.value) || 0)}
-                    className="text-primary mt-1 h-8 font-mono text-xs font-semibold"
+                    value={communicationAllowance || ""}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) =>
+                      handleCommunicationChange(e.target.value === "" ? 0 : parseFloat(e.target.value) || 0)
+                    }
+                    className="text-primary mt-1 h-8 [appearance:textfield] font-mono text-xs font-semibold [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                 </div>
 
@@ -544,9 +534,10 @@ export function DummyPayrollCalculatorPage({ initialData }: DummyPayrollPageProp
                     type="number"
                     min="1"
                     max="31"
-                    value={workdays}
-                    onChange={(e) => setWorkdays(parseInt(e.target.value) || 23)}
-                    className="mt-1 h-8 font-mono text-xs"
+                    value={workdays || ""}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setWorkdays(e.target.value === "" ? 0 : parseInt(e.target.value) || 23)}
+                    className="mt-1 h-8 [appearance:textfield] font-mono text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                 </div>
 
@@ -559,9 +550,10 @@ export function DummyPayrollCalculatorPage({ initialData }: DummyPayrollPageProp
                     type="number"
                     min="0"
                     step="0.5"
-                    value={missedHours}
-                    onChange={(e) => setMissedHours(parseFloat(e.target.value) || 0)}
-                    className="mt-1 h-8 font-mono text-xs"
+                    value={missedHours || ""}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setMissedHours(e.target.value === "" ? 0 : parseFloat(e.target.value) || 0)}
+                    className="mt-1 h-8 [appearance:textfield] font-mono text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                 </div>
 
@@ -573,9 +565,10 @@ export function DummyPayrollCalculatorPage({ initialData }: DummyPayrollPageProp
                     id="absent-days"
                     type="number"
                     min="0"
-                    value={absentDays}
-                    onChange={(e) => setAbsentDays(parseInt(e.target.value) || 0)}
-                    className="mt-1 h-8 font-mono text-xs"
+                    value={absentDays || ""}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setAbsentDays(e.target.value === "" ? 0 : parseInt(e.target.value) || 0)}
+                    className="mt-1 h-8 [appearance:textfield] font-mono text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                 </div>
 
@@ -586,9 +579,10 @@ export function DummyPayrollCalculatorPage({ initialData }: DummyPayrollPageProp
                   <Input
                     id="bonus"
                     type="number"
-                    value={bonus}
-                    onChange={(e) => setBonus(parseFloat(e.target.value) || 0)}
-                    className="mt-1 h-8 font-mono text-xs"
+                    value={bonus || ""}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setBonus(e.target.value === "" ? 0 : parseFloat(e.target.value) || 0)}
+                    className="mt-1 h-8 [appearance:textfield] font-mono text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                 </div>
 
@@ -599,9 +593,10 @@ export function DummyPayrollCalculatorPage({ initialData }: DummyPayrollPageProp
                   <Input
                     id="loan-repayment"
                     type="number"
-                    value={loanRepayment}
-                    onChange={(e) => setLoanRepayment(parseFloat(e.target.value) || 0)}
-                    className="mt-1 h-8 font-mono text-xs"
+                    value={loanRepayment || ""}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setLoanRepayment(e.target.value === "" ? 0 : parseFloat(e.target.value) || 0)}
+                    className="mt-1 h-8 [appearance:textfield] font-mono text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                 </div>
 
@@ -612,9 +607,10 @@ export function DummyPayrollCalculatorPage({ initialData }: DummyPayrollPageProp
                   <Input
                     id="lunch-deduction"
                     type="number"
-                    value={lunchDeduction}
-                    onChange={(e) => setLunchDeduction(parseFloat(e.target.value) || 0)}
-                    className="mt-1 h-8 font-mono text-xs"
+                    value={lunchDeduction || ""}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setLunchDeduction(e.target.value === "" ? 0 : parseFloat(e.target.value) || 0)}
+                    className="mt-1 h-8 [appearance:textfield] font-mono text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                 </div>
 
@@ -625,9 +621,10 @@ export function DummyPayrollCalculatorPage({ initialData }: DummyPayrollPageProp
                   <Input
                     id="other-deductions"
                     type="number"
-                    value={otherDeductions}
-                    onChange={(e) => setOtherDeductions(parseFloat(e.target.value) || 0)}
-                    className="mt-1 h-8 font-mono text-xs"
+                    value={otherDeductions || ""}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setOtherDeductions(e.target.value === "" ? 0 : parseFloat(e.target.value) || 0)}
+                    className="mt-1 h-8 [appearance:textfield] font-mono text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                   />
                 </div>
               </div>

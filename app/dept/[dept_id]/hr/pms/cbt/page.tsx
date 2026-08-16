@@ -8,5 +8,5 @@ interface Props {
 export default async function DeptPmsCbtPage({ params }: Props) {
   const { dept_id } = await params
   await requireDeptScope(dept_id)
-  return <AdminPmsCbtPage />
+  return <AdminPmsCbtPage deptId={dept_id} />
 }

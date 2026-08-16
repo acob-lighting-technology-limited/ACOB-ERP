@@ -10,6 +10,7 @@ export type NotificationModule =
   | "Exit"
   | "Birthday"
   | "Payments"
+  | "Payroll"
   | "Correspondence"
   | "Security"
 

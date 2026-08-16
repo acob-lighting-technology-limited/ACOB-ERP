@@ -52,6 +52,7 @@ type CbtReviewRow = {
   final_score?: number | null
   cbt_score: number | null
   created_at: string
+  tab_switch_count?: number
 }
 
 function getReviewPriority(review: CbtReviewRow) {
@@ -154,6 +155,30 @@ export async function GET(request: NextRequest) {
         }
       }
       cbtScores = Array.from(latestByUserAndCycle.values())
+
+      const { data: attempts } = await supabase
+        .from("cbt_attempts")
+        .select("profile_id, review_cycle_id, cbt_details")
+        .eq("status", "submitted")
+        .in(
+          "profile_id",
+          cbtScores.map((score) => score.user_id)
+        )
+        .returns<
+          { profile_id: string; review_cycle_id: string | null; cbt_details: Record<string, unknown> | null }[]
+        >()
+
+      const tabSwitchByKey = new Map<string, number>()
+      for (const attempt of attempts || []) {
+        if (!attempt.review_cycle_id) continue
+        const key = `${attempt.profile_id}:${attempt.review_cycle_id}`
+        const count = Number(attempt.cbt_details?.tab_switch_count ?? 0)
+        tabSwitchByKey.set(key, count)
+      }
+      cbtScores = cbtScores.map((score) => ({
+        ...score,
+        tab_switch_count: tabSwitchByKey.get(`${score.user_id}:${score.review_cycle_id}`) ?? 0,
+      }))
 
       const reviewerIds = Array.from(
         new Set(cbtScores.map((review) => review.reviewer_id).filter((value): value is string => Boolean(value)))

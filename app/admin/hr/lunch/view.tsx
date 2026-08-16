@@ -47,6 +47,9 @@ import {
   CalendarDays,
   Plus,
   Vote,
+  ArrowUp,
+  ArrowDown,
+  ArrowUpDown,
 } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-client"
@@ -136,6 +139,17 @@ const WEEKDAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Satur
 
 function monBasedDay(jsDay: number) {
   return jsDay === 0 ? 6 : jsDay - 1
+}
+
+// Gold/silver/bronze for the podium, plain outline past that.
+const RANK_BADGE_COLORS = [
+  "border-amber-500/40 bg-amber-500/10 text-amber-600 hover:bg-amber-500/10",
+  "border-slate-400/40 bg-slate-400/10 text-slate-500 hover:bg-slate-400/10",
+  "border-orange-600/40 bg-orange-600/10 text-orange-700 hover:bg-orange-600/10",
+]
+
+function rankBadgeClass(idx: number) {
+  return RANK_BADGE_COLORS[idx] ?? ""
 }
 
 function buildCalendarCells(yearMonth: string): (string | null)[] {
@@ -725,23 +739,6 @@ export function LunchRegisterPage({
       ),
     },
     {
-      key: "menu",
-      label: "Menu",
-      // Single-category menus have no group name, so list the dishes directly;
-      // multi-category ones list the category names and their counts.
-      accessor: (row) => row.groups.flatMap((g) => g.options.map((o) => o.name)).join(" "),
-      render: (row) => {
-        if (row.groups.length === 0) {
-          return <span className="text-muted-foreground text-xs">No dishes yet</span>
-        }
-        const summary =
-          row.groups.length === 1
-            ? row.groups[0].options.map((o) => o.name).join(" · ")
-            : row.groups.map((g, i) => `${groupHeading(g, i)} (${g.options.length})`).join(" · ")
-        return <span className="text-sm">{summary}</span>
-      },
-    },
-    {
       key: "status",
       label: "Status",
       accessor: (row) => row.status,
@@ -793,10 +790,13 @@ export function LunchRegisterPage({
         const notEating = row.votes.length - row.eatingCount
         return (
           <div className="flex items-center gap-1.5">
-            <Badge variant="outline" className="border-2 px-2.5 py-0.5 font-semibold">
+            <Badge
+              variant="outline"
+              className="border-2 border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-semibold text-emerald-600 hover:bg-emerald-500/10"
+            >
               {row.eatingCount}
             </Badge>
-            {notEating > 0 && <span className="text-muted-foreground text-xs">{notEating} said no</span>}
+            {notEating > 0 && <span className="text-xs font-medium text-rose-500/80">{notEating} said no</span>}
           </div>
         )
       },
@@ -854,7 +854,10 @@ export function LunchRegisterPage({
       accessor: (row) => row.lunch_count,
       sortable: true,
       render: (row) => (
-        <Badge variant="outline" className="border-2 px-2.5 py-0.5 font-semibold">
+        <Badge
+          variant="outline"
+          className="border-2 border-blue-500/30 bg-blue-500/10 px-2.5 py-0.5 font-semibold text-blue-600 hover:bg-blue-500/10"
+        >
           {row.lunch_count} {row.lunch_count === 1 ? "day" : "days"}
         </Badge>
       ),
@@ -1492,7 +1495,10 @@ export function LunchRegisterPage({
                           className="hover:bg-muted/30 flex items-center justify-between gap-2 rounded px-1.5 py-1.5 text-sm"
                         >
                           <div className="flex min-w-0 items-center gap-2">
-                            <Badge variant="outline" className="w-6 shrink-0 justify-center px-0 text-[10px]">
+                            <Badge
+                              variant="outline"
+                              className={cn("w-6 shrink-0 justify-center px-0 text-[10px]", rankBadgeClass(idx))}
+                            >
                               {idx + 1}
                             </Badge>
                             <div className="min-w-0">
@@ -1502,7 +1508,9 @@ export function LunchRegisterPage({
                               </div>
                             </div>
                           </div>
-                          <span className="shrink-0 text-xs font-semibold">{row.lunch_count} meals</span>
+                          <span className="shrink-0 text-xs font-semibold text-emerald-600">
+                            {row.lunch_count} meals
+                          </span>
                         </div>
                       ))}
                       {sortedLeaderboard.length === 0 && (
@@ -1531,7 +1539,10 @@ export function LunchRegisterPage({
                           className="hover:bg-muted/30 flex items-center justify-between gap-2 rounded px-1.5 py-1.5 text-sm"
                         >
                           <div className="flex min-w-0 items-center gap-2">
-                            <Badge variant="outline" className="w-6 shrink-0 justify-center px-0 text-[10px]">
+                            <Badge
+                              variant="outline"
+                              className={cn("w-6 shrink-0 justify-center px-0 text-[10px]", rankBadgeClass(idx))}
+                            >
                               {idx + 1}
                             </Badge>
                             <div className="min-w-0">
@@ -1572,7 +1583,10 @@ export function LunchRegisterPage({
                           className="hover:bg-muted/30 flex items-center justify-between gap-2 rounded px-1.5 py-1.5 text-sm"
                         >
                           <div className="flex min-w-0 items-center gap-2">
-                            <Badge variant="outline" className="w-6 shrink-0 justify-center px-0 text-[10px]">
+                            <Badge
+                              variant="outline"
+                              className={cn("w-6 shrink-0 justify-center px-0 text-[10px]", rankBadgeClass(idx))}
+                            >
                               {idx + 1}
                             </Badge>
                             <div className="min-w-0">
@@ -1582,7 +1596,7 @@ export function LunchRegisterPage({
                               </div>
                             </div>
                           </div>
-                          <span className="shrink-0 text-xs font-semibold">{row.lunch_count} meals</span>
+                          <span className="shrink-0 text-xs font-semibold text-amber-600">{row.lunch_count} meals</span>
                         </div>
                       ))}
                       {sortedLeaderboard.length === 0 && (
@@ -1930,6 +1944,62 @@ export function LunchRegisterPage({
  * staff poll — percentages and progress bars answer "what is winning", which
  * is not a question anybody has once voting is done.
  */
+type SortDir = "asc" | "desc"
+
+/** Clickable column header with a sort-direction indicator, matching the DataTable's own headers. */
+function SortHeader({
+  label,
+  active,
+  dir,
+  onClick,
+  align,
+}: {
+  label: string
+  active: boolean
+  dir: SortDir
+  onClick: () => void
+  align?: "right"
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "hover:text-foreground inline-flex items-center gap-1 transition-colors",
+        align === "right" && "flex-row-reverse"
+      )}
+    >
+      {label}
+      {active ? (
+        dir === "asc" ? (
+          <ArrowUp className="h-3 w-3" />
+        ) : (
+          <ArrowDown className="h-3 w-3" />
+        )
+      ) : (
+        <ArrowUpDown className="h-3 w-3 opacity-40" />
+      )}
+    </button>
+  )
+}
+
+// A stable color per dish name, so the same dish reads the same everywhere it's
+// badged (the menu's own count and each eater's meal) instead of one flat grey.
+const DISH_BADGE_COLORS = [
+  "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/10",
+  "border-blue-500/30 bg-blue-500/10 text-blue-600 hover:bg-blue-500/10",
+  "border-amber-500/30 bg-amber-500/10 text-amber-600 hover:bg-amber-500/10",
+  "border-violet-500/30 bg-violet-500/10 text-violet-600 hover:bg-violet-500/10",
+  "border-rose-500/30 bg-rose-500/10 text-rose-600 hover:bg-rose-500/10",
+  "border-cyan-500/30 bg-cyan-500/10 text-cyan-600 hover:bg-cyan-500/10",
+]
+
+function dishBadgeClass(name: string) {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) hash = (hash * 31 + name.charCodeAt(i)) >>> 0
+  return DISH_BADGE_COLORS[hash % DISH_BADGE_COLORS.length]
+}
+
 function MenuVotesPanel({ menu, totalStaff }: { menu: AdminLunchMenu; totalStaff: number }) {
   const notEating = menu.tallies.find((t) => t.option_id === NOT_EATING_OPTION_ID)
   const notEatingCount = notEating?.count ?? 0
@@ -1937,118 +2007,222 @@ function MenuVotesPanel({ menu, totalStaff }: { menu: AdminLunchMenu; totalStaff
 
   // Each eater with their full combination, so a two-category day reads
   // "Afang + Eba" per person instead of two disconnected lists.
-  const eaters = menu.votes
+  const eatersRaw = menu.votes
     .filter((vote) => vote.is_eating)
     .map((vote) => ({
       user_id: vote.user_id,
       full_name: vote.full_name,
       department: vote.department,
+      voted_at: vote.updated_at,
       combo: menu.groups
         .map((group) => group.options.find((o) => o.id === vote.selections[group.id])?.name)
         .filter(Boolean)
         .join(" + "),
     }))
-    .sort((a, b) => a.combo.localeCompare(b.combo) || a.full_name.localeCompare(b.full_name))
+
+  // Flattened prep tallies (all groups, with a category label) for the table below.
+  const prepRowsRaw = menu.groups.flatMap((group, index) =>
+    menu.tallies
+      .filter((t) => t.group_id === group.id && t.option_id !== NOT_EATING_OPTION_ID)
+      .map((t) => ({ ...t, category: menu.groups.length > 1 ? groupHeading(group, index) : null }))
+  )
+
+  // Latest vote first by default — that's the order an admin checking in on a
+  // day in progress actually wants.
+  const [eaterSort, setEaterSort] = useState<{ key: "name" | "department" | "meal" | "voted_at"; dir: SortDir }>({
+    key: "voted_at",
+    dir: "desc",
+  })
+  const [prepSort, setPrepSort] = useState<{ key: "category" | "dish" | "count"; dir: SortDir }>({
+    key: "count",
+    dir: "desc",
+  })
+
+  function toggleSort<T extends string>(current: { key: T; dir: SortDir }, key: T, defaultDir: SortDir) {
+    return current.key === key
+      ? { key, dir: (current.dir === "asc" ? "desc" : "asc") as SortDir }
+      : { key, dir: defaultDir }
+  }
+
+  const eaters = [...eatersRaw].sort((a, b) => {
+    const dir = eaterSort.dir === "asc" ? 1 : -1
+    switch (eaterSort.key) {
+      case "name":
+        return dir * a.full_name.localeCompare(b.full_name)
+      case "department":
+        return dir * (a.department || "").localeCompare(b.department || "")
+      case "meal":
+        return dir * a.combo.localeCompare(b.combo)
+      case "voted_at":
+        return dir * a.voted_at.localeCompare(b.voted_at)
+    }
+  })
+
+  const prepRows = [...prepRowsRaw].sort((a, b) => {
+    const dir = prepSort.dir === "asc" ? 1 : -1
+    switch (prepSort.key) {
+      case "category":
+        return dir * (a.category || "").localeCompare(b.category || "")
+      case "dish":
+        return dir * a.name.localeCompare(b.name)
+      case "count":
+        return dir * (a.count - b.count)
+    }
+  })
 
   if (menu.groups.length === 0) {
-    return (
-      <div className="bg-muted/20 border-b px-6 py-4">
-        <p className="text-muted-foreground text-xs">No dishes on this menu yet.</p>
-      </div>
-    )
+    return <p className="text-muted-foreground text-xs">No dishes on this menu yet.</p>
   }
 
   return (
-    <div className="bg-muted/20 space-y-5 border-b px-6 py-4">
-      {/* 1 ── the cooking list */}
-      <div className="space-y-2">
-        <p className="text-foreground text-xs font-bold">How many to prepare</p>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {menu.groups.map((group, index) => {
-            const groupTallies = menu.tallies
-              .filter((t) => t.group_id === group.id && t.option_id !== NOT_EATING_OPTION_ID)
-              .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
-
-            return (
-              <div key={group.id} className="bg-background rounded-lg border p-3">
-                {menu.groups.length > 1 && (
-                  <p className="text-muted-foreground mb-2 text-[10px] font-bold tracking-wider uppercase">
-                    {groupHeading(group, index)}
-                  </p>
-                )}
-                <div className="space-y-1.5">
-                  {groupTallies.map((tally) => (
-                    <div key={tally.option_id} className="flex items-baseline justify-between gap-3">
-                      <span className={cn("text-sm", tally.count > 0 ? "font-semibold" : "text-muted-foreground")}>
-                        {tally.name}
-                      </span>
-                      <span
-                        className={cn(
-                          "shrink-0 font-mono text-sm tabular-nums",
-                          tally.count > 0 ? "text-foreground font-bold" : "text-muted-foreground/50"
-                        )}
-                      >
-                        {tally.count}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )
-          })}
+    <div className="space-y-4">
+      {/* 0 ── quick stats, mirroring the attendance expanded-row layout */}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div>
+          <p className="text-muted-foreground text-xs uppercase">Eating</p>
+          <p className="font-semibold text-emerald-600">{menu.eatingCount}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground text-xs uppercase">Said No</p>
+          <p className="font-semibold text-rose-500">{notEatingCount}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground text-xs uppercase">No Answer</p>
+          <p className="font-semibold text-amber-500">{noAnswer}</p>
+        </div>
+        <div>
+          <p className="text-muted-foreground text-xs uppercase">Total Staff</p>
+          <p className="font-semibold text-blue-600">{totalStaff}</p>
         </div>
       </div>
 
-      {/* 2 ── the serving list */}
-      <div className="space-y-2">
-        <p className="text-foreground text-xs font-bold">
+      {/* 1 ── the menu, each dish with how many to prepare of it */}
+      <div className="space-y-1 py-2">
+        <p className="text-muted-foreground px-2 text-xs font-semibold uppercase">Menu</p>
+        <div
+          className={cn(
+            "text-muted-foreground grid items-center gap-3 px-2 text-[11px] font-semibold uppercase",
+            menu.groups.length > 1 ? "grid-cols-[140px_1fr_80px]" : "grid-cols-[1fr_80px]"
+          )}
+        >
+          {menu.groups.length > 1 && (
+            <SortHeader
+              label="Category"
+              active={prepSort.key === "category"}
+              dir={prepSort.dir}
+              onClick={() => setPrepSort((s) => toggleSort(s, "category", "asc"))}
+            />
+          )}
+          <SortHeader
+            label="Dish"
+            active={prepSort.key === "dish"}
+            dir={prepSort.dir}
+            onClick={() => setPrepSort((s) => toggleSort(s, "dish", "asc"))}
+          />
+          <span className="flex justify-end">
+            <SortHeader
+              label="Count"
+              align="right"
+              active={prepSort.key === "count"}
+              dir={prepSort.dir}
+              onClick={() => setPrepSort((s) => toggleSort(s, "count", "desc"))}
+            />
+          </span>
+        </div>
+        {prepRows.map((tally) => (
+          <div
+            key={tally.option_id}
+            className={cn(
+              "hover:bg-muted/30 grid items-center gap-3 rounded px-2 py-1.5 text-sm",
+              menu.groups.length > 1 ? "grid-cols-[140px_1fr_80px]" : "grid-cols-[1fr_80px]"
+            )}
+          >
+            {menu.groups.length > 1 && <span className="text-muted-foreground truncate text-xs">{tally.category}</span>}
+            <span className={cn(tally.count === 0 && "text-muted-foreground")}>{tally.name}</span>
+            <div className="flex justify-end">
+              <Badge
+                variant="outline"
+                className={cn(
+                  "border-2 px-2.5 py-0.5 font-semibold",
+                  tally.count > 0 ? dishBadgeClass(tally.name) : "text-muted-foreground/50 border-muted-foreground/20"
+                )}
+              >
+                {tally.count}
+              </Badge>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* 2 ── the serving list, as a table matching the admin attendance day table */}
+      <div className="space-y-1 py-2">
+        <p className="text-muted-foreground px-2 text-xs font-semibold uppercase">
           Who gets what{" "}
-          <span className="text-muted-foreground font-normal">
+          <span className="normal-case">
             ({eaters.length} {eaters.length === 1 ? "person" : "people"})
           </span>
         </p>
         {eaters.length === 0 ? (
-          <p className="text-muted-foreground text-xs">Nobody has chosen a meal yet.</p>
+          <p className="text-muted-foreground px-2 text-xs">Nobody has chosen a meal yet.</p>
         ) : (
-          <div className="bg-background divide-border max-h-64 divide-y overflow-y-auto rounded-lg border">
-            {eaters.map((eater) => (
-              <div key={eater.user_id} className="flex items-center justify-between gap-3 px-3 py-2">
-                <div className="min-w-0">
-                  <span className="text-foreground truncate text-sm font-medium">{eater.full_name}</span>
-                  <div className="text-muted-foreground truncate text-[10px]">{eater.department || "General"}</div>
+          <>
+            <div className="text-muted-foreground grid grid-cols-[40px_1fr_160px_1fr_130px] items-center gap-3 px-2 text-[11px] font-semibold uppercase">
+              <span>S/N</span>
+              <SortHeader
+                label="Employee"
+                active={eaterSort.key === "name"}
+                dir={eaterSort.dir}
+                onClick={() => setEaterSort((s) => toggleSort(s, "name", "asc"))}
+              />
+              <SortHeader
+                label="Department"
+                active={eaterSort.key === "department"}
+                dir={eaterSort.dir}
+                onClick={() => setEaterSort((s) => toggleSort(s, "department", "asc"))}
+              />
+              <SortHeader
+                label="Meal"
+                active={eaterSort.key === "meal"}
+                dir={eaterSort.dir}
+                onClick={() => setEaterSort((s) => toggleSort(s, "meal", "asc"))}
+              />
+              <span className="flex justify-end">
+                <SortHeader
+                  label="Voted At"
+                  align="right"
+                  active={eaterSort.key === "voted_at"}
+                  dir={eaterSort.dir}
+                  onClick={() => setEaterSort((s) => toggleSort(s, "voted_at", "desc"))}
+                />
+              </span>
+            </div>
+            {eaters.map((eater, index) => (
+              <div
+                key={eater.user_id}
+                className="hover:bg-muted/30 grid grid-cols-[40px_1fr_160px_1fr_130px] items-center gap-3 rounded px-2 py-1.5 text-sm"
+              >
+                <span className="text-muted-foreground text-xs">{index + 1}</span>
+                <span className="text-foreground truncate font-medium">{eater.full_name}</span>
+                <span className="text-muted-foreground truncate text-xs">{eater.department || "General"}</span>
+                <div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "border-2 px-2.5 py-0.5 text-xs font-semibold",
+                      eater.combo ? dishBadgeClass(eater.combo) : "text-muted-foreground"
+                    )}
+                  >
+                    {eater.combo || "—"}
+                  </Badge>
                 </div>
-                <span className="text-foreground shrink-0 text-xs font-semibold">{eater.combo || "—"}</span>
+                <span className="text-muted-foreground text-right text-xs">
+                  {eater.voted_at ? formatWATTime(eater.voted_at) : "—"}
+                </span>
               </div>
             ))}
-          </div>
+          </>
         )}
       </div>
-
-      {/* 3 ── everyone who is not being cooked for */}
-      {(notEatingCount > 0 || noAnswer > 0) && (
-        <div className="space-y-2">
-          <p className="text-foreground text-xs font-bold">Not being cooked for</p>
-          <div className="text-muted-foreground space-y-1 text-xs">
-            {notEatingCount > 0 && (
-              <p>
-                <span className="text-foreground font-semibold">{notEatingCount}</span> said no:{" "}
-                {notEating?.voters.map((v) => v.full_name).join(", ")}
-              </p>
-            )}
-            {noAnswer > 0 && (
-              <p>
-                <span className="text-foreground font-semibold">{noAnswer}</span> never answered — they are not on the
-                list and will not be charged.
-              </p>
-            )}
-          </div>
-        </div>
-      )}
-
-      <p className="text-muted-foreground border-t pt-2 text-xs">
-        Cook for <span className="text-foreground font-semibold">{menu.eatingCount}</span>. Those{" "}
-        {menu.eatingCount === 1 ? "is the person" : "are the people"} charged for lunch on this day.
-      </p>
     </div>
   )
 }

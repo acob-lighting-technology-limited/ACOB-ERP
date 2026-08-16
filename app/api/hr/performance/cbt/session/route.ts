@@ -4,6 +4,7 @@ import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { logger } from "@/lib/logger"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { writeLoginLog, REAUTH_SOURCE } from "@/lib/auth/login-log"
+import { getCbtSettings } from "@/lib/cbt-config"
 
 const log = logger("hr-performance-cbt-session")
 
@@ -20,6 +21,7 @@ const StartSchema = z.object({
 const SubmitSchema = z.object({
   attempt_id: z.string().uuid("Attempt is required"),
   answers: z.record(z.string().uuid(), z.enum(["A", "B", "C", "D"])),
+  tab_switch_count: z.number().int().min(0).optional(),
 })
 
 type ProfileRow = {
@@ -50,6 +52,7 @@ type AttemptRow = {
   review_cycle_id?: string | null
   status: "in_progress" | "submitted"
   question_ids: string[]
+  cbt_details: Record<string, unknown> | null
 }
 
 type CycleRow = {
@@ -274,27 +277,29 @@ export async function POST(request: NextRequest) {
     let sessionQuestions: QuestionRow[] = []
     let isResume = false
 
-    if (existingAttempt) {
-      isResume = true
-      sessionAttemptId = existingAttempt.id
+    const loadAttemptQuestions = async (questionIds: string[]): Promise<QuestionRow[]> => {
       const { data: questionsData, error: questionsError } = await supabase
         .from("cbt_questions")
         .select("id, review_cycle_id, prompt, option_a, option_b, option_c, option_d, department, is_bonus")
-        .in("id", existingAttempt.question_ids)
+        .in("id", questionIds)
         .returns<QuestionRow[]>()
 
       if (questionsError) throw questionsError
-      if (!questionsData || questionsData.length === 0) {
+      const questionMap = new Map((questionsData || []).map((q) => [q.id, q]))
+      return questionIds.map((qId) => questionMap.get(qId)).filter((q): q is QuestionRow => !!q)
+    }
+
+    if (existingAttempt) {
+      isResume = true
+      sessionAttemptId = existingAttempt.id
+      sessionQuestions = await loadAttemptQuestions(existingAttempt.question_ids)
+
+      if (sessionQuestions.length === 0) {
         return NextResponse.json(
           { error: "Failed to load assigned questions for your existing session." },
           { status: 500 }
         )
       }
-
-      const questionMap = new Map(questionsData.map((q) => [q.id, q]))
-      sessionQuestions = existingAttempt.question_ids
-        .map((qId) => questionMap.get(qId))
-        .filter((q): q is QuestionRow => !!q)
     } else {
       // 2. Fetch all active standard questions for the review cycle
       const { data: allQuestions, error: questionsError } = await supabase
@@ -324,9 +329,12 @@ export async function POST(request: NextRequest) {
         .returns<QuestionRow[]>()
 
       if (bonusError) throw bonusError
+      // Load active CBT settings (questions count, per-question duration)
+      const cbtSettings = await getCbtSettings(supabase)
+      const targetCount = cbtSettings.total_questions_count
 
-      // 3. Select 1 random question per department (up to 10), and pad to exactly 10 if fewer than 10 departments
-      if (allQuestions.length <= 10) {
+      // 3. Select questions based on targetCount
+      if (allQuestions.length <= targetCount) {
         sessionQuestions = [...allQuestions].sort(() => 0.5 - Math.random())
       } else {
         const deptMap = new Map<string, QuestionRow[]>()
@@ -339,7 +347,7 @@ export async function POST(request: NextRequest) {
         }
 
         const departments = Array.from(deptMap.keys()).sort(() => 0.5 - Math.random())
-        const selectedDepts = departments.slice(0, 10)
+        const selectedDepts = departments.slice(0, targetCount)
         const chosenQuestions: QuestionRow[] = []
 
         for (const dept of selectedDepts) {
@@ -350,14 +358,14 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        if (chosenQuestions.length < 10) {
+        if (chosenQuestions.length < targetCount) {
           const remainingPool = allQuestions.filter((q) => !chosenQuestions.some((cq) => cq.id === q.id))
-          const needed = 10 - chosenQuestions.length
+          const needed = targetCount - chosenQuestions.length
           const padding = [...remainingPool].sort(() => 0.5 - Math.random()).slice(0, needed)
           chosenQuestions.push(...padding)
         }
 
-        sessionQuestions = chosenQuestions.slice(0, 10)
+        sessionQuestions = chosenQuestions.slice(0, targetCount)
       }
 
       // 4. Append targeted bonus questions if any exist
@@ -378,24 +386,56 @@ export async function POST(request: NextRequest) {
           employee_number: "-",
           first_name_snapshot: profile.first_name || profile.last_name || "Candidate",
           company_email,
-          total_questions: sessionQuestions.length,
-          question_ids: sessionQuestions.map((q) => q.id),
           cbt_details,
+          question_ids: sessionQuestions.map((q) => q.id),
+          status: "in_progress",
         })
         .select("id")
         .single<{ id: string }>()
 
-      if (attemptError || !newAttempt) {
-        return NextResponse.json({ error: attemptError?.message || "Failed to start CBT session" }, { status: 500 })
-      }
+      if (attemptError) {
+        // Two logins on the same account starting this cycle at the same
+        // instant can both reach this insert; the DB's unique partial index
+        // (cbt_attempts_profile_cycle_in_progress_uidx) lets only one through.
+        // The loser resumes the winner's attempt instead of erroring out.
+        if (attemptError.code === "23505") {
+          const { data: raceAttempt, error: raceError } = await supabase
+            .from("cbt_attempts")
+            .select("id, question_ids")
+            .eq("profile_id", profile.id)
+            .eq("review_cycle_id", review_cycle_id)
+            .eq("status", "in_progress")
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle<{ id: string; question_ids: string[] }>()
 
-      sessionAttemptId = newAttempt.id
+          if (raceError) throw raceError
+          if (!raceAttempt) throw attemptError
+
+          isResume = true
+          sessionAttemptId = raceAttempt.id
+          sessionQuestions = await loadAttemptQuestions(raceAttempt.question_ids)
+        } else {
+          throw attemptError
+        }
+      } else {
+        sessionAttemptId = newAttempt.id
+      }
     }
+
+    const activeCbtSettings = await getCbtSettings(supabase)
+    const effectiveQuestionCount = sessionQuestions.filter((q) => !q.is_bonus).length
+    const totalTimeSeconds = effectiveQuestionCount * activeCbtSettings.time_per_question_seconds
 
     return NextResponse.json({
       data: {
         attempt_id: sessionAttemptId,
         is_resume: isResume,
+        cbt_settings: {
+          time_per_question_seconds: activeCbtSettings.time_per_question_seconds,
+          total_questions_count: activeCbtSettings.total_questions_count,
+          total_time_seconds: totalTimeSeconds,
+        },
         candidate: {
           first_name: profile.first_name || profile.last_name || "",
           last_name: profile.last_name || "",
@@ -438,11 +478,11 @@ export async function PATCH(request: NextRequest) {
     }
 
     const supabase = getServiceClient()
-    const { attempt_id, answers } = parsed.data
+    const { attempt_id, answers, tab_switch_count } = parsed.data
 
     const { data: attempt, error: attemptError } = await supabase
       .from("cbt_attempts")
-      .select("id, profile_id, review_cycle_id, status, question_ids")
+      .select("id, profile_id, review_cycle_id, status, question_ids, cbt_details")
       .eq("id", attempt_id)
       .maybeSingle<AttemptRow>()
 
@@ -479,6 +519,7 @@ export async function PATCH(request: NextRequest) {
         correct_answers: correctAnswers,
         score,
         submitted_at: now,
+        cbt_details: { ...(attempt.cbt_details || {}), tab_switch_count: tab_switch_count ?? 0 },
       })
       .eq("id", attempt.id)
 

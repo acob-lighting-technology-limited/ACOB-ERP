@@ -895,13 +895,12 @@ export function AttendanceReportsPage({
   }, [])
 
   const stats = useMemo(() => {
-    const totalCredits = reports.reduce((a, r) => a + (r.attendance_credits ?? r.present_days), 0)
-    const totalWorkDays = reports.reduce((a, r) => a + r.total_days, 0)
-    const totalAbsent = reports.reduce((a, r) => a + r.absent_days, 0)
+    const totalHours = reports.reduce((a, r) => a + (r.total_hours ?? 0), 0)
+    const totalMissedHours = reports.reduce((a, r) => a + (r.total_missed_hours ?? 0), 0)
     return {
       employees: reports.length,
-      attendanceRate: totalWorkDays > 0 ? `${((totalCredits / totalWorkDays) * 100).toFixed(2)}%` : "—",
-      absentRate: totalWorkDays > 0 ? `${((totalAbsent / totalWorkDays) * 100).toFixed(2)}%` : "—",
+      totalHours: `${(Math.round(totalHours * 10) / 10).toLocaleString()} hrs`,
+      totalMissedHours: `${(Math.round(totalMissedHours * 10) / 10).toLocaleString()} hrs`,
     }
   }, [reports])
 
@@ -1081,18 +1080,18 @@ export function AttendanceReportsPage({
               iconColor="text-blue-500"
             />
             <StatCard
-              title="Attendance Rate"
-              value={stats.attendanceRate}
-              icon={BarChart3}
+              title="Total Work Hours"
+              value={stats.totalHours}
+              icon={Clock}
               iconBgColor="bg-emerald-500/10"
               iconColor="text-emerald-500"
             />
             <StatCard
-              title="Absent Rate"
-              value={stats.absentRate}
+              title="Missed Hours"
+              value={stats.totalMissedHours}
               icon={AlertCircle}
-              iconBgColor="bg-red-500/10"
-              iconColor="text-red-500"
+              iconBgColor="bg-amber-500/10"
+              iconColor="text-amber-500"
             />
           </div>
         ) : undefined

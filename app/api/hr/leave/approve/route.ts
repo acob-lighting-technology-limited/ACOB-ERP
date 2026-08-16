@@ -351,7 +351,8 @@ export async function PATCH(request: NextRequest) {
       // No balance write here on purpose: entitlements are derived from
       // leave_requests (see COMMITTED_LEAVE_STATUSES in lib/hr/leave-entitlement.ts),
       // so approving the request is itself what consumes the balance. The legacy
-      // leave_balances table is read by nothing.
+      // leave_balances table is read by nothing, and update_leave_balance was never
+      // defined in any migration — this call always errored and was swallowed.
 
       await syncAttendanceForApprovedLeave(
         supabaseAdmin,

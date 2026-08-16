@@ -223,6 +223,47 @@ export function calculateNewTaxReformPAYE(
   }
 }
 
+/** Default monthly communication allowance for a regular employee — what `calculatePayroll` uses when no override is supplied. */
+export const DEFAULT_MONTHLY_COMMUNICATION_ALLOWANCE = 60000 / 12 // ₦5,000
+
+/** Default monthly communication allowance for a department lead. */
+export const LEAD_MONTHLY_COMMUNICATION_ALLOWANCE = 10000
+
+/**
+ * The communication allowance a role gets absent any per-period or per-employee
+ * override — the single place that decides "lead" vs "regular" so it can never
+ * drift between the worksheet, the gross-salary dialog, and the payslip.
+ */
+export function defaultMonthlyCommunicationAllowance(isDepartmentLead: boolean): number {
+  return isDepartmentLead ? LEAD_MONTHLY_COMMUNICATION_ALLOWANCE : DEFAULT_MONTHLY_COMMUNICATION_ALLOWANCE
+}
+
+/**
+ * Monthly gross cash pay for a given monthly base (contract) salary.
+ *
+ * Mirrors `calculatePayroll` exactly rather than approximating: the basic/
+ * housing/transport/leave allowances it derives from `monthlyBase` are a fixed
+ * 50/30/10/10 split of the annualized base, which sums to exactly 100% —
+ * so monthlyGross always equals monthlyBase plus the flat communication
+ * allowance, with no rounding drift. Exported so the salary-management UI can
+ * work in gross terms (what admins and staff actually think in) without a
+ * second copy of the split living in a component.
+ */
+export function monthlyGrossFromBase(
+  monthlyBase: number,
+  communicationConfig: number = DEFAULT_MONTHLY_COMMUNICATION_ALLOWANCE * 12
+): number {
+  return monthlyBase + communicationConfig / 12
+}
+
+/** Inverse of `monthlyGrossFromBase` — the monthly base salary that produces a target monthly gross. */
+export function monthlyBaseFromGross(
+  monthlyGross: number,
+  communicationConfig: number = DEFAULT_MONTHLY_COMMUNICATION_ALLOWANCE * 12
+): number {
+  return monthlyGross - communicationConfig / 12
+}
+
 /**
  * Core payroll calculator matching June 2026 Excel models.
  */

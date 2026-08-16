@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { formatWATDate } from "@/lib/utils/date"
-import { Clock, Download, FileQuestion, UserCheck, MapPin, BarChart3, AlertCircle, Calendar } from "lucide-react"
+import { Clock, Download, FileQuestion, UserCheck, MapPin, AlertCircle, Calendar } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
@@ -465,30 +465,35 @@ export function AttendanceContent({
   const todayHours = todayRecord?.total_hours ? `${todayRecord.total_hours.toFixed(2)} hrs` : "-"
   const todayStatus = todayRecord ? normalizeStatus(todayRecord, todayIso) : "absent"
 
-  // Rates are computed from whatever rows survive the active filter — "all time" when no filter is set
-  const { attendanceRate, absentRate, attendedDays, totalWorkdays } = useMemo(() => {
+  // Computed stats from whatever rows survive the active filter
+  const { totalWorkedHours, totalMissedHours, attendedDays, totalWorkdays } = useMemo(() => {
     const scorable = filteredRows.filter((row) => {
       if (isCoveredStatus(row.normalizedStatus)) return false
       // Exclude a day still in progress (clocked in today, not yet clocked out)
       if (row.date === todayIso && row.clock_in && !row.clock_out) return false
       return true
     })
-    if (scorable.length === 0) return { attendanceRate: 0, absentRate: 0, attendedDays: 0, totalWorkdays: 0 }
-    let hoursLost = 0
+    if (scorable.length === 0) return { totalWorkedHours: 0, totalMissedHours: 0, attendedDays: 0, totalWorkdays: 0 }
+    let worked = 0
+    let missed = 0
     for (const row of scorable) {
-      hoursLost += computeAttendanceDay({
+      const dayRes = computeAttendanceDay({
         status: row.normalizedStatus,
         clockIn: row.clock_in,
         clockOut: row.clock_out,
-      }).hoursLost
+      })
+      worked += dayRes.hoursWorked
+      missed += dayRes.hoursLost
     }
-    const attendanceRate = Math.round(attendanceRateFrom(hoursLost, scorable.length))
-    const absentDays = scorable.filter((r) => r.normalizedStatus === "absent").length
-    const absentRate = Math.round((absentDays / scorable.length) * 100)
     const attended = scorable.filter(
       (row) => row.normalizedStatus !== "absent" && row.normalizedStatus !== "absent_with_permission"
     ).length
-    return { attendanceRate, absentRate, attendedDays: attended, totalWorkdays: scorable.length }
+    return {
+      totalWorkedHours: Math.round(worked * 10) / 10,
+      totalMissedHours: Math.round(missed * 10) / 10,
+      attendedDays: attended,
+      totalWorkdays: scorable.length,
+    }
   }, [filteredRows, todayIso])
 
   function exportCSV() {
@@ -576,29 +581,17 @@ export function AttendanceContent({
                 <TooltipTrigger asChild>
                   <div className="cursor-help">
                     <StatCard
-                      title="Attendance Rate"
-                      value={`${attendanceRate}%`}
-                      icon={BarChart3}
-                      iconBgColor={
-                        attendanceRate >= 80
-                          ? "bg-emerald-500/10"
-                          : attendanceRate >= 60
-                            ? "bg-yellow-500/10"
-                            : "bg-red-500/10"
-                      }
-                      iconColor={
-                        attendanceRate >= 80
-                          ? "text-emerald-500"
-                          : attendanceRate >= 60
-                            ? "text-yellow-500"
-                            : "text-red-500"
-                      }
+                      title="Total Work Hours"
+                      value={`${totalWorkedHours} hrs`}
+                      icon={Clock}
+                      iconBgColor="bg-emerald-500/10"
+                      iconColor="text-emerald-500"
                     />
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="max-w-xs text-xs">
-                    Calculated as (attendance credits / total workdays). Excused days do not count against you.
+                    Total verified work hours credited across expected workdays in this period.
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -606,22 +599,17 @@ export function AttendanceContent({
                 <TooltipTrigger asChild>
                   <div className="cursor-help">
                     <StatCard
-                      title="Absent Rate"
-                      value={`${absentRate}%`}
+                      title="Missed Hours"
+                      value={`${totalMissedHours} hrs`}
                       icon={AlertCircle}
-                      iconBgColor={
-                        absentRate <= 10 ? "bg-emerald-500/10" : absentRate <= 25 ? "bg-yellow-500/10" : "bg-red-500/10"
-                      }
-                      iconColor={
-                        absentRate <= 10 ? "text-emerald-500" : absentRate <= 25 ? "text-yellow-500" : "text-red-500"
-                      }
+                      iconBgColor="bg-amber-500/10"
+                      iconColor="text-amber-500"
                     />
                   </div>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="max-w-xs text-xs">
-                    Percentage of unexcused absences over total workdays. Excused days (holidays, leaves, etc.) are
-                    excluded.
+                    Total hours lost due to late arrival, early departure, or incomplete punches in this period.
                   </p>
                 </TooltipContent>
               </Tooltip>

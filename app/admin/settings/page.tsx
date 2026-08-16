@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { Settings, Users, Building2, Shield, Mail, Clock } from "lucide-react"
+import { Settings, Users, Building2, Shield, Mail, Clock, Brain } from "lucide-react"
 import Link from "next/link"
 import { PageHeader, PageWrapper } from "@/components/layout"
 import { resolveAdminScope } from "@/lib/admin/rbac"
@@ -123,6 +123,23 @@ export default async function AdminSettingsPage() {
             <CardContent className="space-y-4">
               <Link href="/admin/settings/mail" className={cn(buttonVariants({ variant: "default" }), "w-full")}>
                 Open Mail Settings
+              </Link>
+            </CardContent>
+          </Card>
+        )}
+
+        {(scope.role === "super_admin" || scope.role === "developer") && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Brain className="h-5 w-5" />
+                CBT Assessment Settings
+              </CardTitle>
+              <CardDescription>Configure questions per test and duration per question (exam timer).</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <Link href="/admin/settings/cbt" className={cn(buttonVariants({ variant: "default" }), "w-full")}>
+                Configure CBT Settings
               </Link>
             </CardContent>
           </Card>
