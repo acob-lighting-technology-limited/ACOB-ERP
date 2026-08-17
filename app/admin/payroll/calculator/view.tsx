@@ -438,13 +438,13 @@ export function PayrollCalculatorPage({ initialData }: CalculatorPageProps) {
 
             {/* Employee Preset Dropdown */}
             {employees.length > 0 && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <User className="text-muted-foreground h-4 w-4" />
                 <Label htmlFor="employee-preset" className="text-xs font-medium whitespace-nowrap">
                   Load Employee:
                 </Label>
                 <Select value={selectedEmpId} onValueChange={(val) => handleEmployeeChange(val)}>
-                  <SelectTrigger id="employee-preset" className="h-9 w-[320px] text-xs sm:w-[420px]">
+                  <SelectTrigger id="employee-preset" className="h-9 w-full text-xs sm:w-[420px]">
                     <SelectValue placeholder="Select employee..." />
                   </SelectTrigger>
                   <SelectContent>
