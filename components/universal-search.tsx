@@ -147,8 +147,9 @@ export function UniversalSearch({ isAdminMode = false }: UniversalSearchProps) {
       <Button
         variant="outline"
         className={cn(
-          "text-muted-foreground relative h-10 w-full justify-start text-sm sm:pr-12 md:w-64 lg:w-80",
-          isAdminMode && "hover:opacity-90"
+          "group text-muted-foreground border-input/60 bg-muted/40 hover:bg-muted/80 hover:border-input hover:text-foreground relative h-9.5 w-full justify-start text-sm font-normal transition-all duration-200 sm:pr-12 md:w-64 lg:w-80",
+          isAdminMode &&
+            "border-[var(--navbar-admin-sidebar-border)] bg-[var(--navbar-admin-accent-soft)] text-[var(--navbar-admin-primary)] hover:bg-[var(--navbar-admin-accent-soft)]/80 hover:text-[var(--navbar-admin-primary)]"
         )}
         style={
           isAdminMode
@@ -161,18 +162,24 @@ export function UniversalSearch({ isAdminMode = false }: UniversalSearchProps) {
         }
         onClick={() => setOpen(true)}
       >
-        <Search className="mr-2 h-4 w-4" style={isAdminMode ? { color: "var(--navbar-admin-primary)" } : undefined} />
-        <span>Search anything...</span>
+        <Search
+          className={cn(
+            "text-muted-foreground group-hover:text-foreground mr-2 h-4 w-4 transition-colors",
+            isAdminMode && "text-[var(--navbar-admin-primary)] group-hover:text-[var(--navbar-admin-primary)]"
+          )}
+          style={isAdminMode ? { color: "var(--navbar-admin-primary)" } : undefined}
+        />
+        <span className="group-hover:text-foreground transition-colors">Search anything...</span>
         <kbd
           className={cn(
-            "bg-muted pointer-events-none absolute top-1.5 right-1.5 hidden h-6 items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium opacity-100 select-none sm:flex",
-            isAdminMode && "bg-transparent"
+            "border-border/60 bg-background/80 text-muted-foreground group-hover:border-border group-hover:bg-background group-hover:text-foreground pointer-events-none absolute top-1.5 right-1.5 hidden h-6 items-center gap-1 rounded border px-1.5 font-mono text-[10px] font-medium transition-colors select-none sm:flex",
+            isAdminMode &&
+              "bg-background/40 group-hover:bg-background/60 border-[var(--navbar-admin-sidebar-border)] text-[var(--navbar-admin-primary)]"
           )}
           style={
             isAdminMode
               ? {
                   borderColor: "var(--navbar-admin-sidebar-border)",
-                  backgroundColor: "var(--navbar-admin-accent-soft)",
                   color: "var(--navbar-admin-primary)",
                 }
               : undefined
