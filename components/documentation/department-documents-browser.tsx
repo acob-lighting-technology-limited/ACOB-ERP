@@ -1183,7 +1183,8 @@ export function DepartmentDocumentsBrowser({
               disabled={!canAddContent || isMutating}
             >
               <FolderPlus className="h-4 w-4" />
-              New Folder
+              <span className="hidden sm:inline">New Folder</span>
+              <span className="sm:hidden">Folder</span>
             </Button>
             <Button
               variant="outline"
@@ -1193,7 +1194,8 @@ export function DepartmentDocumentsBrowser({
               disabled={!canAddContent || isMutating}
             >
               <FolderUp className="h-4 w-4" />
-              Upload Folder
+              <span className="hidden sm:inline">Upload Folder</span>
+              <span className="sm:hidden">Dir</span>
             </Button>
             <Button
               size="sm"
@@ -1202,13 +1204,14 @@ export function DepartmentDocumentsBrowser({
               disabled={!canAddContent || isMutating}
             >
               <Upload className="h-4 w-4" />
-              Upload Files
+              <span className="hidden sm:inline">Upload Files</span>
+              <span className="sm:hidden">Upload</span>
             </Button>
           </div>
         }
       />
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
         <StatCard
           title="Files"
           value={fileCount}
