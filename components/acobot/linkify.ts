@@ -27,7 +27,7 @@ const ROUTE_LABELS: Array<[path: string, label: string]> = [
   ["/leave", "Leave"],
   ["/tasks", "Tasks"],
   ["/goals", "Goals"],
-  ["/fleet", "Fleet"],
+  ["/fleet", "Resource Booking"],
   ["/admin", "Admin"],
   ["/dept", "Department console"],
   ["/pms", "PMS"],
