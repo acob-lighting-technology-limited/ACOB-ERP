@@ -25,7 +25,7 @@ export const ADMIN_ROUTE_GROUPS: RouteGroup[] = [
       },
       { key: "hr.leave", label: "Leave" },
       { key: "hr.attendance", label: "Attendance" },
-      { key: "hr.fleet", label: "Resource Booking", hint: "Fleet & Resources" },
+      { key: "hr.fleet", label: "Resource Booking", hint: "Shared Resource Booking" },
       { key: "hr.pms", label: "PMS", hint: "Includes everything under PMS (CBT / Assessments, etc.)" },
       { key: "jobdescriptions.main", label: "Job Descriptions", hint: "Standalone module" },
     ],
