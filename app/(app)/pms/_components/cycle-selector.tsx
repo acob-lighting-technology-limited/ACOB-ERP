@@ -72,11 +72,9 @@ export function CycleSelector({ cycles, activeCycleId, showLabel = false }: Cycl
 
   return (
     <div className="flex w-full items-center gap-2">
-      {showLabel && (
-        <span className="hidden text-xs font-medium text-muted-foreground sm:inline">Review Cycle:</span>
-      )}
+      {showLabel && <span className="text-muted-foreground hidden text-xs font-medium sm:inline">Review Cycle:</span>}
       <Select value={cadence} onValueChange={handleCadence}>
-        <SelectTrigger className="h-9 w-[130px] shrink-0 bg-background/80 text-xs">
+        <SelectTrigger className="border-border bg-card hover:bg-accent/50 h-9 w-[130px] shrink-0 text-xs shadow-xs transition-colors">
           <SelectValue placeholder="Cadence" />
         </SelectTrigger>
         <SelectContent align="start">
@@ -88,7 +86,7 @@ export function CycleSelector({ cycles, activeCycleId, showLabel = false }: Cycl
         </SelectContent>
       </Select>
       <Select value={selectedValue} onValueChange={handleSelect}>
-        <SelectTrigger className="h-9 w-full bg-background/80 text-xs">
+        <SelectTrigger className="border-border bg-card hover:bg-accent/50 h-9 w-full text-xs shadow-xs transition-colors sm:w-[220px]">
           <SelectValue placeholder={visibleCycles.length === 0 ? "No cycles for this cadence" : "Select Cycle"} />
         </SelectTrigger>
         <SelectContent align="start">
