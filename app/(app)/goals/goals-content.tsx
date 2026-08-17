@@ -21,7 +21,13 @@ import { useCycleFilters } from "@/components/pms/use-cycle-filters"
 
 type GoalsContentProps = {
   initialGoals: Goal[]
-  cycles?: { id: string; name: string; review_type?: string | null; start_date?: string | null; end_date?: string | null }[]
+  cycles?: {
+    id: string
+    name: string
+    review_type?: string | null
+    start_date?: string | null
+    end_date?: string | null
+  }[]
   canCreateGoal?: boolean
   managedDepartments?: string[]
   pageTitle?: string
@@ -210,7 +216,7 @@ export function GoalsContent({
       }
       stats={
         summaryCards.length > 0 ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3">
             {summaryCards.map((card, index) => (
               <StatCard
                 key={card.label}
@@ -304,6 +310,28 @@ export function GoalsContent({
         emptyDescription="No goals match the current filters."
         emptyIcon={Target}
         skeletonRows={5}
+        viewToggle
+        cardRenderer={(row) => (
+          <div className="space-y-3 rounded-xl border p-3.5 sm:p-4">
+            <div className="flex items-start justify-between gap-2 border-b pb-2">
+              <div>
+                <span className="text-foreground block text-sm font-semibold">{row.title}</span>
+                {row.department && <span className="text-muted-foreground block text-xs">{row.department}</span>}
+              </div>
+              <Badge className={approvalClass(row.approval_status)}>{row.approval_status}</Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-muted-foreground block text-[10px] font-medium uppercase">Priority</span>
+                <span className="text-foreground font-medium capitalize">{row.priority}</span>
+              </div>
+              <div>
+                <span className="text-muted-foreground block text-[10px] font-medium uppercase">Due Date</span>
+                <span className="text-foreground font-medium">{row.due_date ? formatWATDate(row.due_date) : "-"}</span>
+              </div>
+            </div>
+          </div>
+        )}
         urlSync
       />
 
