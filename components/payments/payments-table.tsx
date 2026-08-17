@@ -781,7 +781,8 @@ export function PaymentsTable({
           {currentUser.isAdmin ? (
             <Button onClick={() => setIsModalOpen(true)} className="h-8 gap-2" size="sm">
               <Plus className="h-4 w-4" />
-              Add Payment
+              <span className="hidden sm:inline">Add Payment</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           ) : null}
         </div>
