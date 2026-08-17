@@ -96,7 +96,12 @@ export function StatCard({
       <div className="flex items-center justify-between gap-2 px-3 py-2 sm:hidden">
         <div className="min-w-0">
           <p className="text-muted-foreground truncate text-[10px] font-medium">{title}</p>
-          <p className="text-foreground text-base leading-tight font-bold">{value}</p>
+          <p
+            className="text-foreground line-clamp-2 text-xs leading-tight font-bold break-words sm:text-base"
+            title={String(value)}
+          >
+            {value}
+          </p>
           {description && <p className="text-muted-foreground line-clamp-1 text-[10px]">{description}</p>}
           {trend && (
             <p className={cn("text-[10px]", trend.value >= 0 ? "text-green-600" : "text-red-600")}>
@@ -122,7 +127,9 @@ export function StatCard({
         )}
       </CardHeader>
       <CardContent className="hidden px-6 pb-6 sm:block">
-        <div className="text-2xl font-bold">{value}</div>
+        <div className="line-clamp-2 text-xl font-bold break-words lg:text-2xl" title={String(value)}>
+          {value}
+        </div>
         {description && <p className="text-muted-foreground mt-1 line-clamp-1 text-xs">{description}</p>}
         {trend && (
           <p className={cn("mt-1 text-xs", trend.value >= 0 ? "text-green-600" : "text-red-600")}>
