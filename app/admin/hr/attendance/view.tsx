@@ -1054,18 +1054,19 @@ export function AttendanceReportsPage({
       actions={
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={() => setReportDialogOpen(true)} size="sm">
-            <Mail className="mr-2 h-4 w-4" />
-            Reports
+            <Mail className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Reports</span>
           </Button>
           {!lockedDepartment && (
             <Button variant="outline" onClick={() => setManagerOpen(true)} size="sm">
-              <Settings2 className="mr-2 h-4 w-4" />
-              Attendance Manager
+              <Settings2 className="mr-1.5 h-4 w-4" />
+              <span className="hidden sm:inline">Attendance Manager</span>
+              <span className="sm:hidden">Manager</span>
             </Button>
           )}
           <Button variant="outline" onClick={() => setIsExportOpen(true)} disabled={reports.length === 0} size="sm">
-            <Download className="mr-2 h-4 w-4" />
-            Export
+            <Download className="mr-1.5 h-4 w-4" />
+            <span className="hidden sm:inline">Export</span>
           </Button>
         </div>
       }
@@ -1128,6 +1129,30 @@ export function AttendanceReportsPage({
               />
             ),
           }}
+          viewToggle
+          cardRenderer={(r) => (
+            <div className="space-y-3 rounded-xl border p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h4 className="text-sm font-semibold">{r.user_name}</h4>
+                  <p className="text-muted-foreground text-xs">{r.department}</p>
+                </div>
+                {r.attendance_exempt && <Badge variant="outline">Exempt</Badge>}
+              </div>
+              <div className="border-border/40 grid grid-cols-2 gap-2 border-t pt-2 text-xs">
+                <div>
+                  <span className="text-muted-foreground block text-[10px] uppercase">Early / Present</span>
+                  <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                    {r.early_days ?? 0} early / {r.present_days} present
+                  </span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-[10px] uppercase">Absent</span>
+                  <span className="font-semibold text-rose-600 dark:text-rose-400">{r.absent_days} days</span>
+                </div>
+              </div>
+            </div>
+          )}
           emptyTitle={loading ? "Loading attendance report…" : "No attendance report"}
           emptyDescription="No attendance results available for this period."
           emptyIcon={FileText}
