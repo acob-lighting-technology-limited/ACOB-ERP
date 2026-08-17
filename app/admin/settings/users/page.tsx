@@ -244,7 +244,7 @@ export default function UsersPage() {
       icon={Users}
       backLink={{ href: "/admin/settings", label: "Back to Settings" }}
       actions={
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {roleFilter !== "all" && (
             <Button onClick={openAddUserDialog} variant="secondary" size="sm">
               <UserPlus className="mr-2 h-4 w-4" />
