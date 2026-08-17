@@ -130,7 +130,7 @@ const STAFF_PAGE_DESCRIPTIONS: Array<[string, string]> = [
   ["/goals", "Goals — your personal and team goals."],
   ["/reviews", "Reviews — formal performance reviews."],
   ["/reports", "Reports — KSS reports, action tracker, and weekly reports."],
-  ["/fleet", "Fleet — company vehicles and fleet management."],
+  ["/fleet", "Resource Booking — book shared company resources."],
   ["/cbt", "CBT — computer-based training and assessments."],
   ["/directory", "Directory — look up any colleague's name, email, phone, department, and office location."],
   ["/signature", "Signature Generator — create your official ACOB email signature."],
@@ -368,7 +368,7 @@ Whenever you point the user to a page, write it as a **clickable markdown link**
 - **Documentation / Resources** — \`/documentation\`
 - **Goals / PMS / Reviews** — \`/goals\`, \`/pms\`, \`/reviews\`
 - **Reports** — \`/reports\` (KSS, action tracker, weekly)
-- **Fleet** — \`/fleet\`
+- **Resource Booking** — \`/fleet\`
 - **CBT** — \`/cbt\`
 - **Notifications** — \`/notifications\` (alerts only: approvals, tasks, asset alerts, mentions, announcements — NOT where you view your asset inventory or task list)
 - **Settings** — \`/settings\`
