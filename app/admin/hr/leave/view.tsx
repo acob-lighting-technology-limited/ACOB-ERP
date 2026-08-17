@@ -567,7 +567,8 @@ export function LeaveApprovePage({
         actions={
           <Button size="sm" onClick={() => setAddLeaveOpen(true)}>
             <Plus className="mr-1.5 h-4 w-4" />
-            Add Leave
+            <span className="hidden sm:inline">Add Leave</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         }
         tabs={dynamicTabs}
