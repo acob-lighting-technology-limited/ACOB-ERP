@@ -368,15 +368,16 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
       activeTab={activeTab}
       onTabChange={setActiveTab}
       actions={
-        <Button onClick={openCreateDialog} className="gap-2">
+        <Button onClick={openCreateDialog} size="sm" className="gap-2">
           <Plus className="h-4 w-4" />
-          New Document
+          <span className="hidden sm:inline">New Document</span>
+          <span className="sm:hidden">New</span>
         </Button>
       }
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
           <StatCard
-            title="Total"
+            title="Total Docs"
             value={stats.total}
             icon={FileText}
             iconBgColor="bg-blue-500/10"
