@@ -1464,7 +1464,8 @@ export function AdminAssetsContent({
           {!userProfile?.is_department_lead && (
             <Button onClick={() => void handleOpenAssetDialog()} className="gap-2" size="sm">
               <Plus className="h-4 w-4" />
-              Add Asset
+              <span className="hidden sm:inline">Add Asset</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           )}
           <Button variant="outline" onClick={() => router.push("/admin/assets/issues")} className="gap-2" size="sm">

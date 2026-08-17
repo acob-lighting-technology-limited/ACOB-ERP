@@ -107,14 +107,16 @@ function toLocalDateTimeInput(value?: string) {
 
 async function fetchFleetResources(): Promise<FleetResource[]> {
   const response = await apiFetch("/api/fleet/resources")
-  if (!response.ok) throw new Error("Failed to load fleet resources")
+  if (!response.ok) throw new Error("Failed to load resources")
   const payload = await response.json()
   return payload.data || []
 }
 
-async function fetchFleetBookings(scope: string = "all"): Promise<{ bookings: FleetBooking[]; schedule: FleetSchedule[] }> {
+async function fetchFleetBookings(
+  scope: string = "all"
+): Promise<{ bookings: FleetBooking[]; schedule: FleetSchedule[] }> {
   const response = await apiFetch(`/api/fleet/bookings?scope=${scope}`)
-  if (!response.ok) throw new Error("Failed to load fleet bookings")
+  if (!response.ok) throw new Error("Failed to load resource bookings")
   const payload = await response.json()
   return { bookings: payload.data || [], schedule: payload.resource_schedule || [] }
 }
@@ -454,7 +456,7 @@ export function FleetContent() {
 
   return (
     <DataTablePage
-      title="Shared Resource Booking Center"
+      title="Resource Booking Center"
       description="Book shared resources like transport and spaces without time clashes."
       icon={Car}
       backLink={{ href: "/profile", label: "Back to Dashboard" }}
@@ -462,13 +464,14 @@ export function FleetContent() {
       activeTab={activeTab}
       onTabChange={(tab) => setActiveTab(tab as "all" | "my")}
       actions={
-        <Button onClick={() => setOpen(true)} className="gap-2">
+        <Button onClick={() => setOpen(true)} size="sm" className="gap-2">
           <Plus className="h-4 w-4" />
-          New Application
+          <span className="hidden sm:inline">New Application</span>
+          <span className="sm:hidden">New</span>
         </Button>
       }
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             title="Applications"
             value={stats.total}
@@ -565,10 +568,34 @@ export function FleetContent() {
             </div>
           ),
         }}
-        emptyTitle="No resource booking applications"
-        emptyDescription="You have not submitted any resource booking applications yet."
-        emptyIcon={Car}
-        skeletonRows={5}
+        viewToggle
+        cardRenderer={(row) => (
+          <div className="space-y-3 rounded-xl border p-3.5 sm:p-4">
+            <div className="flex items-start justify-between gap-2 border-b pb-2">
+              <div>
+                <span className="text-foreground block text-sm font-semibold">{row.resourceName}</span>
+                <span className="text-muted-foreground block text-xs">{row.requester?.full_name || "Self"}</span>
+              </div>
+              <Badge
+                variant={
+                  row.status === "approved"
+                    ? "default"
+                    : row.status === "pending"
+                      ? "secondary"
+                      : row.status === "rejected"
+                        ? "destructive"
+                        : "outline"
+                }
+              >
+                {row.status}
+              </Badge>
+            </div>
+            <div className="space-y-1 text-xs">
+              <p className="text-muted-foreground">{row.timeRange}</p>
+              <p className="text-foreground line-clamp-2 font-medium">{row.reason}</p>
+            </div>
+          </div>
+        )}
         urlSync
       />
 

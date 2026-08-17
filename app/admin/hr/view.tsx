@@ -3,10 +3,23 @@
 import { useQuery } from "@tanstack/react-query"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Award, Calendar, Clock, Users, CheckCircle, AlertCircle, FileText, Building, MapPin } from "lucide-react"
+import {
+  Award,
+  Calendar,
+  Clock,
+  Users,
+  CheckCircle,
+  AlertCircle,
+  FileText,
+  Building,
+  MapPin,
+  ChevronRight,
+} from "lucide-react"
 import Link from "next/link"
 import { PageWrapper, PageHeader, Section } from "@/components/layout"
 import { StatCard } from "@/components/ui/stat-card"
+import { Badge } from "@/components/ui/badge"
+import { IconFill } from "@/components/ui/icon-fill"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { useAdminScope } from "@/components/admin-scope-context"
 
@@ -107,136 +120,328 @@ export function HRAdminDashboard({
 
       {/* Admin Actions */}
       <Section title="HR Management">
-        <div className="grid grid-cols-1 gap-2 sm:gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
           {/* Employees Management */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-5 w-5" />
-                Employees
-              </CardTitle>
-              <CardDescription>Manage employee profiles and information</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href={`${basePath}/employees`}>
-                <Button className="w-full">Manage Employees ({stats.totalEmployees})</Button>
-              </Link>
-            </CardContent>
-          </Card>
+          <Link href={`${basePath}/employees`} className="group block">
+            <div className="bg-card border-border flex h-full flex-col justify-between rounded-xl border p-4.5 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-500/60 hover:shadow-xl dark:hover:border-blue-400/60">
+              <div className="space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <IconFill
+                      icon={Users}
+                      fillColor="bg-blue-500"
+                      className="h-9 w-9 rounded-lg border border-blue-500/20 bg-blue-500/10 text-blue-600 transition-transform duration-200 group-hover:scale-105 dark:text-blue-400"
+                      iconClassName="h-5 w-5"
+                    />
+                    <h3 className="text-foreground text-base font-semibold transition-colors group-hover:text-blue-500">
+                      Employees
+                    </h3>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 rounded-full border-blue-500/20 bg-blue-500/10 px-2.5 py-0.5 text-xs font-bold text-blue-600 dark:text-blue-400"
+                  >
+                    {stats.totalEmployees} Staff
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Manage employee profiles and information
+                </p>
+              </div>
+              <div className="border-border/40 mt-4 flex items-center justify-between border-t pt-2.5">
+                <span className="text-muted-foreground text-[11px] font-medium">Employee Roster</span>
+                <IconFill
+                  icon={ChevronRight}
+                  fillColor="bg-blue-500"
+                  hoverTextClassName="group-hover:text-white"
+                  className="border-border h-6 w-6 rounded-full border transition-all duration-200 group-hover:translate-x-0.5 hover:border-blue-500/60 dark:hover:border-blue-400/60"
+                  iconClassName="text-muted-foreground h-3.5 w-3.5"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+          </Link>
 
           {/* Departments */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Building className="h-5 w-5" />
-                Departments
-              </CardTitle>
-              <CardDescription>Manage company departments</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href={`${basePath}/departments`}>
-                <Button className="w-full">Manage Departments ({stats.totalDepartments})</Button>
-              </Link>
-            </CardContent>
-          </Card>
+          <Link href={`${basePath}/departments`} className="group block">
+            <div className="bg-card border-border flex h-full flex-col justify-between rounded-xl border p-4.5 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:border-purple-500/60 hover:shadow-xl dark:hover:border-purple-400/60">
+              <div className="space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <IconFill
+                      icon={Building}
+                      fillColor="bg-purple-500"
+                      className="h-9 w-9 rounded-lg border border-purple-500/20 bg-purple-500/10 text-purple-600 transition-transform duration-200 group-hover:scale-105 dark:text-purple-400"
+                      iconClassName="h-5 w-5"
+                    />
+                    <h3 className="text-foreground text-base font-semibold transition-colors group-hover:text-purple-500">
+                      Departments
+                    </h3>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 rounded-full border-purple-500/20 bg-purple-500/10 px-2.5 py-0.5 text-xs font-bold text-purple-600 dark:text-purple-400"
+                  >
+                    {stats.totalDepartments} Depts
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground text-xs leading-relaxed">Manage company departments</p>
+              </div>
+              <div className="border-border/40 mt-4 flex items-center justify-between border-t pt-2.5">
+                <span className="text-muted-foreground text-[11px] font-medium">Department Units</span>
+                <IconFill
+                  icon={ChevronRight}
+                  fillColor="bg-purple-500"
+                  hoverTextClassName="group-hover:text-white"
+                  className="border-border h-6 w-6 rounded-full border transition-all duration-200 group-hover:translate-x-0.5 hover:border-purple-500/60 dark:hover:border-purple-400/60"
+                  iconClassName="text-muted-foreground h-3.5 w-3.5"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+          </Link>
 
           {/* Office Locations */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <MapPin className="h-5 w-5" />
-                Office Locations
-              </CardTitle>
-              <CardDescription>View locations and assigned employees</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href={`${basePath}/office-location`}>
-                <Button className="w-full">Manage Locations ({stats.totalOfficeLocations})</Button>
-              </Link>
-            </CardContent>
-          </Card>
+          <Link href={`${basePath}/office-location`} className="group block">
+            <div className="bg-card border-border flex h-full flex-col justify-between rounded-xl border p-4.5 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-500/60 hover:shadow-xl dark:hover:border-teal-400/60">
+              <div className="space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <IconFill
+                      icon={MapPin}
+                      fillColor="bg-teal-500"
+                      className="h-9 w-9 rounded-lg border border-teal-500/20 bg-teal-500/10 text-teal-600 transition-transform duration-200 group-hover:scale-105 dark:text-teal-400"
+                      iconClassName="h-5 w-5"
+                    />
+                    <h3 className="text-foreground text-base font-semibold transition-colors group-hover:text-teal-500">
+                      Office Locations
+                    </h3>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 rounded-full border-teal-500/20 bg-teal-500/10 px-2.5 py-0.5 text-xs font-bold text-teal-600 dark:text-teal-400"
+                  >
+                    {stats.totalOfficeLocations} Locations
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground text-xs leading-relaxed">View locations and assigned employees</p>
+              </div>
+              <div className="border-border/40 mt-4 flex items-center justify-between border-t pt-2.5">
+                <span className="text-muted-foreground text-[11px] font-medium">Physical Offices</span>
+                <IconFill
+                  icon={ChevronRight}
+                  fillColor="bg-teal-500"
+                  hoverTextClassName="group-hover:text-white"
+                  className="border-border h-6 w-6 rounded-full border transition-all duration-200 group-hover:translate-x-0.5 hover:border-teal-500/60 dark:hover:border-teal-400/60"
+                  iconClassName="text-muted-foreground h-3.5 w-3.5"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+          </Link>
 
           {/* Leave Approvals */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Leave Approvals
-              </CardTitle>
-              <CardDescription>Review and approve leave requests</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href={leavePath}>
-                <Button className="w-full">Approve Requests ({stats.pendingLeaveRequests})</Button>
-              </Link>
-            </CardContent>
-          </Card>
+          <Link href={leavePath} className="group block">
+            <div className="bg-card border-border flex h-full flex-col justify-between rounded-xl border p-4.5 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:border-amber-500/60 hover:shadow-xl dark:hover:border-amber-400/60">
+              <div className="space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <IconFill
+                      icon={Calendar}
+                      fillColor="bg-amber-500"
+                      className="h-9 w-9 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-600 transition-transform duration-200 group-hover:scale-105 dark:text-amber-400"
+                      iconClassName="h-5 w-5"
+                    />
+                    <h3 className="text-foreground text-base font-semibold transition-colors group-hover:text-amber-500">
+                      Leave Approvals
+                    </h3>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 rounded-full border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-xs font-bold text-amber-600 dark:text-amber-400"
+                  >
+                    {stats.pendingLeaveRequests} Pending
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground text-xs leading-relaxed">Review and approve leave requests</p>
+              </div>
+              <div className="border-border/40 mt-4 flex items-center justify-between border-t pt-2.5">
+                <span className="text-muted-foreground text-[11px] font-medium">Leave Queue</span>
+                <IconFill
+                  icon={ChevronRight}
+                  fillColor="bg-amber-500"
+                  hoverTextClassName="group-hover:text-white"
+                  className="border-border h-6 w-6 rounded-full border transition-all duration-200 group-hover:translate-x-0.5 hover:border-amber-500/60 dark:hover:border-amber-400/60"
+                  iconClassName="text-muted-foreground h-3.5 w-3.5"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+          </Link>
 
           {/* Resource Booking */}
           {canAccessHrResources && (
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Resource Booking
-                </CardTitle>
-                <CardDescription>Manage shared resources and review booking applications</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Link href={`${basePath}/resources`}>
-                  <Button className="w-full">Open Resource Booking Admin</Button>
-                </Link>
-              </CardContent>
-            </Card>
+            <Link href={`${basePath}/resources`} className="group block">
+              <div className="bg-card border-border flex h-full flex-col justify-between rounded-xl border p-4.5 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:border-indigo-500/60 hover:shadow-xl dark:hover:border-indigo-400/60">
+                <div className="space-y-2.5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2.5">
+                      <IconFill
+                        icon={Calendar}
+                        fillColor="bg-indigo-500"
+                        className="h-9 w-9 rounded-lg border border-indigo-500/20 bg-indigo-500/10 text-indigo-600 transition-transform duration-200 group-hover:scale-105 dark:text-indigo-400"
+                        iconClassName="h-5 w-5"
+                      />
+                      <h3 className="text-foreground text-base font-semibold transition-colors group-hover:text-indigo-500">
+                        Resource Booking
+                      </h3>
+                    </div>
+                    <Badge
+                      variant="outline"
+                      className="shrink-0 rounded-full border-indigo-500/20 bg-indigo-500/10 px-2.5 py-0.5 text-xs font-bold text-indigo-600 dark:text-indigo-400"
+                    >
+                      Admin
+                    </Badge>
+                  </div>
+                  <p className="text-muted-foreground text-xs leading-relaxed">
+                    Manage shared resources and review booking applications
+                  </p>
+                </div>
+                <div className="border-border/40 mt-4 flex items-center justify-between border-t pt-2.5">
+                  <span className="text-muted-foreground text-[11px] font-medium">Shared Assets</span>
+                  <IconFill
+                    icon={ChevronRight}
+                    fillColor="bg-indigo-500"
+                    hoverTextClassName="group-hover:text-white"
+                    className="border-border h-6 w-6 rounded-full border transition-all duration-200 group-hover:translate-x-0.5 hover:border-indigo-500/60 dark:hover:border-indigo-400/60"
+                    iconClassName="text-muted-foreground h-3.5 w-3.5"
+                    aria-hidden="true"
+                  />
+                </div>
+              </div>
+            </Link>
           )}
 
           {/* Attendance Reports */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Attendance Reports
-              </CardTitle>
-              <CardDescription>View and export attendance data</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href={`${basePath}/attendance`}>
-                <Button className="w-full">View Reports</Button>
-              </Link>
-            </CardContent>
-          </Card>
+          <Link href={`${basePath}/attendance`} className="group block">
+            <div className="bg-card border-border flex h-full flex-col justify-between rounded-xl border p-4.5 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-500/60 hover:shadow-xl dark:hover:border-emerald-400/60">
+              <div className="space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <IconFill
+                      icon={Clock}
+                      fillColor="bg-emerald-500"
+                      className="h-9 w-9 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 transition-transform duration-200 group-hover:scale-105 dark:text-emerald-400"
+                      iconClassName="h-5 w-5"
+                    />
+                    <h3 className="text-foreground text-base font-semibold transition-colors group-hover:text-emerald-500">
+                      Attendance Reports
+                    </h3>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 rounded-full border-emerald-500/20 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-bold text-emerald-600 dark:text-emerald-400"
+                  >
+                    {stats.todayAttendance} Today
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground text-xs leading-relaxed">View and export attendance data</p>
+              </div>
+              <div className="border-border/40 mt-4 flex items-center justify-between border-t pt-2.5">
+                <span className="text-muted-foreground text-[11px] font-medium">Clocking Logs</span>
+                <IconFill
+                  icon={ChevronRight}
+                  fillColor="bg-emerald-500"
+                  hoverTextClassName="group-hover:text-white"
+                  className="border-border h-6 w-6 rounded-full border transition-all duration-200 group-hover:translate-x-0.5 hover:border-emerald-500/60 dark:hover:border-emerald-400/60"
+                  iconClassName="text-muted-foreground h-3.5 w-3.5"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+          </Link>
 
           {/* Payroll */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <FileText className="h-5 w-5" />
-                Payroll
-              </CardTitle>
-              <CardDescription>Manage payroll periods and calculate payslips</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href={`${basePath}/payroll`}>
-                <Button className="w-full">Open Payroll Panel</Button>
-              </Link>
-            </CardContent>
-          </Card>
+          <Link href={`${basePath}/payroll`} className="group block">
+            <div className="bg-card border-border flex h-full flex-col justify-between rounded-xl border p-4.5 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:border-blue-500/60 hover:shadow-xl dark:hover:border-blue-400/60">
+              <div className="space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <IconFill
+                      icon={FileText}
+                      fillColor="bg-blue-500"
+                      className="h-9 w-9 rounded-lg border border-blue-500/20 bg-blue-500/10 text-blue-600 transition-transform duration-200 group-hover:scale-105 dark:text-blue-400"
+                      iconClassName="h-5 w-5"
+                    />
+                    <h3 className="text-foreground text-base font-semibold transition-colors group-hover:text-blue-500">
+                      Payroll
+                    </h3>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 rounded-full border-blue-500/20 bg-blue-500/10 px-2.5 py-0.5 text-xs font-bold text-blue-600 dark:text-blue-400"
+                  >
+                    Payroll Panel
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Manage payroll periods and calculate payslips
+                </p>
+              </div>
+              <div className="border-border/40 mt-4 flex items-center justify-between border-t pt-2.5">
+                <span className="text-muted-foreground text-[11px] font-medium">Payslip Calculations</span>
+                <IconFill
+                  icon={ChevronRight}
+                  fillColor="bg-blue-500"
+                  hoverTextClassName="group-hover:text-white"
+                  className="border-border h-6 w-6 rounded-full border transition-all duration-200 group-hover:translate-x-0.5 hover:border-blue-500/60 dark:hover:border-blue-400/60"
+                  iconClassName="text-muted-foreground h-3.5 w-3.5"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+          </Link>
 
           {/* PMS */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Award className="h-5 w-5" />
-                PMS
-              </CardTitle>
-              <CardDescription>Track live KPI, goals, attendance, CBT, behaviour, and reviews</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Link href={`${basePath}/pms`}>
-                <Button className="w-full">Open PMS</Button>
-              </Link>
-            </CardContent>
-          </Card>
+          <Link href={`${basePath}/pms`} className="group block">
+            <div className="bg-card border-border flex h-full flex-col justify-between rounded-xl border p-4.5 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:border-amber-500/60 hover:shadow-xl dark:hover:border-amber-400/60">
+              <div className="space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <IconFill
+                      icon={Award}
+                      fillColor="bg-amber-500"
+                      className="h-9 w-9 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-600 transition-transform duration-200 group-hover:scale-105 dark:text-amber-400"
+                      iconClassName="h-5 w-5"
+                    />
+                    <h3 className="text-foreground text-base font-semibold transition-colors group-hover:text-amber-500">
+                      PMS
+                    </h3>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="shrink-0 rounded-full border-amber-500/20 bg-amber-500/10 px-2.5 py-0.5 text-xs font-bold text-amber-600 dark:text-amber-400"
+                  >
+                    {stats.upcomingReviews} Reviews
+                  </Badge>
+                </div>
+                <p className="text-muted-foreground text-xs leading-relaxed">
+                  Track live KPI, goals, attendance, CBT, behaviour, and reviews
+                </p>
+              </div>
+              <div className="border-border/40 mt-4 flex items-center justify-between border-t pt-2.5">
+                <span className="text-muted-foreground text-[11px] font-medium">Performance System</span>
+                <IconFill
+                  icon={ChevronRight}
+                  fillColor="bg-amber-500"
+                  hoverTextClassName="group-hover:text-white"
+                  className="border-border h-6 w-6 rounded-full border transition-all duration-200 group-hover:translate-x-0.5 hover:border-amber-500/60 dark:hover:border-amber-400/60"
+                  iconClassName="text-muted-foreground h-3.5 w-3.5"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
+          </Link>
         </div>
       </Section>
 

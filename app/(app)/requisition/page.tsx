@@ -287,7 +287,9 @@ export default function RequisitionListPage() {
             <RefreshCw className="h-3.5 w-3.5" /> Refresh
           </Button>
           <Button size="sm" onClick={() => setIsCreateOpen(true)} className="gap-1 text-xs">
-            <Plus className="h-4 w-4" /> New Requisition
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">New Requisition</span>
+            <span className="sm:hidden">New</span>
           </Button>
         </div>
       }
@@ -308,6 +310,27 @@ export default function RequisitionListPage() {
         error={error}
         onRetry={fetchRequisitions}
         pagination={{ pageSize: 25 }}
+        viewToggle
+        cardRenderer={(r) => (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-muted-foreground font-mono text-xs font-bold">{r.requisition_number}</span>
+              <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                ₦{Number(r.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+            <div>
+              <h4 className="line-clamp-1 text-sm font-semibold">{r.purpose}</h4>
+              <p className="text-muted-foreground text-xs">{r.project_name || r.department}</p>
+            </div>
+            <div className="border-border/40 flex items-center justify-between border-t pt-2 text-xs">
+              <span className="text-muted-foreground capitalize">{getStageLabel(r.current_stage_code)}</span>
+              <Button variant="ghost" size="sm" asChild className="h-7 px-2 text-xs">
+                <Link href={`/requisition/${r.id}`}>View Form</Link>
+              </Button>
+            </div>
+          </div>
+        )}
       />
 
       <NewRequisitionDialog

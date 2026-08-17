@@ -91,6 +91,23 @@ const CELL_BG: Record<string, string> = {
   half_day: "bg-yellow-50/80 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800",
 }
 
+function shortStatusLabel(status: string, fullLabel: string): string {
+  switch (status) {
+    case "lateness_with_permission":
+      return "LWP"
+    case "absent_with_permission":
+      return "AWP"
+    case "out_of_station":
+      return "Out"
+    case "incomplete":
+      return "Inc"
+    case "on_leave":
+      return "Leave"
+    default:
+      return fullLabel
+  }
+}
+
 export function EmployeeCalendarView() {
   const [calendarMonth, setCalendarMonth] = useState(toLocalYearMonth())
   const [days, setDays] = useState<UnifiedDay[] | null>(null)
@@ -163,7 +180,7 @@ export function EmployeeCalendarView() {
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="min-w-36 text-center text-sm font-medium">{formatMonthLabel(calendarMonth)}</span>
+          <span className="min-w-32 text-center text-sm font-medium">{formatMonthLabel(calendarMonth)}</span>
           <Button
             variant="outline"
             size="icon"
@@ -175,14 +192,16 @@ export function EmployeeCalendarView() {
           </Button>
         </div>
         {!loading && monthWorkedHours !== null && (
-          <div className="flex items-center gap-3">
-            <div className="min-w-[90px] rounded-lg border px-3 py-1.5 text-center">
-              <p className="text-muted-foreground mb-1 text-[11px] leading-none">Work Hours</p>
-              <p className="text-sm leading-none font-semibold text-emerald-600">{monthWorkedHours} hrs</p>
+          <div className="flex items-center gap-2 sm:gap-3">
+            <div className="min-w-[80px] rounded-lg border px-2 py-1 text-center sm:min-w-[90px] sm:px-3 sm:py-1.5">
+              <p className="text-muted-foreground mb-0.5 text-[10px] leading-none sm:mb-1 sm:text-[11px]">Work Hours</p>
+              <p className="text-xs leading-none font-semibold text-emerald-600 sm:text-sm">{monthWorkedHours} hrs</p>
             </div>
-            <div className="min-w-[90px] rounded-lg border px-3 py-1.5 text-center">
-              <p className="text-muted-foreground mb-1 text-[11px] leading-none">Missed Hours</p>
-              <p className="text-sm leading-none font-semibold text-amber-600">{monthMissedHours} hrs</p>
+            <div className="min-w-[80px] rounded-lg border px-2 py-1 text-center sm:min-w-[90px] sm:px-3 sm:py-1.5">
+              <p className="text-muted-foreground mb-0.5 text-[10px] leading-none sm:mb-1 sm:text-[11px]">
+                Missed Hours
+              </p>
+              <p className="text-xs leading-none font-semibold text-amber-600 sm:text-sm">{monthMissedHours} hrs</p>
             </div>
           </div>
         )}
@@ -195,7 +214,10 @@ export function EmployeeCalendarView() {
           {/* Day-of-week headers */}
           <div className="grid grid-cols-7 border-b">
             {DAY_HEADERS.map((d) => (
-              <div key={d} className="text-muted-foreground py-2 text-center text-xs font-semibold">
+              <div
+                key={d}
+                className="text-muted-foreground py-1.5 text-center text-[11px] font-semibold sm:py-2 sm:text-xs"
+              >
                 {d}
               </div>
             ))}
@@ -209,7 +231,7 @@ export function EmployeeCalendarView() {
                 return (
                   <div
                     key={`empty-${i}`}
-                    className={`bg-muted/20 min-h-16 border-b p-1 ${isLastInRow ? "" : "border-r"}`}
+                    className={`bg-muted/20 min-h-14 border-b p-0.5 sm:min-h-16 sm:p-1 ${isLastInRow ? "" : "border-r"}`}
                   />
                 )
               }
@@ -220,26 +242,33 @@ export function EmployeeCalendarView() {
               const clockIn = formatTime(day?.record?.clock_in)
               const clockOut = formatTime(day?.record?.clock_out)
               const timeLabel = clockIn ? (clockOut ? `${clockIn} – ${clockOut}` : clockIn) : ""
+              const fullLabel = status
+                ? (ATTENDANCE_STATUS_LABELS[status as keyof typeof ATTENDANCE_STATUS_LABELS] ?? status)
+                : ""
 
               return (
-                <div key={date} className={`min-h-16 border-b p-1.5 text-xs ${isLastInRow ? "" : "border-r"} ${bg}`}>
+                <div
+                  key={date}
+                  className={`min-h-14 border-b p-1 text-xs sm:min-h-16 sm:p-1.5 ${isLastInRow ? "" : "border-r"} ${bg}`}
+                >
                   <div
-                    className={`mb-1 font-medium ${date === today ? "text-primary font-bold" : "text-muted-foreground"}`}
+                    className={`mb-0.5 text-[11px] font-medium sm:text-xs ${date === today ? "text-primary font-bold" : "text-muted-foreground"}`}
                   >
                     {date.slice(8)}
                   </div>
                   {!isFuture && day && status && status !== "weekend" && (
                     <>
                       <Badge
-                        className={`max-w-full truncate px-1 py-0 text-[10px] font-medium ${
+                        className={`max-w-full truncate px-1 py-0 text-[9px] font-medium sm:text-[10px] ${
                           ATTENDANCE_STATUS_COLORS[status as keyof typeof ATTENDANCE_STATUS_COLORS] ??
                           "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
                         }`}
                       >
-                        {ATTENDANCE_STATUS_LABELS[status as keyof typeof ATTENDANCE_STATUS_LABELS] ?? status}
+                        <span className="sm:hidden">{shortStatusLabel(status, fullLabel)}</span>
+                        <span className="hidden sm:inline">{fullLabel}</span>
                       </Badge>
                       {timeLabel && (
-                        <div className="text-muted-foreground mt-0.5 leading-tight" style={{ fontSize: "10px" }}>
+                        <div className="text-muted-foreground mt-0.5 text-[9px] leading-tight sm:text-[10px]">
                           {timeLabel}
                         </div>
                       )}

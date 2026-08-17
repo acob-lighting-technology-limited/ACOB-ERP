@@ -150,9 +150,9 @@ export function ManageGrossSalaryDialog() {
         </DialogHeader>
 
         <div className="space-y-2 py-1">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-xs font-semibold">Active Salaries Register ({filtered.length})</span>
-            <div className="relative w-48">
+            <div className="relative w-full sm:w-48">
               <Search className="text-muted-foreground absolute top-2 left-2 h-3.5 w-3.5" />
               <Input
                 placeholder="Search staff..."
@@ -163,7 +163,7 @@ export function ManageGrossSalaryDialog() {
             </div>
           </div>
 
-          <div className="border-border/60 max-h-[360px] overflow-y-auto rounded-md border">
+          <div className="border-border/60 max-h-[360px] overflow-x-auto overflow-y-auto rounded-md border">
             <Table>
               <TableHeader>
                 <TableRow className="bg-muted/50 text-[11px]">

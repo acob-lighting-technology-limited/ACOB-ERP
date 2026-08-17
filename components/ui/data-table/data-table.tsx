@@ -669,9 +669,8 @@ export function DataTable<TData>({
   // ─── Column count for colSpan ─────────────────────────────────────────────
   const totalCols =
     visibleColumns.length +
-    (showRowNumbers ? 1 : 0) +
     (selectable ? 1 : 0) +
-    (expandable ? 1 : 0) +
+    (showRowNumbers && expandable && expandAtStart ? 1 : (showRowNumbers ? 1 : 0) + (expandable ? 1 : 0)) +
     (rowActions && rowActions.length > 0 ? 1 : 0)
 
   // ─── Toolbar (shared across all states) ──────────────────────────────────
@@ -681,9 +680,9 @@ export function DataTable<TData>({
   const toolbar = showToolbar ? (
     <div className="space-y-3 p-4">
       {/* Row 1: search + column toggle + view toggle */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex items-center gap-2">
         {!searchDisabled && (
-          <div className="relative flex-1">
+          <div className="relative min-w-0 flex-1">
             <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
             <Input
               placeholder={searchPlaceholder}
@@ -932,8 +931,14 @@ export function DataTable<TData>({
                     />
                   </TableHead>
                 )}
-                {expandable && expandAtStart && <TableHead className="w-10" />}
-                {showRowNumbers && <TableHead className="w-14">S/N</TableHead>}
+                {showRowNumbers && expandable && expandAtStart ? (
+                  <TableHead className="w-16 text-center">S/N</TableHead>
+                ) : (
+                  <>
+                    {expandable && expandAtStart && <TableHead className="w-10 text-center" />}
+                    {showRowNumbers && <TableHead className="w-14 text-center">S/N</TableHead>}
+                  </>
+                )}
                 {visibleColumns.map((col) => (
                   <SortableColHead
                     key={col.key}
@@ -1019,24 +1024,60 @@ export function DataTable<TData>({
                           />
                         </TableCell>
                       )}
-                      {expandable && expandAtStart && (
-                        <TableCell>
-                          {canExpand ? (
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-7 w-7"
-                              onClick={() => toggleExpand(rowId)}
-                              aria-label={isExpanded ? "Collapse row" : "Expand row"}
-                              aria-expanded={isExpanded}
-                            >
-                              {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                            </Button>
-                          ) : null}
+                      {showRowNumbers && expandable && expandAtStart ? (
+                        <TableCell className="text-muted-foreground font-medium whitespace-nowrap">
+                          <div className="flex items-center gap-1">
+                            {canExpand ? (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="text-muted-foreground hover:text-foreground h-6 w-6 shrink-0 p-0"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  toggleExpand(rowId)
+                                }}
+                                aria-label={isExpanded ? "Collapse row" : "Expand row"}
+                                aria-expanded={isExpanded}
+                              >
+                                {isExpanded ? (
+                                  <ChevronDown className="h-3.5 w-3.5" />
+                                ) : (
+                                  <ChevronRight className="h-3.5 w-3.5" />
+                                )}
+                              </Button>
+                            ) : null}
+                            <span>{globalIndex + 1}</span>
+                          </div>
                         </TableCell>
-                      )}
-                      {showRowNumbers && (
-                        <TableCell className="text-muted-foreground font-medium">{globalIndex + 1}</TableCell>
+                      ) : (
+                        <>
+                          {expandable && expandAtStart && (
+                            <TableCell>
+                              {canExpand ? (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-7 w-7"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    toggleExpand(rowId)
+                                  }}
+                                  aria-label={isExpanded ? "Collapse row" : "Expand row"}
+                                  aria-expanded={isExpanded}
+                                >
+                                  {isExpanded ? (
+                                    <ChevronDown className="h-4 w-4" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4" />
+                                  )}
+                                </Button>
+                              ) : null}
+                            </TableCell>
+                          )}
+                          {showRowNumbers && (
+                            <TableCell className="text-muted-foreground font-medium">{globalIndex + 1}</TableCell>
+                          )}
+                        </>
                       )}
                       {visibleColumns.map((col) => (
                         <TableCell

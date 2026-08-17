@@ -1021,7 +1021,7 @@ export function LunchRegisterPage({
         ) : undefined
       }
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {activeTab === "menus" && (
             <Button
               size="sm"

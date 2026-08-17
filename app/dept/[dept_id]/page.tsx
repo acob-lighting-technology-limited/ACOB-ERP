@@ -312,13 +312,22 @@ export default async function DeptOverviewPage({ params }: DeptOverviewPageProps
         actions={
           <>
             <Button asChild size="sm">
-              <Link href={`/dept/${dept_id}/hr/employees`}>Manage Employees</Link>
+              <Link href={`/dept/${dept_id}/hr/employees`}>
+                <span className="hidden sm:inline">Manage Employees</span>
+                <span className="sm:hidden">Employees</span>
+              </Link>
             </Button>
             <Button asChild size="sm" variant="outline">
-              <Link href={`/dept/${dept_id}/tasks`}>Review Tasks</Link>
+              <Link href={`/dept/${dept_id}/tasks`}>
+                <span className="hidden sm:inline">Review Tasks</span>
+                <span className="sm:hidden">Tasks</span>
+              </Link>
             </Button>
             <Button asChild size="sm" variant="outline">
-              <Link href={`/dept/${dept_id}/hr/leave`}>Review Leave</Link>
+              <Link href={`/dept/${dept_id}/hr/leave`}>
+                <span className="hidden sm:inline">Review Leave</span>
+                <span className="sm:hidden">Leave</span>
+              </Link>
             </Button>
           </>
         }

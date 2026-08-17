@@ -227,7 +227,7 @@ export function AdminAuditLogsContent({
       icon={ScrollText}
       backLink={{ href: "/admin", label: "Back to Admin" }}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" className="h-8 gap-2" onClick={() => setExportOptionsOpen(true)}>
             <Download className="h-4 w-4" />
             Export

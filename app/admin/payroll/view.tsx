@@ -331,7 +331,7 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
   )
 
   const actions = initialData.isAdmin ? (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <ManageGrossSalaryDialog />
       <Button asChild variant="outline" size="sm">
         <Link href="/admin/payroll/calculator">

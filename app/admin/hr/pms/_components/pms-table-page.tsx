@@ -81,11 +81,7 @@ function renderStatusBadge(rawStatus: unknown) {
     norm === "absent_with_permission"
   ) {
     badgeClasses = "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
-  } else if (
-    s === "lewp" ||
-    s === "early_departure_with_permission" ||
-    norm === "early_departure_with_permission"
-  ) {
+  } else if (s === "lewp" || s === "early_departure_with_permission" || norm === "early_departure_with_permission") {
     badgeClasses = "bg-teal-500/10 text-teal-600 dark:text-teal-400 border-teal-500/20"
   } else if (s === "lwop" || s === "leave_without_pay" || norm === "lwop") {
     badgeClasses = "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
@@ -104,7 +100,7 @@ function renderStatusBadge(rawStatus: unknown) {
   }
 
   return (
-    <Badge className={cn("px-2 py-0.5 text-xs font-semibold rounded-md border shadow-none capitalize", badgeClasses)}>
+    <Badge className={cn("rounded-md border px-2 py-0.5 text-xs font-semibold capitalize shadow-none", badgeClasses)}>
       {label}
     </Badge>
   )
@@ -299,7 +295,7 @@ export function PmsTablePage({
       }
       stats={
         summaryCards.length > 0 ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3">
             {summaryCards.map((card, index) => (
               <StatCard
                 key={card.label}
@@ -400,6 +396,40 @@ export function PmsTablePage({
         emptyDescription={tableDescription}
         emptyIcon={Icon}
         skeletonRows={5}
+        viewToggle
+        cardRenderer={(row) => {
+          const firstVal = normalizeCell(row[firstColumnKey])
+          const secondKey = columns[1]?.key
+          const secondVal = secondKey ? normalizeCell(row[secondKey]) : null
+          const statusVal = row.__rawStatus || row.status
+
+          return (
+            <div className="space-y-3 rounded-xl border p-3.5 sm:p-4">
+              <div className="flex items-start justify-between gap-2 border-b pb-2">
+                <div>
+                  <span className="text-foreground block text-sm font-semibold">{firstVal}</span>
+                  {secondVal && secondVal !== "-" && (
+                    <span className="text-muted-foreground block text-xs">{secondVal}</span>
+                  )}
+                </div>
+                {Boolean(statusVal && statusVal !== "-") && renderStatusBadge(statusVal)}
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {columns.slice(2).map((col) => {
+                  if (col.key === "status") return null
+                  const val = normalizeCell(row[col.key])
+                  if (val === "-") return null
+                  return (
+                    <div key={col.key}>
+                      <span className="text-muted-foreground block text-[10px] font-medium uppercase">{col.label}</span>
+                      <span className="text-foreground font-medium">{val}</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        }}
         urlSync
       />
 

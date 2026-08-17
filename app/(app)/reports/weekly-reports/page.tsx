@@ -464,12 +464,13 @@ export default function WeeklyReportsPortal() {
             }}
           >
             <Plus className="h-4 w-4" />
-            Add Report
+            <span className="hidden sm:inline">Add Report</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </div>
       }
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             title="Reports"
             value={stats.total}

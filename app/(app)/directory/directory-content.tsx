@@ -272,12 +272,12 @@ export function DirectoryContent() {
             onClick={() => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.directory() })}
             disabled={isLoading}
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
+            <RefreshCw className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
           <Button size="sm" onClick={() => setExportOpen(true)} disabled={rows.length === 0}>
-            <Download className="mr-2 h-4 w-4" />
-            Export
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Export</span>
           </Button>
         </div>
       }

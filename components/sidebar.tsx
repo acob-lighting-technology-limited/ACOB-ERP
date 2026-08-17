@@ -18,12 +18,14 @@ import {
   Settings,
   ShieldCheck,
   Ticket,
+  TrendingUp,
   User,
   UserCheck,
   Users,
   Wrench,
   FolderKanban,
 } from "lucide-react"
+
 import { toast } from "sonner"
 import { cn, formatName, getInitials } from "@/lib/utils"
 import { createClient } from "@/lib/supabase/client"
@@ -98,20 +100,21 @@ const navigationSections: NavSectionDef[] = [
           { name: "Leave", href: "/leave" },
           { name: "Lunch", href: "/lunch" },
           { name: "Shared Resources", href: "/resources" },
-          {
-            name: "PMS",
-            href: "/pms",
-            children: [
-              { name: "Goals", href: "/pms/goals" },
-              { name: "KPI", href: "/pms/kpi" },
-              { name: "Reviews", href: "/pms/reviews" },
-              { name: "Peer Feedback", href: "/pms/peer-feedback" },
-              { name: "Development Plans", href: "/pms/development-plans" },
-              { name: "Behaviour", href: "/pms/behaviour" },
-              { name: "CBT", href: "/pms/cbt" },
-              { name: "Attendance", href: "/pms/attendance" },
-            ],
-          },
+        ],
+      },
+      {
+        name: "PMS",
+        href: "/pms",
+        icon: TrendingUp,
+        children: [
+          { name: "Goals", href: "/pms/goals" },
+          { name: "KPI", href: "/pms/kpi" },
+          { name: "Reviews", href: "/pms/reviews" },
+          { name: "Peer Feedback", href: "/pms/peer-feedback" },
+          { name: "Development Plans", href: "/pms/development-plans" },
+          { name: "Behaviour", href: "/pms/behaviour" },
+          { name: "CBT", href: "/pms/cbt" },
+          { name: "Attendance", href: "/pms/attendance" },
         ],
       },
       {

@@ -1,10 +1,11 @@
 "use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { FileBarChart, ChevronRight, ArrowLeft, Users } from "lucide-react"
 import Link from "next/link"
+import { FileBarChart, ChevronRight, Users } from "lucide-react"
 import { PageWrapper, PageHeader } from "@/components/layout"
-import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
+import { IconFill } from "@/components/ui/icon-fill"
+import { cn } from "@/lib/utils"
 
 export default function PortalReportsPage() {
   const reportCards = [
@@ -13,49 +14,73 @@ export default function PortalReportsPage() {
       description: "Open the weekly reports, action tracker, KSS, and minutes tools used for your general meeting.",
       href: "/reports/general-meeting",
       icon: Users,
-      color: "text-indigo-600 dark:text-indigo-400",
-      bgColor: "bg-indigo-100 dark:bg-indigo-900/30",
+      tag: "Hub",
+      subLabel: "4 meeting tools",
+      color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",
+      fill: "bg-indigo-500",
+      hoverBorder: "hover:border-indigo-500/60 dark:hover:border-indigo-400/60",
+      hoverText: "group-hover:text-indigo-500",
     },
   ]
 
   return (
     <PageWrapper maxWidth="full" background="gradient">
-      <div className="mb-4">
-        <Button variant="ghost" size="sm" asChild className="text-muted-foreground hover:text-foreground gap-2">
-          <Link href="/profile">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Home
-          </Link>
-        </Button>
-      </div>
-
       <PageHeader
         title="Reports"
         description="Access project status reports, action tracking tools, and weekly performance summaries."
         icon={FileBarChart}
+        backLink={{ href: "/profile", label: "Back to Dashboard" }}
       />
 
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3">
         {reportCards.map((card) => (
-          <Link key={card.title} href={card.href} className="group">
-            <Card className="hover:border-primary h-full border-2 transition-all hover:shadow-lg">
-              <CardHeader className="flex flex-row items-center gap-4 pb-2">
-                <div
-                  className={`${card.bgColor} ${card.color} flex h-12 w-12 items-center justify-center rounded-lg transition-transform group-hover:scale-110`}
-                >
-                  <card.icon className="h-6 w-6" />
+          <Link key={card.title} href={card.href} className="group block">
+            <div
+              className={cn(
+                "bg-card border-border flex h-full flex-col justify-between rounded-xl border p-4.5 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl",
+                card.hoverBorder
+              )}
+            >
+              <div className="space-y-2.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <IconFill
+                      icon={card.icon}
+                      fillColor={card.fill}
+                      className={cn(
+                        "h-9 w-9 rounded-lg border transition-transform duration-200 group-hover:scale-105",
+                        card.color
+                      )}
+                      iconClassName="h-5 w-5"
+                    />
+                    <h3 className={cn("text-foreground text-base font-semibold transition-colors", card.hoverText)}>
+                      {card.title}
+                    </h3>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn("shrink-0 rounded-full px-2.5 py-0.5 text-xs font-bold", card.color)}
+                  >
+                    {card.tag}
+                  </Badge>
                 </div>
-                <div className="flex-1">
-                  <CardTitle className="group-hover:text-primary text-xl transition-colors">{card.title}</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <CardDescription className="text-sm leading-relaxed">{card.description}</CardDescription>
-                <div className="text-primary flex translate-x-[-10px] items-center text-sm font-medium opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100">
-                  Access Tool <ChevronRight className="ml-1 h-4 w-4" />
-                </div>
-              </CardContent>
-            </Card>
+                <p className="text-muted-foreground text-xs leading-relaxed">{card.description}</p>
+              </div>
+              <div className="border-border/40 mt-4 flex items-center justify-between border-t pt-2.5">
+                <span className="text-muted-foreground text-[11px] font-medium">{card.subLabel}</span>
+                <IconFill
+                  icon={ChevronRight}
+                  fillColor={card.fill}
+                  hoverTextClassName="group-hover:text-white"
+                  className={cn(
+                    "border-border h-6 w-6 rounded-full border transition-all duration-200 group-hover:translate-x-0.5",
+                    card.hoverBorder
+                  )}
+                  iconClassName="text-muted-foreground h-3.5 w-3.5"
+                  aria-hidden="true"
+                />
+              </div>
+            </div>
           </Link>
         ))}
       </div>

@@ -197,11 +197,12 @@ export function FeedbackContent({ initialFeedback }: FeedbackContentProps) {
       actions={
         <Button onClick={() => setIsSubmitOpen(true)} size="sm" className="gap-2">
           <Plus className="h-4 w-4" />
-          Submit Feedback
+          <span className="hidden sm:inline">Submit Feedback</span>
+          <span className="sm:hidden">Submit</span>
         </Button>
       }
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
           <StatCard
             title="Total"
             value={userFeedback.length}
@@ -236,6 +237,27 @@ export function FeedbackContent({ initialFeedback }: FeedbackContentProps) {
         searchFn={(row, query) =>
           `${row.title} ${row.description || ""} ${row.feedback_type} ${row.status}`.toLowerCase().includes(query)
         }
+        viewToggle
+        cardRenderer={(row) => (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <Badge variant="outline" className="text-xs font-semibold capitalize">
+                {row.feedback_type.replaceAll("_", " ")}
+              </Badge>
+              <Badge variant={row.status === "resolved" ? "default" : "outline"} className="capitalize">
+                {row.status}
+              </Badge>
+            </div>
+            <div>
+              <h4 className="line-clamp-2 text-sm font-semibold">{row.title}</h4>
+              {row.description && <p className="text-muted-foreground mt-1 line-clamp-2 text-xs">{row.description}</p>}
+            </div>
+            <div className="border-border/40 text-muted-foreground flex items-center justify-between border-t pt-2 text-xs">
+              <span>Submitted</span>
+              <span className="font-mono">{formatWATDate(row.created_at)}</span>
+            </div>
+          </div>
+        )}
         rowActions={[
           {
             label: "Edit",

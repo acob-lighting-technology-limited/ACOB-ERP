@@ -16,7 +16,7 @@ interface PaymentStatsCardsProps {
 
 export function PaymentStatsCards({ stats, formatCurrency }: PaymentStatsCardsProps) {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
       <StatCard
         title="Total Outstanding"
         value={formatCurrency(stats.totalDue, "NGN")}

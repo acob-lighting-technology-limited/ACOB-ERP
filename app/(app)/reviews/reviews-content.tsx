@@ -140,7 +140,10 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
 
   // Reviews carry their cycle inline; dedupe it into the list the shared filters need.
   const cycles = useMemo(() => {
-    const byId = new Map<string, { id: string; name: string; review_type: string | null; start_date?: string | null; end_date?: string | null }>()
+    const byId = new Map<
+      string,
+      { id: string; name: string; review_type: string | null; start_date?: string | null; end_date?: string | null }
+    >()
     for (const review of reviews) {
       const cycle = review.review_cycle
       if (cycle?.id) {
@@ -284,7 +287,7 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
       icon={FileText}
       backLink={{ href: "/profile", label: "Back to Dashboard" }}
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
           <StatCard
             title="Total Reviews"
             value={stats.total}
@@ -319,6 +322,29 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
         searchFn={(r, q) =>
           `${getQuarterLabel(r)} ${r.reviewer?.first_name} ${r.reviewer?.last_name}`.toLowerCase().includes(q)
         }
+        viewToggle
+        cardRenderer={(r) => (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold">{getQuarterLabel(r)}</span>
+              <Badge variant={r.acknowledged_at ? "default" : "outline"} className="capitalize">
+                {r.acknowledged_at ? "Acknowledged" : r.status}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-muted-foreground">Reviewer:</span>
+              <span className="font-medium">
+                {r.reviewer ? formatName(`${r.reviewer.first_name || ""} ${r.reviewer.last_name || ""}`) : "---"}
+              </span>
+            </div>
+            <div className="border-border/40 flex items-center justify-between border-t pt-2 text-xs">
+              <span className="text-muted-foreground">Final Score</span>
+              <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                {formatMetric(r.final_score)}%
+              </span>
+            </div>
+          </div>
+        )}
         expandable={{
           render: (r) => renderReviewDetails(r),
         }}

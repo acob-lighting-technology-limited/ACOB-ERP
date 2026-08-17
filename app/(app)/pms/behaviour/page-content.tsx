@@ -102,7 +102,7 @@ export function BehaviourContent({
       backLink={{ href: "/pms", label: "Back to PMS" }}
       actions={headerActions}
       stats={
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3">
           <StatCard
             title="Competencies"
             value={rows.length}
@@ -135,6 +135,19 @@ export function BehaviourContent({
         pagination={{ pageSize: 50 }}
         searchPlaceholder="Search competency..."
         searchFn={(row, query) => row.competency.toLowerCase().includes(query)}
+        viewToggle
+        cardRenderer={(row) => (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm font-semibold">{row.competency}</span>
+              <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">{row.value}%</span>
+            </div>
+            <div className="border-border/40 text-muted-foreground flex items-center justify-between border-t pt-2 text-xs">
+              <span>Cycle</span>
+              <span>{row.cycle}</span>
+            </div>
+          </div>
+        )}
         expandable={{
           render: () => (
             <div className="grid gap-4 md:grid-cols-3">

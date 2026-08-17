@@ -269,8 +269,8 @@ const adminNavigation: NavItem[] = [
       { name: "Attendance", href: "/admin/hr/employees/attendance" },
       { name: "Leave", href: "/admin/hr/leave" },
       { name: "Lunch Register", href: "/admin/hr/employees/lunch" },
-      // Fleet only — /admin/hr/resources is a re-export of the same page.
-      { name: "Fleet", href: "/admin/hr/fleet" },
+      // Resource Booking — /admin/hr/resources is a re-export of the same page.
+      { name: "Resource Booking", href: "/admin/hr/fleet" },
       { name: "Office Location", href: "/admin/hr/office-location" },
       { name: "Site Locations", href: "/admin/hr/site-locations" },
     ],

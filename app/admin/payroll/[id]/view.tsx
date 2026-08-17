@@ -594,7 +594,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
   const unsentCount = rows.filter((r) => !r.payslip_emailed_at).length
 
   const actions = (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Button variant="outline" size="sm" onClick={handleExport} disabled={isLoading}>
         <Download className="mr-1.5 h-4 w-4" /> Export CSV
       </Button>
@@ -678,7 +678,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
               className="space-y-4 rounded-lg border bg-white p-5 text-sm text-gray-800 shadow-sm dark:bg-white dark:text-gray-800"
             >
               {/* Header: Logo + Company Info + Payslip Label */}
-              <div className="flex items-start justify-between border-b border-gray-200 pb-3">
+              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 pb-3">
                 <div>
                   <Image
                     src="/images/exports/acob-lighting-full.png"
@@ -734,7 +734,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
               </div>
 
               {/* Earnings & Deductions */}
-              <div className="grid grid-cols-2 gap-4 text-[11px]">
+              <div className="grid grid-cols-1 gap-4 text-[11px] sm:grid-cols-2">
                 <div>
                   <h3 className="mb-1.5 border-b border-emerald-200 pb-1 text-[9px] font-bold tracking-widest text-emerald-700 uppercase">
                     Earnings

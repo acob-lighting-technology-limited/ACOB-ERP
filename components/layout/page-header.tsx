@@ -57,32 +57,36 @@ export function PageHeader({
   actionsPlacement = "inline",
   className,
 }: PageHeaderProps) {
-  const renderActions = actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null
+  const renderActions = actions ? (
+    <div className={cn("flex shrink-0 items-center gap-2 pt-0.5", actionsPlacement === "below" ? "w-full" : "w-auto")}>
+      {actions}
+    </div>
+  ) : null
 
   return (
     <div
       className={cn(
         actionsPlacement === "below"
-          ? "flex flex-col gap-4"
-          : "flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between",
+          ? "flex flex-col gap-3"
+          : "flex flex-row items-start justify-between gap-3 sm:gap-4",
         className
       )}
     >
-      <div className="space-y-1">
+      <div className="min-w-0 flex-1 space-y-1">
         {backLink && (
           <Link
             href={backLink.href}
-            className="text-muted-foreground hover:text-foreground mb-2 inline-flex items-center gap-1 text-sm transition-colors"
+            className="text-muted-foreground hover:text-foreground mb-1 inline-flex items-center gap-1 text-xs transition-colors sm:text-sm"
           >
-            <ArrowLeft className="h-4 w-4" />
+            <ArrowLeft className="h-3.5 w-3.5 shrink-0" />
             {backLink.label || "Back"}
           </Link>
         )}
         <div className="flex items-center gap-2">
-          {Icon && <Icon className="text-primary h-6 w-6 md:h-7 md:w-7" />}
-          <h1 className="text-foreground text-2xl font-bold md:text-3xl">{title}</h1>
+          {Icon && <Icon className="text-primary h-5 w-5 shrink-0 sm:h-6 sm:w-6 md:h-7 md:w-7" />}
+          <h1 className="text-foreground text-xl font-bold sm:text-2xl md:text-3xl">{title}</h1>
         </div>
-        {description && <p className="text-muted-foreground text-sm">{description}</p>}
+        {description && <p className="text-muted-foreground text-xs leading-normal sm:text-sm">{description}</p>}
       </div>
       {renderActions}
     </div>

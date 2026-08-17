@@ -396,7 +396,7 @@ export function PortalReferenceGeneratorContent({
         </>
       }
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             title="Total"
             value={stats.total}
@@ -439,6 +439,29 @@ export function PortalReferenceGeneratorContent({
             .toLowerCase()
             .includes(query)
         }
+        viewToggle
+        cardRenderer={(row) => (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-xs font-bold">
+                {["approved", "sent", "filed"].includes(row.status) ? row.reference_number : "Reference Pending"}
+              </span>
+              <Badge variant="outline" className="text-xs capitalize">
+                {row.letter_type || "-"}
+              </Badge>
+            </div>
+            <div>
+              <h4 className="line-clamp-2 text-sm font-semibold">{row.subject}</h4>
+              <p className="text-muted-foreground text-xs">
+                {row.department_name || row.assigned_department_name || "-"}
+              </p>
+            </div>
+            <div className="border-border/40 flex items-center justify-between border-t pt-2 text-xs">
+              <span className="text-muted-foreground capitalize">{statusLabel(row.status)}</span>
+              {row.due_date && <span className="text-muted-foreground font-mono">{row.due_date}</span>}
+            </div>
+          </div>
+        )}
         rowActions={[
           {
             label: "Edit",

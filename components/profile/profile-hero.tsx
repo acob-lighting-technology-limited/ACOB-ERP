@@ -185,63 +185,119 @@ export function ProfileHero({ profile, avatarUrl, attendance, onAvatarChange, on
 
   const birthdayLabel = formatBirthdayLabel(profile.birthday)
 
-  const identityLine = [
-    profile.designation,
-    profile.department,
-    joinedDate ? `Joined ${joinedDate}${tenure ? ` · ${tenure}` : ""}` : null,
-  ].filter(Boolean)
+  const desigAndDept = [profile.designation, profile.department].filter(Boolean).join(" · ")
+  const joinedInfo = joinedDate ? `Joined ${joinedDate}${tenure ? ` · ${tenure}` : ""}` : null
+
+  const identityLine = [profile.designation, profile.department, joinedInfo].filter(Boolean)
+
+  const renderAvatar = (sizeClass: string) => (
+    <div className="group relative shrink-0">
+      <button
+        type="button"
+        onClick={handleAvatarClick}
+        disabled={isUploading}
+        aria-label={avatarUrl ? "View profile photo" : "Add profile photo"}
+        className="block rounded-full"
+      >
+        <Avatar
+          className={cn("border-background border-2 shadow-md transition-transform group-hover:scale-105", sizeClass)}
+        >
+          {avatarUrl && <AvatarImage src={avatarUrl} alt={fullName || "Profile photo"} />}
+          <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold sm:text-2xl">
+            {getInitials(profile.first_name, profile.last_name)}
+          </AvatarFallback>
+        </Avatar>
+      </button>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/jpg,image/png,image/webp"
+        className="hidden"
+        onChange={handleFileSelected}
+      />
+
+      <div
+        className={cn(
+          "border-border/50 bg-background/80 pointer-events-none absolute inset-0 flex items-center justify-center rounded-full border opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100",
+          isUploading && "opacity-100"
+        )}
+      >
+        {isUploading ? (
+          <Loader2 className="h-4 w-4 animate-spin sm:h-5 sm:w-5" />
+        ) : (
+          <Camera className="h-4 w-4 sm:h-5 sm:w-5" />
+        )}
+      </div>
+    </div>
+  )
 
   return (
     <Card className="overflow-hidden border shadow-sm">
-      <CardContent className="p-5 sm:p-7 lg:p-8">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between sm:gap-6">
-          <div className="flex items-start gap-4 sm:gap-5">
-            {/* Avatar with lightbox */}
-            <div className="group relative shrink-0">
-              <button
-                type="button"
-                onClick={handleAvatarClick}
-                disabled={isUploading}
-                aria-label={avatarUrl ? "View profile photo" : "Add profile photo"}
-                className="block rounded-full"
-              >
-                <Avatar className="border-background h-16 w-16 border-2 shadow-md transition-transform group-hover:scale-105 sm:h-24 sm:w-24 lg:h-28 lg:w-28">
-                  {avatarUrl && <AvatarImage src={avatarUrl} alt={fullName || "Profile photo"} />}
-                  <AvatarFallback className="bg-primary text-primary-foreground text-lg font-bold sm:text-2xl">
-                    {getInitials(profile.first_name, profile.last_name)}
-                  </AvatarFallback>
-                </Avatar>
-              </button>
+      <CardContent className="p-4 sm:p-7 lg:p-8">
+        {/* Mobile Layout (< sm) */}
+        <div className="space-y-3 sm:hidden">
+          {/* Top header row: Avatar + Name & Badges */}
+          <div className="flex items-center gap-3.5">
+            {renderAvatar("h-16 w-16")}
 
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/jpg,image/png,image/webp"
-                className="hidden"
-                onChange={handleFileSelected}
-              />
-
-              <div
-                className={cn(
-                  "bg-background/80 border-border/50 pointer-events-none absolute inset-0 flex items-center justify-center rounded-full border opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100",
-                  isUploading && "opacity-100"
-                )}
-              >
-                {isUploading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Camera className="h-5 w-5" />}
-              </div>
-            </div>
-
-            {/* Identity */}
-            <div className="min-w-0 flex-1 pt-0.5">
-              <p className="text-muted-foreground text-xs sm:text-sm">
+            <div className="min-w-0 flex-1">
+              <p className="text-muted-foreground text-xs">
                 {getGreeting()}
                 {profile.first_name ? `, ${formatName(profile.first_name)}` : ""}
-                <span className="hidden sm:inline">
-                  {" "}
-                  · {formatWATDate(new Date(), { weekday: "long", day: "numeric", month: "long" })}
-                </span>
               </p>
-              <h1 className="text-foreground mt-1 text-xl leading-tight font-bold tracking-tight sm:text-2xl lg:text-3xl">
+              <h1 className="text-foreground mt-0.5 text-lg leading-tight font-bold tracking-tight">
+                {fullName || "—"}
+              </h1>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <Badge
+                  variant="outline"
+                  className={`px-2 py-0.5 text-[11px] font-medium ${getRoleBadgeColor(profile.role as UserRole)}`}
+                >
+                  {getRoleDisplayName(profile.role as UserRole)}
+                </Badge>
+                {profile.is_department_lead && (
+                  <Badge
+                    variant="outline"
+                    className="border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-600 dark:text-amber-400"
+                  >
+                    Dept Lead
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Full-width identity details */}
+          {(desigAndDept || joinedInfo) && (
+            <div className="space-y-0.5 pt-0.5 text-xs">
+              {desigAndDept && <p className="text-foreground/90 text-sm font-medium">{desigAndDept}</p>}
+              {joinedInfo && <p className="text-muted-foreground">{joinedInfo}</p>}
+            </div>
+          )}
+
+          {/* Bottom actions & status bar */}
+          <div className="border-border/40 flex flex-wrap items-center justify-between gap-2 border-t pt-2.5">
+            <AttendanceChip attendance={attendance} />
+            <Button onClick={onEdit} variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+              <Pencil className="h-3 w-3" />
+              Edit Profile
+            </Button>
+          </div>
+        </div>
+
+        {/* Desktop Layout (>= sm) */}
+        <div className="hidden sm:flex sm:items-start sm:justify-between sm:gap-6">
+          <div className="flex items-start gap-5">
+            {renderAvatar("h-24 w-24 lg:h-28 lg:w-28")}
+
+            <div className="min-w-0 flex-1 pt-0.5">
+              <p className="text-muted-foreground text-sm">
+                {getGreeting()}
+                {profile.first_name ? `, ${formatName(profile.first_name)}` : ""}
+                <span> · {formatWATDate(new Date(), { weekday: "long", day: "numeric", month: "long" })}</span>
+              </p>
+              <h1 className="text-foreground mt-1 text-2xl leading-tight font-bold tracking-tight lg:text-3xl">
                 {fullName || "—"}
               </h1>
               <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -270,21 +326,10 @@ export function ProfileHero({ profile, avatarUrl, attendance, onAvatarChange, on
                   ))}
                 </p>
               )}
-
-              {/* Status + actions — inline under the identity text on mobile so it
-                  shares the same left edge (avoids sitting flush under the avatar) */}
-              <div className="mt-3 flex items-center gap-2 sm:hidden">
-                <AttendanceChip attendance={attendance} />
-                <Button onClick={onEdit} variant="outline" size="sm" className="gap-1.5">
-                  <Pencil className="h-3 w-3" />
-                  Edit Profile
-                </Button>
-              </div>
             </div>
           </div>
 
-          {/* Status + actions — desktop: docked to the right of the header */}
-          <div className="hidden shrink-0 items-center gap-2 sm:flex">
+          <div className="flex shrink-0 items-center gap-2">
             <AttendanceChip attendance={attendance} />
             <Button onClick={onEdit} variant="outline" size="sm" className="gap-1.5">
               <Pencil className="h-3 w-3" />
@@ -294,7 +339,7 @@ export function ProfileHero({ profile, avatarUrl, attendance, onAvatarChange, on
         </div>
 
         {/* Contact strip */}
-        <div className="text-muted-foreground mt-6 grid grid-cols-1 gap-x-6 gap-y-2.5 border-t pt-5 text-sm sm:grid-cols-2 lg:flex lg:flex-wrap lg:items-center">
+        <div className="text-muted-foreground mt-5 grid grid-cols-1 gap-x-6 gap-y-2.5 border-t pt-4 text-sm sm:mt-6 sm:grid-cols-2 sm:pt-5 lg:flex lg:flex-wrap lg:items-center">
           {profile.company_email && (
             <a
               href={`mailto:${profile.company_email}`}

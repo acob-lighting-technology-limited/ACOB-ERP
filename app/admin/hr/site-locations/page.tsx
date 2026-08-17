@@ -240,7 +240,7 @@ export default function SiteLocationsPage() {
         icon={MapPin}
         backLink={{ href: "/admin/hr", label: "Back to HR" }}
         actions={
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <label className="flex cursor-pointer items-center gap-2 text-sm">
               <Switch checked={includeInactive} onCheckedChange={setIncludeInactive} />
               Show inactive

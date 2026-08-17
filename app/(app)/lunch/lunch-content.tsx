@@ -2,18 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import {
-  CalendarDays,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Loader2,
-  Users,
-  Utensils,
-  Wallet,
-} from "lucide-react"
+import { Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Loader2, Users, Utensils, Wallet } from "lucide-react"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
@@ -210,7 +199,10 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
     return opts
   }, [])
 
-  const monthDeduction = historyRows.reduce((sum, row) => sum + Number(row.employee_deduction), 0)
+  const monthDeduction = useMemo(
+    () => historyRows.reduce((sum, row) => sum + Number(row.employee_deduction || 0), 0),
+    [historyRows]
+  )
 
   // ── Voting ────────────────────────────────────────────────────────────────
   // Answering YES means one dish from every required category; NO answers none
@@ -277,11 +269,13 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
       sortable: true,
       accessor: (row) => row.date,
       render: (row) => (
-        <div>
-          <span className="text-foreground font-semibold">
+        <div className="whitespace-nowrap">
+          <span className="text-foreground block text-xs font-semibold sm:text-sm">
             {formatWATDate(row.date, { day: "numeric", month: "short" })}
           </span>
-          <div className="text-muted-foreground text-xs">{formatWATDate(row.date, { weekday: "long" })}</div>
+          <span className="text-muted-foreground block text-[11px]">
+            {WEEKDAYS[new Date(`${row.date}T12:00:00+01:00`).getDay()]}
+          </span>
         </div>
       ),
     },
@@ -299,7 +293,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
         row.picks.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {row.picks.map((pick) => (
-              <Badge key={pick} variant="outline" className="text-xs font-medium">
+              <Badge key={pick} variant="outline" className="text-xs leading-normal font-medium break-words">
                 {pick}
               </Badge>
             ))}
@@ -327,11 +321,13 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
     },
     {
       key: "employee_deduction",
-      label: "Your Deduction",
+      label: "Deduction",
       sortable: true,
       accessor: (row) => row.employee_deduction,
       render: (row) => (
-        <span className="font-mono text-xs font-bold text-red-600">{naira(row.employee_deduction)}</span>
+        <span className="font-mono text-xs font-bold whitespace-nowrap text-red-600">
+          {naira(row.employee_deduction)}
+        </span>
       ),
     },
   ]
@@ -374,36 +370,55 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
       activeTab={activeTab}
       onTabChange={setActiveTab}
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-          <StatCard
-            title="Your Choice"
-            value={myPickLabel}
-            icon={Check}
-            iconBgColor="bg-emerald-500/10"
-            iconColor="text-emerald-500"
-          />
-          <StatCard
-            title="Voted"
-            value={totalVotes}
-            icon={Users}
-            iconBgColor="bg-blue-500/10"
-            iconColor="text-blue-500"
-          />
-          <StatCard
-            title={votingOpen ? "Voting Closes" : "Voting"}
-            value={data.deadline ? (votingOpen ? formatWATTime(data.deadline) : "Closed") : "—"}
-            icon={Clock}
-            iconBgColor="bg-amber-500/10"
-            iconColor="text-amber-500"
-          />
-          <StatCard
-            title="Deduction / Meal"
-            value={naira(data.pricing.employee_deduction)}
-            icon={Wallet}
-            iconBgColor="bg-violet-500/10"
-            iconColor="text-violet-500"
-          />
-        </div>
+        activeTab === "poll" ? (
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+            <StatCard
+              title="Your Choice"
+              value={myPickLabel}
+              icon={Check}
+              iconBgColor="bg-emerald-500/10"
+              iconColor="text-emerald-500"
+            />
+            <StatCard
+              title="Voted"
+              value={totalVotes}
+              icon={Users}
+              iconBgColor="bg-blue-500/10"
+              iconColor="text-blue-500"
+            />
+            <StatCard
+              title={votingOpen ? "Voting Closes" : "Voting"}
+              value={data.deadline ? (votingOpen ? formatWATTime(data.deadline) : "Closed") : "—"}
+              icon={Clock}
+              iconBgColor="bg-amber-500/10"
+              iconColor="text-amber-500"
+            />
+            <StatCard
+              title="Deduction / Meal"
+              value={naira(data.pricing.employee_deduction)}
+              icon={Wallet}
+              iconBgColor="bg-violet-500/10"
+              iconColor="text-violet-500"
+            />
+          </div>
+        ) : (
+          <div className="grid max-w-xl grid-cols-2 gap-2 sm:gap-3">
+            <StatCard
+              title="Total Deduction"
+              value={naira(monthDeduction)}
+              icon={Wallet}
+              iconBgColor="bg-red-500/10"
+              iconColor="text-red-500"
+            />
+            <StatCard
+              title="Meals This Period"
+              value={historyRows.length}
+              icon={Utensils}
+              iconBgColor="bg-blue-500/10"
+              iconColor="text-blue-500"
+            />
+          </div>
+        )
       }
     >
       {activeTab === "poll" && (
@@ -585,30 +600,6 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
 
       {activeTab === "history" && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
-            <StatCard
-              title="Meals This Period"
-              value={historyRows.length}
-              icon={Utensils}
-              iconBgColor="bg-blue-500/10"
-              iconColor="text-blue-500"
-            />
-            <StatCard
-              title="Total Deduction"
-              value={naira(monthDeduction)}
-              icon={Wallet}
-              iconBgColor="bg-red-500/10"
-              iconColor="text-red-500"
-            />
-            <StatCard
-              title="Company Covered"
-              value={naira(historyRows.reduce((sum, r) => sum + Number(r.company_subsidy), 0))}
-              icon={CalendarDays}
-              iconBgColor="bg-emerald-500/10"
-              iconColor="text-emerald-500"
-            />
-          </div>
-
           <DataTable<HistoryRow>
             data={historyRows}
             columns={historyColumns}
@@ -624,6 +615,45 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
             error={historyError}
             onRetry={() => void loadHistory(historyMonth)}
             pagination={{ pageSize: 31 }}
+            viewToggle
+            cardRenderer={(row) => (
+              <div className="space-y-2.5 p-3.5 sm:p-4">
+                <div className="flex items-center justify-between gap-2 border-b pb-2">
+                  <div>
+                    <span className="text-foreground block text-sm font-semibold">
+                      {formatWATDate(row.date, { day: "numeric", month: "short", year: "numeric" })}
+                    </span>
+                    <span className="text-muted-foreground block text-xs">
+                      {formatWATDate(row.date, { weekday: "long" })}
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="block font-mono text-sm font-bold text-red-500">
+                      {naira(row.employee_deduction)}
+                    </span>
+                    {row.cost > 0 && (
+                      <span className="text-muted-foreground block font-mono text-[11px]">
+                        Meal cost: {naira(row.cost)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-muted-foreground mb-1 text-[11px] font-medium">What You Ate:</p>
+                  {row.picks.length > 0 ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {row.picks.map((pick) => (
+                        <Badge key={pick} variant="outline" className="bg-muted/30 text-xs font-medium">
+                          {pick}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground text-xs italic">Logged by admin</span>
+                  )}
+                </div>
+              </div>
+            )}
           />
         </div>
       )}
@@ -667,13 +697,13 @@ function PollRow({
 
   return (
     <div className="py-1.5">
-      <div className="flex items-center gap-3">
+      <div className="flex items-start gap-2 sm:gap-3">
         <button
           type="button"
           disabled={disabled}
           onClick={onSelect}
           className={cn(
-            "flex min-w-0 flex-1 items-center gap-3 rounded-md px-1 py-1 text-left transition-colors",
+            "flex min-w-0 flex-1 items-start gap-2.5 rounded-md px-1 py-1 text-left transition-colors",
             !disabled && "hover:bg-muted/40",
             disabled && "cursor-not-allowed opacity-60"
           )}
@@ -681,16 +711,20 @@ function PollRow({
         >
           <span
             className={cn(
-              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
+              "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2",
               selected ? "border-primary bg-primary" : "border-muted-foreground/40"
             )}
           >
             {selected && <Check className="text-primary-foreground h-3 w-3" />}
           </span>
-          <span className="min-w-0">
-            <span className="text-foreground block truncate text-sm font-medium">{label}</span>
-            {description && <span className="text-muted-foreground block truncate text-xs">{description}</span>}
-            {unavailable && <span className="block text-xs font-medium text-red-500">Finished</span>}
+          <span className="min-w-0 flex-1">
+            <span className="text-foreground block text-sm leading-snug font-medium break-words">{label}</span>
+            {description && (
+              <span className="text-muted-foreground mt-0.5 block text-xs leading-normal break-words">
+                {description}
+              </span>
+            )}
+            {unavailable && <span className="mt-0.5 block text-xs font-medium text-red-500">Finished</span>}
           </span>
         </button>
 
@@ -699,7 +733,7 @@ function PollRow({
           onClick={onToggleExpanded}
           disabled={count === 0}
           className={cn(
-            "flex shrink-0 items-center gap-1.5 rounded-md px-1 py-1",
+            "mt-0.5 flex shrink-0 items-center gap-1.5 rounded-md px-1.5 py-1",
             count > 0 ? "hover:bg-muted/40" : "cursor-default"
           )}
           aria-expanded={expanded}
@@ -715,7 +749,7 @@ function PollRow({
         </button>
       </div>
 
-      <div className="bg-muted mt-1.5 h-1.5 overflow-hidden rounded-full">
+      <div className="bg-muted mt-2 h-1.5 overflow-hidden rounded-full">
         <div
           className="bg-primary h-full rounded-full transition-[width] duration-300"
           style={{ width: `${percent}%` }}
@@ -723,7 +757,7 @@ function PollRow({
       </div>
 
       {expanded && voters.length > 0 && (
-        <div className="mt-2 space-y-1 pl-9">
+        <div className="mt-2 space-y-1 pl-8 sm:pl-9">
           {voters.map((voter) => (
             <div key={voter.user_id} className="flex items-center gap-2">
               <VoterAvatar voter={voter} className="h-6 w-6 text-[10px]" />
@@ -741,20 +775,33 @@ function PollRow({
 /** Overlapping photos of the most recent voters, newest first. */
 function AvatarStack({ voters, currentUserId }: { voters: LunchVoter[]; currentUserId: string }) {
   if (voters.length === 0) return null
-  const shown = voters.slice(0, AVATAR_STACK_SIZE)
+
+  // Show up to 3 avatars on mobile, 4 on desktop
+  const shownDesktop = voters.slice(0, 4)
+  const extraMobile = voters.length - 3
+  const extraDesktop = voters.length - 4
 
   return (
     <div className="flex items-center -space-x-2">
-      {shown.map((voter) => (
+      {shownDesktop.map((voter, idx) => (
         <VoterAvatar
           key={voter.user_id}
           voter={voter}
-          className={cn("ring-background h-6 w-6 text-[9px] ring-2", voter.user_id === currentUserId && "ring-primary")}
+          className={cn(
+            "ring-background h-6 w-6 text-[9px] ring-2",
+            voter.user_id === currentUserId && "ring-primary",
+            idx === 3 && "hidden sm:inline-flex"
+          )}
         />
       ))}
-      {voters.length > shown.length && (
-        <span className="bg-muted text-muted-foreground ring-background flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-semibold ring-2">
-          +{voters.length - shown.length}
+      {extraMobile > 0 && (
+        <span className="bg-muted text-muted-foreground ring-background flex h-6 w-6 items-center justify-center rounded-full text-[9px] font-semibold ring-2 sm:hidden">
+          +{extraMobile}
+        </span>
+      )}
+      {extraDesktop > 0 && (
+        <span className="bg-muted text-muted-foreground ring-background hidden h-6 w-6 items-center justify-center rounded-full text-[9px] font-semibold ring-2 sm:flex">
+          +{extraDesktop}
         </span>
       )}
     </div>

@@ -8,6 +8,7 @@ import { Package, Boxes, Warehouse, ArrowUpDown, AlertTriangle, TrendingUp } fro
 import Link from "next/link"
 import { PageWrapper, PageHeader, Section } from "@/components/layout"
 import { StatCard } from "@/components/ui/stat-card"
+import { IconFill } from "@/components/ui/icon-fill"
 
 async function fetchInventoryStats(): Promise<InventoryStats> {
   const res = await fetch("/api/admin/inventory/stats", { cache: "no-store" })
@@ -73,11 +74,16 @@ export default function InventoryDashboard() {
       <Section title="Inventory Management">
         <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-2 md:gap-4 lg:grid-cols-3">
           {/* Products */}
-          <Card>
+          <Card className="group">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5" />
-                Products
+              <CardTitle className="flex items-center gap-2.5">
+                <IconFill
+                  icon={Package}
+                  fillColor="bg-blue-500"
+                  className="h-8 w-8 rounded-lg border border-blue-500/20 bg-blue-500/10 text-blue-600 transition-transform duration-200 group-hover:scale-105 dark:text-blue-400"
+                  iconClassName="h-4 w-4"
+                />
+                <span className="transition-colors group-hover:text-blue-500">Products</span>
               </CardTitle>
               <CardDescription>Manage your product catalog</CardDescription>
             </CardHeader>
@@ -94,11 +100,16 @@ export default function InventoryDashboard() {
           </Card>
 
           {/* Categories */}
-          <Card>
+          <Card className="group">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Boxes className="h-5 w-5" />
-                Categories
+              <CardTitle className="flex items-center gap-2.5">
+                <IconFill
+                  icon={Boxes}
+                  fillColor="bg-purple-500"
+                  className="h-8 w-8 rounded-lg border border-purple-500/20 bg-purple-500/10 text-purple-600 transition-transform duration-200 group-hover:scale-105 dark:text-purple-400"
+                  iconClassName="h-4 w-4"
+                />
+                <span className="transition-colors group-hover:text-purple-500">Categories</span>
               </CardTitle>
               <CardDescription>Organize products by category</CardDescription>
             </CardHeader>
@@ -110,11 +121,16 @@ export default function InventoryDashboard() {
           </Card>
 
           {/* Warehouses */}
-          <Card>
+          <Card className="group">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Warehouse className="h-5 w-5" />
-                Warehouses
+              <CardTitle className="flex items-center gap-2.5">
+                <IconFill
+                  icon={Warehouse}
+                  fillColor="bg-teal-500"
+                  className="h-8 w-8 rounded-lg border border-teal-500/20 bg-teal-500/10 text-teal-600 transition-transform duration-200 group-hover:scale-105 dark:text-teal-400"
+                  iconClassName="h-4 w-4"
+                />
+                <span className="transition-colors group-hover:text-teal-500">Warehouses</span>
               </CardTitle>
               <CardDescription>Manage storage locations</CardDescription>
             </CardHeader>
@@ -126,11 +142,16 @@ export default function InventoryDashboard() {
           </Card>
 
           {/* Stock Movements */}
-          <Card>
+          <Card className="group">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <ArrowUpDown className="h-5 w-5" />
-                Stock Movements
+              <CardTitle className="flex items-center gap-2.5">
+                <IconFill
+                  icon={ArrowUpDown}
+                  fillColor="bg-emerald-500"
+                  className="h-8 w-8 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 transition-transform duration-200 group-hover:scale-105 dark:text-emerald-400"
+                  iconClassName="h-4 w-4"
+                />
+                <span className="transition-colors group-hover:text-emerald-500">Stock Movements</span>
               </CardTitle>
               <CardDescription>Track stock in and out</CardDescription>
             </CardHeader>
