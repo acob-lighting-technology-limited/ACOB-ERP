@@ -465,7 +465,7 @@ export function AdminTasksContent({
       icon={ClipboardList}
       backLink={{ href: "/admin", label: "Back to Admin" }}
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setIsWorkflowOpen(true)} className="h-8 gap-2">
             <ArrowRight className="h-4 w-4" /> Workflow Guide
           </Button>
