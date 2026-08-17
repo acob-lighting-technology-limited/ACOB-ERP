@@ -61,9 +61,10 @@ export function CreateTicketDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          New Ticket
+        <Button size="sm">
+          <Plus className="mr-1.5 h-4 w-4" />
+          <span className="hidden sm:inline">New Ticket</span>
+          <span className="sm:hidden">Ticket</span>
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[90vh] w-[95vw] max-w-2xl overflow-y-auto">
