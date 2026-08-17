@@ -395,14 +395,15 @@ export default function ActionTrackerPortal() {
               Export
             </Button>
           ) : null}
-          <Button variant="outline" onClick={handleCarryForward} disabled={isCarryForwarding} className="h-8">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Carry Forward
+          <Button variant="outline" onClick={handleCarryForward} disabled={isCarryForwarding} className="h-8" size="sm">
+            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Carry Forward</span>
+            <span className="sm:hidden">Carry</span>
           </Button>
         </div>
       }
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
           <StatCard title="Total Action Points" value={stats.total} icon={FileSpreadsheet} />
           <StatCard title="Completed" value={stats.completed} icon={CheckCircle2} />
           <StatCard title="Pending" value={stats.pending} icon={Clock} />
