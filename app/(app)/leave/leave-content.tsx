@@ -557,7 +557,7 @@ export function LeaveContent({
       activeTab={activeTab}
       onTabChange={setActiveTab}
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             title="Taken (Days)"
             value={stats.totalTaken}
@@ -592,11 +592,12 @@ export function LeaveContent({
       }
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setIsOverviewOpen(true)}>
-            <CircleHelp className="mr-2 h-4 w-4" />
-            Overview
+          <Button variant="outline" size="sm" onClick={() => setIsOverviewOpen(true)}>
+            <CircleHelp className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Overview</span>
           </Button>
           <Button
+            size="sm"
             onClick={() => {
               if (hasPendingRequest) {
                 setIsCreateBlockedOpen(true)
@@ -605,8 +606,9 @@ export function LeaveContent({
               openCreateDialog()
             }}
           >
-            <Plus className="mr-2 h-4 w-4" />
-            New Request
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">New Request</span>
+            <span className="sm:hidden">New</span>
           </Button>
         </div>
       }
@@ -781,6 +783,45 @@ export function LeaveContent({
                 )
               },
             }}
+            viewToggle
+            cardRenderer={(row) => (
+              <div className="space-y-3 rounded-xl border p-3.5 sm:p-4">
+                <div className="flex items-center justify-between gap-2 border-b pb-2">
+                  <div>
+                    <span className="text-foreground block text-sm font-semibold">
+                      {leaveTypeMap.get(row.leave_type_id)?.name || "Leave"}
+                    </span>
+                    <span className="text-muted-foreground block text-xs">
+                      {row.start_date} to {row.end_date} ({row.days_count} day{Number(row.days_count) > 1 ? "s" : ""})
+                    </span>
+                  </div>
+                  <Badge
+                    variant={
+                      row.status === "approved"
+                        ? "default"
+                        : ["rejected", "cancelled"].includes(row.status)
+                          ? "destructive"
+                          : "outline"
+                    }
+                    className="capitalize"
+                  >
+                    {formatName(row.status)}
+                  </Badge>
+                </div>
+                <div className="space-y-1 text-xs">
+                  <p>
+                    <span className="text-muted-foreground">Reliever:</span>{" "}
+                    <span className="font-medium">{resolvePersonName(row.reliever) || "Not assigned"}</span>
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Current Stage:</span>{" "}
+                    <span className="font-medium">
+                      {approvalStageLabel(row.current_stage_code || row.approval_stage)}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            )}
             urlSync
           />
         )}
@@ -824,6 +865,29 @@ export function LeaveContent({
                   onClick: (r) => setRejectPrompt({ requestId: r.id }),
                 },
               ]}
+              viewToggle
+              cardRenderer={(r) => (
+                <div className="space-y-3 rounded-xl border p-3.5 sm:p-4">
+                  <div className="flex items-center justify-between gap-2 border-b pb-2">
+                    <div>
+                      <span className="text-foreground block text-sm font-semibold">
+                        {r.user?.full_name || "Employee"}
+                      </span>
+                      <span className="text-muted-foreground block text-xs">
+                        {r.start_date} to {r.end_date} ({r.days_count} day{Number(r.days_count) > 1 ? "s" : ""})
+                      </span>
+                    </div>
+                    <Badge variant="outline" className="capitalize">
+                      {formatName(r.status)}
+                    </Badge>
+                  </div>
+                  {r.reason && (
+                    <p className="text-muted-foreground text-xs">
+                      Reason: <span className="text-foreground">{r.reason}</span>
+                    </p>
+                  )}
+                </div>
+              )}
             />
 
             <div className="rounded-lg border p-4">
