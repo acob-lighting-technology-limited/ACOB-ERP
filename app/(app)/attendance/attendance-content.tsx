@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { formatWATDate } from "@/lib/utils/date"
+import { cn } from "@/lib/utils"
 import { Clock, Download, FileQuestion, UserCheck, MapPin, AlertCircle, Calendar } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -117,8 +118,17 @@ function getPrevMonth(yearMonth: string, n: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
 }
 
+function formatClockTime(value: string | null | undefined): string {
+  if (!value || value === "-") return "-"
+  const parts = value.split(":")
+  if (parts.length >= 2) {
+    return `${parts[0]}:${parts[1]}`
+  }
+  return value
+}
+
 function getClockOutLabel(row: Pick<AttendanceRow, "clock_in" | "clock_out" | "date">): string {
-  if (row.clock_out) return row.clock_out
+  if (row.clock_out) return formatClockTime(row.clock_out)
   if (row.clock_in && row.date === toLocalISODate()) return "In Progress"
   return "-"
 }
@@ -253,7 +263,7 @@ export function AttendanceContent({
             clock_out: null,
             total_hours: null,
             status: "no_record",
-            dayLabel: formatWATDate(dateObj, { weekday: "short" }),
+            dayLabel: dateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "Africa/Lagos" }),
             dateLabel: formatWATDate(dateObj, { day: "2-digit", month: "long", year: "numeric" }),
             periodLabel: "-",
             monthLabel,
@@ -278,7 +288,7 @@ export function AttendanceContent({
         return {
           ...existing,
           total_hours: breakdown.total ?? existing.total_hours,
-          dayLabel: formatWATDate(dateObj, { weekday: "short" }),
+          dayLabel: dateObj.toLocaleDateString("en-US", { weekday: "long", timeZone: "Africa/Lagos" }),
           dateLabel: formatWATDate(dateObj, { day: "2-digit", month: "long", year: "numeric" }),
           periodLabel: `${existing.clock_in || "-"} - ${getClockOutLabel({ ...existing, date: workday })}`,
           monthLabel,
@@ -302,6 +312,20 @@ export function AttendanceContent({
   const columns = useMemo<DataTableColumn<AttendanceRow>[]>(
     () => [
       {
+        key: "date",
+        label: "Date",
+        sortable: true,
+        accessor: (row) => row.date,
+        render: (row) => (
+          <div className="whitespace-nowrap">
+            <span className="text-foreground block text-xs font-semibold sm:text-sm">{row.dayLabel}</span>
+            <span className="text-muted-foreground block text-[11px]">
+              {formatWATDate(row.date, { day: "numeric", month: "short", year: "numeric" })}
+            </span>
+          </div>
+        ),
+      },
+      {
         key: "day",
         label: "Day",
         sortable: true,
@@ -315,9 +339,9 @@ export function AttendanceContent({
         sortable: true,
         accessor: (row) => row.clock_in ?? "",
         render: (row) => (
-          <span className="flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5 shrink-0 text-green-600" />
-            <span>{row.clock_in || "-"}</span>
+          <span className="flex items-center gap-1.5 whitespace-nowrap">
+            <Clock className="hidden h-3.5 w-3.5 shrink-0 text-green-600 sm:inline-block" />
+            <span>{formatClockTime(row.clock_in)}</span>
           </span>
         ),
       },
@@ -327,8 +351,8 @@ export function AttendanceContent({
         sortable: true,
         accessor: (row) => row.clock_out ?? "",
         render: (row) => (
-          <span className="flex items-center gap-1.5">
-            <Clock className="h-3.5 w-3.5 shrink-0 text-red-500" />
+          <span className="flex items-center gap-1.5 whitespace-nowrap">
+            <Clock className="hidden h-3.5 w-3.5 shrink-0 text-red-500 sm:inline-block" />
             <span>{getClockOutLabel(row)}</span>
           </span>
         ),
@@ -362,6 +386,7 @@ export function AttendanceContent({
         sortable: true,
         accessor: (row) => row.calculatedTotalHours || row.total_hours || 0,
         render: (row) => (row.calculatedTotalHours != null ? `${row.calculatedTotalHours.toFixed(2)} hrs` : "-"),
+        hideOnMobile: true,
       },
       {
         key: "status",
@@ -527,7 +552,7 @@ export function AttendanceContent({
         activeTab={activeTab}
         onTabChange={(t) => setActiveTab(t as "log" | "calendar")}
         actions={
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {remoteCheckinEnabled && (
               <Button
                 variant="outline"
@@ -657,27 +682,30 @@ export function AttendanceContent({
 
                 return (
                   <div className="space-y-4">
-                    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="grid max-w-xl grid-cols-3 gap-3">
                       <div>
-                        <p className="text-muted-foreground text-xs uppercase">Day</p>
-                        <p className="font-medium">{row.dayLabel}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs uppercase">Date</p>
-                        <p className="font-medium">{row.dateLabel}</p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-xs uppercase">Clock In</p>
-                        <p className="mt-0.5 flex items-center gap-1.5 font-medium">
-                          <Clock className="h-3.5 w-3.5 shrink-0 text-green-600" />
-                          <span>{row.clock_in || "-"}</span>
+                        <p className="text-muted-foreground text-[11px] font-semibold uppercase">Work Hours</p>
+                        <p className="text-sm font-medium">
+                          {row.workHours != null ? `${row.workHours.toFixed(2)} hrs` : "-"}
                         </p>
                       </div>
                       <div>
-                        <p className="text-muted-foreground text-xs uppercase">Clock Out</p>
-                        <p className="mt-0.5 flex items-center gap-1.5 font-medium">
-                          <Clock className="h-3.5 w-3.5 shrink-0 text-red-500" />
-                          <span>{row.clock_out || "-"}</span>
+                        <p className="text-muted-foreground text-[11px] font-semibold uppercase">Missed Hours</p>
+                        <p
+                          className={cn(
+                            "text-sm font-medium",
+                            (row.missedHoursValue ?? 0) > 0 ? "text-orange-500" : ""
+                          )}
+                        >
+                          {row.missedHoursValue != null && row.missedHoursValue > 0
+                            ? `${row.missedHoursValue.toFixed(2)} hrs`
+                            : "0.00 hrs"}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground text-[11px] font-semibold uppercase">Total Hours</p>
+                        <p className="text-sm font-medium">
+                          {row.calculatedTotalHours != null ? `${row.calculatedTotalHours.toFixed(2)} hrs` : "-"}
                         </p>
                       </div>
                     </div>
@@ -752,6 +780,95 @@ export function AttendanceContent({
                   </div>
                 )
               },
+            }}
+            viewToggle
+            cardRenderer={(row) => {
+              const rowAppeals = appeals.filter((a) => a.appeal_date === row.date)
+              const pendingAppeal = rowAppeals.find((a) => a.status === "pending")
+              const approvedAppeal = rowAppeals.find((a) => a.status === "approved")
+              const hasRejected = rowAppeals.some((a) => a.status === "rejected")
+              const isEligible = (["absent", "late", "incomplete"] as string[]).includes(row.normalizedStatus)
+
+              return (
+                <div className="space-y-3 rounded-xl border p-3.5 sm:p-4">
+                  <div className="flex items-center justify-between gap-2 border-b pb-2">
+                    <div>
+                      <span className="text-foreground block text-sm font-semibold">
+                        {formatWATDate(row.date, { day: "numeric", month: "short", year: "numeric" })}
+                      </span>
+                      <span className="text-muted-foreground block text-xs">{row.dayLabel}</span>
+                    </div>
+                    <StatusBadge status={row.normalizedStatus} />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                      <span>
+                        In: <strong className="text-foreground">{formatClockTime(row.clock_in)}</strong>
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Clock className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                      <span>
+                        Out: <strong className="text-foreground">{getClockOutLabel(row)}</strong>
+                      </span>
+                    </div>
+                    <div className="text-muted-foreground">
+                      Work:{" "}
+                      <strong className="text-foreground">
+                        {row.workHours != null ? `${row.workHours.toFixed(2)} hrs` : "-"}
+                      </strong>
+                    </div>
+                    <div className="text-muted-foreground">
+                      Total:{" "}
+                      <strong className="text-foreground">
+                        {row.calculatedTotalHours != null ? `${row.calculatedTotalHours.toFixed(2)} hrs` : "-"}
+                      </strong>
+                    </div>
+                  </div>
+
+                  {(isEligible || rowAppeals.length > 0) && (
+                    <div className="border-border/40 flex items-center justify-end border-t pt-2">
+                      {pendingAppeal ? (
+                        <Badge variant="outline" className="border-amber-500 bg-amber-500/5 text-amber-500">
+                          Pending Appeal
+                        </Badge>
+                      ) : approvedAppeal ? (
+                        <Badge variant="outline" className="border-emerald-500 bg-emerald-500/5 text-emerald-500">
+                          Appeal Approved
+                        </Badge>
+                      ) : hasRejected ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 text-xs text-red-600"
+                          onClick={() => {
+                            setEditAppeal(null)
+                            setAppealDialogRow(row)
+                          }}
+                        >
+                          <FileQuestion className="h-3.5 w-3.5" />
+                          Re-appeal
+                        </Button>
+                      ) : isEligible ? (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 gap-1 text-xs"
+                          onClick={() => {
+                            setEditAppeal(null)
+                            setAppealDialogRow(row)
+                          }}
+                        >
+                          <FileQuestion className="h-3.5 w-3.5" />
+                          Appeal
+                        </Button>
+                      ) : null}
+                    </div>
+                  )}
+                </div>
+              )
             }}
             urlSync
           />
