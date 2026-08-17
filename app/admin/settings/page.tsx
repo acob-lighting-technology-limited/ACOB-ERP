@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils"
 import { Settings, Users, Building2, Shield, Mail, Clock, Brain } from "lucide-react"
 import Link from "next/link"
 import { PageHeader, PageWrapper } from "@/components/layout"
+import { IconFill } from "@/components/ui/icon-fill"
 import { resolveAdminScope } from "@/lib/admin/rbac"
 import { canManageMaintenanceMode } from "@/lib/maintenance"
 
@@ -41,11 +42,16 @@ export default async function AdminSettingsPage() {
 
       {/* Settings Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <Card>
+        <Card className="group">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Users className="h-5 w-5" />
-              User Management
+            <CardTitle className="flex items-center gap-2.5">
+              <IconFill
+                icon={Users}
+                fillColor="bg-blue-500"
+                className="h-8 w-8 rounded-lg border border-blue-500/20 bg-blue-500/10 text-blue-600 transition-transform duration-200 group-hover:scale-105 dark:text-blue-400"
+                iconClassName="h-4 w-4"
+              />
+              <span className="transition-colors group-hover:text-blue-500">User Management</span>
             </CardTitle>
             <CardDescription>Manage user accounts and permissions</CardDescription>
           </CardHeader>
@@ -62,11 +68,16 @@ export default async function AdminSettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="group">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5" />
-              Roles & Permissions
+            <CardTitle className="flex items-center gap-2.5">
+              <IconFill
+                icon={Shield}
+                fillColor="bg-purple-500"
+                className="h-8 w-8 rounded-lg border border-purple-500/20 bg-purple-500/10 text-purple-600 transition-transform duration-200 group-hover:scale-105 dark:text-purple-400"
+                iconClassName="h-4 w-4"
+              />
+              <span className="transition-colors group-hover:text-purple-500">Roles & Permissions</span>
             </CardTitle>
             <CardDescription>Configure user roles and access levels</CardDescription>
           </CardHeader>
@@ -77,11 +88,16 @@ export default async function AdminSettingsPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="group">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Building2 className="h-5 w-5" />
-              Company Settings
+            <CardTitle className="flex items-center gap-2.5">
+              <IconFill
+                icon={Building2}
+                fillColor="bg-teal-500"
+                className="h-8 w-8 rounded-lg border border-teal-500/20 bg-teal-500/10 text-teal-600 transition-transform duration-200 group-hover:scale-105 dark:text-teal-400"
+                iconClassName="h-4 w-4"
+              />
+              <span className="transition-colors group-hover:text-teal-500">Company Settings</span>
             </CardTitle>
             <CardDescription>
               {scope.isAdminLike ? "Configure company information" : "View company information (read-only for leads)"}
@@ -95,11 +111,16 @@ export default async function AdminSettingsPage() {
         </Card>
 
         {canManageMaintenanceMode(scope.role) && (
-          <Card>
+          <Card className="group">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5" />
-                Maintenance Control
+              <CardTitle className="flex items-center gap-2.5">
+                <IconFill
+                  icon={Settings}
+                  fillColor="bg-amber-500"
+                  className="h-8 w-8 rounded-lg border border-amber-500/20 bg-amber-500/10 text-amber-600 transition-transform duration-200 group-hover:scale-105 dark:text-amber-400"
+                  iconClassName="h-4 w-4"
+                />
+                <span className="transition-colors group-hover:text-amber-500">Maintenance Control</span>
               </CardTitle>
               <CardDescription>Toggle maintenance mode and review its current state.</CardDescription>
             </CardHeader>
@@ -112,11 +133,16 @@ export default async function AdminSettingsPage() {
         )}
 
         {(scope.role === "super_admin" || scope.role === "developer") && (
-          <Card>
+          <Card className="group">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Mail className="h-5 w-5" />
-                Mail Settings
+              <CardTitle className="flex items-center gap-2.5">
+                <IconFill
+                  icon={Mail}
+                  fillColor="bg-indigo-500"
+                  className="h-8 w-8 rounded-lg border border-indigo-500/20 bg-indigo-500/10 text-indigo-600 transition-transform duration-200 group-hover:scale-105 dark:text-indigo-400"
+                  iconClassName="h-4 w-4"
+                />
+                <span className="transition-colors group-hover:text-indigo-500">Mail Settings</span>
               </CardTitle>
               <CardDescription>Control system-wide in-app/email notification delivery by module.</CardDescription>
             </CardHeader>
@@ -129,11 +155,16 @@ export default async function AdminSettingsPage() {
         )}
 
         {(scope.role === "super_admin" || scope.role === "developer") && (
-          <Card>
+          <Card className="group">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Brain className="h-5 w-5" />
-                CBT Assessment Settings
+              <CardTitle className="flex items-center gap-2.5">
+                <IconFill
+                  icon={Brain}
+                  fillColor="bg-violet-500"
+                  className="h-8 w-8 rounded-lg border border-violet-500/20 bg-violet-500/10 text-violet-600 transition-transform duration-200 group-hover:scale-105 dark:text-violet-400"
+                  iconClassName="h-4 w-4"
+                />
+                <span className="transition-colors group-hover:text-violet-500">CBT Assessment Settings</span>
               </CardTitle>
               <CardDescription>Configure questions per test and duration per question (exam timer).</CardDescription>
             </CardHeader>
@@ -146,11 +177,16 @@ export default async function AdminSettingsPage() {
         )}
 
         {scope.isAdminLike && (
-          <Card>
+          <Card className="group">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="h-5 w-5" />
-                Attendance Policy
+              <CardTitle className="flex items-center gap-2.5">
+                <IconFill
+                  icon={Clock}
+                  fillColor="bg-emerald-500"
+                  className="h-8 w-8 rounded-lg border border-emerald-500/20 bg-emerald-500/10 text-emerald-600 transition-transform duration-200 group-hover:scale-105 dark:text-emerald-400"
+                  iconClassName="h-4 w-4"
+                />
+                <span className="transition-colors group-hover:text-emerald-500">Attendance Policy</span>
               </CardTitle>
               <CardDescription>Configure working hours, grace cutoff, and incomplete penalty.</CardDescription>
             </CardHeader>
@@ -163,11 +199,16 @@ export default async function AdminSettingsPage() {
         )}
 
         {scope.role === "developer" && (
-          <Card>
+          <Card className="group">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="h-5 w-5" />
-                Developer Control Plane
+              <CardTitle className="flex items-center gap-2.5">
+                <IconFill
+                  icon={Settings}
+                  fillColor="bg-orange-500"
+                  className="h-8 w-8 rounded-lg border border-orange-500/20 bg-orange-500/10 text-orange-600 transition-transform duration-200 group-hover:scale-105 dark:text-orange-400"
+                  iconClassName="h-4 w-4"
+                />
+                <span className="transition-colors group-hover:text-orange-500">Developer Control Plane</span>
               </CardTitle>
               <CardDescription>Developer-only diagnostics, security, and test tooling.</CardDescription>
             </CardHeader>
