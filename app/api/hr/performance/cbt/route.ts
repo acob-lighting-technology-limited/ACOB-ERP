@@ -35,6 +35,7 @@ type ReviewCycleRow = {
   review_type: string | null
   start_date: string | null
   end_date: string | null
+  status: string | null
 }
 
 type CbtReviewRow = {
@@ -123,7 +124,7 @@ export async function GET(request: NextRequest) {
       usersQuery.returns<ScopedUserRow[]>(),
       supabase
         .from("review_cycles")
-        .select("id, name, review_type, start_date, end_date")
+        .select("id, name, review_type, start_date, end_date, status")
         .order("start_date", { ascending: false })
         .returns<ReviewCycleRow[]>(),
     ])

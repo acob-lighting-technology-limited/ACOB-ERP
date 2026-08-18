@@ -97,11 +97,11 @@ export function SearchableMultiSelect({
   }, [portal, open])
 
   const contentClassName =
-    "bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 relative z-50 max-h-[300px] w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-md border shadow-md"
+    "bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 relative z-50 flex max-h-[400px] w-[var(--radix-popover-trigger-width)] flex-col overflow-hidden rounded-md border shadow-md"
 
   const renderContent = () => (
     <>
-      <div className="border-b p-2">
+      <div className="shrink-0 border-b p-2">
         <div className="mb-2 flex items-center gap-2">
           {icon && <span className="flex-shrink-0">{icon}</span>}
           <span className="text-sm font-medium">{label}</span>
@@ -125,7 +125,16 @@ export function SearchableMultiSelect({
           />
         </div>
         {selectedOptions.length > 0 && (
-          <div className="mt-2 flex flex-wrap gap-1">
+          // Capped and independently scrollable — otherwise a long selection
+          // list grows unbounded and, since the outer popover clips overflow,
+          // pushes the options list below out of view entirely (rather than
+          // just scrolling), making it impossible to select anything past
+          // however many already-selected badges fit.
+          <div
+            className="mt-2 flex max-h-[72px] flex-wrap gap-1 overflow-y-auto"
+            onMouseDown={(e) => e.stopPropagation()}
+            onWheel={(e) => e.stopPropagation()}
+          >
             {selectedOptions.map((option) => (
               <Badge
                 key={option.value}
@@ -141,7 +150,7 @@ export function SearchableMultiSelect({
         )}
       </div>
       <div
-        className="max-h-[250px] overflow-y-auto p-1"
+        className="min-h-0 flex-1 overflow-y-auto p-1"
         onMouseDown={(e) => e.stopPropagation()}
         onWheel={(e) => e.stopPropagation()}
       >

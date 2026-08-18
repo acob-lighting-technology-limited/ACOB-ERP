@@ -33,6 +33,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { SearchableMultiSelect } from "@/components/ui/searchable-multi-select"
 import { StatCard } from "@/components/ui/stat-card"
 import { Textarea } from "@/components/ui/textarea"
 import { apiFetch } from "@/lib/api-client"
@@ -73,7 +74,7 @@ const INITIAL_FORM = {
   correct_option: "A" as "A" | "B" | "C" | "D",
   explanation: "",
   is_active: true,
-  targeted_emails: "",
+  targeted_emails: [] as string[],
 }
 
 function formatDate(date: string | undefined) {
@@ -155,15 +156,17 @@ export default function AdminPmsCbtExtraQuestionPage() {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null)
   const [editingQuestion, setEditingQuestion] = useState<CbtQuestion | null>(null)
   const [form, setForm] = useState(INITIAL_FORM)
+  const [candidateEmails, setCandidateEmails] = useState<string[]>([])
 
   const loadPage = useCallback(async () => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const [cyclesResponse, questionsResponse] = await Promise.all([
+      const [cyclesResponse, questionsResponse, candidatesResponse] = await Promise.all([
         apiFetch("/api/hr/performance/cycles", { cache: "no-store" }),
         apiFetch("/api/hr/performance/cbt/questions?is_bonus=true", { cache: "no-store" }),
+        apiFetch("/api/hr/performance/cbt/session", { cache: "no-store" }),
       ])
 
       const cyclesPayload = (await cyclesResponse.json().catch(() => null)) as {
@@ -174,15 +177,24 @@ export default function AdminPmsCbtExtraQuestionPage() {
         data?: CbtQuestion[]
         error?: string
       } | null
+      const candidatesPayload = (await candidatesResponse.json().catch(() => null)) as {
+        data?: { candidates?: { company_email: string | null }[] }
+        error?: string
+      } | null
 
       if (!cyclesResponse.ok) throw new Error(cyclesPayload?.error || "Failed to load review cycles")
       if (!questionsResponse.ok) throw new Error(questionsPayload?.error || "Failed to load CBT questions")
+      if (!candidatesResponse.ok) throw new Error(candidatesPayload?.error || "Failed to load candidate emails")
 
       const nextCycles = cyclesPayload?.data || []
       const nextQuestions = questionsPayload?.data || []
+      const nextCandidateEmails = (candidatesPayload?.data?.candidates || [])
+        .map((c) => c.company_email)
+        .filter((email): email is string => Boolean(email))
 
       setCycles(nextCycles)
       setQuestions(nextQuestions)
+      setCandidateEmails(nextCandidateEmails)
     } catch (loadError) {
       const message = loadError instanceof Error ? loadError.message : "Failed to load CBT questions"
       setError(message)
@@ -199,10 +211,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
   // Land on the quarter that contains today. PMS is scored quarterly, and
   // half-year/annual cycles cover the same dates, so "first active cycle" can
   // silently open the page on the wrong window.
-  const activeCycleId = useMemo(
-    () => pickCurrentCycle(cycles, toLocalISODate(), "quarterly")?.id || "",
-    [cycles]
-  )
+  const activeCycleId = useMemo(() => pickCurrentCycle(cycles, toLocalISODate(), "quarterly")?.id || "", [cycles])
 
   useEffect(() => {
     if (cycles.length > 0 && !searchParams.get("review_cycle_id") && !searchParams.get("cycleId")) {
@@ -245,7 +254,6 @@ export default function AdminPmsCbtExtraQuestionPage() {
     if (dates.length === 0) return "-"
     return formatDate([...dates].sort((left, right) => new Date(right).getTime() - new Date(left).getTime())[0])
   }, [filteredQuestions])
-
 
   const filters: DataTableFilter<CbtQuestion>[] = [
     ...cycleFilters,
@@ -370,7 +378,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
       correct_option: question.correct_option,
       explanation: question.explanation || "",
       is_active: question.is_active !== false,
-      targeted_emails: question.targeted_emails?.join(", ") || "",
+      targeted_emails: question.targeted_emails || [],
     })
     setIsModalOpen(true)
   }
@@ -385,10 +393,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
         : "/api/hr/performance/cbt/questions"
       const method = editingQuestion ? "PATCH" : "POST"
 
-      const parsedEmails = form.targeted_emails
-        .split(",")
-        .map((email) => email.trim().toLowerCase())
-        .filter((email) => email.length > 0)
+      const parsedEmails = Array.from(new Set(form.targeted_emails.map((email) => email.trim().toLowerCase())))
 
       if (parsedEmails.length === 0) {
         throw new Error("At least one target email is required for bonus questions.")
@@ -456,7 +461,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
   return (
     <DataTablePage
       title="CBT Bonus Questions Manager"
-      description="Manage standalone, ungraded bonus/joke questions and specify which candidate emails can see them."
+      description="Manage standalone bonus/joke questions and specify which candidate emails can see them. Scored, but kept out of the real CBT score and never shown to the candidate."
       icon={Brain}
       backLink={{ href: "/admin/hr/pms/cbt", label: "Back to PMS CBT Overview" }}
       actions={
@@ -465,6 +470,11 @@ export default function AdminPmsCbtExtraQuestionPage() {
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
+          <Link href="/admin/hr/pms/cbt/extra/scores">
+            <Button variant="outline" size="sm">
+              View Scores
+            </Button>
+          </Link>
           <Button size="sm" onClick={openCreateModal}>
             <Plus className="h-4 w-4" />
             Add Bonus Question
@@ -629,16 +639,15 @@ export default function AdminPmsCbtExtraQuestionPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="targeted_emails" className="text-white">
-                  Target Candidate Emails
-                </Label>
-                <Input
-                  id="targeted_emails"
-                  placeholder="candidate1@example.com, candidate2@example.com"
-                  value={form.targeted_emails}
-                  onChange={(event) => setForm((current) => ({ ...current, targeted_emails: event.target.value }))}
+                <Label className="text-white">Target Candidate Emails</Label>
+                <SearchableMultiSelect
+                  label="Target Candidate Emails"
+                  values={form.targeted_emails}
+                  options={candidateEmails.map((email) => ({ value: email, label: email }))}
+                  onChange={(values) => setForm((current) => ({ ...current, targeted_emails: values }))}
+                  placeholder="Select candidates..."
+                  searchPlaceholder="Search emails..."
                   className="border-white/10 bg-neutral-900 text-white"
-                  required
                 />
               </div>
             </div>
@@ -775,7 +784,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
               <Button
                 type="submit"
                 loading={saving}
-                disabled={!form.review_cycle_id || !form.targeted_emails}
+                disabled={!form.review_cycle_id || form.targeted_emails.length === 0}
                 className="bg-white text-black hover:bg-slate-200 hover:text-black"
               >
                 {editingQuestion ? "Save Changes" : "Add Question"}

@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
+import { getCbtSettings } from "@/lib/cbt-config"
 
 const log = logger("admin-hr-performance-cbt-attempts-detail")
 export const dynamic = "force-dynamic"
@@ -53,6 +54,46 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ data: null })
     }
 
+    const cbtSettings = await getCbtSettings(dataClient)
+    if (!cbtSettings.show_detailed_responses) {
+      return NextResponse.json({
+        data: {
+          attempt,
+          questions: [],
+          gated: true,
+          gated_reason:
+            "Detailed question-by-question responses, correct answers, and explanations are currently disabled by administrator setting.",
+        },
+      })
+    }
+
+    // Question text, correct answers, and explanations stay withheld — even
+    // from admins/dept leads with access to this route — until the cycle is
+    // closed. hr.pms.cbt.manage is dept-scoped, so without this gate any lead
+    // (or the candidate themselves, via the /pms/cbt self-view that reuses
+    // this same API) sees another department member's answers the moment
+    // they submit, mid-cycle, while others are still sitting the test.
+    const { data: cycle, error: cycleError } = await dataClient
+      .from("review_cycles")
+      .select("status")
+      .eq("id", reviewCycleId)
+      .maybeSingle<{ status: string | null }>()
+
+    if (cycleError) throw cycleError
+    const isRevealed = cycle?.status === "closed"
+
+    if (!isRevealed) {
+      return NextResponse.json({
+        data: {
+          attempt,
+          questions: [],
+          gated: true,
+          gated_reason:
+            "Question-by-question responses, correct answers, and explanations stay hidden while this review cycle's CBT window is still open — so completing early doesn't leak answers to others who haven't sat it yet. They'll appear here once the cycle is closed.",
+        },
+      })
+    }
+
     const questionIds: string[] = (attempt.question_ids as string[]) || []
     let questions: unknown[] = []
 
@@ -66,7 +107,7 @@ export async function GET(request: NextRequest) {
       questions = questionsData || []
     }
 
-    return NextResponse.json({ data: { attempt, questions } })
+    return NextResponse.json({ data: { attempt, questions, gated: false } })
   } catch (error) {
     log.error({ err: String(error) }, "Failed to load CBT attempt detail")
     return NextResponse.json({ error: "Failed to load CBT attempt detail" }, { status: 500 })

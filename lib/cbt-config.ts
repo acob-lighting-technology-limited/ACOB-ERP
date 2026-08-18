@@ -3,11 +3,13 @@ import { SupabaseClient } from "@supabase/supabase-js"
 export interface CbtSettings {
   time_per_question_seconds: number
   total_questions_count: number
+  show_detailed_responses: boolean
 }
 
 export const DEFAULT_CBT_SETTINGS: CbtSettings = {
   time_per_question_seconds: 45,
   total_questions_count: 10,
+  show_detailed_responses: false,
 }
 
 /**
@@ -32,9 +34,15 @@ export async function getCbtSettings(supabase: SupabaseClient): Promise<CbtSetti
         ? val.total_questions_count
         : DEFAULT_CBT_SETTINGS.total_questions_count
 
+    const showDetailed =
+      typeof val.show_detailed_responses === "boolean"
+        ? val.show_detailed_responses
+        : DEFAULT_CBT_SETTINGS.show_detailed_responses
+
     return {
       time_per_question_seconds: timePerQ,
       total_questions_count: totalQ,
+      show_detailed_responses: showDetailed,
     }
   } catch (error) {
     return DEFAULT_CBT_SETTINGS
