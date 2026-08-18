@@ -350,36 +350,16 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // Check access for standalone CBT page or its backing session API route
-  const isCbtPageOrSessionApi =
-    pathname === "/cbt" ||
-    pathname.startsWith("/cbt/") ||
-    pathname === "/api/hr/performance/cbt/session" ||
-    pathname.startsWith("/api/hr/performance/cbt/session/")
-
-  if (isCbtPageOrSessionApi && user) {
-    const scope = await resolveAdminScope(supabase, user.id)
-    const baseRole = scope ? scope.role : null
-
-    const isAllowed =
-      baseRole === "developer" ||
-      baseRole === "super_admin" ||
-      (baseRole === "admin" &&
-        scope &&
-        Array.isArray(scope.adminRoutes) &&
-        (scope.adminRoutes.includes("hr.pms.cbt.manage") ||
-          scope.adminRoutes.includes("hr.pms") ||
-          scope.adminRoutes.includes("hr.main")))
-
-    if (!isAllowed) {
-      if (pathname.startsWith("/api/")) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-      }
-      const url = request.nextUrl.clone()
-      url.pathname = "/profile"
-      return NextResponse.redirect(url)
-    }
-  }
+  // /cbt (and /cbt2) verify each candidate independently via their own
+  // company email + password/DOB, checked fresh on every request — that's
+  // the real security boundary, not whatever site session happens to be
+  // active in this browser. An earlier version of this middleware also
+  // required an admin/developer/super_admin site session to even load the
+  // page, which meant any logged-in-but-non-admin employee got bounced to
+  // /profile — forcing staff to borrow an admin's login just to reach the
+  // form before entering their own separate CBT credentials. Removed: it
+  // added no protection the per-candidate check doesn't already provide,
+  // and actively broke the flow for real candidates.
 
   // CSRF: validate Origin for state-changing requests.
   // First of two layers — the double-submit token check below is the second,

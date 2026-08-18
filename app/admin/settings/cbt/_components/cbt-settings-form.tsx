@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
 import { Button } from "@/components/ui/button"
 import { Clock, Brain, Save } from "lucide-react"
 import { apiFetch } from "@/lib/api-client"
@@ -55,9 +56,8 @@ export function CbtSettingsForm({ initialSettings }: CbtSettingsFormProps) {
             CBT Assessment Configuration
           </CardTitle>
           <CardDescription>
-            Configure default total questions per test session and the duration multiplier per question. The timer
-            applies as an overall exam countdown timer (e.g. {questionCount} questions × {timePerQ}s ={" "}
-            {totalMinutesFormatted} mins total), allowing candidates to navigate freely between questions.
+            Configure default total questions per test session, duration multiplier per question, and candidate question
+            response visibility.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -109,6 +109,24 @@ export function CbtSettingsForm({ initialSettings }: CbtSettingsFormProps) {
                 Seconds allocated per question to compute the total exam countdown duration (default: 45 seconds).
               </p>
             </div>
+          </div>
+
+          <div className="bg-muted/30 border-border/60 flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="space-y-1">
+              <Label htmlFor="show_detailed_responses" className="text-foreground cursor-pointer text-sm font-semibold">
+                Show Detailed Question Responses to Candidates
+              </Label>
+              <p className="text-muted-foreground text-xs leading-relaxed">
+                When turned off, candidate score detail breakdowns in PMS CBT will withhold individual question prompts,
+                choices, correct options, and explanations. Enable this toggle when ready to show full question response
+                analysis to candidates for completed cycles.
+              </p>
+            </div>
+            <Switch
+              id="show_detailed_responses"
+              checked={form.show_detailed_responses ?? false}
+              onCheckedChange={(checked) => setForm((prev) => ({ ...prev, show_detailed_responses: checked }))}
+            />
           </div>
 
           <div className="border-primary/20 bg-primary/5 space-y-2 rounded-xl border p-4">

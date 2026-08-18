@@ -38,6 +38,8 @@ type Attempt = {
 export function CbtAttemptDetail({ profileId, reviewCycleId }: CbtAttemptDetailProps) {
   const [attempt, setAttempt] = useState<Attempt | null>(null)
   const [questions, setQuestions] = useState<Question[]>([])
+  const [isGated, setIsGated] = useState(false)
+  const [gatedReason, setGatedReason] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -53,7 +55,7 @@ export function CbtAttemptDetail({ profileId, reviewCycleId }: CbtAttemptDetailP
         const payload = await res.json().catch(() => null)
         if (!res.ok) throw new Error(payload?.error || "Failed to load CBT details")
 
-        const { attempt: attemptData, questions: rawQuestions } = payload?.data ?? {}
+        const { attempt: attemptData, questions: rawQuestions, gated, gated_reason } = payload?.data ?? {}
 
         if (!attemptData) {
           if (isMounted) {
@@ -71,6 +73,8 @@ export function CbtAttemptDetail({ profileId, reviewCycleId }: CbtAttemptDetailP
         if (isMounted) {
           setAttempt(typedAttempt)
           setQuestions(orderedQuestions)
+          setIsGated(Boolean(gated))
+          setGatedReason(typeof gated_reason === "string" ? gated_reason : null)
         }
       } catch (err) {
         log.error({ err: String(err) }, "Failed to load CBT attempt details")
@@ -168,7 +172,15 @@ export function CbtAttemptDetail({ profileId, reviewCycleId }: CbtAttemptDetailP
       <div className="space-y-4">
         <p className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">Detailed Responses</p>
 
-        {questions.length === 0 ? (
+        {isGated ? (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-700 dark:text-amber-400">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              {gatedReason ||
+                "Question-by-question responses, correct answers, and explanations are currently disabled."}
+            </span>
+          </div>
+        ) : questions.length === 0 ? (
           <p className="text-muted-foreground text-xs italic">No questions found for this attempt.</p>
         ) : (
           <div className="space-y-4">

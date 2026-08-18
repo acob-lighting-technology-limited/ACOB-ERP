@@ -11,6 +11,7 @@ const log = logger("admin-settings-cbt")
 const CbtSettingsSchema = z.object({
   time_per_question_seconds: z.number().min(5, "Time per question must be at least 5 seconds").max(600),
   total_questions_count: z.number().min(1, "Question count must be at least 1").max(100),
+  show_detailed_responses: z.boolean().default(false),
 })
 
 export async function GET() {

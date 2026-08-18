@@ -1,7 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Brain, ChevronLeft, ChevronRight, AlertCircle, Clock, Eye, EyeOff } from "lucide-react"
+import { Brain, ChevronLeft, ChevronRight, AlertCircle, Clock } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -56,7 +56,24 @@ type ResultData = {
   total_questions: number
 }
 
-export default function CbtPage() {
+const MONTH_OPTIONS = [
+  { value: "1", label: "January" },
+  { value: "2", label: "February" },
+  { value: "3", label: "March" },
+  { value: "4", label: "April" },
+  { value: "5", label: "May" },
+  { value: "6", label: "June" },
+  { value: "7", label: "July" },
+  { value: "8", label: "August" },
+  { value: "9", label: "September" },
+  { value: "10", label: "October" },
+  { value: "11", label: "November" },
+  { value: "12", label: "December" },
+]
+
+const DAY_OPTIONS = Array.from({ length: 31 }, (_, i) => String(i + 1))
+
+export default function Cbt2Page() {
   const [candidateOptions, setCandidateOptions] = useState<CandidateOption[]>([])
   const [cycles, setCycles] = useState<ReviewCycleOption[]>([])
   const [loadingOptions, setLoadingOptions] = useState(true)
@@ -66,12 +83,21 @@ export default function CbtPage() {
   const [testStarted, setTestStarted] = useState(false)
   const [result, setResult] = useState<ResultData | null>(null)
   const [currentIndex, setCurrentIndex] = useState(0)
-  const [showPassword, setShowPassword] = useState(false)
   const [answers, setAnswers] = useState<Record<string, "A" | "B" | "C" | "D">>({})
   const [form, setForm] = useState({
     company_email: "",
     review_cycle_id: "",
-    password: "",
+    last_name: "",
+    dob_day: "",
+    dob_month: "",
+  })
+
+  const resetForm = () => ({
+    company_email: "",
+    review_cycle_id: "",
+    last_name: "",
+    dob_day: "",
+    dob_month: "",
   })
 
   const selectedCycleName = useMemo(() => {
@@ -241,14 +267,9 @@ export default function CbtPage() {
     const totalSeconds = session.cbt_settings?.total_time_seconds ?? session.questions.length * 45
     const storageKey = `acob_cbt_timer_${session.attempt_id}`
 
-    // Store an absolute deadline, not a remaining-seconds snapshot. A
-    // snapshot only ticks down while setInterval actually fires, and browsers
-    // throttle/suspend timers in backgrounded tabs — so a snapshot model
-    // effectively "pauses" the clock the moment you switch away, letting
-    // someone leave the tab open for hours with no time cost. A fixed
-    // deadline keeps draining in real wall-clock time regardless of
-    // backgrounding, while still surviving a reload with no bonus or loss
-    // (remaining is always just expiresAt - now).
+    // Store an absolute deadline, not a remaining-seconds snapshot — see
+    // app/cbt/page.tsx for why (background-tab throttling would otherwise
+    // pause the clock).
     let expiresAt: number
     const storedExpiresAt = localStorage.getItem(storageKey)
     if (storedExpiresAt && !isNaN(Number(storedExpiresAt))) {
@@ -264,9 +285,6 @@ export default function CbtPage() {
       const remaining = Math.max(0, Math.floor((expiresAt - Date.now()) / 1000))
       setTimeLeftSeconds(remaining)
 
-      // Guarded by the ref (not clearInterval here, to dodge referencing
-      // `interval` before its declaration below runs) — the effect's own
-      // cleanup clears the interval once `session` is set to null on submit.
       if (remaining <= 0 && !autoSubmittedRef.current) {
         autoSubmittedRef.current = true
         toast.warning("Time's up! Your CBT assessment is being automatically submitted.")
@@ -360,11 +378,7 @@ export default function CbtPage() {
                 try {
                   localStorage.removeItem("acob_cbt_state")
                 } catch (e) {}
-                setForm({
-                  company_email: "",
-                  review_cycle_id: "",
-                  password: "",
-                })
+                setForm(resetForm())
               }}
             >
               Start Another Session
@@ -504,11 +518,7 @@ export default function CbtPage() {
               onClick={() => {
                 if (session.is_completed) {
                   setSession(null)
-                  setForm({
-                    company_email: "",
-                    review_cycle_id: "",
-                    password: "",
-                  })
+                  setForm(resetForm())
                 } else {
                   setTestStarted(true)
                 }
@@ -642,7 +652,9 @@ export default function CbtPage() {
     )
   }
 
-  const isFormValid = Boolean(form.company_email && form.review_cycle_id && form.password)
+  const isFormValid = Boolean(
+    form.company_email && form.review_cycle_id && form.last_name && form.dob_day && form.dob_month
+  )
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-black p-6 text-white">
@@ -653,9 +665,14 @@ export default function CbtPage() {
               <Brain className="h-6 w-6 text-white" />
             </div>
             <div>
-              <CardTitle className="text-3xl">CBT Login Verification</CardTitle>
+              <CardTitle className="text-3xl">CBT Verification</CardTitle>
               <CardDescription className="text-slate-300">
-                Select your review cycle, email address, and enter your password to start the assessment.
+                Select your review cycle, email address, and verify using your last name and date of birth. Know your
+                password instead? Use the standard{" "}
+                <a href="/cbt" className="underline">
+                  /cbt
+                </a>{" "}
+                page.
               </CardDescription>
             </div>
           </div>
@@ -702,25 +719,51 @@ export default function CbtPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <div className="relative">
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  value={form.password}
-                  onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                  className="h-10 border-white/10 bg-white/5 pr-10 text-white"
-                  placeholder="Enter your password"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute top-1/2 right-3 -translate-y-1/2 text-slate-400 transition hover:text-white"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
+              <Label htmlFor="last_name">Last Name</Label>
+              <Input
+                id="last_name"
+                value={form.last_name}
+                onChange={(event) => setForm((current) => ({ ...current, last_name: event.target.value }))}
+                className="h-10 border-white/10 bg-white/5 text-white"
+                placeholder="Enter last name"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Date of Birth</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <Select
+                value={form.dob_day}
+                onValueChange={(value) => setForm((current) => ({ ...current, dob_day: value }))}
+              >
+                <SelectTrigger className="border-white/10 bg-white/5 text-white">
+                  <SelectValue placeholder="Day (DD)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DAY_OPTIONS.map((day) => (
+                    <SelectItem key={day} value={day}>
+                      {day.padStart(2, "0")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select
+                value={form.dob_month}
+                onValueChange={(value) => setForm((current) => ({ ...current, dob_month: value }))}
+              >
+                <SelectTrigger className="border-white/10 bg-white/5 text-white">
+                  <SelectValue placeholder="Month" />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTH_OPTIONS.map((m) => (
+                    <SelectItem key={m.value} value={m.value}>
+                      {m.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

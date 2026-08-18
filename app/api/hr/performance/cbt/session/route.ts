@@ -8,15 +8,29 @@ import { getCbtSettings } from "@/lib/cbt-config"
 
 const log = logger("hr-performance-cbt-session")
 
-const StartSchema = z.object({
-  company_email: z.string().trim().email("Select a valid email"),
-  review_cycle_id: z.string().uuid("Please select a valid review cycle"),
-  password: z.string().min(1, "Password is required"),
-  last_name: z.string().optional(),
-  dob_day: z.union([z.string(), z.number()]).optional(),
-  dob_month: z.union([z.string(), z.number()]).optional(),
-  dob_year: z.union([z.string(), z.number()]).optional(),
-})
+const StartSchema = z
+  .object({
+    company_email: z.string().trim().email("Select a valid email"),
+    review_cycle_id: z.string().uuid("Please select a valid review cycle"),
+    password: z.string().min(1).optional(),
+    last_name: z.string().trim().min(1).optional(),
+    dob_day: z.union([z.string(), z.number()]).optional(),
+    dob_month: z.union([z.string(), z.number()]).optional(),
+  })
+  .superRefine((data, ctx) => {
+    // Two verification paths: password (the primary /cbt flow) or last
+    // name + date of birth (the /cbt2 fallback for candidates who don't
+    // know/have a password). Exactly one must be fully supplied. profiles.
+    // birthday is stored as MM-DD only (no year), so year isn't collected —
+    // day + month is the full comparison.
+    const hasDob = Boolean(data.last_name && data.dob_day && data.dob_month)
+    if (!data.password && !hasDob) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter your password, or your last name and date of birth",
+      })
+    }
+  })
 
 const SubmitSchema = z.object({
   attempt_id: z.string().uuid("Attempt is required"),
@@ -114,7 +128,10 @@ export async function GET(request: NextRequest) {
     )
     const selectableCycles = allCycles.filter((cycle) => cycleIdsWithQuestions.has(cycle.id))
 
-    const defaultCycle = selectableCycles.find((cycle) => cycle.status === "active") ?? selectableCycles[0] ?? null
+    // selectableCycles is ordered newest-first (start_date desc). Default to
+    // the OLDEST cycle with questions, not the newest — candidates work
+    // through missed cycles in order, starting from the earliest gap.
+    const defaultCycle = [...selectableCycles].reverse()[0] ?? null
 
     return NextResponse.json({
       data: {
@@ -150,42 +167,7 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = getServiceClient()
-    const { company_email, review_cycle_id, password } = parsed.data
-
-    // Authenticate candidate password against Supabase Auth
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-    if (supabaseUrl && anonKey && password) {
-      const authClient = createAdminClient(supabaseUrl, anonKey, {
-        auth: { persistSession: false, autoRefreshToken: false },
-      })
-      const { data: authData, error: authError } = await authClient.auth.signInWithPassword({
-        email: company_email,
-        password,
-      })
-
-      if (authError) {
-        return NextResponse.json(
-          { error: "Incorrect password. Please enter the password associated with your company account." },
-          { status: 400 }
-        )
-      }
-
-      // This check lands in auth.audit_log_entries as a `login` even though the
-      // candidate is only unlocking an assessment. Tag it so reconciliation
-      // against the audit log doesn't read it as a missing sign-in.
-      if (authData?.user) {
-        await writeLoginLog({
-          supabase,
-          headers: request.headers,
-          userId: authData.user.id,
-          authMethod: "password",
-          source: REAUTH_SOURCE,
-          userEmail: authData.user.email,
-        })
-      }
-    }
+    const { company_email, review_cycle_id, password, last_name, dob_day, dob_month } = parsed.data
 
     const { data: cycle, error: cycleError } = await supabase
       .from("review_cycles")
@@ -210,6 +192,73 @@ export async function POST(request: NextRequest) {
 
     if (!profile) {
       return NextResponse.json({ error: "The email address entered does not match our records." }, { status: 400 })
+    }
+
+    if (password) {
+      // Authenticate candidate password against Supabase Auth
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+      if (supabaseUrl && anonKey) {
+        const authClient = createAdminClient(supabaseUrl, anonKey, {
+          auth: { persistSession: false, autoRefreshToken: false },
+        })
+        const { data: authData, error: authError } = await authClient.auth.signInWithPassword({
+          email: company_email,
+          password,
+        })
+
+        if (authError) {
+          return NextResponse.json(
+            { error: "Incorrect password. Please enter the password associated with your company account." },
+            { status: 400 }
+          )
+        }
+
+        // This check lands in auth.audit_log_entries as a `login` even though the
+        // candidate is only unlocking an assessment. Tag it so reconciliation
+        // against the audit log doesn't read it as a missing sign-in.
+        if (authData?.user) {
+          await writeLoginLog({
+            supabase,
+            headers: request.headers,
+            userId: authData.user.id,
+            authMethod: "password",
+            source: REAUTH_SOURCE,
+            userEmail: authData.user.email,
+          })
+        }
+      }
+    } else {
+      // Fallback verification for candidates who don't know/have a password
+      // (the /cbt2 flow): last name + date of birth, matched against the
+      // profile on file — same check the original /cbt used before password
+      // auth was added.
+      const isLastNameMatch =
+        String(profile.last_name || "")
+          .trim()
+          .toLowerCase() ===
+        String(last_name || "")
+          .trim()
+          .toLowerCase()
+
+      const dayNum = Number(dob_day)
+      const monthNum = Number(dob_month)
+      const enteredMMDD = `${String(monthNum).padStart(2, "0")}-${String(dayNum).padStart(2, "0")}`
+      const isDobMatch = profile.birthday === enteredMMDD
+
+      if (!isLastNameMatch && !isDobMatch) {
+        return NextResponse.json(
+          { error: "The last name and date of birth entered do not match our records." },
+          { status: 400 }
+        )
+      }
+      if (!isLastNameMatch) {
+        return NextResponse.json({ error: "The last name entered does not match our records." }, { status: 400 })
+      }
+      if (!isDobMatch) {
+        return NextResponse.json({ error: "The date of birth entered does not match our records." }, { status: 400 })
+      }
     }
 
     // 0. Check for existing submitted attempt
@@ -375,7 +424,7 @@ export async function POST(request: NextRequest) {
 
       const cbt_details = {
         company_email,
-        verified_by: "password",
+        verified_by: password ? "password" : "dob",
       }
 
       const { data: newAttempt, error: attemptError } = await supabase
@@ -509,6 +558,19 @@ export async function PATCH(request: NextRequest) {
     }, 0)
     const score = totalQuestions === 0 ? 0 : Math.round((correctAnswers / totalQuestions) * 10000) / 100
 
+    // Bonus/joke questions are scored too, but kept out of `score` above —
+    // they're targeted at specific candidates for fun, not part of the real
+    // assessment, so they shouldn't move an actual performance evaluation.
+    // Tracked in cbt_details and reviewed separately at
+    // /admin/hr/pms/cbt/extra/scores.
+    const bonusQuestionIds = (questions || []).filter((q) => q.is_bonus).map((q) => q.id)
+    const bonusTotalQuestions = bonusQuestionIds.length
+    const bonusCorrectAnswers = bonusQuestionIds.reduce((count, questionId) => {
+      return count + (answers[questionId] && answers[questionId] === questionMap.get(questionId) ? 1 : 0)
+    }, 0)
+    const bonusScore =
+      bonusTotalQuestions === 0 ? null : Math.round((bonusCorrectAnswers / bonusTotalQuestions) * 10000) / 100
+
     const now = new Date().toISOString()
     const { error: updateAttemptError } = await supabase
       .from("cbt_attempts")
@@ -519,7 +581,13 @@ export async function PATCH(request: NextRequest) {
         correct_answers: correctAnswers,
         score,
         submitted_at: now,
-        cbt_details: { ...(attempt.cbt_details || {}), tab_switch_count: tab_switch_count ?? 0 },
+        cbt_details: {
+          ...(attempt.cbt_details || {}),
+          tab_switch_count: tab_switch_count ?? 0,
+          bonus_total_questions: bonusTotalQuestions,
+          bonus_correct_answers: bonusCorrectAnswers,
+          bonus_score: bonusScore,
+        },
       })
       .eq("id", attempt.id)
 
