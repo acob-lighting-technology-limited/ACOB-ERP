@@ -35,25 +35,13 @@ export interface AssetAssignment {
 
 type AssetsPageClient = Awaited<ReturnType<typeof createClient>>
 
-type AssetProfileRow = {
-  department?: string | null
-  department_id?: string | null
-  office_location?: string | null
-}
-
-type SharedAssetRow = Asset & {
-  created_at?: string | null
-}
-
-type SharedAssignmentRow = {
+type IndividualAssignmentRow = {
   id: string
   assigned_at: string
   assignment_notes?: string | null
   assigned_by?: string | null
   asset_id: string
   department?: string | null
-  asset?: Asset | null
-  assigner?: { first_name: string; last_name: string } | null
 }
 
 const isDefined = <T,>(value: T | null | undefined): value is T => value != null
@@ -71,30 +59,9 @@ async function getAssetsData() {
     return { redirect: "/auth/login" as const }
   }
 
-  // Get user's department and office location
-  const { data: profile } = await dataClient
-    .from("profiles")
-    .select("department, department_id, office_location")
-    .eq("id", user.id)
-    .single()
-
-  const typedProfile = profile as AssetProfileRow | null
-  let profileDepartment = typedProfile?.department || null
-  if (typedProfile?.department_id) {
-    const { data: deptById } = await dataClient
-      .from("departments")
-      .select("name")
-      .eq("id", typedProfile.department_id)
-      .maybeSingle()
-    if (deptById?.name) profileDepartment = deptById.name
-  }
-  if (String(profileDepartment || "").toLowerCase() === "finance") {
-    profileDepartment = "Accounts"
-  }
-
   let loadError: string | null = null
 
-  // Fetch individual assignments
+  // Fetch individual assignments only
   const { data: individualAssignments, error: individualError } = await dataClient
     .from("asset_assignments")
     .select(
@@ -116,96 +83,11 @@ async function getAssetsData() {
     loadError = "Failed to load some asset data"
   }
 
-  // Fetch department and office assignments if user has a department or office
-  let departmentAndOfficeAssets: SharedAssignmentRow[] = []
-  if (profileDepartment || profile?.office_location) {
-    const [departmentAssetsRes, officeAssetsRes] = await Promise.all([
-      profileDepartment
-        ? dataClient
-            .from("assets")
-            .select(
-              `
-              id,
-              unique_code,
-              asset_type,
-              asset_model,
-              serial_number,
-              status,
-              acquisition_year,
-              assignment_type,
-              department,
-              office_location,
-              created_at
-            `
-            )
-            .eq("status", "assigned")
-            .is("deleted_at", null)
-            .eq("assignment_type", "department")
-            .eq("department", profileDepartment)
-        : Promise.resolve({ data: [] as SharedAssetRow[], error: null }),
-      profile?.office_location
-        ? dataClient
-            .from("assets")
-            .select(
-              `
-              id,
-              unique_code,
-              asset_type,
-              asset_model,
-              serial_number,
-              status,
-              acquisition_year,
-              assignment_type,
-              department,
-              office_location,
-              created_at
-            `
-            )
-            .eq("status", "assigned")
-            .is("deleted_at", null)
-            .eq("assignment_type", "office")
-            .eq("office_location", profile.office_location)
-        : Promise.resolve({ data: [] as SharedAssetRow[], error: null }),
-    ])
+  const assignmentsList = (individualAssignments || []) as IndividualAssignmentRow[]
 
-    if (departmentAssetsRes.error || officeAssetsRes.error) {
-      log.error("Error loading shared asset assignments:", departmentAssetsRes.error || officeAssetsRes.error)
-      loadError = loadError || "Failed to load some asset data"
-    }
-
-    const sharedAssets = [...(departmentAssetsRes.data || []), ...(officeAssetsRes.data || [])]
-    const seen = new Set<string>()
-    departmentAndOfficeAssets = sharedAssets
-      .filter((asset) => {
-        if (!asset?.id || seen.has(asset.id)) return false
-        seen.add(asset.id)
-        return true
-      })
-      .map((asset) => ({
-        id: `shared-${asset.id}`,
-        assigned_at: asset.created_at,
-        assignment_notes:
-          asset.assignment_type === "department"
-            ? `Assigned to ${asset.department} department`
-            : `Assigned to ${asset.office_location} office`,
-        assigned_by: null,
-        asset_id: asset.id,
-        department: asset.department,
-        asset,
-        assigner: null,
-      }))
-  }
-
-  // Combine both assignment types
-  const allAssignments = [...(individualAssignments || []), ...departmentAndOfficeAssets]
-
-  // Fetch Asset and assigner details separately (only for individual assignments)
+  // Fetch Asset and assigner details for individual assignments
   const assignmentsWithDetails = await Promise.all(
-    allAssignments.map(async (assignment: SharedAssignmentRow) => {
-      if (assignment.asset) {
-        return assignment
-      }
-
+    assignmentsList.map(async (assignment) => {
       const [assetResult, assignerResult] = await Promise.all([
         dataClient
           .from("assets")

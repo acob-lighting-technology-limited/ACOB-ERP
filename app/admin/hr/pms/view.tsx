@@ -19,6 +19,9 @@ import { IconFill } from "@/components/ui/icon-fill"
 import { cn } from "@/lib/utils"
 import { getAdminPmsData } from "./_lib"
 import { getRequestScope } from "@/lib/admin/api-scope"
+import { createClient } from "@/lib/supabase/server"
+import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
+import { getCbtSettings, canAccessCbt } from "@/lib/cbt-config"
 
 const adminPmsLinks = [
   {
@@ -150,11 +153,16 @@ function formatPercent(value: number | null | undefined) {
 
 export async function AdminPmsPage({ basePath }: { basePath?: string } = {}) {
   const base = basePath ?? "/admin"
-  const { summary } = await getAdminPmsData()
-  const scope = await getRequestScope()
-  const canAccessCbt = scope?.role === "super_admin" || scope?.role === "developer"
+  const supabase = await createClient()
+  const db = getServiceRoleClientOrFallback(supabase)
+  const [{ summary }, scope, cbtSettings] = await Promise.all([
+    getAdminPmsData(),
+    getRequestScope(),
+    getCbtSettings(db),
+  ])
+  const canAccessCbtCard = canAccessCbt(scope, cbtSettings)
   const visibleLinks = adminPmsLinks
-    .filter((item) => item.href !== "/admin/hr/pms/cbt" || canAccessCbt)
+    .filter((item) => item.href !== "/admin/hr/pms/cbt" || canAccessCbtCard)
     .map((item) => ({ ...item, href: item.href.replace("/admin", base) }))
 
   return (

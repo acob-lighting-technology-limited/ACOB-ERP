@@ -21,6 +21,8 @@ type ScopedUserRow = {
   first_name: string | null
   last_name: string | null
   department: string | null
+  employment_type?: "full_time" | "part_time" | "contract" | null
+  employment_status?: string | null
 }
 
 type ReviewerRow = {
@@ -117,7 +119,7 @@ export async function GET(request: NextRequest) {
 
     const usersQuery = supabase
       .from("profiles")
-      .select("id, first_name, last_name, department")
+      .select("id, first_name, last_name, department, employment_type, employment_status")
       .order("first_name", { ascending: true })
 
     const [{ data: users }, { data: cycles }] = await Promise.all([

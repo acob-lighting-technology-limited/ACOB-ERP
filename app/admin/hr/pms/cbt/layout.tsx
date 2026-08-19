@@ -1,17 +1,21 @@
 import { redirect } from "next/navigation"
 import { getRequestScope } from "@/lib/admin/api-scope"
+import { createClient } from "@/lib/supabase/server"
+import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
+import { getCbtSettings, canAccessCbt } from "@/lib/cbt-config"
 
 /**
  * Server-level guard for the CBT section.
- * CBT (question management, cycle scores) is a super_admin / developer concern —
- * department leads have no business creating or accessing organisation-wide tests.
+ * Access is granted to super_admin, developer, or users/roles configured in CBT Settings.
  */
 export default async function CbtLayout({ children }: { children: React.ReactNode }) {
   const scope = await getRequestScope()
+  const supabase = await createClient()
+  const db = getServiceRoleClientOrFallback(supabase)
+  const cbtSettings = await getCbtSettings(db)
 
-  // Strictly enforce super_admin and developer access
-  const canAccessCbt = scope?.role === "super_admin" || scope?.role === "developer"
-  if (!canAccessCbt) {
+  const allowed = canAccessCbt(scope, cbtSettings)
+  if (!allowed) {
     redirect("/admin/hr/pms")
   }
 

@@ -18,7 +18,6 @@ interface AssetsContentProps {
 }
 
 type AssetRow = AssetAssignment & {
-  assignmentType: "Personal" | "Department" | "Office"
   assetTypeLabel: string
   statusLabel: string
 }
@@ -33,16 +32,8 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
   const rows = useMemo<AssetRow[]>(
     () =>
       assignments.map((assignment) => {
-        const assignmentType =
-          assignment.id.startsWith("shared-") && assignment.asset?.assignment_type === "department"
-            ? "Department"
-            : assignment.id.startsWith("shared-") && assignment.asset?.assignment_type === "office"
-              ? "Office"
-              : "Personal"
-
         return {
           ...assignment,
-          assignmentType,
           assetTypeLabel:
             ASSET_TYPE_MAP[assignment.asset?.asset_type || ""]?.label || assignment.asset?.asset_type || "-",
           statusLabel: assignment.asset?.status || "available",
@@ -55,13 +46,6 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
     if (status === "assigned") return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
     if (status === "maintenance") return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
     if (status === "available") return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-    return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400"
-  }
-
-  const assignmentTypeClass = (type: string) => {
-    if (type === "Personal") return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400"
-    if (type === "Department") return "bg-violet-100 text-violet-800 dark:bg-violet-900/30 dark:text-violet-400"
-    if (type === "Office") return "bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400"
     return "bg-gray-100 text-gray-800 dark:bg-gray-900/30 dark:text-gray-400"
   }
 
@@ -116,13 +100,6 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
         render: (row) => <Badge className={statusClass(row.statusLabel)}>{row.statusLabel}</Badge>,
       },
       {
-        key: "assignmentType",
-        label: "Assignment",
-        sortable: true,
-        accessor: (row) => row.assignmentType,
-        render: (row) => <Badge className={assignmentTypeClass(row.assignmentType)}>{row.assignmentType}</Badge>,
-      },
-      {
         key: "assigned_at",
         label: "Assigned",
         sortable: true,
@@ -131,15 +108,6 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
       },
     ],
     []
-  )
-
-  const assignmentTypeOptions = useMemo(
-    () =>
-      Array.from(new Set(rows.map((row) => row.assignmentType))).map((type) => ({
-        value: type,
-        label: type,
-      })),
-    [rows]
   )
 
   const statusOptions = useMemo(
@@ -168,54 +136,56 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
         options: statusOptions,
       },
       {
-        key: "assignmentType",
-        label: "Assignment Type",
-        options: assignmentTypeOptions,
-      },
-      {
         key: "asset_type",
         label: "Asset Type",
         options: assetTypeOptions,
       },
     ],
-    [assignmentTypeOptions, assetTypeOptions, statusOptions]
+    [assetTypeOptions, statusOptions]
   )
+
+  const activeCount = useMemo(
+    () => rows.filter((r) => r.statusLabel === "assigned" || r.statusLabel === "active").length,
+    [rows]
+  )
+  const maintenanceCount = useMemo(() => rows.filter((r) => r.statusLabel === "maintenance").length, [rows])
+  const uniqueTypesCount = useMemo(() => new Set(rows.map((r) => r.assetTypeLabel)).size, [rows])
 
   return (
     <DataTablePage
       title="My Assets"
-      description="View your currently assigned assets and equipment."
+      description="View your currently assigned personal assets and equipment."
       icon={Package}
       backLink={{ href: "/profile", label: "Back to Dashboard" }}
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
-            title="Assigned Assets"
+            title="Total Personal Assets"
             value={rows.length}
             icon={Package}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
           />
           <StatCard
-            title="Personal"
-            value={rows.filter((row) => row.assignmentType === "Personal").length}
+            title="Active"
+            value={activeCount}
             icon={User}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
           />
           <StatCard
-            title="Department"
-            value={rows.filter((row) => row.assignmentType === "Department").length}
+            title="In Maintenance"
+            value={maintenanceCount}
             icon={Building2}
-            iconBgColor="bg-violet-500/10"
-            iconColor="text-violet-500"
-          />
-          <StatCard
-            title="Office"
-            value={rows.filter((row) => row.assignmentType === "Office").length}
-            icon={Package}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
+          />
+          <StatCard
+            title="Asset Types"
+            value={uniqueTypesCount}
+            icon={Package}
+            iconBgColor="bg-violet-500/10"
+            iconColor="text-violet-500"
           />
         </div>
       }
@@ -226,7 +196,7 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
         filters={filters}
         getRowId={(row) => row.id}
         pagination={{ pageSize: 50 }}
-        searchPlaceholder="Search asset name, code, model, serial, or assignment..."
+        searchPlaceholder="Search asset name, code, model, or serial..."
         searchFn={(row, query) => {
           const q = query.toLowerCase()
           return (
@@ -240,7 +210,6 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
             String(row.asset?.serial_number || "")
               .toLowerCase()
               .includes(q) ||
-            row.assignmentType.toLowerCase().includes(q) ||
             String(row.department || "")
               .toLowerCase()
               .includes(q) ||
@@ -261,16 +230,16 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
                 <p className="font-medium">{row.assetTypeLabel}</p>
                 <p className="text-muted-foreground font-mono text-sm">{row.asset?.unique_code || "-"}</p>
               </div>
-              <Badge className={assignmentTypeClass(row.assignmentType)}>{row.assignmentType}</Badge>
+              <Badge className={statusClass(row.statusLabel)}>{row.statusLabel}</Badge>
             </div>
             <div className="grid gap-1 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Status</span>
-                <Badge className={statusClass(row.statusLabel)}>{row.statusLabel}</Badge>
-              </div>
-              <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Model</span>
                 <span>{row.asset?.asset_model || "-"}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Serial</span>
+                <span className="font-mono">{row.asset?.serial_number || "-"}</span>
               </div>
             </div>
           </div>
