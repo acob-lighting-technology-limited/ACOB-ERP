@@ -6,7 +6,7 @@ import { resolveAdminScope, roleCanEnterAdmin, isAdminLikeRole } from "@/lib/adm
 import { resolveDeptScope } from "@/lib/dept/scope"
 import { buildAccessContextV2, canAccessRouteV2, resolveAdminRouteKeyV2 } from "@/lib/admin/policy-v2"
 import { resolveCookieMaxAge } from "@/lib/supabase/cookie-policy"
-import { getCbtSettings, canAccessCbt } from "@/lib/cbt-config"
+import { getCbtSettings, canAccessCbt, resolveCbtAccessScope } from "@/lib/cbt-config"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 
 type CookieSetOptions = Parameters<NextResponse["cookies"]["set"]>[2]
@@ -362,9 +362,14 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/api/hr/performance/cbt/session/")
 
   if (isCbtPageOrSessionApi && user) {
-    const scope = await resolveAdminScope(supabase, user.id)
+    // Scope comes from the profile row, not resolveAdminScope(): that returns
+    // null for employees, visitors and route-less admins, which would silently
+    // void every grant configured in /admin/settings/cbt.
     const dataClient = getServiceRoleClientOrFallback(supabase)
-    const cbtSettings = await getCbtSettings(dataClient)
+    const [scope, cbtSettings] = await Promise.all([
+      resolveCbtAccessScope(dataClient, user.id),
+      getCbtSettings(dataClient),
+    ])
 
     if (!canAccessCbt(scope, cbtSettings)) {
       if (pathname.startsWith("/api/")) {
@@ -372,6 +377,7 @@ export async function updateSession(request: NextRequest) {
       }
       const url = request.nextUrl.clone()
       url.pathname = "/pms"
+      url.search = ""
       return NextResponse.redirect(url)
     }
   }

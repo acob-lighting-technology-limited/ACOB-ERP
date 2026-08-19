@@ -16,10 +16,42 @@ export const DEFAULT_CBT_SETTINGS: CbtSettings = {
   allowed_user_ids: [],
 }
 
-interface AccessScopeShape {
+export interface AccessScopeShape {
   userId?: string | null
   role?: string | null
   isDepartmentLead?: boolean | null
+}
+
+/**
+ * Resolves the identity CBT permissioning is evaluated against.
+ *
+ * Deliberately NOT built on resolveAdminScope(): that returns null for plain
+ * employees, visitors, and route-less admins, which would make every grant
+ * configured in /admin/settings/cbt (allowed_roles / allowed_user_ids) a no-op
+ * for exactly the users it exists to grant. This reads the profile row
+ * directly so any authenticated user can be evaluated on their own merits.
+ */
+export async function resolveCbtAccessScope(
+  supabase: SupabaseClient,
+  userId: string
+): Promise<AccessScopeShape | null> {
+  try {
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, role, is_department_lead")
+      .eq("id", userId)
+      .maybeSingle<{ id: string; role: string | null; is_department_lead: boolean | null }>()
+
+    if (!data) return null
+
+    return {
+      userId: data.id,
+      role: data.role,
+      isDepartmentLead: Boolean(data.is_department_lead),
+    }
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -44,15 +76,14 @@ export function canAccessCbt(scope: AccessScopeShape | null | undefined, setting
 
   // Role-based access
   if (Array.isArray(settings.allowed_roles) && settings.allowed_roles.length > 0) {
-    if (normalizedRole && settings.allowed_roles.includes(normalizedRole)) {
+    const allowedRoles = settings.allowed_roles.map((role) => role.trim().toLowerCase())
+
+    if (normalizedRole && allowedRoles.includes(normalizedRole)) {
       return true
     }
 
     // Department lead access check if 'department_lead' or 'lead' is allowed
-    if (
-      scope.isDepartmentLead &&
-      (settings.allowed_roles.includes("department_lead") || settings.allowed_roles.includes("lead"))
-    ) {
+    if (scope.isDepartmentLead && (allowedRoles.includes("department_lead") || allowedRoles.includes("lead"))) {
       return true
     }
   }
