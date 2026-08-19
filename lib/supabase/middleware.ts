@@ -6,6 +6,8 @@ import { resolveAdminScope, roleCanEnterAdmin, isAdminLikeRole } from "@/lib/adm
 import { resolveDeptScope } from "@/lib/dept/scope"
 import { buildAccessContextV2, canAccessRouteV2, resolveAdminRouteKeyV2 } from "@/lib/admin/policy-v2"
 import { resolveCookieMaxAge } from "@/lib/supabase/cookie-policy"
+import { getCbtSettings, canAccessCbt, resolveCbtAccessScope } from "@/lib/cbt-config"
+import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 
 type CookieSetOptions = Parameters<NextResponse["cookies"]["set"]>[2]
 
@@ -350,16 +352,35 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  // /cbt (and /cbt2) verify each candidate independently via their own
-  // company email + password/DOB, checked fresh on every request — that's
-  // the real security boundary, not whatever site session happens to be
-  // active in this browser. An earlier version of this middleware also
-  // required an admin/developer/super_admin site session to even load the
-  // page, which meant any logged-in-but-non-admin employee got bounced to
-  // /profile — forcing staff to borrow an admin's login just to reach the
-  // form before entering their own separate CBT credentials. Removed: it
-  // added no protection the per-candidate check doesn't already provide,
-  // and actively broke the flow for real candidates.
+  // Check dynamic CBT access permissions for standalone /cbt pages and session APIs
+  const isCbtPageOrSessionApi =
+    pathname === "/cbt" ||
+    pathname.startsWith("/cbt/") ||
+    pathname === "/cbt2" ||
+    pathname.startsWith("/cbt2/") ||
+    pathname === "/api/hr/performance/cbt/session" ||
+    pathname.startsWith("/api/hr/performance/cbt/session/")
+
+  if (isCbtPageOrSessionApi && user) {
+    // Scope comes from the profile row, not resolveAdminScope(): that returns
+    // null for employees, visitors and route-less admins, which would silently
+    // void every grant configured in /admin/settings/cbt.
+    const dataClient = getServiceRoleClientOrFallback(supabase)
+    const [scope, cbtSettings] = await Promise.all([
+      resolveCbtAccessScope(dataClient, user.id),
+      getCbtSettings(dataClient),
+    ])
+
+    if (!canAccessCbt(scope, cbtSettings)) {
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Forbidden: CBT access not granted" }, { status: 403 })
+      }
+      const url = request.nextUrl.clone()
+      url.pathname = "/pms"
+      url.search = ""
+      return NextResponse.redirect(url)
+    }
+  }
 
   // CSRF: validate Origin for state-changing requests.
   // First of two layers — the double-submit token check below is the second,
