@@ -13,26 +13,31 @@ export type PmsCadence = "all" | "quarterly" | "biannual" | "annual"
 
 export type CadenceCycle = {
   id: string
+  name?: string | null
   review_type?: string | null
   start_date?: string | null
   end_date?: string | null
 }
 
-const HALF_YEAR_MARKERS = ["biannual", "semiannual", "midyear", "halfyear", "h1", "h2"]
+const HALF_YEAR_MARKERS = ["biannual", "semiannual", "midyear", "halfyear", "h1", "h2", "half1", "half2", "mid-year"]
+const QUARTERLY_MARKERS = ["quarter", "quarterly", "q1", "q2", "q3", "q4"]
 
-function normalize(reviewType: string | null | undefined) {
-  return (reviewType || "").toLowerCase().replace(/[\s_-]/g, "")
+function normalize(text: string | null | undefined) {
+  return (text || "").toLowerCase().replace(/[\s_-]/g, "")
 }
 
-/** Does a cycle's review_type belong to the chosen cadence? */
-export function matchesCadence(cadence: string, reviewType: string | null | undefined): boolean {
+/** Does a cycle's review_type or name belong to the chosen cadence? */
+export function matchesCadence(cadence: string, reviewType: string | null | undefined, name?: string | null): boolean {
   if (cadence === "all") return true
-  const value = normalize(reviewType)
+  const value = normalize(`${reviewType || ""} ${name || ""}`)
   const isHalfYear = HALF_YEAR_MARKERS.some((marker) => value.includes(marker))
-  if (cadence === "quarterly") return value.includes("quarter")
+  const isQuarterly = QUARTERLY_MARKERS.some((marker) => value.includes(marker)) && !isHalfYear
+
+  if (cadence === "quarterly") return isQuarterly
   if (cadence === "biannual") return isHalfYear
-  // Annual must not swallow "Bi-Annual" / "Mid-Year".
-  if (cadence === "annual") return !isHalfYear && (value.includes("annual") || value.includes("fullyear"))
+  // Annual must not swallow "Bi-Annual" / "Mid-Year" / "Quarterly".
+  if (cadence === "annual")
+    return !isHalfYear && !isQuarterly && (value.includes("annual") || value.includes("fullyear"))
   return true
 }
 
@@ -46,7 +51,7 @@ export function isQuarterlyCycle(reviewType: string | null | undefined): boolean
  * something instead of an empty picker.
  */
 export function cyclesForCadence<T extends CadenceCycle>(cycles: T[], cadence: PmsCadence = "quarterly"): T[] {
-  const matching = cycles.filter((cycle) => matchesCadence(cadence, cycle.review_type))
+  const matching = cycles.filter((cycle) => matchesCadence(cadence, cycle.review_type, cycle.name))
   return matching.length > 0 ? matching : cycles
 }
 

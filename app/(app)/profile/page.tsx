@@ -303,30 +303,6 @@ async function getProfileData() {
     .returns<AssetAssignmentRow[]>()
   if (individualAssignmentsError) loadErrors.push("assets")
 
-  // Load department and office assets (separate queries to avoid filter parsing issues with commas in names)
-  const [departmentAssetsRes, officeAssetsRes] = await Promise.all([
-    resolvedDepartment
-      ? dataClient
-          .from("assets")
-          .select("*")
-          .eq("status", "assigned")
-          .is("deleted_at", null)
-          .eq("assignment_type", "department")
-          .eq("department", resolvedDepartment)
-      : Promise.resolve({ data: [] as AssetRow[], error: null }),
-    profileData.office_location
-      ? dataClient
-          .from("assets")
-          .select("*")
-          .eq("status", "assigned")
-          .is("deleted_at", null)
-          .eq("assignment_type", "office")
-          .eq("office_location", profileData.office_location)
-      : Promise.resolve({ data: [] as AssetRow[], error: null }),
-  ])
-  if (departmentAssetsRes.error || officeAssetsRes.error) loadErrors.push("assets")
-  const sharedAssets = [...(departmentAssetsRes.data || []), ...(officeAssetsRes.data || [])]
-
   let allAssets: Asset[] = []
 
   // Process individual assignments
@@ -342,17 +318,7 @@ async function getProfileData() {
           : null
       )
       .filter(isDefined)
-    allAssets = [...allAssets, ...indAssets]
-  }
-
-  // Process shared assets
-  if (sharedAssets) {
-    const shAssets = sharedAssets.map((a) => ({
-      ...a,
-      assigned_at: a.created_at, // Use created_at for shared assets
-      assignment_type: a.assignment_type,
-    }))
-    allAssets = [...allAssets, ...shAssets]
+    allAssets = indAssets
   }
 
   // Load documentation created by user

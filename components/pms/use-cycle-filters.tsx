@@ -29,12 +29,19 @@ const CADENCE_OPTIONS: { value: PmsCadence; label: string }[] = [
  * configured defaults once. Both selections are applied by the cadence filter's
  * `filterFn`, which always carries a value.
  */
+function formatCycleOptionLabel(name: string | null | undefined): string {
+  if (!name) return "-"
+  const cleaned = name.replace(/[-–—:]?\s*performance\s+review\s*[-–—:]?/gi, "").trim()
+  return cleaned || name
+}
+
 export function useCycleFilters<TRow>({
   cycles,
   getRowCycleId,
   cycleKey = "cycle",
   cycleLabel = "Cycle",
   includeCyclePicker = true,
+  defaultCadence = "quarterly",
 }: {
   cycles: CycleFilterCycle[]
   getRowCycleId: (row: TRow) => string | null | undefined
@@ -46,41 +53,43 @@ export function useCycleFilters<TRow>({
    * filter still makes sense there, but picking a single cycle does not.
    */
   includeCyclePicker?: boolean
+  defaultCadence?: PmsCadence
 }): { filters: DataTableFilter<TRow>[]; selectedCycleId: string; cadence: PmsCadence } {
-  const [cadence, setCadence] = useState<PmsCadence>("quarterly")
+  const [cadence, setCadence] = useState<PmsCadence>(defaultCadence)
   const [selectedCycleId, setSelectedCycleId] = useState("")
 
-  const reviewTypeById = useMemo(() => {
-    const map = new Map<string, string | null | undefined>()
-    for (const cycle of cycles) map.set(cycle.id, cycle.review_type)
+  const cycleInfoById = useMemo(() => {
+    const map = new Map<string, { review_type?: string | null; name?: string | null }>()
+    for (const cycle of cycles) map.set(cycle.id, { review_type: cycle.review_type, name: cycle.name })
     return map
   }, [cycles])
 
   const visibleCycles = useMemo(
-    () => cycles.filter((cycle) => matchesCadence(cadence, cycle.review_type)),
+    () => cycles.filter((cycle) => matchesCadence(cadence, cycle.review_type, cycle.name)),
     [cycles, cadence]
   )
 
-  // Land on the current quarter as soon as the cycle list arrives.
+  // Land on the current cycle as soon as the cycle list arrives.
   const seededRef = useRef(false)
   useEffect(() => {
     if (seededRef.current || cycles.length === 0) return
     seededRef.current = true
-    setSelectedCycleId(pickCurrentCycle(cycles, toLocalISODate(), "quarterly")?.id ?? "")
-  }, [cycles])
+    setSelectedCycleId(pickCurrentCycle(cycles, toLocalISODate(), cadence)?.id ?? "")
+  }, [cycles, cadence])
 
   const matchesSelection = useCallback(
     (row: TRow, forCadence: PmsCadence) => {
       // Cycles not loaded (or failed to load): filtering on a cadence we cannot
       // resolve would blank the whole table.
-      if (reviewTypeById.size === 0) return true
+      if (cycleInfoById.size === 0) return true
       const cycleId = getRowCycleId(row)
       if (!cycleId) return forCadence === "all"
-      if (!matchesCadence(forCadence, reviewTypeById.get(cycleId))) return false
+      const info = cycleInfoById.get(cycleId)
+      if (!matchesCadence(forCadence, info?.review_type, info?.name)) return false
       if (includeCyclePicker && selectedCycleId) return cycleId === selectedCycleId
       return true
     },
-    [getRowCycleId, includeCyclePicker, reviewTypeById, selectedCycleId]
+    [getRowCycleId, includeCyclePicker, cycleInfoById, selectedCycleId]
   )
 
   const filters = useMemo<DataTableFilter<TRow>[]>(() => {
@@ -91,8 +100,8 @@ export function useCycleFilters<TRow>({
         options: CADENCE_OPTIONS,
         multi: false,
         mode: "custom",
-        defaultValues: ["quarterly"],
-        filterFn: (row, values) => matchesSelection(row, (values[0] as PmsCadence) || "quarterly"),
+        defaultValues: [defaultCadence],
+        filterFn: (row, values) => matchesSelection(row, (values[0] as PmsCadence) || defaultCadence),
         render: (values, onChange) => (
           <Select
             value={values[0] || cadence}
@@ -104,7 +113,7 @@ export function useCycleFilters<TRow>({
               // left scoped to a cycle the picker no longer offers.
               setSelectedCycleId((current) => {
                 const stillVisible = cycles.some(
-                  (cycle) => cycle.id === current && matchesCadence(next, cycle.review_type)
+                  (cycle) => cycle.id === current && matchesCadence(next, cycle.review_type, cycle.name)
                 )
                 if (stillVisible) return current
                 return pickCurrentCycle(cycles, toLocalISODate(), next)?.id ?? ""
@@ -127,7 +136,7 @@ export function useCycleFilters<TRow>({
       {
         key: cycleKey,
         label: cycleLabel,
-        options: visibleCycles.map((cycle) => ({ value: cycle.id, label: cycle.name })),
+        options: visibleCycles.map((cycle) => ({ value: cycle.id, label: formatCycleOptionLabel(cycle.name) })),
         multi: false,
         mode: "custom",
         // Row scoping is applied by the cadence filter above, which always has a
@@ -147,7 +156,7 @@ export function useCycleFilters<TRow>({
             <SelectContent>
               {visibleCycles.map((cycle) => (
                 <SelectItem key={cycle.id} value={cycle.id}>
-                  {cycle.name}
+                  {formatCycleOptionLabel(cycle.name)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -158,7 +167,17 @@ export function useCycleFilters<TRow>({
 
     if (!includeCyclePicker) list.length = 1
     return list
-  }, [cadence, cycleKey, cycleLabel, cycles, includeCyclePicker, matchesSelection, selectedCycleId, visibleCycles])
+  }, [
+    cadence,
+    cycleKey,
+    cycleLabel,
+    cycles,
+    defaultCadence,
+    includeCyclePicker,
+    matchesSelection,
+    selectedCycleId,
+    visibleCycles,
+  ])
 
   return { filters, selectedCycleId, cadence }
 }

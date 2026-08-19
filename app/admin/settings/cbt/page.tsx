@@ -23,17 +23,23 @@ export default async function CbtSettingsPage() {
   }
 
   const db = getServiceRoleClientOrFallback(supabase)
-  const initialSettings = await getCbtSettings(db)
+  const [initialSettings, { data: profiles }] = await Promise.all([
+    getCbtSettings(db),
+    db
+      .from("profiles")
+      .select("id, full_name, company_email, department, role")
+      .order("full_name", { ascending: true }),
+  ])
 
   return (
     <PageWrapper maxWidth="full" background="gradient">
       <PageHeader
         title="CBT Assessment Settings"
-        description="Manage default CBT session question counts, duration per question, and total exam timer calculation."
+        description="Manage default CBT session question counts, duration per question, response visibility, and access permissioning."
         icon={Brain}
         backLink={{ href: "/admin/settings", label: "Back to Settings" }}
       />
-      <CbtSettingsForm initialSettings={initialSettings} />
+      <CbtSettingsForm initialSettings={initialSettings} profiles={profiles || []} />
     </PageWrapper>
   )
 }

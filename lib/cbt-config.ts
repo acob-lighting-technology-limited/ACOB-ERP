@@ -4,12 +4,60 @@ export interface CbtSettings {
   time_per_question_seconds: number
   total_questions_count: number
   show_detailed_responses: boolean
+  allowed_roles?: string[]
+  allowed_user_ids?: string[]
 }
 
 export const DEFAULT_CBT_SETTINGS: CbtSettings = {
   time_per_question_seconds: 45,
   total_questions_count: 10,
   show_detailed_responses: false,
+  allowed_roles: [],
+  allowed_user_ids: [],
+}
+
+interface AccessScopeShape {
+  userId?: string | null
+  role?: string | null
+  isDepartmentLead?: boolean | null
+}
+
+/**
+ * Validates if the given user scope has access to CBT.
+ * Super Admins and Developers always return true.
+ * Users listed in allowed_user_ids or matching allowed_roles return true.
+ */
+export function canAccessCbt(scope: AccessScopeShape | null | undefined, settings: CbtSettings): boolean {
+  if (!scope) return false
+
+  const normalizedRole = scope.role ? scope.role.trim().toLowerCase() : ""
+
+  // System superusers always have full access
+  if (normalizedRole === "super_admin" || normalizedRole === "developer") {
+    return true
+  }
+
+  // Individual user override access
+  if (scope.userId && Array.isArray(settings.allowed_user_ids) && settings.allowed_user_ids.includes(scope.userId)) {
+    return true
+  }
+
+  // Role-based access
+  if (Array.isArray(settings.allowed_roles) && settings.allowed_roles.length > 0) {
+    if (normalizedRole && settings.allowed_roles.includes(normalizedRole)) {
+      return true
+    }
+
+    // Department lead access check if 'department_lead' or 'lead' is allowed
+    if (
+      scope.isDepartmentLead &&
+      (settings.allowed_roles.includes("department_lead") || settings.allowed_roles.includes("lead"))
+    ) {
+      return true
+    }
+  }
+
+  return false
 }
 
 /**
@@ -39,10 +87,20 @@ export async function getCbtSettings(supabase: SupabaseClient): Promise<CbtSetti
         ? val.show_detailed_responses
         : DEFAULT_CBT_SETTINGS.show_detailed_responses
 
+    const allowedRoles = Array.isArray(val.allowed_roles)
+      ? val.allowed_roles.filter((r): r is string => typeof r === "string")
+      : DEFAULT_CBT_SETTINGS.allowed_roles
+
+    const allowedUserIds = Array.isArray(val.allowed_user_ids)
+      ? val.allowed_user_ids.filter((id): id is string => typeof id === "string")
+      : DEFAULT_CBT_SETTINGS.allowed_user_ids
+
     return {
       time_per_question_seconds: timePerQ,
       total_questions_count: totalQ,
       show_detailed_responses: showDetailed,
+      allowed_roles: allowedRoles,
+      allowed_user_ids: allowedUserIds,
     }
   } catch (error) {
     return DEFAULT_CBT_SETTINGS

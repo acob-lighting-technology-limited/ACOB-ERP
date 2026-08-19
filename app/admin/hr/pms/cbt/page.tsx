@@ -39,6 +39,8 @@ type CbtUser = {
   first_name: string | null
   last_name: string | null
   department: string | null
+  employment_type?: "full_time" | "part_time" | "contract" | null
+  employment_status?: string | null
 }
 
 type CbtScore = {
@@ -63,6 +65,8 @@ type IndividualRow = {
   cycle: string
   cbt_score: number | null
   tab_switch_count: number
+  employment_type: "full_time" | "part_time" | "contract" | null
+  employment_status: string | null
 }
 
 type DepartmentRow = {
@@ -70,6 +74,7 @@ type DepartmentRow = {
   department: string
   cycleId: string
   cycle: string
+  total_employees: number
   scores_recorded: number
   average_score: number | null
 }
@@ -78,7 +83,9 @@ type CycleRow = {
   id: string
   cycle: string
   review_type: string
+  total_employees: number
   scores_recorded: number
+  average_score: number | null
   questions: number
 }
 
@@ -96,7 +103,14 @@ function scoreLabel(score: number | null) {
   return typeof score === "number" ? `${score}%` : "-"
 }
 
+function formatCycleName(name: string | null | undefined): string {
+  if (!name) return "-"
+  const cleaned = name.replace(/[-–—:]?\s*performance\s+review\s*[-–—:]?/gi, "").trim()
+  return cleaned || name
+}
+
 function IndividualCard({ row }: { row: IndividualRow }) {
+  const hasTaken = typeof row.cbt_score === "number"
   return (
     <div className="space-y-3 rounded-xl border p-4">
       <div className="flex items-start justify-between gap-3">
@@ -104,14 +118,25 @@ function IndividualCard({ row }: { row: IndividualRow }) {
           <p className="font-semibold">{row.employee}</p>
           <p className="text-muted-foreground text-xs">{row.department}</p>
         </div>
-        <Badge variant={typeof row.cbt_score === "number" && row.cbt_score >= 70 ? "default" : "secondary"}>
-          {scoreLabel(row.cbt_score)}
-        </Badge>
+        <div className="flex items-center gap-1.5">
+          <Badge
+            className={
+              hasTaken
+                ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-600 shadow-none dark:text-emerald-400"
+                : "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            }
+          >
+            {hasTaken ? "Taken" : "Not Taken"}
+          </Badge>
+          <Badge variant={hasTaken && (row.cbt_score ?? 0) >= 70 ? "default" : "secondary"}>
+            {scoreLabel(row.cbt_score)}
+          </Badge>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div>
           <p className="text-muted-foreground text-xs">Cycle</p>
-          <p>{row.cycle}</p>
+          <p>{formatCycleName(row.cycle)}</p>
         </div>
         <div>
           <p className="text-muted-foreground text-xs">Tab Switches</p>
@@ -137,13 +162,15 @@ function DepartmentCard({ row }: { row: DepartmentRow }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="font-semibold">{row.department}</p>
-          <p className="text-muted-foreground text-xs">{row.cycle}</p>
+          <p className="text-muted-foreground text-xs">{formatCycleName(row.cycle)}</p>
         </div>
-        <Badge variant="secondary">{row.scores_recorded} scores</Badge>
+        <Badge variant="secondary">
+          {row.scores_recorded} / {row.total_employees} completed
+        </Badge>
       </div>
       <div className="text-sm">
         <p className="text-muted-foreground text-xs">Average Score</p>
-        <p>{scoreLabel(row.average_score)}</p>
+        <p className="font-medium">{scoreLabel(row.average_score)}</p>
       </div>
     </div>
   )
@@ -154,19 +181,21 @@ function CycleCard({ row, onView }: { row: CycleRow; onView?: (row: CycleRow) =>
     <div className="space-y-3 rounded-xl border p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="font-semibold">{row.cycle}</p>
+          <p className="font-semibold">{formatCycleName(row.cycle)}</p>
           <p className="text-muted-foreground text-xs">{row.review_type}</p>
         </div>
         <Badge variant="secondary">{row.questions} questions</Badge>
       </div>
       <div className="grid grid-cols-2 gap-3 text-sm">
         <div>
-          <p className="text-muted-foreground text-xs">Scores</p>
-          <p>{row.scores_recorded}</p>
+          <p className="text-muted-foreground text-xs">Completed</p>
+          <p>
+            {row.scores_recorded} / {row.total_employees}
+          </p>
         </div>
         <div>
-          <p className="text-muted-foreground text-xs">Questions</p>
-          <p>{row.questions}</p>
+          <p className="text-muted-foreground text-xs">Average Score</p>
+          <p>{scoreLabel(row.average_score)}</p>
         </div>
       </div>
       {onView && (
@@ -238,67 +267,102 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
     void loadCbtSnapshot()
   }, [loadCbtSnapshot])
 
-  const usersById = useMemo(() => new Map(data.users.map((user) => [user.id, user])), [data.users])
   const cycleNameById = useMemo(() => new Map(data.cycles.map((cycle) => [cycle.id, cycle.name])), [data.cycles])
-  const scoresForSelectedCycle = useMemo(
-    () => data.scores.filter((score) => selectedCycleId === "all" || score.review_cycle_id === selectedCycleId),
-    [data.scores, selectedCycleId]
-  )
 
-  const individualRows = useMemo<IndividualRow[]>(
-    () =>
-      data.scores.map((score, index) => {
-        const user = usersById.get(score.user_id)
-        return {
-          id: `${score.user_id}-${score.review_cycle_id}-${index}`,
-          user_id: score.user_id,
-          review_cycle_id: score.review_cycle_id,
-          employee: employeeName(user),
-          department: user?.department || "-",
-          cycle: cycleNameById.get(score.review_cycle_id) || "-",
-          cbt_score: score.cbt_score,
-          tab_switch_count: score.tab_switch_count ?? 0,
+  const individualRows = useMemo<IndividualRow[]>(() => {
+    const scoreMap = new Map<string, CbtScore>()
+    for (const score of data.scores) {
+      scoreMap.set(`${score.user_id}:${score.review_cycle_id}`, score)
+    }
+
+    const rows: IndividualRow[] = []
+
+    if (data.cycles.length > 0) {
+      for (const cycle of data.cycles) {
+        for (const user of data.users) {
+          const key = `${user.id}:${cycle.id}`
+          const score = scoreMap.get(key)
+          rows.push({
+            id: `${user.id}-${cycle.id}`,
+            user_id: user.id,
+            review_cycle_id: cycle.id,
+            employee: employeeName(user),
+            department: user.department || "-",
+            cycle: cycle.name,
+            cbt_score: score ? score.cbt_score : null,
+            tab_switch_count: score ? (score.tab_switch_count ?? 0) : 0,
+            employment_type: user.employment_type || "full_time",
+            employment_status: user.employment_status || "active",
+          })
         }
-      }),
-    [cycleNameById, data.scores, usersById]
-  )
+      }
+    } else {
+      for (const user of data.users) {
+        rows.push({
+          id: `${user.id}-none`,
+          user_id: user.id,
+          review_cycle_id: "",
+          employee: employeeName(user),
+          department: user.department || "-",
+          cycle: "-",
+          cbt_score: null,
+          tab_switch_count: 0,
+          employment_type: user.employment_type || "full_time",
+          employment_status: user.employment_status || "active",
+        })
+      }
+    }
+
+    return rows
+  }, [data.cycles, data.scores, data.users])
 
   const departmentRows = useMemo<DepartmentRow[]>(() => {
-    const grouped = new Map<string, number[]>()
-    for (const score of scoresForSelectedCycle) {
-      const department = usersById.get(score.user_id)?.department || "Unassigned"
-      const key = `${department}::${selectedCycleId}`
-      const current = grouped.get(key) || []
-      if (typeof score.cbt_score === "number") current.push(score.cbt_score)
-      grouped.set(key, current)
-    }
-    return Array.from(grouped.entries()).map(([key, values]) => {
-      const [department, cycleId] = key.split("::")
-      return {
-        id: key,
-        department,
-        cycleId,
-        cycle: cycleNameById.get(cycleId) || "-",
-        scores_recorded: values.length,
-        average_score:
-          values.length > 0
-            ? Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 100) / 100
-            : null,
-      }
-    })
-  }, [cycleNameById, scoresForSelectedCycle, selectedCycleId, usersById])
+    const allDepts = Array.from(new Set(data.users.map((u) => u.department).filter(Boolean) as string[])).sort()
+    const rows: DepartmentRow[] = []
 
-  const cycleRows = useMemo<CycleRow[]>(
-    () =>
-      data.cycles.map((cycle) => ({
+    for (const cycle of data.cycles) {
+      for (const dept of allDepts) {
+        const deptUsers = data.users.filter((u) => u.department === dept)
+        const deptUserIds = new Set(deptUsers.map((u) => u.id))
+        const scores = data.scores.filter(
+          (s) => s.review_cycle_id === cycle.id && deptUserIds.has(s.user_id) && typeof s.cbt_score === "number"
+        )
+
+        const totalScores = scores.reduce((sum, s) => sum + (s.cbt_score ?? 0), 0)
+        const avg = scores.length > 0 ? Math.round((totalScores / scores.length) * 10) / 10 : null
+
+        rows.push({
+          id: `${dept}::${cycle.id}`,
+          department: dept,
+          cycleId: cycle.id,
+          cycle: cycle.name,
+          total_employees: deptUsers.length,
+          scores_recorded: scores.length,
+          average_score: avg,
+        })
+      }
+    }
+
+    return rows
+  }, [data.cycles, data.scores, data.users])
+
+  const cycleRows = useMemo<CycleRow[]>(() => {
+    return data.cycles.map((cycle) => {
+      const scores = data.scores.filter((s) => s.review_cycle_id === cycle.id && typeof s.cbt_score === "number")
+      const totalScores = scores.reduce((sum, s) => sum + (s.cbt_score ?? 0), 0)
+      const avg = scores.length > 0 ? Math.round((totalScores / scores.length) * 10) / 10 : null
+
+      return {
         id: cycle.id,
         cycle: cycle.name,
         review_type: cycle.review_type || "-",
-        scores_recorded: data.scores.filter((score) => score.review_cycle_id === cycle.id).length,
+        total_employees: data.users.length,
+        scores_recorded: scores.length,
+        average_score: avg,
         questions: questionCounts[cycle.id] || 0,
-      })),
-    [data.cycles, data.scores, questionCounts]
-  )
+      }
+    })
+  }, [data.cycles, data.scores, data.users.length, questionCounts])
 
   const departmentOptions = useMemo(
     () =>
@@ -308,25 +372,20 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
     [data.users]
   )
 
-  const userOptions = useMemo(
-    () =>
-      data.users
-        .map((user) => ({ value: user.id, label: employeeName(user) }))
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    [data.users]
-  )
-
   const { filters: individualCycleFilters } = useCycleFilters<IndividualRow>({
     cycles: data.cycles,
     getRowCycleId: (row) => row.review_cycle_id,
+    defaultCadence: "all",
   })
   const { filters: departmentCycleFilters } = useCycleFilters<DepartmentRow>({
     cycles: data.cycles,
     getRowCycleId: (row) => row.cycleId,
+    defaultCadence: "all",
   })
   const { filters: cycleTabCycleFilters } = useCycleFilters<CycleRow>({
     cycles: data.cycles,
     getRowCycleId: (row) => row.id,
+    defaultCadence: "all",
   })
 
   const individualColumns: DataTableColumn<IndividualRow>[] = [
@@ -341,12 +400,49 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
     },
     { key: "department", label: "Department", sortable: true, accessor: (row) => row.department, hideOnMobile: true },
     {
+      key: "employment_type",
+      label: "Staff type",
+      sortable: true,
+      accessor: (row) => row.employment_type || "full_time",
+      render: (row) => {
+        const type = row.employment_type || "full_time"
+        const display = type === "full_time" ? "Full Time" : type === "part_time" ? "Part Time" : "Contract"
+        const badgeColor =
+          type === "full_time"
+            ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/10 border-transparent shadow-none"
+            : type === "part_time"
+              ? "bg-purple-500/10 text-purple-500 hover:bg-purple-500/10 border-transparent shadow-none"
+              : "bg-orange-500/10 text-orange-500 hover:bg-orange-500/10 border-transparent shadow-none"
+        return <Badge className={badgeColor}>{display}</Badge>
+      },
+      hideOnMobile: true,
+    },
+    {
+      key: "cbt_status",
+      label: "CBT Status",
+      sortable: true,
+      accessor: (row) => (typeof row.cbt_score === "number" ? "Taken" : "Not Taken"),
+      render: (row) => {
+        const hasTaken = typeof row.cbt_score === "number"
+        return hasTaken ? (
+          <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-600 shadow-none hover:bg-emerald-500/10 dark:text-emerald-400">
+            Taken
+          </Badge>
+        ) : (
+          <Badge variant="outline" className="border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            Not Taken
+          </Badge>
+        )
+      },
+    },
+    {
       key: "cycle",
       label: "Cycle",
       sortable: true,
-      accessor: (row) => row.cycle,
+      accessor: (row) => formatCycleName(row.cycle),
+      render: (row) => formatCycleName(row.cycle),
       resizable: true,
-      initialWidth: 220,
+      initialWidth: 150,
       hideOnMobile: true,
     },
     {
@@ -388,22 +484,35 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
       sortable: true,
       accessor: (row) => row.department,
       resizable: true,
-      initialWidth: 220,
+      initialWidth: 200,
     },
     {
       key: "cycle",
       label: "Cycle",
       sortable: true,
-      accessor: (row) => row.cycle,
+      accessor: (row) => formatCycleName(row.cycle),
+      render: (row) => formatCycleName(row.cycle),
       resizable: true,
-      initialWidth: 220,
+      initialWidth: 150,
+      hideOnMobile: true,
+    },
+    {
+      key: "total_employees",
+      label: "Total Staff",
+      sortable: true,
+      accessor: (row) => row.total_employees,
       hideOnMobile: true,
     },
     {
       key: "scores_recorded",
-      label: "Scores Recorded",
+      label: "Completed",
       sortable: true,
       accessor: (row) => row.scores_recorded,
+      render: (row) => (
+        <span>
+          {row.scores_recorded} / {row.total_employees}
+        </span>
+      ),
       hideOnMobile: true,
     },
     {
@@ -411,12 +520,24 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
       label: "Average Score",
       sortable: true,
       accessor: (row) => row.average_score ?? -1,
-      render: (row) => scoreLabel(row.average_score),
+      render: (row) => (
+        <Badge variant={typeof row.average_score === "number" && row.average_score >= 70 ? "default" : "secondary"}>
+          {scoreLabel(row.average_score)}
+        </Badge>
+      ),
     },
   ]
 
   const cycleColumns: DataTableColumn<CycleRow>[] = [
-    { key: "cycle", label: "Cycle", sortable: true, accessor: (row) => row.cycle, resizable: true, initialWidth: 240 },
+    {
+      key: "cycle",
+      label: "Cycle",
+      sortable: true,
+      accessor: (row) => formatCycleName(row.cycle),
+      render: (row) => <span className="font-medium">{formatCycleName(row.cycle)}</span>,
+      resizable: true,
+      initialWidth: 180,
+    },
     {
       key: "review_type",
       label: "Review Type",
@@ -425,11 +546,34 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
       hideOnMobile: true,
     },
     {
+      key: "total_employees",
+      label: "Total Staff",
+      sortable: true,
+      accessor: (row) => row.total_employees,
+      hideOnMobile: true,
+    },
+    {
       key: "scores_recorded",
-      label: "Scores Recorded",
+      label: "Completed",
       sortable: true,
       accessor: (row) => row.scores_recorded,
+      render: (row) => (
+        <span>
+          {row.scores_recorded} / {row.total_employees}
+        </span>
+      ),
       hideOnMobile: true,
+    },
+    {
+      key: "average_score",
+      label: "Average Score",
+      sortable: true,
+      accessor: (row) => row.average_score ?? -1,
+      render: (row) => (
+        <Badge variant={typeof row.average_score === "number" && row.average_score >= 70 ? "default" : "secondary"}>
+          {scoreLabel(row.average_score)}
+        </Badge>
+      ),
     },
     { key: "questions", label: "Questions", sortable: true, accessor: (row) => row.questions, hideOnMobile: true },
   ]
@@ -442,12 +586,48 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
       placeholder: "All Departments",
     },
     {
-      key: "user_id",
-      label: "Employee",
-      options: userOptions,
-      placeholder: "All Employees",
+      key: "status",
+      label: "Status",
+      options: [
+        { value: "active", label: "Active" },
+        { value: "contract", label: "Contract" },
+        { value: "suspended", label: "Suspended" },
+        { value: "on_leave", label: "On Leave" },
+        { value: "exited", label: "Exited" },
+      ],
+      placeholder: "Active Statuses",
+      defaultValues: ["active", "contract", "suspended", "on_leave"],
       mode: "custom",
-      filterFn: (row, values) => values.length === 0 || values.includes(row.user_id),
+      filterFn: (row, selected) => selected.includes(row.employment_status || "active"),
+    },
+    {
+      key: "employment_type",
+      label: "Staff type",
+      options: [
+        { value: "full_time", label: "Full Time" },
+        { value: "part_time", label: "Part Time" },
+        { value: "contract", label: "Contract" },
+      ],
+      placeholder: "All Types",
+      defaultValues: ["full_time"],
+      mode: "custom",
+      filterFn: (row, selected) => selected.includes(row.employment_type || "full_time"),
+    },
+    {
+      key: "cbt_status",
+      label: "CBT Status",
+      options: [
+        { value: "taken", label: "Taken" },
+        { value: "not_taken", label: "Not Taken" },
+      ],
+      placeholder: "All CBT Statuses",
+      mode: "custom",
+      filterFn: (row, selected) => {
+        const isTaken = typeof row.cbt_score === "number"
+        if (selected.includes("taken") && isTaken) return true
+        if (selected.includes("not_taken") && !isTaken) return true
+        return false
+      },
     },
     ...individualCycleFilters,
   ]
@@ -504,6 +684,7 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
       label: "Reset CBT Attempt",
       icon: RotateCcw,
       variant: "destructive",
+      hidden: (row) => row.cbt_score === null,
       onClick: (row) => setResetConfirmRow(row),
     },
   ]
@@ -613,14 +794,24 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
           filters={individualFilters}
           getRowId={(row) => row.id}
           pagination={{ pageSize: 50 }}
-          searchPlaceholder="Search employee, department, cycle, or score..."
+          searchPlaceholder="Search employee, department, cycle, status, or score..."
           searchFn={(row, query) =>
-            [row.employee, row.department, row.cycle, scoreLabel(row.cbt_score)].join(" ").toLowerCase().includes(query)
+            [
+              row.employee,
+              row.department,
+              row.cycle,
+              typeof row.cbt_score === "number" ? "taken completed" : "not taken pending",
+              scoreLabel(row.cbt_score),
+            ]
+              .join(" ")
+              .toLowerCase()
+              .includes(query)
           }
           isLoading={isInitialLoading}
           error={error}
           onRetry={() => void loadCbtSnapshot()}
           rowActions={individualRowActions}
+          forceRowActionsDropdown
           expandable={{
             render: (row) => <CbtAttemptDetail profileId={row.user_id} reviewCycleId={row.review_cycle_id} />,
           }}
