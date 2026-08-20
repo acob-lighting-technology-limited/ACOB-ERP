@@ -12,6 +12,10 @@ import { formatName, cn } from "@/lib/utils"
 import { formatWATDate, formatDateOfBirth } from "@/lib/utils/date"
 import {
   Users,
+  UserCheck,
+  UserMinus,
+  Briefcase,
+  FileSignature,
   Shield,
   Mail,
   Phone,
@@ -25,6 +29,8 @@ import {
   Tags,
   Cake,
   MoreVertical,
+  ArrowRight,
+  UserCircle,
 } from "lucide-react"
 import type { UserRole, EmploymentStatus } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
@@ -33,7 +39,12 @@ import { getAssignableRolesForActor } from "@/lib/role-management"
 import { logger } from "@/lib/logger"
 import { ManageUsersDialog } from "@/components/hr/manage-users-dialog"
 import { ManageContractCategoriesDialog } from "@/components/hr/manage-contract-categories-dialog"
-import { EmployeeViewModal } from "@/components/employees/EmployeeViewModal"
+import {
+  EmployeeViewModal,
+  type EditForm,
+  SUSPENSION_REASONS,
+  EXIT_REASONS,
+} from "@/components/employees/EmployeeViewModal"
 import { EmployeeDeletionDialog } from "@/components/employees/EmployeeDeletionDialog"
 import { EmployeeExportDialog } from "@/components/employees/EmployeeExportDialog"
 import {
@@ -48,7 +59,7 @@ import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { BirthdayManagerDialog } from "@/components/hr/birthday-manager-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
-import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
+import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { Badge } from "@/components/ui/badge"
 import { StatCard } from "@/components/ui/stat-card"
 import { EmployeeStatusBadge } from "@/components/hr/employee-status-badge"
@@ -127,6 +138,18 @@ function deriveLeadDepartments(department: string, isDepartmentLead: boolean): s
 
 const roleList: UserRole[] = ["visitor", "employee", "admin", "super_admin", "developer"]
 
+/**
+ * Contract staff are a distinct population: engaged per contract, not on the regular
+ * payroll, and largely not platform users. They are identified by employment_type, which
+ * survives the profile normalisation — company_email being blank was only ever a symptom
+ * of the same incomplete onboarding, never the defining attribute.
+ *
+ * NULL employment_type is treated as full time to match the Staff type filter.
+ */
+function isContractStaff(employee: Employee): boolean {
+  return (employee.employment_type ?? "full_time") === "contract"
+}
+
 export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmployeeContentProps) {
   const searchParams = useSearchParams()
   const [supabase] = useState(() => createClient())
@@ -136,9 +159,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
   const [isSaving, setIsSaving] = useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
-  const [modalViewMode, setModalViewMode] = useState<"profile" | "employment" | "edit" | "signature" | "status">(
-    "profile"
-  )
+  const [modalViewMode, setModalViewMode] = useState<"profile" | "employment" | "edit" | "signature">("profile")
 
   // Export state
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false)
@@ -187,14 +208,14 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
   const [categoriesDialogOpen, setCategoriesDialogOpen] = useState(false)
   const [birthdayManagerOpen, setBirthdayManagerOpen] = useState(false)
 
-  const [editForm, setEditForm] = useState({
-    role: "employee" as UserRole,
-    admin_routes: [] as string[],
+  const [editForm, setEditForm] = useState<EditForm>({
+    role: "employee",
+    admin_routes: [],
     is_department_lead: false,
     department: "",
     office_location: "",
     designation: "",
-    lead_departments: [] as string[],
+    lead_departments: [],
     employee_number: "",
     first_name: "",
     last_name: "",
@@ -213,8 +234,13 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     employment_date: "",
     job_description: "",
     attendance_exempt: false,
+    employment_status: "active",
+    status_reason_code: "",
+    suspension_end_date: "",
+    separation_date: "",
+    employment_type: "full_time",
+    contract_category_code: "",
   })
-  const [showMoreOptions, setShowMoreOptions] = useState(false)
 
   const canManageUsers = ["developer", "super_admin", "admin"].includes(userProfile?.role || "")
   const canReviewApplications = canManageUsers || Boolean(userProfile?.is_department_lead)
@@ -234,6 +260,51 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
   // sync via the DataTable's onProcessedDataChange so exports match what the user sees.
   const [processedEmployees, setProcessedEmployees] = useState<Employee[]>(initialEmployees)
 
+  // ── Lifecycle scope ────────────────────────────────────────────────────────
+  // Employment lifecycle is a scope, not a filter: the directory means current
+  // staff unless you deliberately ask for leavers. Keeping it in the tab row
+  // (rather than as a pre-ticked Status option) makes the exclusion visible and
+  // leaves the filter dropdowns free of values the user never chose.
+  const [lifecycleTab, setLifecycleTab] = useState<"current" | "former" | "all">("current")
+
+  const lifecycleEmployees = useMemo(() => {
+    if (lifecycleTab === "current") return employees.filter((e) => e.employment_status !== "exited")
+    if (lifecycleTab === "former") return employees.filter((e) => e.employment_status === "exited")
+    return employees
+  }, [employees, lifecycleTab])
+
+  const lifecycleTabs: DataTableTab[] = useMemo(() => {
+    const former = employees.filter((e) => e.employment_status === "exited").length
+    return [
+      { key: "current", label: `Current (${employees.length - former})`, icon: UserCheck },
+      { key: "former", label: `Former (${former})`, icon: UserMinus },
+      { key: "all", label: `All (${employees.length})`, icon: Users },
+    ]
+  }, [employees])
+
+  // ── Population scope ───────────────────────────────────────────────────────
+  // ~47 contract staff sit alongside the ~48 regular employees. Both are real staff,
+  // but they are managed differently and are rarely wanted in the same list, so the
+  // page opens on regular employees. Like the lifecycle scope, this is a named tab
+  // carrying its own count — the excluded population is stated on screen rather than
+  // hidden behind a filter value the user never chose.
+  const [populationTab, setPopulationTab] = useState<"employees" | "contract" | "all">("employees")
+
+  const populationTabs: DataTableTab[] = useMemo(() => {
+    const contract = lifecycleEmployees.filter(isContractStaff).length
+    return [
+      { key: "employees", label: `Employees (${lifecycleEmployees.length - contract})`, icon: Briefcase },
+      { key: "contract", label: `Contract Staff (${contract})`, icon: FileSignature },
+      { key: "all", label: `All Staff (${lifecycleEmployees.length})`, icon: Users },
+    ]
+  }, [lifecycleEmployees])
+
+  const scopedEmployees = useMemo(() => {
+    if (populationTab === "employees") return lifecycleEmployees.filter((e) => !isContractStaff(e))
+    if (populationTab === "contract") return lifecycleEmployees.filter(isContractStaff)
+    return lifecycleEmployees
+  }, [lifecycleEmployees, populationTab])
+
   const loadData = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminEmployees() })
   }, [queryClient])
@@ -247,11 +318,21 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
 
       try {
         setSelectedEmployee(employee)
-        const { data: fullProfile } = await supabase.from("profiles").select("*").eq("id", employee.id).single()
+        const { data: fullProfile, error: profileErr } = await supabase
+          .from("profiles")
+          .select("*, contract_categories(code)")
+          .eq("id", employee.id)
+          .single()
+
+        if (profileErr) {
+          throw profileErr
+        }
 
         if (fullProfile) {
           const isDepartmentLead = Boolean(fullProfile.is_department_lead)
           const normalizedDepartment = fullProfile.department || ""
+          const contractCategoryCode = (fullProfile.contract_categories as { code?: string } | null)?.code || ""
+
           setEditForm({
             role: (fullProfile.role as UserRole) || "employee",
             admin_routes: Array.isArray(fullProfile.admin_routes) ? fullProfile.admin_routes : [],
@@ -278,10 +359,16 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             employment_date: fullProfile.employment_date || "",
             job_description: fullProfile.job_description || "",
             attendance_exempt: Boolean(fullProfile.attendance_exempt),
+            device_key: fullProfile.device_key || "",
+            employment_status: (fullProfile.employment_status as EmploymentStatus) || "active",
+            status_reason_code: fullProfile.separation_reason || fullProfile.suspension_reason || "",
+            suspension_end_date: fullProfile.suspension_end_date || "",
+            separation_date: fullProfile.separation_date || "",
+            employment_type: (fullProfile.employment_type as "full_time" | "part_time" | "contract") || "full_time",
+            contract_category_code: contractCategoryCode,
           })
         }
 
-        setShowMoreOptions(false)
         setSelectedEmployee(employee)
         setViewEmployeeProfile(employee as unknown as EmployeeProfile)
         setModalViewMode("edit")
@@ -359,12 +446,133 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         return
       }
 
+      // 1. Fetch current profile state from DB to compare changes
+      const { data: currentProfile, error: fetchErr } = await supabase
+        .from("profiles")
+        .select("*, contract_categories(code)")
+        .eq("id", selectedEmployee.id)
+        .single()
+
+      if (fetchErr || !currentProfile) {
+        throw new Error("Could not retrieve current employee record for verification")
+      }
+
+      const currentType = currentProfile.employment_type || "full_time"
+      const currentCatCode = (currentProfile.contract_categories as { code?: string } | null)?.code || ""
+      const isTypeOrCatChanged =
+        editForm.employment_type !== currentType ||
+        (editForm.employment_type === "contract" && editForm.contract_category_code !== currentCatCode)
+
+      // 2. If Staff Type or Contract Category changed, call convert-type RPC endpoint
+      if (isTypeOrCatChanged) {
+        if (editForm.employment_type === "contract" && !editForm.contract_category_code) {
+          toast.error("Please select a contract category for contract staff")
+          setIsSaving(false)
+          return
+        }
+
+        const convertRes = await apiFetch("/api/admin/employees/convert-type", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            profileId: selectedEmployee.id,
+            newType: editForm.employment_type,
+            newCategoryCode: editForm.employment_type === "contract" ? editForm.contract_category_code : undefined,
+          }),
+        })
+
+        const convertPayload = (await convertRes.json().catch(() => ({}))) as {
+          error?: string
+          success?: boolean
+          newEmployeeNumber?: string
+        }
+
+        if (!convertRes.ok) {
+          throw new Error(convertPayload.error || "Failed to convert employee classification")
+        }
+
+        if (convertPayload.newEmployeeNumber) {
+          toast.success(`Converted to ${editForm.employment_type}. New Staff ID: ${convertPayload.newEmployeeNumber}`)
+        }
+      }
+
+      // 3. If Employment Status or separation/suspension details changed, call HR status API
+      const currentStatus = currentProfile.employment_status || "active"
+      const isStatusChanged =
+        editForm.employment_status !== currentStatus ||
+        (editForm.employment_status === "exited" &&
+          (editForm.status_reason_code !== (currentProfile.separation_reason || "") ||
+            editForm.separation_date !== (currentProfile.separation_date || ""))) ||
+        (editForm.employment_status === "suspended" &&
+          (editForm.status_reason_code !== (currentProfile.suspension_reason || "") ||
+            editForm.suspension_end_date !== (currentProfile.suspension_end_date || "")))
+
+      if (isStatusChanged) {
+        if (editForm.employment_status === "suspended" && !editForm.status_reason_code) {
+          toast.error("Please select a suspension reason")
+          setIsSaving(false)
+          return
+        }
+
+        if (editForm.employment_status === "exited" && (!editForm.status_reason_code || !editForm.separation_date)) {
+          toast.error("Please provide both a separation reason and separation date")
+          setIsSaving(false)
+          return
+        }
+
+        const reasonLabel =
+          editForm.employment_status === "suspended"
+            ? SUSPENSION_REASONS.find((r) => r.value === editForm.status_reason_code)?.label ||
+              editForm.status_reason_code
+            : editForm.employment_status === "exited"
+              ? EXIT_REASONS.find((r) => r.value === editForm.status_reason_code)?.label || editForm.status_reason_code
+              : editForm.status_reason_code
+
+        const statusRes = await apiFetch(`/api/v1/hr/employees/${selectedEmployee.id}/status`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            status: editForm.employment_status,
+            reason_code: editForm.status_reason_code || undefined,
+            reason_label: reasonLabel || undefined,
+            suspension_end_date:
+              editForm.employment_status === "suspended" ? editForm.suspension_end_date || null : undefined,
+            separation_date: editForm.employment_status === "exited" ? editForm.separation_date || null : undefined,
+          }),
+        })
+
+        const statusPayload = (await statusRes.json().catch(() => ({}))) as {
+          error?: string
+          has_blockers?: boolean
+          blockers?: string[]
+        }
+
+        if (!statusRes.ok) {
+          if (statusPayload.has_blockers && statusPayload.blockers?.length) {
+            throw new Error(`Cannot change status due to active blockers: ${statusPayload.blockers.join(", ")}`)
+          }
+          throw new Error(statusPayload.error || "Failed to update employee status")
+        }
+      }
+
+      // 4. Update general profile fields
       const leadDepartments = deriveLeadDepartments(editForm.department, editForm.is_department_lead)
+
+      let departmentId: string | null = null
+      if (editForm.department) {
+        const { data: deptRow } = await supabase
+          .from("departments")
+          .select("id")
+          .eq("name", editForm.department)
+          .maybeSingle()
+        departmentId = deptRow?.id || null
+      }
 
       const updateData: Database["public"]["Tables"]["profiles"]["Update"] = {
         role: editForm.role,
         admin_routes: editForm.role === "admin" ? editForm.admin_routes : null,
         department: editForm.department,
+        department_id: departmentId,
         office_location: editForm.office_location || null,
         designation: editForm.designation || null,
         is_department_lead: editForm.is_department_lead,
@@ -387,7 +595,6 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         job_description: editForm.job_description || null,
       }
 
-      // attendance_exempt and personal_email are not in the generated DB type yet — cast to allow them
       ;(updateData as Record<string, unknown>).attendance_exempt = editForm.attendance_exempt
       ;(updateData as Record<string, unknown>).personal_email = personalEmail || null
 
@@ -413,8 +620,6 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       }
       loadData()
     } catch (_error: unknown) {
-      // Supabase/Postgrest errors are plain objects — String() yields "[object Object]".
-      // Extract a readable message so failures (e.g. check-constraint violations) are visible.
       const errMessage =
         _error instanceof Error
           ? _error.message
@@ -445,12 +650,26 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
     }
   }
 
-  const handleViewEmployeeSignature = (employee: EmployeeProfile) => {
+  const handleViewEmployeeSignature = useCallback((employee: EmployeeProfile) => {
     setSelectedEmployee(employee as unknown as Employee)
     setViewEmployeeProfile(employee)
     setModalViewMode("signature")
     setIsViewDialogOpen(true)
-  }
+  }, [])
+
+  const handleConvertStaffType = useCallback(
+    async (employee: Employee) => {
+      await handleEditEmployee(employee)
+    },
+    [handleEditEmployee]
+  )
+
+  const handleChangeStatus = useCallback(
+    async (employee: Employee) => {
+      await handleEditEmployee(employee)
+    },
+    [handleEditEmployee]
+  )
 
   const getAvailableRoles = (): UserRole[] => {
     if (!userProfile) return []
@@ -538,16 +757,31 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         key: "department",
         label: "Department",
         sortable: true,
-        resizable: true,
-        initialWidth: 150,
-        accessor: (r) => r.department || "",
+        accessor: (r) => r.department,
+        render: (r) => <span>{r.department}</span>,
+      },
+      {
+        key: "designation",
+        label: "Designation",
+        sortable: true,
+        accessor: (r) => r.designation || "",
+        render: (r) => <span>{r.designation || "—"}</span>,
       },
       {
         key: "role",
         label: "Role",
         sortable: true,
         accessor: (r) => r.role,
-        render: (r) => <Badge className={getRoleBadgeColor(r.role)}>{getRoleDisplayName(r.role)}</Badge>,
+        render: (r) => (
+          <div className="flex flex-wrap gap-1.5">
+            <Badge className={getRoleBadgeColor(r.role)}>{getRoleDisplayName(r.role)}</Badge>
+            {r.is_department_lead && (
+              <Badge variant="outline" className="border-amber-200 text-amber-600">
+                Lead
+              </Badge>
+            )}
+          </div>
+        ),
       },
       {
         key: "employment_type",
@@ -606,11 +840,41 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
                 <Pencil className="h-4 w-4" />
               </Button>
             )}
+            {canManageUsers && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-8 w-8" title="More Actions">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => void handleConvertStaffType(r)}>
+                    <ArrowRight className="mr-2 h-4 w-4" />
+                    Convert Staff Type
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void handleChangeStatus(r)}>
+                    <UserCircle className="mr-2 h-4 w-4" />
+                    Change Status
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => void handleViewEmployeeSignature(r as unknown as EmployeeProfile)}>
+                    <FileSignature className="mr-2 h-4 w-4" />
+                    Email Signature
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </div>
         ),
       },
     ],
-    [canManageUsers, handleCopyEmail, handleEditEmployee]
+    [
+      canManageUsers,
+      handleCopyEmail,
+      handleEditEmployee,
+      handleConvertStaffType,
+      handleChangeStatus,
+      handleViewEmployeeSignature,
+    ]
   )
 
   const departments = useMemo(
@@ -650,52 +914,26 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         options: roleList.map((r) => ({ value: r, label: getRoleDisplayName(r) })),
         placeholder: "All Roles",
       },
-      {
-        key: "status",
-        label: "Status",
-        // "Contract" appears here as well as under Staff type because 46 profiles carry it as
-        // their employment_status rather than 'active' — a data problem, not a UI one. Removing
-        // the option would hide them entirely, since it is also a default value. Fix the data
-        // (status 'active' + staff type 'contract') and this option can go.
-        options: [
-          { value: "active", label: "Active" },
-          { value: "contract", label: "Contract" },
-          { value: "suspended", label: "Suspended" },
-          { value: "on_leave", label: "On Leave" },
-          { value: "exited", label: "Exited" },
-        ],
-        placeholder: "Active Statuses",
-        // Hide exited employees by default; user can opt to include them.
-        defaultValues: ["active", "contract", "suspended", "on_leave"],
-      },
-      {
-        key: "employment_type",
-        label: "Staff type",
-        options: [
-          { value: "full_time", label: "Full Time" },
-          { value: "part_time", label: "Part Time" },
-          { value: "contract", label: "Contract" },
-        ],
-        placeholder: "All Types",
-        defaultValues: ["full_time"],
-        mode: "custom",
-        filterFn: (employee, selected) => selected.includes(employee.employment_type || "full_time"),
-      },
+      // Status and Staff type are deliberately not filters. Both are scopes, and both are
+      // now owned by the tab rows above: lifecycle (Current / Former / All) and population
+      // (Employees / Contract Staff / All Staff). Duplicating them here is what produced the
+      // pre-ticked filter chips this page used to open with. The Status column remains
+      // visible and sortable for the states the tabs do not name.
     ],
     [departments, offices]
   )
 
-  // Stats follow what the table is actually showing — counting the full set would claim
-  // people the default Status and Staff type filters have hidden.
+  // Stats follow what the table is actually showing, so they never claim people the
+  // current tab or filters have hidden.
   const stats = useMemo(() => {
-    const source = processedEmployees.length ? processedEmployees : employees
+    const source = processedEmployees.length ? processedEmployees : scopedEmployees
     return {
       total: source.length,
       admins: source.filter((s) => ["developer", "super_admin", "admin"].includes(s.role)).length,
       leads: source.filter((s) => s.is_department_lead).length,
       currentEmployees: source.filter((s) => s.role !== "visitor").length,
     }
-  }, [employees, processedEmployees])
+  }, [scopedEmployees, processedEmployees])
 
   // Handle userId from search params (for edit dialog)
   useEffect(() => {
@@ -714,6 +952,12 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       description="View and manage employee profiles, roles, and permissions."
       icon={Users}
       backLink={{ href: "/admin/hr", label: "Back to HR" }}
+      tabs={lifecycleTabs}
+      activeTab={lifecycleTab}
+      onTabChange={(tab) => setLifecycleTab(tab as "current" | "former" | "all")}
+      secondaryTabs={populationTabs}
+      secondaryActiveTab={populationTab}
+      onSecondaryTabChange={(tab) => setPopulationTab(tab as "employees" | "contract" | "all")}
       actions={
         <div className="flex items-center gap-2">
           {(canManageUsers || canReviewApplications) && (
@@ -787,7 +1031,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       }
     >
       <DataTable<Employee>
-        data={employees}
+        data={scopedEmployees}
         columns={columns}
         getRowId={(r) => r.id}
         onProcessedDataChange={setProcessedEmployees}
@@ -961,14 +1205,10 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         isSaving={isSaving}
         editForm={editForm}
         setEditForm={setEditForm}
-        showMoreOptions={showMoreOptions}
-        setShowMoreOptions={setShowMoreOptions}
         userProfile={userProfile}
         viewEmployeeData={viewEmployeeData}
         onEditEmployee={handleEditEmployee}
         onSignature={handleViewEmployeeSignature}
-        loadData={loadData}
-        setViewEmployeeProfile={setViewEmployeeProfile}
         canManageUsers={canManageUsers}
         getAvailableRoles={getAvailableRoles}
       />
