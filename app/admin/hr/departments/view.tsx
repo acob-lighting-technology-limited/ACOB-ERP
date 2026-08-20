@@ -1,13 +1,23 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
-import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
+import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "@/components/ui/data-table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   Dialog,
   DialogContent,
@@ -20,7 +30,7 @@ import {
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
-import { AlertTriangle, Building, Mail, Pencil, Plus, Users } from "lucide-react"
+import { AlertTriangle, Building, Mail, Pencil, Plus, Trash2, Users } from "lucide-react"
 import { toast } from "sonner"
 import { StatCard } from "@/components/ui/stat-card"
 import { QUERY_KEYS } from "@/lib/query-keys"
@@ -29,6 +39,34 @@ import { formatWATDate } from "@/lib/utils/date"
 import { apiFetch } from "@/lib/api-client"
 
 const log = logger("hr-departments")
+
+const TABS: DataTableTab[] = [
+  { key: "active", label: "Active" },
+  { key: "inactive", label: "Inactive" },
+  { key: "all", label: "All" },
+]
+
+export function DepartmentStatusBadge({ isActive }: { isActive: boolean }) {
+  if (isActive) {
+    return (
+      <Badge
+        variant="outline"
+        className="border-emerald-200 bg-emerald-50 font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+      >
+        Active
+      </Badge>
+    )
+  }
+
+  return (
+    <Badge
+      variant="outline"
+      className="border-slate-300 bg-slate-100 font-medium text-slate-700 dark:border-slate-700 dark:bg-slate-800/60 dark:text-slate-400"
+    >
+      Inactive
+    </Badge>
+  )
+}
 
 export interface Department {
   id: string
@@ -52,6 +90,7 @@ export interface DepartmentEmployee {
   designation: string | null
   employment_status: string | null
   department: string | null
+  department_id?: string | null
 }
 
 export interface DepartmentsData {
@@ -72,7 +111,17 @@ function employeeName(employee: DepartmentEmployee) {
   return [employee.first_name, employee.last_name].filter(Boolean).join(" ") || "Unknown"
 }
 
-function DepartmentCard({ department, onEdit }: { department: Department; onEdit: (department: Department) => void }) {
+function DepartmentCard({
+  department,
+  onEdit,
+  onDelete,
+  canManage,
+}: {
+  department: Department
+  onEdit: (department: Department) => void
+  onDelete?: (department: Department) => void
+  canManage?: boolean
+}) {
   return (
     <div className="space-y-3 rounded-xl border p-4">
       <div className="flex items-start justify-between gap-3">
@@ -80,14 +129,24 @@ function DepartmentCard({ department, onEdit }: { department: Department; onEdit
           <p className="font-semibold">{department.name}</p>
           <p className="text-muted-foreground text-xs">{department.employee_count || 0} employees</p>
         </div>
-        <Badge variant={department.is_active ? "default" : "secondary"}>
-          {department.is_active ? "Active" : "Inactive"}
-        </Badge>
+        <DepartmentStatusBadge isActive={department.is_active} />
       </div>
       <p className="text-muted-foreground text-sm">{department.description || "No description added"}</p>
-      <Button size="sm" variant="outline" onClick={() => onEdit(department)}>
-        Edit
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" onClick={() => onEdit(department)}>
+          Edit
+        </Button>
+        {canManage && onDelete && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            onClick={() => onDelete(department)}
+          >
+            Deactivate
+          </Button>
+        )}
+      </div>
     </div>
   )
 }
@@ -98,8 +157,11 @@ export function DepartmentsPage({
   initialData,
 }: { backLinkHref?: string; employeesBasePath?: string; initialData?: DepartmentsData } = {}) {
   const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState<string>("active")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingDepartment, setEditingDepartment] = useState<Department | null>(null)
+  const [deletingDepartment, setDeletingDepartment] = useState<Department | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -116,9 +178,37 @@ export function DepartmentsPage({
     initialData,
   })
 
-  const departments = data?.departments ?? []
-  const departmentEmployees = data?.departmentEmployees ?? {}
+  const departments = useMemo(() => data?.departments ?? [], [data?.departments])
+  const departmentEmployees = useMemo(() => data?.departmentEmployees ?? {}, [data?.departmentEmployees])
   const canManageDepartments = data?.canManageDepartments ?? false
+
+  const filteredDepartments = useMemo(() => {
+    if (activeTab === "active") return departments.filter((d) => d.is_active)
+    if (activeTab === "inactive") return departments.filter((d) => !d.is_active)
+    return departments
+  }, [departments, activeTab])
+
+  async function handleDeleteDepartment(dept: Department) {
+    try {
+      setIsDeleting(true)
+      const res = await apiFetch(`/api/departments/${dept.id}`, {
+        method: "DELETE",
+      })
+      const json = (await res.json().catch(() => null)) as { error?: string } | null
+      if (!res.ok) {
+        throw new Error(json?.error || "Failed to deactivate department")
+      }
+      toast.success(`Department "${dept.name}" deactivated successfully`)
+      setDeletingDepartment(null)
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminDepartmentsPage() })
+    } catch (err: unknown) {
+      log.error("Error deactivating department:", err)
+      const message = err instanceof Error ? err.message : "Failed to deactivate department"
+      toast.error(message)
+    } finally {
+      setIsDeleting(false)
+    }
+  }
 
   // After renaming the canonical department, push the new name onto every profile
   // that still stores the old name as plain text (keeps directory & scoping in sync).
@@ -148,6 +238,16 @@ export function DepartmentsPage({
         return
       }
 
+      if (!formData.name.trim()) {
+        toast.error("Department name is required")
+        return
+      }
+
+      if (!formData.description.trim()) {
+        toast.error("Department description is required")
+        return
+      }
+
       if (editingDepartment) {
         const oldName = editingDepartment.name?.trim() || ""
         const newName = formData.name.trim()
@@ -156,7 +256,7 @@ export function DepartmentsPage({
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             name: newName,
-            description: formData.description || null,
+            description: formData.description.trim(),
             department_code: formData.department_code.trim().toUpperCase() || null,
             is_executive_dept: formData.is_executive_dept,
             is_active: formData.is_active,
@@ -176,8 +276,8 @@ export function DepartmentsPage({
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: formData.name,
-            description: formData.description || null,
+            name: formData.name.trim(),
+            description: formData.description.trim(),
             department_code: formData.department_code.trim().toUpperCase() || null,
             is_executive_dept: formData.is_executive_dept,
             is_active: formData.is_active,
@@ -290,11 +390,7 @@ export function DepartmentsPage({
       label: "Status",
       sortable: true,
       accessor: (department) => (department.is_active ? "active" : "inactive"),
-      render: (department) => (
-        <Badge variant={department.is_active ? "default" : "secondary"}>
-          {department.is_active ? "Active" : "Inactive"}
-        </Badge>
-      ),
+      render: (department) => <DepartmentStatusBadge isActive={department.is_active} />,
     },
     {
       key: "created_at",
@@ -351,10 +447,11 @@ export function DepartmentsPage({
       hidden: () => !canManageDepartments,
     },
     {
-      label: "View Employees",
-      icon: Users,
-      onClick: () => {},
-      hidden: () => true,
+      label: "Deactivate",
+      icon: Trash2,
+      variant: "destructive",
+      onClick: (department) => setDeletingDepartment(department),
+      hidden: () => !canManageDepartments,
     },
   ]
 
@@ -435,9 +532,12 @@ export function DepartmentsPage({
                       )}
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="description">Description</Label>
+                    <Label htmlFor="description">
+                      Description <span className="text-destructive">*</span>
+                    </Label>
                     <Textarea
                       id="description"
+                      required
                       value={formData.description}
                       onChange={(event) => setFormData({ ...formData, description: event.target.value })}
                       placeholder="Brief description of the department responsibilities..."
@@ -478,6 +578,9 @@ export function DepartmentsPage({
           </Dialog>
         ) : null
       }
+      tabs={TABS}
+      activeTab={activeTab}
+      onTabChange={setActiveTab}
       stats={
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard
@@ -495,24 +598,24 @@ export function DepartmentsPage({
             iconColor="text-emerald-500"
           />
           <StatCard
+            title="Inactive"
+            value={departments.filter((department) => !department.is_active).length}
+            icon={Building}
+            iconBgColor="bg-slate-500/10"
+            iconColor="text-slate-500"
+          />
+          <StatCard
             title="Total Employees"
             value={departments.reduce((sum, department) => sum + (department.employee_count || 0), 0)}
             icon={Users}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
           />
-          <StatCard
-            title="Empty Units"
-            value={departments.filter((department) => (department.employee_count || 0) === 0).length}
-            icon={Building}
-            iconBgColor="bg-violet-500/10"
-            iconColor="text-violet-500"
-          />
         </div>
       }
     >
       <DataTable<Department>
-        data={departments}
+        data={filteredDepartments}
         columns={columns}
         filters={filters}
         getRowId={(department) => department.id}
@@ -534,56 +637,97 @@ export function DepartmentsPage({
             return members.length === 0 ? (
               <p className="text-muted-foreground text-sm">No employees in this department.</p>
             ) : (
-              <div className="space-y-3">
-                <p className="text-sm font-medium">{members.length} team members</p>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-[640px] text-sm">
-                    <thead className="bg-muted/30">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-xs font-semibold tracking-wide uppercase">Employee</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold tracking-wide uppercase">Contact</th>
-                        <th className="px-3 py-2 text-left text-xs font-semibold tracking-wide uppercase">Role</th>
-                        <th className="px-3 py-2 text-right text-xs font-semibold tracking-wide uppercase">Action</th>
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[640px] text-sm">
+                  <thead className="bg-muted/30">
+                    <tr>
+                      <th className="w-12 px-3 py-2 text-left text-xs font-semibold tracking-wide uppercase">S/N</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold tracking-wide uppercase">Employee</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold tracking-wide uppercase">Contact</th>
+                      <th className="px-3 py-2 text-left text-xs font-semibold tracking-wide uppercase">Role</th>
+                      <th className="px-3 py-2 text-right text-xs font-semibold tracking-wide uppercase">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {members.map((member, index) => (
+                      <tr key={member.id} className="border-t">
+                        <td className="text-muted-foreground w-12 px-3 py-2 font-mono text-xs">{index + 1}</td>
+                        <td className="px-3 py-2 font-medium">{employeeName(member)}</td>
+                        <td className="text-muted-foreground px-3 py-2">
+                          <div className="flex items-center gap-2">
+                            <Mail className="h-3 w-3" />
+                            <span>
+                              {[member.company_email, member.additional_email].filter(Boolean).join(" | ") || "-"}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-2">
+                          <Badge variant="outline">{member.designation || "Employee"}</Badge>
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <Link href={`${employeesBasePath ?? "/admin/hr/employees"}?userId=${member.id}`}>
+                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          </Link>
+                        </td>
                       </tr>
-                    </thead>
-                    <tbody>
-                      {members.map((member) => (
-                        <tr key={member.id} className="border-t">
-                          <td className="px-3 py-2 font-medium">{employeeName(member)}</td>
-                          <td className="text-muted-foreground px-3 py-2">
-                            <div className="flex items-center gap-2">
-                              <Mail className="h-3 w-3" />
-                              <span>
-                                {[member.company_email, member.additional_email].filter(Boolean).join(" | ") || "-"}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-2">
-                            <Badge variant="outline">{member.designation || "Employee"}</Badge>
-                          </td>
-                          <td className="px-3 py-2 text-right">
-                            <Link href={`${employeesBasePath ?? "/admin/hr/employees"}?userId=${member.id}`}>
-                              <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            </Link>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )
           },
         }}
         viewToggle
-        cardRenderer={(department) => <DepartmentCard department={department} onEdit={openEditDialog} />}
+        cardRenderer={(department) => (
+          <DepartmentCard
+            department={department}
+            onEdit={openEditDialog}
+            onDelete={setDeletingDepartment}
+            canManage={canManageDepartments}
+          />
+        )}
         emptyTitle="No departments yet"
         emptyDescription="Create your first department to start structuring teams and reporting lines."
         emptyIcon={Building}
         skeletonRows={5}
       />
+      <AlertDialog open={deletingDepartment !== null} onOpenChange={(open) => !open && setDeletingDepartment(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate Department</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span>
+                Are you sure you want to deactivate <strong>{deletingDepartment?.name}</strong>?
+              </span>
+              {(deletingDepartment?.employee_count ?? 0) > 0 ? (
+                <span className="block font-medium text-amber-600 dark:text-amber-400">
+                  Warning: This department currently has {deletingDepartment?.employee_count} employee(s). You must
+                  reassign all employees before deactivating.
+                </span>
+              ) : (
+                <span className="text-muted-foreground block">This will mark the department as inactive.</span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              disabled={isDeleting}
+              onClick={(e) => {
+                e.preventDefault()
+                if (deletingDepartment) {
+                  void handleDeleteDepartment(deletingDepartment)
+                }
+              }}
+            >
+              {isDeleting ? "Deactivating..." : "Deactivate"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DataTablePage>
   )
 }
