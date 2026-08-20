@@ -199,7 +199,7 @@ export default function PaymentDetailsPage(props: { params: Promise<{ id: string
 
       if (response.ok) {
         toast.success("Payment deleted successfully")
-        router.push("/admin/finance/payments")
+        router.push("/admin/accounts/payments")
       } else {
         const data = await response.json()
         toast.error(data.error || "Failed to delete payment")
@@ -385,7 +385,7 @@ export default function PaymentDetailsPage(props: { params: Promise<{ id: string
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4">
         <p className="text-muted-foreground">Payment not found</p>
-        <Link href="/admin/finance/payments">
+        <Link href="/admin/accounts/payments">
           <Button variant="outline">Back to Payments</Button>
         </Link>
       </div>
@@ -405,7 +405,7 @@ export default function PaymentDetailsPage(props: { params: Promise<{ id: string
   })()
 
   return (
-    <Dialog defaultOpen onOpenChange={(open) => !open && router.push("/admin/finance/payments")}>
+    <Dialog defaultOpen onOpenChange={(open) => !open && router.push("/admin/accounts/payments")}>
       <DialogContent className="max-h-[92vh] w-[96vw] max-w-6xl overflow-y-auto p-0">
         <PageWrapper maxWidth="full" background="gradient">
           <PageHeader
@@ -416,7 +416,7 @@ export default function PaymentDetailsPage(props: { params: Promise<{ id: string
                 : `One-time payment on ${payment.payment_date ? format(parseISO(payment.payment_date), "PPP") : "N/A"}`
             }
             icon={CreditCard}
-            backLink={{ href: "/admin/finance/payments", label: "Back to Payments" }}
+            backLink={{ href: "/admin/accounts/payments", label: "Back to Payments" }}
             actions={
               <div className="flex flex-wrap items-center gap-2">
                 <Badge className={getStatusColor(realStatus)}>{realStatus}</Badge>
