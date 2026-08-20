@@ -38,6 +38,7 @@ type AttendanceRow = {
   present_days?: number
   late_days?: number
   lateness_with_permission_days?: number
+  incomplete_with_permission_days?: number
   incomplete_days?: number
   exempted_days?: number
   out_of_station_days?: number
@@ -71,6 +72,7 @@ const HEADERS = [
   "Late",
   "Incomplete",
   "LWP",
+  "IWP",
   "AWP",
   "OOS",
   "Leave",
@@ -93,6 +95,7 @@ function toRow(r: AttendanceRow): (string | number)[] {
     r.late_days ?? 0,
     r.incomplete_days ?? 0,
     r.lateness_with_permission_days ?? 0,
+    r.incomplete_with_permission_days ?? 0,
     r.absent_with_permission_days ?? 0,
     r.out_of_station_days ?? 0,
     r.leave_days ?? 0,
