@@ -194,6 +194,7 @@ export async function GET(request: NextRequest) {
         out_of_station_days = 0,
         absent_with_permission_days = 0,
         lateness_with_permission_days = 0,
+        incomplete_with_permission_days = 0,
         total_hours = 0,
         total_missed_hours = 0,
         waived_days = 0,
@@ -276,6 +277,11 @@ export async function GET(request: NextRequest) {
           present_days++
           attendance_credits += 1.0
           total_hours += netDay
+        } else if (derived === "incomplete_with_permission") {
+          incomplete_with_permission_days++
+          present_days++
+          attendance_credits += 1.0
+          total_hours += netDay
         } else if (
           derived === "early" ||
           derived === "late" ||
@@ -345,6 +351,7 @@ export async function GET(request: NextRequest) {
         out_of_station_days,
         absent_with_permission_days,
         lateness_with_permission_days,
+        incomplete_with_permission_days,
         absent_days,
         waived_days,
         leave_days,
