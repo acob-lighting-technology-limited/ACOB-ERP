@@ -15,8 +15,9 @@ export async function validateLwpAwpMonthlyQuota(params: {
   isAdminLike: boolean
   excludeRecordId?: string | null
 }): Promise<{ allowed: boolean; error?: string }> {
-  // Only enforce quota for LWP (lateness_with_permission) and AWP (absent_with_permission)
-  if (!["lateness_with_permission", "absent_with_permission"].includes(params.targetStatus)) {
+  // Only enforce quota for LWP, IWP, and AWP permissions
+  const PERMISSION_STATUS_LIST = ["lateness_with_permission", "absent_with_permission", "incomplete_with_permission"]
+  if (!PERMISSION_STATUS_LIST.includes(params.targetStatus)) {
     return { allowed: true }
   }
 
@@ -39,7 +40,7 @@ export async function validateLwpAwpMonthlyQuota(params: {
       .from("attendance_records")
       .select("id", { count: "exact", head: true })
       .eq("user_id", params.userId)
-      .in("status", ["lateness_with_permission", "absent_with_permission"])
+      .in("status", PERMISSION_STATUS_LIST)
       .gte("date", monthStart)
       .lte("date", monthEnd)
 
@@ -50,7 +51,10 @@ export async function validateLwpAwpMonthlyQuota(params: {
     const { count, error } = await query
 
     if (error) {
-      log.error({ err: error.message, userId: params.userId, date: params.date }, "Error checking LWP/AWP monthly quota")
+      log.error(
+        { err: error.message, userId: params.userId, date: params.date },
+        "Error checking LWP/AWP monthly quota"
+      )
       return { allowed: true }
     }
 
