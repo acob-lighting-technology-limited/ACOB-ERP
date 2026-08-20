@@ -78,6 +78,9 @@ function getBypassSummary(log: EnrichedBypassLog): string {
     if (status === "lateness_with_permission") {
       return `Lateness override (LWP) granted to ${targetName} for ${date}`
     }
+    if (status === "incomplete_with_permission") {
+      return `Missed clock-out override (IWP) granted to ${targetName} for ${date}`
+    }
     if (status === "absent_with_permission") {
       return `Absence override (AWP) granted to ${targetName} for ${date}`
     }
@@ -101,6 +104,7 @@ function getBypassType(row: EnrichedBypassLog): string {
     const status = newVals.status || oldVals.status || ""
     const source = newVals.clock_in_source || newVals.source || ""
     if (status === "lateness_with_permission") return "Lateness Override (LWP)"
+    if (status === "incomplete_with_permission") return "Incomplete Override (IWP)"
     if (status === "absent_with_permission") return "Absence Override (AWP)"
     if (source === "remote_web") return "Remote Check-In Bypass"
     return "Manual Punch Alteration"
