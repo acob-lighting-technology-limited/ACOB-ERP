@@ -47,8 +47,10 @@ function isBypassOrOverride(log: AuditLogRow): boolean {
   if (entityType.includes("attendance")) {
     const isOverrideStatus = [
       "lateness_with_permission",
+      "incomplete_with_permission",
       "absent_with_permission",
       "lwp",
+      "iwp",
       "awp",
       "remote_web",
       "exempt",

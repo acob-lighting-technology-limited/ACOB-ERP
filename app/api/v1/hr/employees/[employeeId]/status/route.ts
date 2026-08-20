@@ -119,11 +119,26 @@ export async function PATCH(request: Request, { params }: RouteContext) {
         .eq("employee_id", ctx.employeeId)
         .eq("is_active", true)
 
+      const suspensionReason =
+        reason_label ||
+        (reason_code === "temporary_access_hold"
+          ? "Temporary Access Hold"
+          : reason_code === "policy_review"
+            ? "Policy Review"
+            : reason_code === "security_investigation"
+              ? "Security Investigation"
+              : reason_code === "compliance_breach"
+                ? "Compliance Breach"
+                : reason_code === "administrative_hold"
+                  ? "Administrative Hold"
+                  : reason_code || "Temporary Access Hold")
+
       await ctx.dataClient.from("employee_suspensions").insert({
         employee_id: ctx.employeeId,
         suspended_by: ctx.user.id,
-        reason: reason_label || reason_code || "No reason provided",
+        reason: suspensionReason,
         start_date: toLocalISODate(),
+        created_at: new Date().toISOString(),
         end_date: suspension_end_date || null,
         is_active: true,
       })

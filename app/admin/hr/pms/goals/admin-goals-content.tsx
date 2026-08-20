@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Plus, Target, CheckCircle, Clock } from "lucide-react"
+import { Plus, Target, CheckCircle, Clock, Trash2, ListPlus } from "lucide-react"
 import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { useRouter } from "next/navigation"
@@ -20,6 +20,7 @@ import {
   type DataTableFilter,
   type DataTableTab,
 } from "@/components/ui/data-table"
+import { Badge } from "@/components/ui/badge"
 
 import type { Goal } from "@/app/(app)/goals/page"
 import { apiFetch } from "@/lib/api-client"
@@ -84,11 +85,11 @@ export function AdminGoalsContent({
         label: "Goal",
         sortable: true,
         resizable: true,
-        initialWidth: 250,
+        initialWidth: 280,
         accessor: (r) => r.title,
         render: (r) => (
-          <div className="space-y-1">
-            <p className="font-medium">{r.title}</p>
+          <div className="space-y-0.5">
+            <p className="text-foreground font-medium">{r.title}</p>
             {r.description ? (
               <p className="text-muted-foreground truncate text-xs" title={r.description}>
                 {r.description}
@@ -106,7 +107,7 @@ export function AdminGoalsContent({
       },
       {
         key: "cycle",
-        label: "Cycle",
+        label: "Review Cycle",
         sortable: true,
         accessor: (r) => r.cycle?.name || "-",
         hideOnMobile: true,
@@ -114,15 +115,12 @@ export function AdminGoalsContent({
       {
         key: "status",
         label: "Status",
-        accessor: (r) => String(r.status || "").replaceAll("_", " "),
-        render: (r) => <span className="capitalize">{String(r.status || "").replaceAll("_", " ")}</span>,
-      },
-      {
-        key: "approval",
-        label: "Approval",
-        accessor: (r) => r.approval_status || "pending",
-        render: (r) => <span className="capitalize">{r.approval_status || "pending"}</span>,
-        hideOnMobile: true,
+        accessor: (r) => r.status || "in_progress",
+        render: (r) => (
+          <Badge variant="outline" className="text-xs capitalize">
+            {String(r.status || "in_progress").replaceAll("_", " ")}
+          </Badge>
+        ),
       },
       {
         key: "due",
@@ -162,7 +160,6 @@ export function AdminGoalsContent({
         review_type: cycle.review_type || "-",
         departments: new Set(cycleGoals.map((goal) => goal.department).filter(Boolean)).size,
         goals: cycleGoals.length,
-        approved: cycleGoals.filter((goal) => goal.approval_status === "approved").length,
       }
     })
   }, [cycles, goals])
@@ -199,13 +196,6 @@ export function AdminGoalsContent({
         accessor: (r) => String(r.goals),
         hideOnMobile: true,
       },
-      {
-        key: "approved",
-        label: "Approved",
-        align: "center",
-        accessor: (r) => String(r.approved),
-        hideOnMobile: true,
-      },
     ],
     []
   )
@@ -236,7 +226,7 @@ export function AdminGoalsContent({
       setGoals((current) => [payload.data as GoalWithCycle, ...current])
       setForm({ ...INITIAL_FORM, department: form.department, review_cycle_id: form.review_cycle_id })
       setIsDialogOpen(false)
-      toast.success("Department goal created")
+      toast.success("Department goal created successfully")
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to create goal")
     } finally {
@@ -244,14 +234,23 @@ export function AdminGoalsContent({
     }
   }
 
-  // ─── Render ──────────────────────────────────────────────────────────────
-  const pendingGoals = goals.filter((g) => g.approval_status === "pending").length
-  const approvedGoals = goals.filter((g) => g.approval_status === "approved").length
+  async function handleArchiveGoal(goal: GoalWithCycle) {
+    try {
+      const response = await apiFetch(`/api/hr/performance/goals?id=${encodeURIComponent(goal.id)}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) throw new Error("Failed to archive goal")
+      setGoals((current) => current.filter((g) => g.id !== goal.id))
+      toast.success("Goal archived successfully")
+    } catch (error) {
+      toast.error("Failed to archive goal")
+    }
+  }
 
   return (
     <DataTablePage
-      title="PMS Goals"
-      description="Department leads create department goals here, then create tasks under the specific goal."
+      title="PMS Strategic Goals"
+      description="Department leads and admins define strategic goals here and link actionable tasks."
       icon={Target}
       backLink={{ href: backLinkHref ?? "/admin/hr/pms", label: "Back to PMS" }}
       tabs={TABS}
@@ -259,9 +258,9 @@ export function AdminGoalsContent({
       onTabChange={setTab}
       actions={
         canCreateGoal ? (
-          <Button size="sm" onClick={() => setIsDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Goal
+          <Button size="sm" onClick={() => setIsDialogOpen(true)} className="gap-1.5">
+            <Plus className="h-4 w-4" />
+            Add Strategic Goal
           </Button>
         ) : undefined
       }
@@ -269,15 +268,15 @@ export function AdminGoalsContent({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           <StatCard title="Total Goals" value={goals.length} icon={Target} />
           <StatCard
-            title="Pending Approval"
-            value={pendingGoals}
+            title="Active Review Cycles"
+            value={cycles.length}
             icon={Clock}
-            iconBgColor="bg-amber-500/10"
-            iconColor="text-amber-500"
+            iconBgColor="bg-blue-500/10"
+            iconColor="text-blue-500"
           />
           <StatCard
-            title="Approved"
-            value={approvedGoals}
+            title="Departments with Goals"
+            value={new Set(goals.map((g) => g.department).filter(Boolean)).size}
             icon={CheckCircle}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
@@ -300,9 +299,16 @@ export function AdminGoalsContent({
           pagination={{ pageSize: 50 }}
           rowActions={[
             {
-              label: "Create Task",
+              label: "Create Task under Goal",
+              icon: ListPlus,
               onClick: (row) =>
                 router.push(`${goalsBasePath ?? "/admin/hr/pms/goals"}/task?goal_id=${encodeURIComponent(row.id)}`),
+            },
+            {
+              label: "Archive Goal",
+              icon: Trash2,
+              variant: "destructive",
+              onClick: (row) => handleArchiveGoal(row),
             },
           ]}
         />
@@ -323,14 +329,14 @@ export function AdminGoalsContent({
           <DialogHeader>
             <DialogTitle>Create Department Goal</DialogTitle>
             <DialogDescription>
-              Goals are departmental now. Save the goal here, then create tasks inside it for one person or the
-              department queue.
+              Create a strategic goal for your department. Once created, team tasks can be aligned to this goal to drive
+              performance scoring.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 pt-2">
             <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Department</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Department *</Label>
                 <Select
                   value={form.department}
                   onValueChange={(value) => setForm((current) => ({ ...current, department: value }))}
@@ -347,8 +353,8 @@ export function AdminGoalsContent({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Cycle</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Review Cycle *</Label>
                 <Select
                   value={form.review_cycle_id}
                   onValueChange={(value) => setForm((current) => ({ ...current, review_cycle_id: value }))}
@@ -368,34 +374,36 @@ export function AdminGoalsContent({
                 </Select>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Goal Title</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Goal Title *</Label>
               <Input
                 value={form.title}
                 onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                placeholder="e.g. Achieve 98% on-time project completion rate"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Description</Label>
               <Textarea
-                rows={4}
+                rows={3}
                 value={form.description}
                 onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Describe key outcomes and measurement criteria..."
               />
             </div>
-            <div className="space-y-2">
-              <Label>Due Date</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-semibold">Target Due Date</Label>
               <Input
                 type="date"
                 value={form.due_date}
                 onChange={(event) => setForm((current) => ({ ...current, due_date: event.target.value }))}
               />
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={saving}>
                 Cancel
               </Button>
-              <Button onClick={() => void handleCreateGoal()} disabled={saving}>
+              <Button onClick={() => void handleCreateGoal()} disabled={saving || !form.title.trim()}>
                 {saving ? "Saving..." : "Save Goal"}
               </Button>
             </div>

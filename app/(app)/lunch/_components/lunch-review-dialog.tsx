@@ -35,7 +35,9 @@ export function LunchReviewDialog({ open, onOpenChange, menuId, date, onSaved }:
   const [rating, setRating] = useState(0)
   const [hovered, setHovered] = useState(0)
   const [comment, setComment] = useState("")
+  const [hasExistingReview, setHasExistingReview] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [loading, setLoading] = useState(false)
 
   useEffect(() => {
@@ -43,6 +45,7 @@ export function LunchReviewDialog({ open, onOpenChange, menuId, date, onSaved }:
     setLoading(true)
     setRating(0)
     setComment("")
+    setHasExistingReview(false)
     void (async () => {
       try {
         const res = await apiFetch(`/api/hr/lunch/reviews?menu_id=${encodeURIComponent(menuId)}`)
@@ -51,6 +54,7 @@ export function LunchReviewDialog({ open, onOpenChange, menuId, date, onSaved }:
         if (existing) {
           setRating(Number(existing.rating) || 0)
           setComment(existing.comment || "")
+          setHasExistingReview(true)
         }
       } catch {
         // A missing prior review is the normal case — start blank.
@@ -77,7 +81,7 @@ export function LunchReviewDialog({ open, onOpenChange, menuId, date, onSaved }:
       const payload = await res.json().catch(() => null)
       if (!res.ok) throw new Error(payload?.error || "Failed to save your review")
 
-      toast.success("Thanks — your feedback was sent anonymously")
+      toast.success(hasExistingReview ? "Review updated" : "Thanks — your feedback was sent anonymously")
       onOpenChange(false)
       onSaved?.()
     } catch (error) {
@@ -87,14 +91,34 @@ export function LunchReviewDialog({ open, onOpenChange, menuId, date, onSaved }:
     }
   }
 
+  async function handleDelete() {
+    if (!menuId) return
+    setDeleting(true)
+    try {
+      const res = await apiFetch(`/api/hr/lunch/reviews?menu_id=${encodeURIComponent(menuId)}`, {
+        method: "DELETE",
+      })
+      const payload = await res.json().catch(() => null)
+      if (!res.ok) throw new Error(payload?.error || "Failed to delete your review")
+
+      toast.success("Review deleted")
+      onOpenChange(false)
+      onSaved?.()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete your review")
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Review this meal</DialogTitle>
+          <DialogTitle>{hasExistingReview ? "Edit your review" : "Review this meal"}</DialogTitle>
           <DialogDescription>
-            {date ? formatWATDate(date, { weekday: "long", day: "numeric", month: "long" }) : "Past meal"} — your rating
-            and comment reach HR <span className="font-medium">without your name</span>.
+            {date ? formatWATDate(date, { weekday: "long", day: "numeric", month: "long" }) : "Meal"} — your rating and
+            comment reach HR <span className="font-medium">without your name</span>.
           </DialogDescription>
         </DialogHeader>
 
@@ -109,7 +133,7 @@ export function LunchReviewDialog({ open, onOpenChange, menuId, date, onSaved }:
                   aria-label={`${value} star${value === 1 ? "" : "s"}`}
                   onMouseEnter={() => setHovered(value)}
                   onClick={() => setRating(value)}
-                  disabled={loading}
+                  disabled={loading || saving || deleting}
                   className="p-0.5 transition-transform hover:scale-110 disabled:opacity-50"
                 >
                   <Star
@@ -132,18 +156,34 @@ export function LunchReviewDialog({ open, onOpenChange, menuId, date, onSaved }:
               placeholder="What was good, what could be better?"
               className="min-h-[120px]"
               maxLength={2000}
-              disabled={loading}
+              disabled={loading || saving || deleting}
             />
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
-          </Button>
-          <Button onClick={handleSubmit} loading={saving} disabled={loading}>
-            Submit review
-          </Button>
+        <DialogFooter className="flex items-center justify-between sm:justify-between">
+          {hasExistingReview ? (
+            <Button
+              type="button"
+              variant="destructive"
+              size="sm"
+              onClick={handleDelete}
+              loading={deleting}
+              disabled={saving || loading}
+            >
+              Delete review
+            </Button>
+          ) : (
+            <div />
+          )}
+          <div className="flex items-center gap-2">
+            <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving || deleting}>
+              Cancel
+            </Button>
+            <Button onClick={handleSubmit} loading={saving} disabled={loading || deleting}>
+              {hasExistingReview ? "Update review" : "Submit review"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

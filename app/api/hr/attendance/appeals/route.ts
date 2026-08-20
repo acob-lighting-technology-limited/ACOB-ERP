@@ -12,7 +12,12 @@ export const dynamic = "force-dynamic"
 const APPEALABLE_STATUSES = ["absent", "late", "incomplete"] as const
 type AppealableStatus = (typeof APPEALABLE_STATUSES)[number]
 
-const ALLOWED_REQUESTED_STATUSES = ["absent_with_permission", "lateness_with_permission", "out_of_station"] as const
+const ALLOWED_REQUESTED_STATUSES = [
+  "absent_with_permission",
+  "lateness_with_permission",
+  "incomplete_with_permission",
+  "out_of_station",
+] as const
 type AllowedRequestedStatus = (typeof ALLOWED_REQUESTED_STATUSES)[number]
 
 function isAppealableStatus(s: string): s is AppealableStatus {
@@ -33,6 +38,7 @@ function isAllowedRequestedStatus(s: string): s is AllowedRequestedStatus {
 const APPEAL_WINDOW_MONTHS: Record<AllowedRequestedStatus, number> = {
   absent_with_permission: 2,
   lateness_with_permission: 2,
+  incomplete_with_permission: 2,
   out_of_station: 6,
 }
 
@@ -196,12 +202,13 @@ export async function POST(request: NextRequest) {
       }
       if (
         (currentStatus === "late" || currentStatus === "incomplete") &&
-        requestedStatus !== "lateness_with_permission"
+        requestedStatus !== "lateness_with_permission" &&
+        requestedStatus !== "incomplete_with_permission"
       ) {
         return NextResponse.json(
           {
             error:
-              "Late or incomplete days can only be appealed as lateness_with_permission (LWP) or out_of_station (OOS)",
+              "Late or incomplete days can only be appealed as lateness_with_permission (LWP), incomplete_with_permission (IWP), or out_of_station (OOS)",
           },
           { status: 422 }
         )

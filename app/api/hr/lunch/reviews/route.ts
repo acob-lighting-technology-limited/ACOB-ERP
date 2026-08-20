@@ -81,7 +81,7 @@ export async function POST(request: NextRequest) {
 
     if (!menu) return NextResponse.json({ error: "Menu not found" }, { status: 404 })
 
-    if (menu.date >= toLocalISODate()) {
+    if (menu.date > toLocalISODate()) {
       return NextResponse.json({ error: "You can only review food that has already been served" }, { status: 400 })
     }
 
@@ -102,5 +102,31 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     log.error({ err: String(error) }, "POST /api/hr/lunch/reviews failed")
     return NextResponse.json({ error: "Failed to save your review" }, { status: 500 })
+  }
+}
+
+/**
+ * Deletes the caller's own review for a menu.
+ */
+export async function DELETE(request: NextRequest) {
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const menuId = request.nextUrl.searchParams.get("menu_id")
+    if (!menuId) return NextResponse.json({ error: "menu_id is required" }, { status: 400 })
+
+    const dataClient = getServiceRoleClientOrFallback(supabase)
+    const { error } = await dataClient.from("lunch_reviews").delete().eq("menu_id", menuId).eq("user_id", user.id)
+
+    if (error) throw error
+
+    return NextResponse.json({ success: true })
+  } catch (error) {
+    log.error({ err: String(error) }, "DELETE /api/hr/lunch/reviews failed")
+    return NextResponse.json({ error: "Failed to delete your review" }, { status: 500 })
   }
 }

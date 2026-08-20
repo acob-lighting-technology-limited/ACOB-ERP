@@ -13,6 +13,7 @@ export type AdminDomain = "hr" | "finance" | "assets" | "reports" | "tasks" | "p
 export type AdminScopeMode = "global" | "lead"
 export type AdminSection =
   | "dev"
+  | "accounts"
   | "assets"
   | "audit-logs"
   | "documentation"
@@ -68,18 +69,19 @@ interface DepartmentRow {
 /** Section → representative route keys used for section-level access checks. */
 const SECTION_TO_ROUTES: Partial<Record<AdminSection, AdminRouteKeyV2[]>> = {
   dev: ["dev.main"],
+  accounts: ["accounts.main", "finance.main"],
   assets: ["assets.main", "assets.issues"],
   "audit-logs": ["auditlogs.main"],
   documentation: ["documentation.main"],
   employees: ["hr.main"],
   feedback: ["feedback.main"],
-  finance: ["finance.main"],
+  finance: ["accounts.main", "finance.main"],
   hr: ["hr.main"],
   inventory: ["inventory.main"],
   "job-descriptions": ["jobdescriptions.main"],
   notification: ["notifications.main"],
   onedrive: [],
-  payments: ["finance.main"],
+  payments: ["accounts.main", "finance.main"],
   // hr.main kept alongside payroll.main so admins who held HR before payroll was
   // split out of it are not locked out (mirrors canAccessRouteV2).
   payroll: ["payroll.main", "hr.main"],

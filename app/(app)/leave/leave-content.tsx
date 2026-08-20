@@ -5,12 +5,13 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
-import { CalendarDays, Clock, Plus, ExternalLink, Trash2, Pencil, Paperclip, CircleHelp } from "lucide-react"
+import { CalendarDays, Clock, Plus, ExternalLink, Trash2, Pencil, Paperclip, CircleHelp, FileText } from "lucide-react"
 import type { LeaveApprovalAudit, LeaveBalance, LeaveRequest, LeaveType } from "./page"
 
 import { LeaveTypesCard } from "@/components/leave/leave-types-card"
 import { LeaveDeleteConfirmDialog } from "@/components/leave/leave-delete-confirm-dialog"
 import { LeaveRequestFormDialog } from "@/components/leave/leave-request-form-dialog"
+import type { LeaveRequestFormData } from "@/components/leave/leave-request-form-dialog"
 import {
   LeaveApprovePromptDialog,
   LeaveRejectPromptDialog,
@@ -26,6 +27,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { formatName } from "@/lib/utils"
 import { formatWATDateTime } from "@/lib/utils/date"
 import { apiFetch } from "@/lib/api-client"
+import { leaveHandoverHref } from "@/lib/hr/leave-attachment-links"
 
 interface LeaveContentProps {
   currentUserId: string
@@ -38,8 +40,14 @@ interface LeaveContentProps {
 
 type ApproverQueueItem = LeaveRequest & {
   user?: {
+    id?: string
+    first_name?: string | null
+    last_name?: string | null
     full_name?: string | null
+    company_email?: string | null
+    department?: string | null
   } | null
+  approvals?: LeaveApprovalAudit[]
 }
 
 type LeaveQueryData = {
@@ -69,7 +77,7 @@ type PersonNameRef = {
   company_email?: string | null
 }
 
-const EMPTY_REQUEST_FORM = {
+const EMPTY_REQUEST_FORM: LeaveRequestFormData = {
   leave_type_id: "",
   start_date: "",
   days_count: 1,
@@ -77,7 +85,9 @@ const EMPTY_REQUEST_FORM = {
   reason: "",
   reliever_identifier: "",
   handover_note: "",
-  attachment: null as File | null,
+  handover_file: null,
+  handover_checklist_url: null,
+  attachment: null,
 }
 
 const TABS: DataTableTab[] = [
@@ -350,6 +360,8 @@ export function LeaveContent({
       reason: request.reason || "",
       reliever_identifier: request.reliever_id || "",
       handover_note: request.handover_note || "",
+      handover_file: null,
+      handover_checklist_url: request.handover_checklist_url || null,
       attachment: null,
     })
     setOpen(true)
@@ -366,14 +378,43 @@ export function LeaveContent({
     setSubmitting(true)
     try {
       const isEditing = !!editingRequestId
-      const { attachment, ...requestPayload } = formData
+      const { attachment, handover_file, ...requestPayload } = formData
+
+      if (!isEditing && !handover_file && !formData.handover_checklist_url && !formData.handover_note) {
+        throw new Error("Handover document is required")
+      }
       if (!isEditing && requiresAttachmentOnCreate && !attachment) {
         throw new Error("Attachment is required for this leave type")
       }
+
+      let handoverChecklistUrl = formData.handover_checklist_url
+      if (handover_file) {
+        const handoverUploadPayload = new FormData()
+        handoverUploadPayload.set("file", handover_file)
+        handoverUploadPayload.set("document_type", "handover_document")
+        const handoverUploadResponse = await apiFetch("/api/hr/leave/evidence/upload", {
+          method: "POST",
+          body: handoverUploadPayload,
+        })
+        const handoverUploadBody = await handoverUploadResponse.json().catch(() => ({}))
+        if (!handoverUploadResponse.ok || !handoverUploadBody?.data?.file_url) {
+          throw new Error(handoverUploadBody?.error || "Failed to upload handover document")
+        }
+        handoverChecklistUrl = String(handoverUploadBody.data.file_url)
+      }
+
+      const finalPayload = {
+        ...requestPayload,
+        handover_checklist_url: handoverChecklistUrl || null,
+        handover_note:
+          formData.handover_note?.trim() ||
+          (handover_file ? `Attached: ${handover_file.name}` : formData.handover_note || null),
+      }
+
       const response = await apiFetch("/api/hr/leave/requests", {
         method: isEditing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(isEditing ? { id: editingRequestId, ...requestPayload } : requestPayload),
+        body: JSON.stringify(isEditing ? { id: editingRequestId, ...finalPayload } : finalPayload),
       })
       const payload = await response.json()
       if (!response.ok) throw new Error(payload.error || "Failed to submit request")
@@ -719,7 +760,7 @@ export function LeaveContent({
 
                 return (
                   <div className="grid gap-3 p-2 text-sm md:grid-cols-2">
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       <p>
                         <span className="text-muted-foreground">Reliever:</span>{" "}
                         <span className="font-medium">{resolvePersonName(row.reliever) || "Not assigned"}</span>
@@ -730,6 +771,27 @@ export function LeaveContent({
                           {approvalStageLabel(row.current_stage_code || row.approval_stage)}
                         </span>
                       </p>
+                      {row.handover_checklist_url && (
+                        <p className="flex items-center gap-1.5 pt-1 text-xs">
+                          <span className="text-muted-foreground">Handover Doc:</span>
+                          <a
+                            href={leaveHandoverHref(row.id, row.handover_checklist_url)}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-primary inline-flex items-center gap-1 font-medium hover:underline"
+                          >
+                            <FileText className="h-3.5 w-3.5" />
+                            View Attached Handover
+                          </a>
+                        </p>
+                      )}
+                      {row.handover_note &&
+                        (!row.handover_checklist_url || !row.handover_note.startsWith("Attached:")) && (
+                          <p className="text-xs">
+                            <span className="text-muted-foreground">Handover Note:</span>{" "}
+                            <span className="text-foreground">{row.handover_note}</span>
+                          </p>
+                        )}
                     </div>
                     <div className="space-y-1">
                       <p className="text-muted-foreground text-xs">Approval Timeline</p>
@@ -865,6 +927,38 @@ export function LeaveContent({
                   onClick: (r) => setRejectPrompt({ requestId: r.id }),
                 },
               ]}
+              expandable={{
+                render: (r) => (
+                  <div className="space-y-2 p-2 text-xs">
+                    {r.reason && (
+                      <p>
+                        <span className="text-muted-foreground">Reason:</span>{" "}
+                        <span className="text-foreground">{r.reason}</span>
+                      </p>
+                    )}
+                    {r.handover_checklist_url && (
+                      <p className="flex items-center gap-1.5 pt-0.5">
+                        <span className="text-muted-foreground">Handover Document:</span>
+                        <a
+                          href={leaveHandoverHref(r.id, r.handover_checklist_url)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary inline-flex items-center gap-1 font-medium hover:underline"
+                        >
+                          <FileText className="h-3.5 w-3.5" />
+                          View / Download Handover File
+                        </a>
+                      </p>
+                    )}
+                    {r.handover_note && (!r.handover_checklist_url || !r.handover_note.startsWith("Attached:")) && (
+                      <p>
+                        <span className="text-muted-foreground">Handover Note:</span>{" "}
+                        <span className="text-foreground">{r.handover_note}</span>
+                      </p>
+                    )}
+                  </div>
+                ),
+              }}
               viewToggle
               cardRenderer={(r) => (
                 <div className="space-y-3 rounded-xl border p-3.5 sm:p-4">
@@ -884,6 +978,20 @@ export function LeaveContent({
                   {r.reason && (
                     <p className="text-muted-foreground text-xs">
                       Reason: <span className="text-foreground">{r.reason}</span>
+                    </p>
+                  )}
+                  {r.handover_checklist_url && (
+                    <p className="flex items-center gap-1.5 text-xs">
+                      <span className="text-muted-foreground">Handover:</span>
+                      <a
+                        href={leaveHandoverHref(r.id, r.handover_checklist_url)}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary inline-flex items-center gap-1 font-medium hover:underline"
+                      >
+                        <FileText className="h-3.5 w-3.5" />
+                        View Attached File
+                      </a>
                     </p>
                   )}
                 </div>
@@ -981,7 +1089,9 @@ export function LeaveContent({
           !!formData.start_date &&
           !!formData.reason &&
           !!formData.reliever_identifier &&
-          !!formData.handover_note &&
+          (Boolean(formData.handover_file) ||
+            Boolean(formData.handover_checklist_url) ||
+            Boolean(editingRequestId && formData.handover_note)) &&
           Number(formData.days_count) > 0 &&
           Number(formData.days_count) <= selectedAvailableDays &&
           (!requiresAttachmentOnCreate || Boolean(formData.attachment))

@@ -7,7 +7,7 @@ import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
-import { parseISODate, addDays, toISODate } from "@/lib/hr/leave-workflow"
+import { parseISODate, addDays, toISODate, formatLeaveReference, notifyUsers } from "@/lib/hr/leave-workflow"
 
 const log = logger("admin-hr-attendance-leave-manual")
 export const dynamic = "force-dynamic"
@@ -127,17 +127,41 @@ export async function POST(request: NextRequest) {
     )
 
     try {
-      await dataClient.rpc("create_notification", {
-        p_user_id: user_id,
-        p_type: "approval_granted",
-        p_category: "approvals",
-        p_title: "Leave Recorded",
-        p_message: `Approved leave was recorded on your behalf for ${start_date} to ${end_date} (${days_count} day(s)).`,
-        p_priority: "normal",
-        p_link_url: "/leave",
-        p_actor_id: scope.userId,
-        p_entity_type: "leave_request",
-        p_entity_id: created.id,
+      const [{ data: ltRow }, { data: adminProfile }] = await Promise.all([
+        dataClient.from("leave_types").select("name").eq("id", leave_type_id).maybeSingle(),
+        dataClient.from("profiles").select("full_name, first_name, last_name").eq("id", scope.userId).maybeSingle(),
+      ])
+      const leaveTypeName = ltRow?.name || "Leave"
+      const adminName =
+        adminProfile?.full_name ||
+        `${adminProfile?.first_name || ""} ${adminProfile?.last_name || ""}`.trim() ||
+        "HR Administrator"
+      const ref = formatLeaveReference(created.id)
+      const refSuffix = ref ? ` — ${ref}` : ""
+
+      await notifyUsers(dataClient, {
+        userIds: [user_id],
+        title: "Leave recorded on your behalf",
+        message: `Approved leave for ${leaveTypeName} was recorded on your behalf by ${adminName} for ${start_date} to ${end_date} (${days_count} day(s)).`,
+        actorId: scope.userId,
+        linkUrl: "/leave",
+        entityId: created.id,
+        emailEvent: "approved",
+        emailSubject: `Leave Recorded on Your Behalf — ${leaveTypeName}${refSuffix}`,
+        emailTitle: "Leave Recorded by Management",
+        badgeText: "Leave Recorded",
+        badgeVariant: "success",
+        detailsTitle: "Approved Leave Schedule",
+        details: [
+          { label: "Leave Type", value: leaveTypeName },
+          { label: "Duration", value: `${days_count} day(s)` },
+          { label: "Start Date", value: start_date },
+          { label: "End Date", value: end_date },
+          { label: "Resumption Date", value: resume_date },
+          { label: "Recorded By", value: adminName },
+          { label: "Reason / Notes", value: reason },
+        ],
+        ctaLabel: "View Leave Details",
       })
     } catch (notifyErr) {
       log.error({ err: String(notifyErr) }, "Failed to notify employee of manual leave")

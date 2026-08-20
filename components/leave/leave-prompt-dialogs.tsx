@@ -38,11 +38,11 @@ export function LeaveApprovePromptDialog({ approvePrompt, onOpenChange, onConfir
         if (!open) onOpenChange(false)
       }}
       title="Approval Feedback"
-      description="Provide feedback for this approval decision."
-      label="Feedback"
-      placeholder="Enter approval feedback..."
+      description="Provide feedback for this approval decision (optional)."
+      label="Feedback (Optional)"
+      placeholder="Enter approval feedback (optional)..."
       inputType="textarea"
-      required
+      required={false}
       confirmLabel="Approve Leave"
       onConfirm={async (feedback) => {
         if (approvePrompt) await onConfirm(approvePrompt.requestId, feedback)

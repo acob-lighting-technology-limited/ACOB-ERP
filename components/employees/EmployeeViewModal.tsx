@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { formatWATDate, formatDateOfBirth } from "@/lib/utils/date"
 import { toast } from "sonner"
 import {
@@ -22,14 +22,29 @@ import { AdminRoutesPicker } from "@/components/ui/admin-routes-picker"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { EmployeeStatusBadge } from "@/components/hr/employee-status-badge"
-import { ChangeStatusContent } from "@/components/hr/change-status-dialog"
 import { SignatureCreator } from "@/components/signature-creator"
 import { ASSET_TYPE_MAP } from "@/lib/asset-types"
-import { formatName } from "@/lib/utils"
+import { formatName, cn } from "@/lib/utils"
 import { format, differenceInDays } from "date-fns"
-import { Edit, FileSignature, ChevronDown, ChevronUp, UserCircle, ArrowRight } from "lucide-react"
+import {
+  Edit,
+  FileSignature,
+  UserCircle,
+  ArrowRight,
+  User,
+  Briefcase,
+  Mail,
+  Calendar,
+  Clock,
+  Copy,
+  Check,
+  FileText,
+  Package,
+  CheckSquare,
+  AlertCircle,
+  AlertTriangle,
+} from "lucide-react"
 import { useQuery } from "@tanstack/react-query"
 import type { UserRole, EmploymentStatus } from "@/types/database"
 import { getRoleDisplayName, getRoleBadgeColor } from "@/lib/permissions"
@@ -37,10 +52,10 @@ import { useDepartments } from "@/hooks/use-departments"
 import { useOfficeLocations } from "@/hooks/use-office-locations"
 import { createClient } from "@/lib/supabase/client"
 import type { UserProfile } from "@/app/admin/hr/employees/admin-employee-content"
-import type { EmployeeAssignedItems, EmployeeProfile, EmployeeStatusSummary, EmployeeViewData } from "./types"
+import type { EmployeeAssignedItems, EmployeeProfile, EmployeeViewData } from "./types"
 import { apiFetch } from "@/lib/api-client"
 
-interface EditForm {
+export interface EditForm {
   role: UserRole
   admin_routes: string[]
   is_department_lead: boolean
@@ -67,52 +82,57 @@ interface EditForm {
   employment_date: string
   job_description: string
   attendance_exempt: boolean
+  employment_status: EmploymentStatus
+  status_reason_code?: string
+  suspension_end_date?: string
+  separation_date?: string
+  employment_type: "full_time" | "part_time" | "contract"
+  contract_category_code?: string
 }
 
-interface EmployeeViewModalProps {
+export interface EmployeeViewModalProps {
   isOpen: boolean
   onOpenChange: (open: boolean) => void
   employee: EmployeeProfile | null
   assignedItems: EmployeeAssignedItems
-  modalViewMode: "profile" | "employment" | "edit" | "signature" | "status"
-  setModalViewMode: (mode: "profile" | "employment" | "edit" | "signature" | "status") => void
+  modalViewMode: "profile" | "employment" | "edit" | "signature"
+  setModalViewMode: (mode: "profile" | "employment" | "edit" | "signature") => void
   onSave: () => void
   isSaving: boolean
   editForm: EditForm
   setEditForm: (form: EditForm | ((prev: EditForm) => EditForm)) => void
-  showMoreOptions: boolean
-  setShowMoreOptions: (show: boolean) => void
   userProfile: UserProfile
   viewEmployeeData: EmployeeViewData
   onEditEmployee: (employee: EmployeeProfile) => void
   onSignature: (employee: EmployeeProfile) => void
-  loadData: () => void
-  setViewEmployeeProfile: (profile: EmployeeProfile | null) => void
   canManageUsers: boolean
   getAvailableRoles: () => UserRole[]
 }
 
-// ─── Compact profile info row ────────────────────────────────────────────────
-function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex items-start py-2">
-      <dt className="text-muted-foreground w-36 shrink-0 border-r pt-px pr-3 text-xs">{label}</dt>
-      <dd className="min-w-0 flex-1 pl-3 text-sm font-medium">{children}</dd>
-    </div>
-  )
-}
+const STATUS_OPTIONS: { value: "active" | "suspended" | "exited"; label: string }[] = [
+  { value: "active", label: "Active" },
+  { value: "suspended", label: "Suspended" },
+  { value: "exited", label: "Exited" },
+]
 
-// ─── Compact item row for assets / tasks / docs ───────────────────────────────
-function ItemRow({ children }: { children: React.ReactNode }) {
-  return (
-    <li className="flex items-center gap-3 border-b py-2.5 last:border-0">
-      <div className="min-w-0 flex-1">{children}</div>
-      <ArrowRight className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
-    </li>
-  )
-}
+export const EXIT_REASONS = [
+  { value: "resignation", label: "Resignation" },
+  { value: "mutual_separation", label: "Mutual Separation" },
+  { value: "contract_completed", label: "Contract Completed" },
+  { value: "retirement", label: "Retirement" },
+  { value: "workforce_reduction", label: "Workforce Reduction" },
+  { value: "disciplinary_dismissal", label: "Disciplinary Dismissal" },
+]
 
-function statusColor(status: string | null | undefined): string {
+export const SUSPENSION_REASONS = [
+  { value: "policy_review", label: "Policy Review" },
+  { value: "security_investigation", label: "Security Investigation" },
+  { value: "administrative_hold", label: "Administrative Hold" },
+  { value: "compliance_breach", label: "Compliance Breach" },
+  { value: "temporary_access_hold", label: "Temporary Access Hold" },
+]
+
+function getAssetStatusColor(status: string | null | undefined): string {
   switch (status?.toLowerCase()) {
     case "assigned":
     case "active":
@@ -131,6 +151,39 @@ function statusColor(status: string | null | undefined): string {
   }
 }
 
+function StaffTypeBadge({
+  type,
+  categoryName,
+  className,
+}: {
+  type?: string | null
+  categoryName?: string | null
+  className?: string
+}) {
+  const normType = type || "full_time"
+  const isPartTime = normType === "part_time"
+  const isContract = normType === "contract"
+
+  const label = isContract && categoryName ? `Contract (${categoryName})` : normType.replace(/_/g, " ")
+
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "text-xs font-medium capitalize",
+        isPartTime
+          ? "border-purple-200 bg-purple-500/10 text-purple-600 dark:border-purple-800"
+          : isContract
+            ? "border-orange-200 bg-orange-500/10 text-orange-600 dark:border-orange-800"
+            : "border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800",
+        className
+      )}
+    >
+      {label}
+    </Badge>
+  )
+}
+
 export function EmployeeViewModal({
   isOpen,
   onOpenChange,
@@ -142,14 +195,10 @@ export function EmployeeViewModal({
   isSaving,
   editForm,
   setEditForm,
-  showMoreOptions,
-  setShowMoreOptions,
   userProfile,
   viewEmployeeData,
   onEditEmployee,
   onSignature,
-  loadData,
-  setViewEmployeeProfile,
   canManageUsers,
   getAvailableRoles,
 }: EmployeeViewModalProps) {
@@ -157,20 +206,26 @@ export function EmployeeViewModal({
   const { officeLocations } = useOfficeLocations()
   const supabase = createClient()
   const [innerTab, setInnerTab] = useState<"assets" | "tasks" | "docs">("assets")
-  const [convertType, setConvertType] = useState<"full_time" | "part_time" | "contract">("full_time")
-  const [convertCategory, setConvertCategory] = useState("")
-  const [isConverting, setIsConverting] = useState(false)
+  const [copiedField, setCopiedField] = useState<string | null>(null)
 
-  const { data: contractCategories = [] } = useQuery<any[]>({
+  const handleCopy = useCallback((text: string, fieldName: string) => {
+    if (!text) return
+    void navigator.clipboard.writeText(text)
+    setCopiedField(fieldName)
+    toast.success(`Copied ${fieldName}`)
+    setTimeout(() => setCopiedField(null), 2000)
+  }, [])
+
+  const { data: contractCategories = [] } = useQuery<Array<{ id: string; name: string; code: string }>>({
     queryKey: ["contract-categories"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("contract_categories")
-        .select("*")
+        .select("id, name, code")
         .eq("is_active", true)
         .order("sort_order", { ascending: true })
       if (error) throw error
-      return data || []
+      return (data || []) as Array<{ id: string; name: string; code: string }>
     },
     enabled: isOpen,
   })
@@ -182,626 +237,431 @@ export function EmployeeViewModal({
       : viewEmployeeProfile?.lead_departments || []
 
   const isMainView = modalViewMode === "profile" || modalViewMode === "employment" || modalViewMode === "signature"
-  const isSubView = modalViewMode === "edit" || modalViewMode === "status"
+  const isSubView = modalViewMode === "edit"
+
+  const MAIN_TABS = [
+    { mode: "profile" as const, label: "Overview", icon: User },
+    { mode: "employment" as const, label: "Employment", icon: Briefcase },
+    { mode: "signature" as const, label: "Signature", icon: FileSignature },
+  ]
+
+  const originalType = viewEmployeeProfile?.employment_type || "full_time"
+  const originalCategoryCode = viewEmployeeProfile?.contract_categories?.code || ""
+  const isTypeOrCategoryChanged =
+    editForm.employment_type !== originalType ||
+    (editForm.employment_type === "contract" && editForm.contract_category_code !== originalCategoryCode)
+
+  const currentYear = new Date().getFullYear()
+  const expectedIdPreview =
+    editForm.employment_type === "full_time"
+      ? `ACOB/${currentYear}/...`
+      : editForm.employment_type === "part_time"
+        ? `ACOB/PT/${currentYear}/...`
+        : `ACOB/${editForm.contract_category_code || "SIWES"}/${currentYear}/...`
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[92vh] max-h-[92vh] max-w-4xl flex-col gap-0 overflow-hidden p-0">
-        {/* ── Header ── */}
-        <DialogHeader className="border-b px-5 py-3 sm:px-6">
-          <DialogTitle className="flex flex-wrap items-center gap-2 text-base">
-            <span>
-              {modalViewMode === "edit"
-                ? "Edit Employee Profile"
-                : modalViewMode === "signature"
-                  ? "Email Signature"
-                  : modalViewMode === "status"
-                    ? "Change Employment Status"
-                    : viewEmployeeProfile
-                      ? `${formatName(viewEmployeeProfile.first_name)} ${formatName(viewEmployeeProfile.last_name)}`
-                      : "Employee Details"}
-            </span>
-            {viewEmployeeProfile?.role && (
-              <Badge className={getRoleBadgeColor(viewEmployeeProfile.role as UserRole)}>
-                {getRoleDisplayName(viewEmployeeProfile.role as UserRole)}
-              </Badge>
-            )}
-            {viewEmployeeProfile?.employment_status && (
-              <EmployeeStatusBadge status={(viewEmployeeProfile.employment_status as EmploymentStatus) || "active"} />
-            )}
-          </DialogTitle>
-          <DialogDescription className="text-xs">
-            {modalViewMode === "edit"
-              ? "Update role, department, permissions, and profile information."
-              : modalViewMode === "signature"
-                ? "Manage branded signature details for this employee."
-                : modalViewMode === "status"
-                  ? "Update employment status, offboarding, or convert employment type."
-                  : "Review profile, assets, tasks, and employment details."}
-          </DialogDescription>
+      <DialogContent className="flex h-[90vh] max-h-[90vh] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:rounded-xl">
+        <DialogHeader className="bg-muted/20 border-b px-5 py-3.5 sm:px-6">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-3">
+              {viewEmployeeProfile && (
+                <Avatar className="h-9 w-9 shrink-0 border">
+                  <AvatarFallback className="bg-primary/10 text-primary text-xs font-bold">
+                    {formatName(viewEmployeeProfile.first_name)?.[0]}
+                    {formatName(viewEmployeeProfile.last_name)?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+              )}
+              <div className="min-w-0">
+                <DialogTitle className="flex flex-wrap items-center gap-2 text-base font-semibold">
+                  <span className="truncate">
+                    {modalViewMode === "edit"
+                      ? "Edit Employee Profile & Status"
+                      : modalViewMode === "signature"
+                        ? "Email Signature"
+                        : viewEmployeeProfile
+                          ? `${formatName(viewEmployeeProfile.first_name)} ${formatName(viewEmployeeProfile.last_name)}`
+                          : "Employee Details"}
+                  </span>
+                </DialogTitle>
+                <DialogDescription className="text-muted-foreground truncate text-xs">
+                  {modalViewMode === "edit"
+                    ? "Update identity, work, status, staff type, and contact details in one place."
+                    : modalViewMode === "signature"
+                      ? "Official company email signature template."
+                      : viewEmployeeProfile?.designation || "Employee profile overview and employment history."}
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
         </DialogHeader>
 
-        {/* ── Tab nav (main views only) ── */}
         {viewEmployeeProfile && isMainView && (
-          <div className="border-b px-5 sm:px-6">
-            <div className="flex gap-0">
-              {[
-                { mode: "profile" as const, label: "Overview" },
-                { mode: "signature" as const, label: "Signature" },
-                { mode: "employment" as const, label: "Employment" },
-              ].map(({ mode, label }) => (
-                <button
-                  key={mode}
-                  onClick={() => {
-                    if (mode === "signature" && viewEmployeeProfile) {
-                      onSignature(viewEmployeeProfile)
-                    } else {
-                      setModalViewMode(mode)
-                    }
-                  }}
-                  className={`border-b-2 px-4 py-2.5 text-xs font-medium transition-none ${
-                    modalViewMode === mode
-                      ? "border-primary text-foreground"
-                      : "text-muted-foreground hover:text-foreground border-transparent"
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
+          <div className="bg-background border-b px-5 sm:px-6">
+            <div className="flex gap-1">
+              {MAIN_TABS.map(({ mode, label, icon: TabIcon }) => {
+                const isActive = modalViewMode === mode
+                return (
+                  <button
+                    key={mode}
+                    onClick={() => {
+                      if (mode === "signature" && viewEmployeeProfile) {
+                        onSignature(viewEmployeeProfile)
+                      } else {
+                        setModalViewMode(mode)
+                      }
+                    }}
+                    className={cn(
+                      "flex items-center gap-1.5 border-b-2 px-3.5 py-2.5 text-xs font-medium transition-colors",
+                      isActive
+                        ? "border-primary text-primary font-semibold"
+                        : "text-muted-foreground hover:text-foreground border-transparent"
+                    )}
+                  >
+                    <TabIcon className="h-3.5 w-3.5" />
+                    {label}
+                  </button>
+                )
+              })}
             </div>
           </div>
         )}
 
-        {/* ── Scrollable content ── */}
         <div className="min-h-0 flex-1 overflow-hidden">
-          {/* Loading skeleton */}
-          {!viewEmployeeProfile && (
-            <div className="space-y-4 p-5 sm:p-6">
-              <div className="bg-muted h-6 w-2/5 animate-pulse rounded" />
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="space-y-2">
-                    <div className="bg-muted h-3 w-1/3 animate-pulse rounded" />
-                    <div className="bg-muted h-5 w-full animate-pulse rounded" />
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* ── Overview ── */}
           {viewEmployeeProfile && modalViewMode === "profile" && (
             <ScrollArea className="h-full">
-              <div className="space-y-5 px-5 py-4 sm:px-6">
-                {/* Profile info — compact dl */}
-                <div className="rounded-lg border">
-                  <div className="flex items-center gap-3 border-b px-4 py-3">
-                    <Avatar className="h-10 w-10 shrink-0">
-                      <AvatarFallback className="bg-primary text-primary-foreground text-sm font-bold">
-                        {formatName(viewEmployeeProfile.first_name)?.[0]}
-                        {formatName(viewEmployeeProfile.last_name)?.[0]}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold">
-                        {formatName(viewEmployeeProfile.first_name)} {formatName(viewEmployeeProfile.last_name)}
-                      </p>
-                      {viewEmployeeProfile.designation && (
-                        <p className="text-muted-foreground truncate text-xs">{viewEmployeeProfile.designation}</p>
-                      )}
-                    </div>
-                  </div>
-                  <dl className="divide-y px-4">
-                    {viewEmployeeProfile.company_email && (
-                      <InfoRow label="Email">
-                        <span className="text-xs break-all sm:text-sm">{viewEmployeeProfile.company_email}</span>
-                      </InfoRow>
-                    )}
-                    {viewEmployeeProfile.personal_email && (
-                      <InfoRow label="Personal Email">
-                        <span className="text-xs break-all sm:text-sm">{viewEmployeeProfile.personal_email}</span>
-                      </InfoRow>
-                    )}
-                    {viewEmployeeProfile.additional_email && (
-                      <InfoRow label="Additional Email">
-                        <span className="text-xs break-all sm:text-sm">{viewEmployeeProfile.additional_email}</span>
-                      </InfoRow>
-                    )}
-                    {viewEmployeeProfile.department && (
-                      <InfoRow label="Department">{viewEmployeeProfile.department}</InfoRow>
-                    )}
-                    <InfoRow label="Role">
-                      <div className="flex flex-wrap gap-1.5">
-                        <Badge className={getRoleBadgeColor(viewEmployeeProfile.role as UserRole)}>
-                          {getRoleDisplayName(viewEmployeeProfile.role as UserRole)}
-                        </Badge>
-                        {viewEmployeeProfile.is_department_lead && displayedLeadDepartments.length > 0 && (
-                          <Badge variant="outline">
-                            Leading {displayedLeadDepartments.length} Dept
-                            {displayedLeadDepartments.length > 1 ? "s" : ""}
-                          </Badge>
-                        )}
-                      </div>
-                    </InfoRow>
-                    {viewEmployeeProfile.phone_number && (
-                      <InfoRow label="Phone">{viewEmployeeProfile.phone_number}</InfoRow>
-                    )}
-                    {viewEmployeeProfile.office_location && (
-                      <InfoRow label="Office">{viewEmployeeProfile.office_location}</InfoRow>
-                    )}
-                    {viewEmployeeProfile.residential_address && (
-                      <InfoRow label="Address">
-                        <span className="text-xs">{viewEmployeeProfile.residential_address}</span>
-                      </InfoRow>
-                    )}
-                    {displayedLeadDepartments.length > 0 && (
-                      <InfoRow label="Leading">
-                        <div className="flex flex-wrap gap-1">
-                          {displayedLeadDepartments.map((dept: string) => (
-                            <Badge key={dept} variant="outline" className="text-xs">
-                              {dept}
-                            </Badge>
-                          ))}
-                        </div>
-                      </InfoRow>
-                    )}
-                    {(viewEmployeeProfile.birthday || viewEmployeeProfile.date_of_birth) && (
-                      <InfoRow label="Birthday">
-                        {formatDateOfBirth(viewEmployeeProfile.date_of_birth, viewEmployeeProfile.birthday)}
-                      </InfoRow>
-                    )}
-                    <InfoRow label="Hire Date">
-                      {viewEmployeeProfile.employment_date
-                        ? format(new Date(viewEmployeeProfile.employment_date), "PPP")
-                        : "Not recorded"}
-                    </InfoRow>
-                    {viewEmployeeProfile.employment_date && (
-                      <InfoRow label="Tenure">
-                        {differenceInDays(new Date(), new Date(viewEmployeeProfile.employment_date))} days
-                      </InfoRow>
-                    )}
-                    <InfoRow label="Account Created">{format(new Date(viewEmployeeProfile.created_at), "PPP")}</InfoRow>
-                  </dl>
-                </div>
-
-                {/* Assets / Tasks / Docs — compact tabs */}
-                <div className="rounded-lg border">
-                  {/* Tab bar */}
-                  <div className="flex gap-0 border-b px-2">
-                    {(
-                      [
-                        { key: "assets", label: "Assets", count: viewEmployeeData.assets.length },
-                        { key: "tasks", label: "Tasks", count: viewEmployeeData.tasks.length },
-                        { key: "docs", label: "Docs", count: viewEmployeeData.documentation.length },
-                      ] as const
-                    ).map(({ key, label, count }) => (
-                      <button
-                        key={key}
-                        onClick={() => setInnerTab(key)}
-                        className={`border-b-2 px-3 py-2 text-xs font-medium transition-none ${
-                          innerTab === key
-                            ? "border-primary text-foreground"
-                            : "text-muted-foreground hover:text-foreground border-transparent"
-                        }`}
-                        style={{ marginBottom: "-1px" }}
-                      >
-                        {label} <span className="text-[10px] tabular-nums">({count})</span>
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* Assets panel */}
-                  {innerTab === "assets" &&
-                    (viewEmployeeData.assets.length > 0 ? (
-                      <ul className="max-h-60 divide-y overflow-y-auto px-4">
-                        {viewEmployeeData.assets.map((assignment) => {
-                          const asset = assignment.Asset
-                          const typeLabel = asset?.asset_type
-                            ? ASSET_TYPE_MAP[asset.asset_type]?.label || asset.asset_type
-                            : "Unknown"
-                          const isOffice = assignment.assignmentType === "office"
-                          return (
-                            <ItemRow key={assignment.id}>
-                              <p className="truncate text-sm font-medium">{typeLabel}</p>
-                              <div className="mt-0.5 flex items-center gap-1.5">
-                                <span className="text-muted-foreground font-mono text-[10px]">
-                                  {asset?.unique_code || "—"}
-                                </span>
-                                <Badge
-                                  variant="outline"
-                                  className={`px-1.5 py-0 text-[10px] ${isOffice ? "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300" : "bg-green-50 text-green-700 dark:bg-green-950 dark:text-green-300"}`}
-                                >
-                                  {isOffice ? `Office: ${assignment.officeLocation || "Office"}` : "Personal"}
-                                </Badge>
-                                <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(asset?.status)}`}>
-                                  {asset?.status || "unknown"}
-                                </Badge>
-                              </div>
-                            </ItemRow>
-                          )
-                        })}
-                      </ul>
-                    ) : (
-                      <p className="text-muted-foreground px-4 py-6 text-center text-sm">No assets assigned</p>
-                    ))}
-
-                  {/* Tasks panel */}
-                  {innerTab === "tasks" &&
-                    (viewEmployeeData.tasks.length > 0 ? (
-                      <ul className="max-h-60 divide-y overflow-y-auto px-4">
-                        {viewEmployeeData.tasks.map((task) => (
-                          <ItemRow key={task.id}>
-                            <p className="truncate text-sm font-medium">{task.title || "Untitled task"}</p>
-                            <div className="mt-0.5 flex items-center gap-1.5">
-                              <Badge className={`px-1.5 py-0 text-[10px] ${statusColor(task.status)}`}>
-                                {task.status?.replace(/_/g, " ") || "unknown"}
-                              </Badge>
-                              {task.created_at && (
-                                <span className="text-muted-foreground text-[10px]">
-                                  {formatWATDate(task.created_at, { day: "numeric", month: "short", year: "numeric" })}
-                                </span>
-                              )}
-                            </div>
-                          </ItemRow>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-muted-foreground px-4 py-6 text-center text-sm">No tasks assigned</p>
-                    ))}
-
-                  {/* Docs panel */}
-                  {innerTab === "docs" &&
-                    (viewEmployeeData.documentation.length > 0 ? (
-                      <ul className="max-h-60 divide-y overflow-y-auto px-4">
-                        {viewEmployeeData.documentation.map((doc) => (
-                          <ItemRow key={doc.id}>
-                            <p className="truncate text-sm font-medium">{doc.title || "Untitled document"}</p>
-                            {doc.created_at && (
-                              <p className="text-muted-foreground mt-0.5 text-[10px]">
-                                {formatWATDate(doc.created_at, { day: "numeric", month: "short", year: "numeric" })}
-                              </p>
-                            )}
-                          </ItemRow>
-                        ))}
-                      </ul>
-                    ) : (
-                      <p className="text-muted-foreground px-4 py-6 text-center text-sm">No documents found</p>
-                    ))}
-                </div>
-              </div>
-            </ScrollArea>
-          )}
-
-          {/* ── Employment ── */}
-          {viewEmployeeProfile && modalViewMode === "employment" && (
-            <ScrollArea className="h-full">
-              <div className="px-5 py-4 sm:px-6">
-                <div className="rounded-lg border">
-                  <dl className="divide-y px-4">
-                    <InfoRow label="Current Status">
-                      <EmployeeStatusBadge status={viewEmployeeProfile.employment_status || "active"} size="lg" />
-                    </InfoRow>
-                    <InfoRow label="Employment Type">
-                      <span className="capitalize">
-                        {String(viewEmployeeProfile.employment_type || "full_time").replace("_", " ")}
+              <div className="space-y-4 p-5 sm:p-6">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="bg-card space-y-3 rounded-lg border p-4 shadow-xs">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold uppercase">
+                        <Briefcase className="text-primary h-3.5 w-3.5" /> Work & Organization
                       </span>
-                    </InfoRow>
-                    {viewEmployeeProfile.employment_type === "contract" && (
-                      <InfoRow label="Contract Category">
-                        <span>
-                          {viewEmployeeProfile.contract_categories?.name
-                            ? `${viewEmployeeProfile.contract_categories.name} (${viewEmployeeProfile.contract_categories.code})`
-                            : "Not specified"}
-                        </span>
-                      </InfoRow>
-                    )}
-                    <InfoRow label="Device / Attendance No.">
-                      <span className="font-mono font-semibold">{viewEmployeeProfile.device_key || "—"}</span>
-                    </InfoRow>
-                    <InfoRow label="Hire Date">
-                      {viewEmployeeProfile.employment_date
-                        ? formatWATDate(viewEmployeeProfile.employment_date, {
-                            day: "numeric",
-                            month: "long",
-                            year: "numeric",
-                          })
-                        : "Not recorded"}
-                    </InfoRow>
-                    {viewEmployeeProfile.employment_date && (
-                      <InfoRow label="Tenure">
-                        {differenceInDays(new Date(), new Date(viewEmployeeProfile.employment_date))} days
-                      </InfoRow>
-                    )}
-                    {viewEmployeeProfile.employment_status === "exited" && (
-                      <>
-                        <InfoRow label="Separation Date">
-                          <span className="text-red-600 dark:text-red-400">
-                            {viewEmployeeProfile.separation_date
-                              ? formatWATDate(viewEmployeeProfile.separation_date, {
-                                  day: "numeric",
-                                  month: "long",
-                                  year: "numeric",
-                                })
-                              : "Not recorded"}
-                          </span>
-                        </InfoRow>
-                        <InfoRow label="Reason">
-                          <span className="text-red-600 italic dark:text-red-400">
-                            {viewEmployeeProfile.separation_reason || "No reason specified"}
-                          </span>
-                        </InfoRow>
-                      </>
-                    )}
-                    {viewEmployeeProfile.employment_status === "suspended" && (
-                      <InfoRow label="Note">
-                        <span className="text-xs text-amber-600 dark:text-amber-400">
-                          Contact IT / Admin for active suspension period details.
-                        </span>
-                      </InfoRow>
-                    )}
-                  </dl>
-                </div>
-                <p className="text-muted-foreground mt-4 text-xs leading-relaxed">
-                  Changes to employment status are logged for audit purposes. Terminating an employee will automatically
-                  revoke their system access and clear their assigned roles.
-                </p>
-              </div>
-            </ScrollArea>
-          )}
-
-          {/* ── Signature ── */}
-          {viewEmployeeProfile && modalViewMode === "signature" && (
-            <ScrollArea className="h-full">
-              <div className="px-5 py-4 sm:px-6">
-                <SignatureCreator
-                  profile={viewEmployeeProfile}
-                  variant="selectable"
-                  defaultSelectableMode="anniversary"
-                />
-              </div>
-            </ScrollArea>
-          )}
-
-          {/* ── Change Status / Type ── */}
-          {viewEmployeeProfile && modalViewMode === "status" && (
-            <Tabs defaultValue="status" className="flex h-full w-full flex-col">
-              <TabsList className="mx-5 mt-4 sm:mx-6">
-                <TabsTrigger value="status">Employment Status</TabsTrigger>
-                <TabsTrigger value="type">Employment Type</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="status" className="min-h-0 flex-grow">
-                <ScrollArea className="h-full">
-                  <div className="px-5 py-4 sm:px-6">
-                    <ChangeStatusContent
-                      employee={
-                        {
-                          id: viewEmployeeProfile.id,
-                          first_name: viewEmployeeProfile.first_name,
-                          last_name: viewEmployeeProfile.last_name,
-                          employment_status: viewEmployeeProfile.employment_status || "active",
-                        } satisfies EmployeeStatusSummary
-                      }
-                      onSuccess={() => {
-                        setModalViewMode("employment")
-                        loadData()
-                        supabase
-                          .from("profiles")
-                          .select("*")
-                          .eq("id", viewEmployeeProfile.id)
-                          .single()
-                          .then(({ data }) => {
-                            if (data) setViewEmployeeProfile(data as EmployeeProfile)
-                          })
-                      }}
-                    />
-                  </div>
-                </ScrollArea>
-              </TabsContent>
-
-              <TabsContent value="type" className="min-h-0 flex-grow">
-                <ScrollArea className="h-full">
-                  <div className="space-y-4 px-5 py-4 sm:px-6">
-                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 p-4">
-                      <span className="text-xs font-semibold text-amber-700 uppercase dark:text-amber-400">Note</span>
-                      <p className="mt-1 text-sm text-amber-800 dark:text-amber-300">
-                        Converting this employee&apos;s employment type will archive their current staff ID (
-                        <strong className="font-mono">{viewEmployeeProfile.employee_number || "N/A"}</strong>) in
-                        history and generate a new ID based on the selected series. The old ID remains linked to this
-                        profile for historical reference and will not be reassigned.
-                      </p>
                     </div>
-
-                    <div className="space-y-4">
-                      <div className="grid gap-4 md:grid-cols-2">
-                        <div>
-                          <Label htmlFor="convert_employment_type">New Employment Type</Label>
-                          <Select
-                            value={convertType}
-                            onValueChange={(value: any) => {
-                              setConvertType(value)
-                              if (value !== "contract") {
-                                setConvertCategory("")
-                              } else if (contractCategories.length > 0) {
-                                setConvertCategory(contractCategories[0].code)
-                              }
-                            }}
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Department</span>
+                        <span className="text-foreground mt-0.5 block truncate text-xs font-medium">
+                          {viewEmployeeProfile.department || "—"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Designation</span>
+                        <span className="text-foreground mt-0.5 block truncate text-xs font-medium">
+                          {viewEmployeeProfile.designation || "—"}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Role</span>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-1">
+                          <Badge
+                            className={cn(
+                              "px-1.5 py-0 text-[10px]",
+                              getRoleBadgeColor(viewEmployeeProfile.role as UserRole)
+                            )}
                           >
-                            <SelectTrigger id="convert_employment_type" className="mt-1.5">
-                              <SelectValue placeholder="Select type" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="full_time">Full Time</SelectItem>
-                              <SelectItem value="part_time">Part Time</SelectItem>
-                              <SelectItem value="contract">Contract</SelectItem>
-                            </SelectContent>
-                          </Select>
+                            {getRoleDisplayName(viewEmployeeProfile.role as UserRole)}
+                          </Badge>
+                          {viewEmployeeProfile.is_department_lead && (
+                            <Badge variant="outline" className="border-amber-300 px-1 py-0 text-[10px] text-amber-600">
+                              Lead
+                            </Badge>
+                          )}
                         </div>
-
-                        {convertType === "contract" && (
-                          <div>
-                            <Label htmlFor="convert_contract_category">Contract Category</Label>
-                            <Select value={convertCategory} onValueChange={(value) => setConvertCategory(value)}>
-                              <SelectTrigger id="convert_contract_category" className="mt-1.5">
-                                <SelectValue placeholder="Select category" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {contractCategories.map((cat) => (
-                                  <SelectItem key={cat.id} value={cat.code}>
-                                    {cat.name} ({cat.code})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Office Location</span>
+                        <span className="text-foreground mt-0.5 block truncate text-xs font-medium">
+                          {viewEmployeeProfile.office_location || "—"}
+                        </span>
+                      </div>
+                      <div className="col-span-2 flex items-center justify-between border-t pt-2">
+                        <div>
+                          <span className="text-muted-foreground block text-[11px]">Staff Classification</span>
+                          <div className="mt-0.5 flex items-center gap-1.5">
+                            <StaffTypeBadge
+                              type={viewEmployeeProfile.employment_type}
+                              categoryName={viewEmployeeProfile.contract_categories?.name}
+                            />
+                            <span className="text-muted-foreground font-mono text-xs">
+                              ({viewEmployeeProfile.employee_number || "No ID"})
+                            </span>
+                          </div>
+                        </div>
+                        {displayedLeadDepartments.length > 0 && (
+                          <div className="text-right">
+                            <span className="text-muted-foreground block text-[11px]">Leading Depts</span>
+                            <span className="text-foreground text-xs font-medium">
+                              {displayedLeadDepartments.join(", ")}
+                            </span>
                           </div>
                         )}
                       </div>
+                    </div>
+                  </div>
+                  <div className="bg-card space-y-3 rounded-lg border p-4 shadow-xs">
+                    <div className="flex items-center justify-between border-b pb-2">
+                      <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold uppercase">
+                        <Mail className="text-primary h-3.5 w-3.5" /> Contact Details
+                      </span>
+                    </div>
+                    <div className="space-y-2 text-xs">
+                      <div>
+                        <span className="text-muted-foreground block text-[11px]">Company Email</span>
+                        <div className="group mt-0.5 flex items-center justify-between">
+                          <span className="text-foreground truncate font-mono font-medium select-all">
+                            {viewEmployeeProfile.company_email || "—"}
+                          </span>
+                          {viewEmployeeProfile.company_email && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-6 w-6 opacity-60 hover:opacity-100"
+                              onClick={() => handleCopy(viewEmployeeProfile.company_email, "Email")}
+                            >
+                              {copiedField === "Email" ? (
+                                <Check className="h-3 w-3 text-green-600" />
+                              ) : (
+                                <Copy className="h-3 w-3" />
+                              )}
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <span className="text-muted-foreground block text-[11px]">Personal Email</span>
+                          <span className="text-foreground mt-0.5 block truncate font-mono text-xs">
+                            {viewEmployeeProfile.personal_email || "—"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground block text-[11px]">Phone Number</span>
+                          <span className="text-foreground mt-0.5 block truncate font-mono text-xs">
+                            {viewEmployeeProfile.phone_number || "—"}
+                          </span>
+                        </div>
+                      </div>
+                      {viewEmployeeProfile.residential_address && (
+                        <div className="border-t pt-2">
+                          <span className="text-muted-foreground block text-[11px]">Address</span>
+                          <span className="text-foreground mt-0.5 line-clamp-2 text-xs">
+                            {viewEmployeeProfile.residential_address}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+          )}
 
-                      <div className="bg-muted/30 rounded-lg border p-3">
-                        <span className="text-muted-foreground text-xs font-semibold uppercase">
-                          Expected ID Series Preview
-                        </span>
-                        <p className="text-primary mt-1 font-mono text-sm font-bold">
-                          {(() => {
-                            const currentYear = new Date().getFullYear()
-                            if (convertType === "full_time") {
-                              return `ACOB/${currentYear}/... (Next sequence number)`
-                            } else if (convertType === "part_time") {
-                              return `ACOB/PT/${currentYear}/... (Next part-time number)`
-                            } else {
-                              return `ACOB/${convertCategory || "SIWES"}/${currentYear}/... (Next contract number)`
-                            }
-                          })()}
-                        </p>
+          {viewEmployeeProfile && modalViewMode === "employment" && (
+            <ScrollArea className="h-full">
+              <div className="space-y-4 p-5 sm:p-6">
+                <div className="bg-card space-y-4 rounded-lg border p-4 shadow-xs">
+                  <div className="flex flex-col justify-between gap-3 border-b pb-3.5 sm:flex-row sm:items-center">
+                    <div>
+                      <span className="text-muted-foreground mb-1 block text-[11px] font-semibold uppercase">
+                        Employment Status & Type
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <EmployeeStatusBadge
+                          status={(viewEmployeeProfile.employment_status as EmploymentStatus) || "active"}
+                          size="lg"
+                        />
+                        <StaffTypeBadge
+                          type={viewEmployeeProfile.employment_type}
+                          categoryName={viewEmployeeProfile.contract_categories?.name}
+                          className="px-2 py-0.5"
+                        />
+                      </div>
+                    </div>
+                    {canManageUsers && (
+                      <Button
+                        size="sm"
+                        onClick={() => {
+                          if (viewEmployeeProfile) onEditEmployee(viewEmployeeProfile)
+                        }}
+                        className="h-8 gap-1.5 text-xs"
+                      >
+                        <Edit className="h-3.5 w-3.5" />
+                        Edit Employment & Status
+                      </Button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+          )}
+
+          {viewEmployeeProfile && modalViewMode === "edit" && (
+            <ScrollArea className="h-full">
+              <div className="space-y-4 p-5 sm:p-6">
+                {/* 1. Basic Identity */}
+                <div className="bg-card space-y-3 rounded-lg border p-4">
+                  <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold uppercase">
+                    <User className="text-primary h-3.5 w-3.5" /> Personal Identity
+                  </span>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                    <div>
+                      <Label htmlFor="edit_first_name" className="text-xs">
+                        First Name *
+                      </Label>
+                      <Input
+                        id="edit_first_name"
+                        value={editForm.first_name}
+                        onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
+                        className="mt-1 h-8 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit_last_name" className="text-xs">
+                        Last Name *
+                      </Label>
+                      <Input
+                        id="edit_last_name"
+                        value={editForm.last_name}
+                        onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
+                        className="mt-1 h-8 text-xs"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="edit_other_names" className="text-xs">
+                        Other Names
+                      </Label>
+                      <Input
+                        id="edit_other_names"
+                        value={editForm.other_names}
+                        onChange={(e) => setEditForm({ ...editForm, other_names: e.target.value })}
+                        className="mt-1 h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-2">
+                    <div>
+                      <Label className="text-xs">Date of Birth</Label>
+                      <div className="mt-1">
+                        <BirthdayInput
+                          birthday={editForm.birthday}
+                          birthYear={editForm.birth_year}
+                          onChange={({ birthday, birthYear }) =>
+                            setEditForm({ ...editForm, birthday, birth_year: birthYear })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="edit_address" className="text-xs">
+                        Residential Address
+                      </Label>
+                      <Input
+                        id="edit_address"
+                        value={editForm.residential_address}
+                        onChange={(e) => setEditForm({ ...editForm, residential_address: e.target.value })}
+                        placeholder="City, State, Country"
+                        className="mt-1 h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2. Work & Organization */}
+                <div className="bg-card space-y-3 rounded-lg border p-4">
+                  <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold uppercase">
+                    <Briefcase className="text-primary h-3.5 w-3.5" /> Work & Organization
+                  </span>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label htmlFor="edit_department" className="text-xs">
+                        Department *
+                      </Label>
+                      <Select
+                        value={editForm.department}
+                        onValueChange={(value) =>
+                          setEditForm({
+                            ...editForm,
+                            department: value,
+                            lead_departments: editForm.is_department_lead ? [value] : editForm.lead_departments,
+                          })
+                        }
+                      >
+                        <SelectTrigger id="edit_department" className="mt-1 h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {DEPARTMENTS.map((dept) => (
+                            <SelectItem key={dept} value={dept} className="text-xs">
+                              {dept}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="edit_office" className="text-xs">
+                        Office Location
+                      </Label>
+                      <div className="mt-1">
+                        <SearchableSelect
+                          value={editForm.office_location}
+                          onValueChange={(value) => setEditForm({ ...editForm, office_location: value })}
+                          options={officeLocations.map((loc) => ({ value: loc, label: loc }))}
+                        />
                       </div>
                     </div>
 
-                    <div className="mt-4 flex justify-end gap-2 border-t pt-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          setModalViewMode("employment")
+                    <div>
+                      <Label htmlFor="edit_designation" className="text-xs">
+                        Designation / Title
+                      </Label>
+                      <Input
+                        id="edit_designation"
+                        value={editForm.designation}
+                        onChange={(e) => setEditForm({ ...editForm, designation: e.target.value })}
+                        placeholder="e.g., Senior Systems Engineer"
+                        className="mt-1 h-8 text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="edit_role" className="text-xs">
+                        System Role *
+                      </Label>
+                      <Select
+                        value={editForm.role}
+                        onValueChange={(value: UserRole) => {
+                          setEditForm((prev) => ({
+                            ...prev,
+                            role: value,
+                            admin_routes: value === "admin" ? prev.admin_routes : [],
+                          }))
                         }}
-                        disabled={isConverting}
                       >
-                        Cancel
-                      </Button>
-                      <Button
-                        onClick={async () => {
-                          setIsConverting(true)
-                          try {
-                            const response = await apiFetch("/api/admin/employees/convert-type", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                profileId: viewEmployeeProfile.id,
-                                newType: convertType,
-                                newCategoryCode: convertType === "contract" ? convertCategory : null,
-                              }),
-                            })
-                            const result = await response.json()
-                            if (!response.ok) throw new Error(result.error || "Failed to convert")
-                            toast.success(result.message)
-                            loadData()
-                            // Reload profile immediately
-                            const { data: updatedProfile } = await supabase
-                              .from("profiles")
-                              .select("*, contract_categories(*)")
-                              .eq("id", viewEmployeeProfile.id)
-                              .single()
-                            if (updatedProfile) {
-                              setViewEmployeeProfile(updatedProfile as any)
-                            }
-                            setModalViewMode("employment")
-                          } catch (err: any) {
-                            toast.error(err.message || "Failed to convert type")
-                          } finally {
-                            setIsConverting(false)
-                          }
-                        }}
-                        loading={isConverting}
-                        className="gap-1.5"
-                      >
-                        <ArrowRight className="h-4 w-4" />
-                        Confirm Conversion
-                      </Button>
+                        <SelectTrigger id="edit_role" className="mt-1 h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {getAvailableRoles().map((role) => (
+                            <SelectItem key={role} value={role} className="text-xs">
+                              {getRoleDisplayName(role)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
-                </ScrollArea>
-              </TabsContent>
-            </Tabs>
-          )}
 
-          {/* ── Edit Profile ── */}
-          {viewEmployeeProfile && modalViewMode === "edit" && (
-            <ScrollArea className="h-full">
-              <div className="space-y-4 px-5 py-4 sm:px-6">
-                <div>
-                  <Label htmlFor="role">Role *</Label>
-                  <Select
-                    value={editForm.role}
-                    onValueChange={(value: UserRole) => {
-                      setEditForm((prev) => ({
-                        ...prev,
-                        role: value,
-                        admin_routes: value === "admin" ? prev.admin_routes : [],
-                      }))
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {getAvailableRoles().map((role) => (
-                        <SelectItem key={role} value={role}>
-                          {getRoleDisplayName(role)}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-muted-foreground mt-1 text-xs">
-                    {userProfile?.role === "admin"
-                      ? "As Admin, you can assign: Visitor and Employee roles"
-                      : "As Super Admin, you can assign any role"}
-                  </p>
-                  {editForm.role === "admin" && (
-                    <div className="mt-3 space-y-2">
-                      <Label>Admin Routes *</Label>
-                      <AdminRoutesPicker
-                        values={editForm.admin_routes}
-                        onChange={(values) => setEditForm((prev) => ({ ...prev, admin_routes: values }))}
-                      />
-                      <p className="text-muted-foreground text-xs">Admin must have at least one route.</p>
-                    </div>
-                  )}
-                </div>
-
-                <div>
-                  <Label htmlFor="department">Department *</Label>
-                  <Select
-                    value={editForm.department}
-                    onValueChange={(value) =>
-                      setEditForm({
-                        ...editForm,
-                        department: value,
-                        lead_departments: editForm.is_department_lead ? [value] : editForm.lead_departments,
-                      })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select department" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DEPARTMENTS.map((dept) => (
-                        <SelectItem key={dept} value={dept}>
-                          {dept}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <div className="mt-3 flex items-center gap-2">
+                  <div className="flex items-center gap-2 pt-1">
                     <input
-                      id="is_department_lead"
+                      id="is_department_lead_checkbox"
                       type="checkbox"
                       checked={editForm.is_department_lead}
                       onChange={(e) =>
@@ -811,200 +671,385 @@ export function EmployeeViewModal({
                           lead_departments: e.target.checked && prev.department ? [prev.department] : [],
                         }))
                       }
-                      className="rounded"
+                      className="text-primary focus:ring-primary h-3.5 w-3.5 rounded border-gray-300"
                     />
-                    <Label htmlFor="is_department_lead">Department Lead</Label>
+                    <Label htmlFor="is_department_lead_checkbox" className="cursor-pointer text-xs">
+                      Designate as Department Lead for {editForm.department || "assigned department"}
+                    </Label>
                   </div>
-                </div>
 
-                <div>
-                  <Label htmlFor="office_location">Office Location</Label>
-                  <SearchableSelect
-                    value={editForm.office_location}
-                    onValueChange={(value) => setEditForm({ ...editForm, office_location: value })}
-                    placeholder="Select office location"
-                    options={officeLocations.map((loc) => ({ value: loc, label: loc }))}
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="designation">Designation</Label>
-                  <Input
-                    id="designation"
-                    value={editForm.designation}
-                    onChange={(e) => setEditForm({ ...editForm, designation: e.target.value })}
-                    placeholder="e.g., Senior Developer"
-                  />
-                </div>
-
-                {/* More Options */}
-                <div className="border-t pt-4">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    onClick={() => setShowMoreOptions(!showMoreOptions)}
-                    className="w-full justify-between"
-                  >
-                    <span className="font-medium">More Personal Options</span>
-                    {showMoreOptions ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </Button>
-
-                  {showMoreOptions && (
-                    <div className="animate-in slide-in-from-top-2 mt-4 space-y-4">
-                      <div className="space-y-4">
-                        <h4 className="text-foreground text-sm font-semibold">Personal Information</h4>
-                        <div>
-                          <Label>Employee Number</Label>
-                          <Input value={editForm.employee_number} className="font-mono" readOnly disabled />
-                          <p className="text-muted-foreground mt-1 text-xs">
-                            Employee number is locked after creation.
-                          </p>
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div>
-                            <Label>First Name</Label>
-                            <Input
-                              value={editForm.first_name}
-                              onChange={(e) => setEditForm({ ...editForm, first_name: e.target.value })}
-                              placeholder="First name"
-                            />
-                          </div>
-                          <div>
-                            <Label>Last Name</Label>
-                            <Input
-                              value={editForm.last_name}
-                              onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
-                              placeholder="Last name"
-                            />
-                          </div>
-                        </div>
-                        <div>
-                          <Label>Other Names</Label>
-                          <Input
-                            value={editForm.other_names}
-                            onChange={(e) => setEditForm({ ...editForm, other_names: e.target.value })}
-                            placeholder="Middle name or other names"
-                          />
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-3">
-                          <div>
-                            <Label>Company Email</Label>
-                            <Input
-                              type="email"
-                              value={editForm.company_email}
-                              onChange={(e) => setEditForm({ ...editForm, company_email: e.target.value })}
-                              disabled={!canManageUsers}
-                              placeholder="email@company.com"
-                            />
-                          </div>
-                          <div>
-                            <Label>Personal Email</Label>
-                            <Input
-                              type="email"
-                              value={editForm.personal_email}
-                              onChange={(e) => setEditForm({ ...editForm, personal_email: e.target.value })}
-                              placeholder="personal@example.com"
-                            />
-                          </div>
-                          <div>
-                            <Label>Additional Email</Label>
-                            <Input
-                              type="email"
-                              value={editForm.additional_email}
-                              onChange={(e) => setEditForm({ ...editForm, additional_email: e.target.value })}
-                              placeholder="email@example.com"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div>
-                            <Label>Phone Number</Label>
-                            <Input
-                              type="tel"
-                              value={editForm.phone_number}
-                              onChange={(e) => setEditForm({ ...editForm, phone_number: e.target.value })}
-                              placeholder="+234 800 000 0000"
-                            />
-                          </div>
-                          <div>
-                            <Label>Additional Phone</Label>
-                            <Input
-                              type="tel"
-                              value={editForm.additional_phone}
-                              onChange={(e) => setEditForm({ ...editForm, additional_phone: e.target.value })}
-                              placeholder="Alternative phone"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid gap-4 md:grid-cols-2">
-                          <div>
-                            <Label>Date of Birth</Label>
-                            <BirthdayInput
-                              birthday={editForm.birthday}
-                              birthYear={editForm.birth_year}
-                              onChange={({ birthday, birthYear }) =>
-                                setEditForm({ ...editForm, birthday, birth_year: birthYear })
-                              }
-                            />
-                            <p className="text-muted-foreground mt-1 text-xs">Year is optional.</p>
-                          </div>
-                          <div>
-                            <Label>Employment Date</Label>
-                            <Input
-                              type="date"
-                              value={editForm.employment_date}
-                              onChange={(e) => setEditForm({ ...editForm, employment_date: e.target.value })}
-                            />
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-4 border-t pt-4">
-                        <h4 className="text-foreground text-sm font-semibold">Address</h4>
-                        <Textarea
-                          value={editForm.residential_address}
-                          onChange={(e) => setEditForm({ ...editForm, residential_address: e.target.value })}
-                          placeholder="Full residential address"
-                          rows={2}
-                        />
-                      </div>
-
-                      <div className="space-y-4 border-t pt-4">
-                        <h4 className="text-foreground text-sm font-semibold">Job Information</h4>
-                        <Textarea
-                          value={editForm.job_description}
-                          onChange={(e) => setEditForm({ ...editForm, job_description: e.target.value })}
-                          placeholder="Job description or responsibilities"
-                          rows={4}
-                        />
-                      </div>
+                  {editForm.role === "admin" && (
+                    <div className="bg-muted/20 mt-2 space-y-1.5 rounded-lg border p-3">
+                      <Label className="text-xs font-semibold">Admin Permitted Routes *</Label>
+                      <AdminRoutesPicker
+                        values={editForm.admin_routes}
+                        onChange={(values) => setEditForm((prev) => ({ ...prev, admin_routes: values }))}
+                      />
+                      <p className="text-muted-foreground text-[11px]">
+                        Admin role must have at least one authorized route.
+                      </p>
                     </div>
                   )}
                 </div>
+
+                {/* 3. Status & Staff Classification (UNIFIED IN EDIT FORM) */}
+                <div className="bg-card space-y-3.5 rounded-lg border p-4 shadow-xs">
+                  <div className="flex items-center justify-between border-b pb-2">
+                    <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold uppercase">
+                      <UserCircle className="text-primary h-3.5 w-3.5" /> Employment Status & Classification
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label htmlFor="edit_status" className="text-xs">
+                        Employment Status (Lifecycle) *
+                      </Label>
+                      <Select
+                        value={editForm.employment_status}
+                        onValueChange={(val: EmploymentStatus) =>
+                          setEditForm((prev) => ({ ...prev, employment_status: val }))
+                        }
+                      >
+                        <SelectTrigger id="edit_status" className="mt-1 h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {STATUS_OPTIONS.map((opt) => (
+                            <SelectItem key={opt.value} value={opt.value} className="text-xs">
+                              {opt.label}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="edit_staff_type" className="text-xs">
+                        Staff Classification (Type) *
+                      </Label>
+                      <Select
+                        value={editForm.employment_type}
+                        onValueChange={(val: "full_time" | "part_time" | "contract") => {
+                          setEditForm((prev) => ({
+                            ...prev,
+                            employment_type: val,
+                            contract_category_code:
+                              val === "contract"
+                                ? prev.contract_category_code || (contractCategories[0]?.code ?? "")
+                                : "",
+                          }))
+                        }}
+                      >
+                        <SelectTrigger id="edit_staff_type" className="mt-1 h-8 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="full_time" className="text-xs">
+                            Full Time
+                          </SelectItem>
+                          <SelectItem value="part_time" className="text-xs">
+                            Part Time
+                          </SelectItem>
+                          <SelectItem value="contract" className="text-xs">
+                            Contract Staff
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {editForm.employment_type === "contract" && (
+                      <div className="sm:col-span-2">
+                        <Label htmlFor="edit_contract_cat" className="text-xs">
+                          Contract Category *
+                        </Label>
+                        <Select
+                          value={editForm.contract_category_code}
+                          onValueChange={(val) => setEditForm((prev) => ({ ...prev, contract_category_code: val }))}
+                        >
+                          <SelectTrigger id="edit_contract_cat" className="mt-1 h-8 text-xs">
+                            <SelectValue placeholder="Select category (e.g. SIWES, NYSC)" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {contractCategories.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.code} className="text-xs">
+                                {cat.name} ({cat.code})
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    )}
+
+                    {editForm.employment_status === "suspended" && (
+                      <>
+                        <div className="flex items-start gap-2 rounded border border-amber-500/30 bg-amber-500/10 p-2.5 text-xs text-amber-800 sm:col-span-2 dark:text-amber-300">
+                          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+                          <span>
+                            <strong>Disciplinary Action / Access Hold:</strong> Suspending this employee immediately
+                            deactivates their system login and redirects them to the suspension notice page upon sign-in
+                            attempts.
+                          </span>
+                        </div>
+                        <div>
+                          <Label htmlFor="edit_suspension_reason" className="text-xs">
+                            Suspension Reason *
+                          </Label>
+                          <Select
+                            value={editForm.status_reason_code}
+                            onValueChange={(val) => setEditForm((prev) => ({ ...prev, status_reason_code: val }))}
+                          >
+                            <SelectTrigger id="edit_suspension_reason" className="mt-1 h-8 text-xs">
+                              <SelectValue placeholder="Select reason" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {SUSPENSION_REASONS.map((r) => (
+                                <SelectItem key={r.value} value={r.value} className="text-xs">
+                                  {r.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="edit_suspension_end" className="text-xs">
+                            Expected End Date
+                          </Label>
+                          <Input
+                            id="edit_suspension_end"
+                            type="date"
+                            value={editForm.suspension_end_date}
+                            onChange={(e) => setEditForm((prev) => ({ ...prev, suspension_end_date: e.target.value }))}
+                            className="mt-1 h-8 text-xs"
+                          />
+                        </div>
+                      </>
+                    )}
+
+                    {editForm.employment_status === "exited" && (
+                      <>
+                        <div>
+                          <Label htmlFor="edit_exit_reason" className="text-xs">
+                            Separation Reason *
+                          </Label>
+                          <Select
+                            value={editForm.status_reason_code}
+                            onValueChange={(val) => setEditForm((prev) => ({ ...prev, status_reason_code: val }))}
+                          >
+                            <SelectTrigger id="edit_exit_reason" className="mt-1 h-8 text-xs">
+                              <SelectValue placeholder="Select exit reason" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {EXIT_REASONS.map((r) => (
+                                <SelectItem key={r.value} value={r.value} className="text-xs">
+                                  {r.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div>
+                          <Label htmlFor="edit_separation_date" className="text-xs">
+                            Separation Date *
+                          </Label>
+                          <Input
+                            id="edit_separation_date"
+                            type="date"
+                            value={editForm.separation_date}
+                            onChange={(e) => setEditForm((prev) => ({ ...prev, separation_date: e.target.value }))}
+                            className="mt-1 h-8 text-xs"
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <div className="bg-muted/30 rounded border p-2.5 text-xs">
+                    {isTypeOrCategoryChanged ? (
+                      <div className="space-y-1 text-amber-800 dark:text-amber-300">
+                        <span className="flex items-center gap-1 text-[11px] font-semibold uppercase">
+                          <AlertTriangle className="h-3 w-3 text-amber-600" /> Staff ID Conversion Notice
+                        </span>
+                        <p className="text-[11px] leading-relaxed">
+                          Saving changes will convert staff type and generate a new ID series:{" "}
+                          <strong className="text-primary font-mono font-bold">{expectedIdPreview}</strong>. Current ID
+                          (<strong className="font-mono">{editForm.employee_number || "None"}</strong>) will be archived
+                          to history.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="text-muted-foreground flex items-center justify-between text-[11px]">
+                        <span>
+                          Current Staff ID:{" "}
+                          <strong className="text-foreground font-mono font-semibold">
+                            {editForm.employee_number || "None"}
+                          </strong>
+                        </span>
+                        <span className="font-mono text-[10px]">ID series active</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* 4. Contact Details */}
+                <div className="bg-card space-y-3 rounded-lg border p-4">
+                  <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold uppercase">
+                    <Mail className="text-primary h-3.5 w-3.5" /> Contact Details
+                  </span>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="edit_company_email" className="text-xs">
+                          Company Email *
+                        </Label>
+                        <span className="text-muted-foreground text-[10px] font-medium">Primary Login ID</span>
+                      </div>
+                      <Input
+                        id="edit_company_email"
+                        type="email"
+                        value={editForm.company_email}
+                        onChange={(e) => setEditForm({ ...editForm, company_email: e.target.value })}
+                        disabled={!canManageUsers}
+                        placeholder="user@acoblighting.com"
+                        className="mt-1 h-8 font-mono text-xs"
+                      />
+                      <p className="mt-1 flex items-center gap-1 text-[10px] text-amber-700 dark:text-amber-400">
+                        <AlertCircle className="inline h-3 w-3 shrink-0" />
+                        Changing this email updates the employee&apos;s login credentials.
+                      </p>
+                    </div>
+
+                    <div>
+                      <Label htmlFor="edit_personal_email" className="text-xs">
+                        Personal Email
+                      </Label>
+                      <Input
+                        id="edit_personal_email"
+                        type="email"
+                        value={editForm.personal_email}
+                        onChange={(e) => setEditForm({ ...editForm, personal_email: e.target.value })}
+                        placeholder="personal@gmail.com"
+                        className="mt-1 h-8 font-mono text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="edit_phone" className="text-xs">
+                        Primary Phone
+                      </Label>
+                      <Input
+                        id="edit_phone"
+                        type="tel"
+                        value={editForm.phone_number}
+                        onChange={(e) => setEditForm({ ...editForm, phone_number: e.target.value })}
+                        placeholder="+234 800 000 0000"
+                        className="mt-1 h-8 text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <Label htmlFor="edit_alt_phone" className="text-xs">
+                        Alternative Phone
+                      </Label>
+                      <Input
+                        id="edit_alt_phone"
+                        type="tel"
+                        value={editForm.additional_phone}
+                        onChange={(e) => setEditForm({ ...editForm, additional_phone: e.target.value })}
+                        placeholder="Alternative contact"
+                        className="mt-1 h-8 text-xs"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Employment & Job Details */}
+                <div className="bg-card space-y-3 rounded-lg border p-4">
+                  <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold uppercase">
+                    <Calendar className="text-primary h-3.5 w-3.5" /> Employment Dates & Info
+                  </span>
+
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div>
+                      <Label htmlFor="edit_hire_date" className="text-xs">
+                        Employment Date
+                      </Label>
+                      <Input
+                        id="edit_hire_date"
+                        type="date"
+                        value={editForm.employment_date}
+                        onChange={(e) => setEditForm({ ...editForm, employment_date: e.target.value })}
+                        className="mt-1 h-8 text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="edit_device_key" className="text-xs">
+                          Biometric / Device Key
+                        </Label>
+                        <span className="text-muted-foreground font-mono text-[10px]">Auto-generated</span>
+                      </div>
+                      <Input
+                        id="edit_device_key"
+                        value={editForm.device_key || "Auto-derived"}
+                        disabled
+                        readOnly
+                        className="bg-muted/40 mt-1 h-8 cursor-not-allowed font-mono text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="edit_job_desc" className="text-xs">
+                      Job Description & Responsibilities
+                    </Label>
+                    <Textarea
+                      id="edit_job_desc"
+                      value={editForm.job_description}
+                      onChange={(e) => setEditForm({ ...editForm, job_description: e.target.value })}
+                      placeholder="Summary of core duties..."
+                      rows={3}
+                      className="mt-1 resize-none text-xs"
+                    />
+                  </div>
+                </div>
+              </div>
+            </ScrollArea>
+          )}
+
+          {viewEmployeeProfile && modalViewMode === "signature" && (
+            <ScrollArea className="h-full">
+              <div className="p-5 sm:p-6">
+                <SignatureCreator
+                  profile={viewEmployeeProfile}
+                  variant="selectable"
+                  defaultSelectableMode="anniversary"
+                />
               </div>
             </ScrollArea>
           )}
         </div>
 
-        {/* ── Footer ── */}
         <DialogFooter className="bg-background/95 flex w-full flex-col gap-2 border-t px-5 py-3 backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div>
             {isSubView && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setModalViewMode(modalViewMode === "status" ? "employment" : "profile")}
-                disabled={isSaving || isConverting}
-              >
+              <Button variant="outline" size="sm" onClick={() => setModalViewMode("profile")} disabled={isSaving}>
                 ← Back
               </Button>
             )}
           </div>
           <div className="flex items-center gap-2">
             {modalViewMode === "edit" && (
-              <Button onClick={onSave} loading={isSaving} size="sm">
-                Save Changes
-              </Button>
+              <>
+                <Button variant="ghost" size="sm" onClick={() => setModalViewMode("profile")} disabled={isSaving}>
+                  Cancel
+                </Button>
+                <Button onClick={onSave} loading={isSaving} size="sm">
+                  Save Changes
+                </Button>
+              </>
             )}
             {canManageUsers && modalViewMode === "profile" && (
               <Button
@@ -1022,16 +1067,12 @@ export function EmployeeViewModal({
               <Button
                 size="sm"
                 onClick={() => {
-                  if (viewEmployeeProfile) {
-                    setConvertType(viewEmployeeProfile.employment_type || "full_time")
-                    setConvertCategory(viewEmployeeProfile.contract_categories?.code || "")
-                  }
-                  setModalViewMode("status")
+                  if (viewEmployeeProfile) onEditEmployee(viewEmployeeProfile)
                 }}
                 className="gap-1.5"
               >
-                <UserCircle className="h-3.5 w-3.5" />
-                Change Status / Type
+                <Edit className="h-3.5 w-3.5" />
+                Edit Employment & Status
               </Button>
             )}
             {canManageUsers && modalViewMode === "signature" && (

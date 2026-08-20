@@ -7,24 +7,33 @@ import { checkRequestSize } from "@/lib/api/request-size"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { apiError, ApiErrorCode } from "@/lib/api/errors"
 import { getRequestScope, type AdminScope } from "@/lib/admin/api-scope"
-import { TASK_STATUSES } from "@/lib/tasks/constants"
+import { TASK_STATUSES, type TaskStatus } from "@/lib/tasks/constants"
 
 const log = logger("tasks-status-route")
 
 const StatusBodySchema = z.object({
   status: z.enum(TASK_STATUSES),
   comment: z.string().trim().max(5000).optional(),
+  reason: z.string().trim().max(5000).optional(),
+  reassigned_to: z.string().uuid().optional().nullable(),
+  due_date: z.string().optional().nullable(),
+  extension_reason: z.string().trim().max(5000).optional().nullable(),
 })
 
-const VALID_TRANSITIONS: Record<string, string[]> = {
-  pending: ["in_progress", "cancelled"],
-  in_progress: ["completed", "pending", "cancelled"],
+const EMPLOYEE_TRANSITIONS: Record<string, TaskStatus[]> = {
+  pending: ["in_progress", "unable_to_complete", "cancelled"],
+  in_progress: ["submitted_for_review", "unable_to_complete", "pending", "cancelled"],
+  submitted_for_review: ["in_progress", "unable_to_complete"],
+  unable_to_complete: ["in_progress"],
   completed: [],
+  reassigned: [],
+  failed: [],
   cancelled: ["pending"],
 }
 
 type TaskRecord = {
   id: string
+  title: string
   status: string
   goal_id?: string | null
   assignment_type?: string | null
@@ -34,6 +43,12 @@ type TaskRecord = {
   started_at?: string | null
   completed_at?: string | null
   work_item_number?: string | null
+  due_date?: string | null
+  priority?: string | null
+  description?: string | null
+  task_start_date?: string | null
+  task_end_date?: string | null
+  source_type?: string | null
 }
 
 type ProfileRecord = {
@@ -85,7 +100,25 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     const { data: task, error: taskError } = await supabase
       .from("tasks")
       .select(
-        "id, status, goal_id, assignment_type, assigned_to, assigned_by, department, started_at, completed_at, work_item_number"
+        `
+        id,
+        title,
+        status,
+        goal_id,
+        assignment_type,
+        assigned_to,
+        assigned_by,
+        department,
+        started_at,
+        completed_at,
+        work_item_number,
+        due_date,
+        priority,
+        description,
+        task_start_date,
+        task_end_date,
+        source_type
+      `
       )
       .eq("id", params.id)
       .single<TaskRecord>()
@@ -105,48 +138,98 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
 
     const taskScope = await getRequestScope()
     const isAdmin = isAdminProfile(taskScope)
-    const hasAssignment = Boolean(assignments && assignments.length > 0)
-    const canAccess =
-      task.assigned_to === user.id ||
-      task.assigned_by === user.id ||
-      hasAssignment ||
-      isAdmin ||
-      isLeadForTask(profile ?? null, task.department)
+    const isLead = isLeadForTask(profile ?? null, task.department)
+    const isLeadOrAdmin = isAdmin || isLead
+    const isAssignee = task.assigned_to === user.id || Boolean(assignments && assignments.length > 0)
+    const isAssigner = task.assigned_by === user.id
 
-    if (!canAccess) {
-      return apiError("Forbidden", ApiErrorCode.FORBIDDEN, 403)
-    }
-
-    if (!task.goal_id) {
-      return apiError("Task must be linked to a goal before it can be updated", ApiErrorCode.INVALID_STATE, 400)
-    }
-
-    // Policy: department tasks are updated by department leads only.
-    if (task.assignment_type === "department" && !isLeadForTask(profile ?? null, task.department)) {
-      return apiError("Only department leads can update department tasks", ApiErrorCode.FORBIDDEN, 403)
+    if (!isAssignee && !isAssigner && !isLeadOrAdmin) {
+      return apiError("Forbidden: You do not have permission to update this task", ApiErrorCode.FORBIDDEN, 403)
     }
 
     const oldStatus = task.status
     const nextStatus = parsed.data.status
-    if (oldStatus === nextStatus) {
-      return NextResponse.json({ success: true, task })
-    }
 
-    if (!isAdmin) {
-      const allowed = VALID_TRANSITIONS[oldStatus] || []
+    // State machine check for regular assignees
+    if (!isLeadOrAdmin) {
+      const allowed = EMPLOYEE_TRANSITIONS[oldStatus] || []
       if (!allowed.includes(nextStatus)) {
-        return apiError(`Cannot transition from ${oldStatus} to ${nextStatus}`, ApiErrorCode.INVALID_STATE, 400)
+        return apiError(
+          `Employees cannot transition task from ${oldStatus.replaceAll("_", " ")} to ${nextStatus.replaceAll("_", " ")}.`,
+          ApiErrorCode.INVALID_STATE,
+          400
+        )
       }
     }
 
     const now = new Date().toISOString()
     const updatePayload: Record<string, unknown> = {
       status: nextStatus,
+      updated_by: user.id,
       updated_at: now,
     }
 
-    if (nextStatus === "completed") updatePayload.completed_at = now
-    if (nextStatus === "in_progress" && oldStatus === "pending" && !task.started_at) updatePayload.started_at = now
+    // Lifecycle timestamps and attribution
+    if (nextStatus === "in_progress" && !task.started_at) {
+      updatePayload.started_at = now
+    }
+
+    if (nextStatus === "completed") {
+      updatePayload.completed_at = now
+      if (isLeadOrAdmin) {
+        updatePayload.reviewed_by = user.id
+        updatePayload.reviewed_at = now
+      }
+    }
+
+    if (nextStatus === "unable_to_complete") {
+      updatePayload.unable_to_complete_reason = parsed.data.reason || parsed.data.comment || null
+    }
+
+    if (nextStatus === "failed") {
+      if (!isLeadOrAdmin) {
+        return apiError(
+          "Only department leads or administrators can mark a task as failed",
+          ApiErrorCode.FORBIDDEN,
+          403
+        )
+      }
+      updatePayload.reviewed_by = user.id
+      updatePayload.reviewed_at = now
+      updatePayload.failure_reason = parsed.data.reason || parsed.data.comment || null
+    }
+
+    if (nextStatus === "reassigned") {
+      if (!isLeadOrAdmin) {
+        return apiError("Only department leads or administrators can reassign a task", ApiErrorCode.FORBIDDEN, 403)
+      }
+      const newAssigneeId = parsed.data.reassigned_to
+      if (!newAssigneeId) {
+        return apiError("New assignee is required when reassigning a task", ApiErrorCode.MISSING_REQUIRED_FIELD, 400)
+      }
+      updatePayload.reviewed_by = user.id
+      updatePayload.reviewed_at = now
+      updatePayload.reassigned_to = newAssigneeId
+    }
+
+    // Timeline extension handling
+    if (parsed.data.due_date) {
+      if (!isLeadOrAdmin) {
+        return apiError(
+          "Only department leads or administrators can extend task deadlines",
+          ApiErrorCode.FORBIDDEN,
+          403
+        )
+      }
+      updatePayload.due_date = parsed.data.due_date
+      if (parsed.data.extension_reason) {
+        updatePayload.extension_reason = parsed.data.extension_reason
+      }
+      // If task was unable_to_complete or expired and is now extended, move back to in_progress
+      if (nextStatus === "in_progress") {
+        updatePayload.status = "in_progress"
+      }
+    }
 
     const { data: updatedTask, error: updateError } = await supabase
       .from("tasks")
@@ -159,31 +242,125 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       return apiError(updateError?.message || "Failed to update task", ApiErrorCode.DATABASE_ERROR, 500)
     }
 
-    if (parsed.data.comment) {
+    // Log update note/comment
+    const commentText = parsed.data.comment || parsed.data.reason || parsed.data.extension_reason
+    if (commentText) {
       await supabase.from("task_updates").insert({
         task_id: task.id,
         user_id: user.id,
         update_type: "status_change",
-        content: parsed.data.comment,
+        content: commentText,
         old_value: oldStatus,
         new_value: nextStatus,
       })
     }
 
-    if (nextStatus === "completed" && task.assigned_by && task.assigned_by !== user.id) {
-      await supabase.rpc("create_notification", {
-        p_user_id: task.assigned_by,
-        p_type: "task_completed",
-        p_category: "tasks",
-        p_title: "Task completed",
-        p_message: `${task.work_item_number || "Task"} is now completed`,
-        p_priority: "normal",
-        p_link_url: "/tasks/management",
-        p_actor_id: user.id,
-        p_entity_type: "task",
-        p_entity_id: task.id,
-        p_rich_content: { status: nextStatus, work_item_number: task.work_item_number },
-      })
+    // If task was reassigned, create a new task instance for the new assignee
+    if (nextStatus === "reassigned" && parsed.data.reassigned_to) {
+      const newAssigneeId = parsed.data.reassigned_to
+      const { data: newTargetProfile } = await supabase
+        .from("profiles")
+        .select("department")
+        .eq("id", newAssigneeId)
+        .single()
+
+      const newTaskPayload = {
+        title: `${task.title} (Reassigned)`,
+        description: task.description || null,
+        priority: task.priority || "medium",
+        status: "pending",
+        due_date: parsed.data.due_date || task.due_date || null,
+        department: newTargetProfile?.department || task.department,
+        assignment_type: "individual",
+        assigned_to: newAssigneeId,
+        assigned_by: user.id,
+        assigned_at: now,
+        created_by: user.id,
+        updated_by: user.id,
+        goal_id: task.goal_id || null,
+        task_start_date: task.task_start_date || null,
+        task_end_date: task.task_end_date || null,
+        source_type: task.source_type || "manual",
+      }
+
+      const { data: spawnedTask } = await supabase.from("tasks").insert(newTaskPayload).select().single()
+
+      if (spawnedTask) {
+        try {
+          await supabase.rpc("create_notification", {
+            p_user_id: newAssigneeId,
+            p_type: "task_assigned",
+            p_category: "tasks",
+            p_title: "Task reassigned to you",
+            p_message: spawnedTask.title,
+            p_priority: "normal",
+            p_link_url: "/tasks/management",
+            p_actor_id: user.id,
+            p_entity_type: "task",
+            p_entity_id: spawnedTask.id,
+          })
+        } catch (nErr) {
+          log.error({ err: String(nErr) }, "Failed to notify reassigned user")
+        }
+      }
+    }
+
+    // Send notifications based on transitions
+    if (nextStatus === "submitted_for_review" && task.assigned_by && task.assigned_by !== user.id) {
+      try {
+        await supabase.rpc("create_notification", {
+          p_user_id: task.assigned_by,
+          p_type: "task_submitted",
+          p_category: "tasks",
+          p_title: "Task submitted for review",
+          p_message: `${task.work_item_number || "Task"} was submitted for review: ${task.title}`,
+          p_priority: "normal",
+          p_link_url: "/admin/tasks",
+          p_actor_id: user.id,
+          p_entity_type: "task",
+          p_entity_id: task.id,
+        })
+      } catch (nErr) {
+        log.error({ err: String(nErr) }, "Notification failed")
+      }
+    }
+
+    if (nextStatus === "completed" && task.assigned_to && task.assigned_to !== user.id) {
+      try {
+        await supabase.rpc("create_notification", {
+          p_user_id: task.assigned_to,
+          p_type: "task_completed",
+          p_category: "tasks",
+          p_title: "Task approved & completed",
+          p_message: `Your task "${task.title}" was approved by the lead`,
+          p_priority: "normal",
+          p_link_url: "/tasks/management",
+          p_actor_id: user.id,
+          p_entity_type: "task",
+          p_entity_id: task.id,
+        })
+      } catch (nErr) {
+        log.error({ err: String(nErr) }, "Notification failed")
+      }
+    }
+
+    if (nextStatus === "unable_to_complete" && task.assigned_by && task.assigned_by !== user.id) {
+      try {
+        await supabase.rpc("create_notification", {
+          p_user_id: task.assigned_by,
+          p_type: "task_blocked",
+          p_category: "tasks",
+          p_title: "Task reported unable to complete",
+          p_message: `${task.title}: ${parsed.data.reason || "Issue reported"}`,
+          p_priority: "high",
+          p_link_url: "/admin/tasks",
+          p_actor_id: user.id,
+          p_entity_type: "task",
+          p_entity_id: task.id,
+        })
+      } catch (nErr) {
+        log.error({ err: String(nErr) }, "Notification failed")
+      }
     }
 
     await writeAuditLog(
@@ -193,7 +370,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
         entityType: "task",
         entityId: task.id,
         oldValues: { status: oldStatus },
-        newValues: { status: nextStatus },
+        newValues: { status: nextStatus, ...updatePayload },
         context: { actorId: user.id, source: "api", route: "/api/tasks/[id]/status" },
       },
       { failOpen: true }

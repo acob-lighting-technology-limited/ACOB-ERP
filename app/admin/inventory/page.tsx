@@ -42,7 +42,7 @@ export default function InventoryDashboard() {
         title="Inventory"
         description="Manage products, stock levels, and warehouses"
         icon={Package}
-        backLink={{ href: "/admin/finance", label: "Back to Finance" }}
+        backLink={{ href: "/admin/accounts", label: "Back to Accounts" }}
       />
 
       {/* Stats Grid */}

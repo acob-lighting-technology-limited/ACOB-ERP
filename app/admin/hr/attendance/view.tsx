@@ -63,6 +63,7 @@ interface AttendanceReport {
   late_days: number
   incomplete_days?: number
   lateness_with_permission_days?: number
+  incomplete_with_permission_days?: number
   absent_with_permission_days?: number
   out_of_station_days?: number
   exempted_days?: number
@@ -104,6 +105,7 @@ type DayStatus =
   | "present"
   | "late"
   | "lateness_with_permission"
+  | "incomplete_with_permission"
   | "absent"
   | "absent_with_permission"
   | "out_of_station"
@@ -283,7 +285,7 @@ function getHourBreakdown(
   // because the missing half of the day is unverifiable.
   if (Boolean(record.clock_in) !== Boolean(record.clock_out)) {
     const { hoursLost } = computeAttendanceDay({
-      status: "incomplete",
+      status: record.status ?? "incomplete",
       clockIn: record.clock_in,
       clockOut: record.clock_out,
       policy,
@@ -968,12 +970,17 @@ export function AttendanceReportsPage({
     },
     {
       key: "lwp_awp_days",
-      label: "LWP/AWP",
+      label: "LWP/IWP/AWP",
       sortable: true,
-      accessor: (r) => (r.lateness_with_permission_days ?? 0) + (r.absent_with_permission_days ?? 0),
+      accessor: (r) =>
+        (r.lateness_with_permission_days ?? 0) +
+        (r.incomplete_with_permission_days ?? 0) +
+        (r.absent_with_permission_days ?? 0),
       render: (r) => (
         <span className="text-amber-600">
-          {(r.lateness_with_permission_days ?? 0) + (r.absent_with_permission_days ?? 0)}
+          {(r.lateness_with_permission_days ?? 0) +
+            (r.incomplete_with_permission_days ?? 0) +
+            (r.absent_with_permission_days ?? 0)}
         </span>
       ),
       align: "center",

@@ -12,7 +12,9 @@ import {
   assertRelieverAvailability,
   computeLeaveDates,
   evaluateLeaveEligibility,
+  formatLeaveReference,
   getLeavePolicy,
+  notifyUsers,
   parseISODate,
   resolveProfileByIdentifier,
 } from "@/lib/hr/leave-workflow"
@@ -31,16 +33,25 @@ import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("leave-requests")
 const BLACKOUT_MONTHS = new Set([12, 1])
-const CreateLeaveRequestSchema = z.object({
-  leave_type_id: z.string().trim().min(1, "Missing required fields"),
-  start_date: z.string().trim().min(1, "Missing required fields"),
-  days_count: z.unknown().optional(),
-  emergency_override: z.boolean().optional(),
-  end_date: z.string().optional().nullable(),
-  reason: z.string().trim().min(1, "Missing required fields"),
-  reliever_identifier: z.string().trim().min(1, "Missing required fields"),
-  handover_note: z.string().trim().min(1, "Missing required fields"),
-})
+const CreateLeaveRequestSchema = z
+  .object({
+    leave_type_id: z.string().trim().min(1, "Missing required fields"),
+    start_date: z.string().trim().min(1, "Missing required fields"),
+    days_count: z.unknown().optional(),
+    emergency_override: z.boolean().optional(),
+    end_date: z.string().optional().nullable(),
+    reason: z.string().trim().min(1, "Missing required fields"),
+    reliever_identifier: z.string().trim().min(1, "Missing required fields"),
+    handover_note: z.string().trim().optional().nullable(),
+    handover_checklist_url: z.string().trim().optional().nullable(),
+  })
+  .refine(
+    (data) => Boolean(data.handover_checklist_url || (data.handover_note && data.handover_note.trim().length > 0)),
+    {
+      message: "Handover document or handover note is required",
+      path: ["handover_checklist_url"],
+    }
+  )
 
 const UpdateLeaveRequestSchema = z.object({
   id: z.string().trim().min(1, "Leave request ID is required"),
@@ -51,7 +62,8 @@ const UpdateLeaveRequestSchema = z.object({
   end_date: z.string().optional().nullable(),
   reason: z.string().optional(),
   reliever_identifier: z.string().optional(),
-  handover_note: z.string().optional(),
+  handover_note: z.string().optional().nullable(),
+  handover_checklist_url: z.string().optional().nullable(),
 })
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
@@ -666,7 +678,6 @@ export async function POST(request: NextRequest) {
     } = await supabase.auth.getUser()
 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
     const body = await request.json()
     const parsed = CreateLeaveRequestSchema.safeParse(body)
     if (!parsed.success) {
@@ -681,6 +692,7 @@ export async function POST(request: NextRequest) {
       reason,
       reliever_identifier,
       handover_note,
+      handover_checklist_url,
     } = parsed.data
 
     const parsedDays = Number(days_count)
@@ -828,6 +840,9 @@ export async function POST(request: NextRequest) {
     const departmentLeadStage = routeSnapshot.find((stage) => stage.approver_role_code === "department_lead")
     const initialStatus = eligibility.status === "missing_evidence" ? "pending_evidence" : "pending"
 
+    const effectiveHandoverNote =
+      handover_note?.trim() || (handover_checklist_url ? "Handover document attached" : null)
+
     const { data: newRequest, error } = await supabase
       .from("leave_requests")
       .insert({
@@ -847,7 +862,8 @@ export async function POST(request: NextRequest) {
         route_snapshot: routeSnapshot,
         reliever_id: reliever.id,
         supervisor_id: departmentLeadStage?.approver_user_id || null,
-        handover_note,
+        handover_note: effectiveHandoverNote,
+        handover_checklist_url: handover_checklist_url || null,
         requested_days_mode: policy.accrual_mode || "calendar_days",
         request_kind: emergency_override ? "emergency" : "standard",
       })
@@ -873,20 +889,103 @@ export async function POST(request: NextRequest) {
       { failOpen: true }
     )
 
-    const requesterName = requester.full_name || `${requester.first_name || ""} ${requester.last_name || ""}`.trim()
+    const requesterName =
+      requester.full_name || `${requester.first_name || ""} ${requester.last_name || ""}`.trim() || "Employee"
+    const ref = formatLeaveReference(newRequest.id)
+    const refSuffix = ref ? ` — ${ref}` : ""
+    const relieverName = reliever.full_name || reliever.company_email || "Assigned Reliever"
 
     if (initialStatus === "pending") {
       const isRelieverStage = firstStage.approver_role_code === "reliever"
+
+      // 1. Notify first stage approver (Reliever or Department Lead) with rich details
       await notifyStageApprover({
         supabase,
         approverUserId: firstStage.approver_user_id,
         title: isRelieverStage ? "Leave relief confirmation required" : "Leave request awaiting your approval",
         message: isRelieverStage
-          ? `${requesterName || "Employee"} selected you as reliever for ${leaveType.name} from ${start_date} to ${endDate}. Review the handover note and confirm coverage so the request can continue.`
-          : `${requesterName || "Employee"} requested ${effectiveDays} day(s) leave from ${start_date} to ${endDate}.`,
+          ? `${requesterName} selected you as reliever for ${leaveType.name} (${effectiveDays} day(s), ${start_date} to ${endDate}). Review the handover note and confirm coverage so the request can proceed.`
+          : `${requesterName} submitted a leave request for ${leaveType.name} (${effectiveDays} day(s), ${start_date} to ${endDate}) awaiting your endorsement.`,
         actorId: user.id,
         entityId: newRequest.id,
         linkUrl: "/leave",
+        emailSubject: isRelieverStage
+          ? `Action Required: Leave Relief Confirmation for ${requesterName}${refSuffix}`
+          : `Action Required: Leave Request Awaiting Your Approval — ${requesterName}${refSuffix}`,
+        emailTitle: isRelieverStage ? "Leave Relief Confirmation Required" : "Leave Request Awaiting Your Approval",
+        badgeText: isRelieverStage ? "Relief Confirmation Required" : "Action Required",
+        detailsTitle: "Leave Request Details",
+        details: [
+          { label: "Employee", value: requesterName },
+          { label: "Department", value: requester.department || "-" },
+          { label: "Leave Type", value: leaveType.name || "-" },
+          { label: "Duration", value: `${effectiveDays} day(s)` },
+          { label: "Period", value: `${start_date} to ${endDate}` },
+          { label: "Resumption Date", value: resumeDate || "-" },
+          ...(handover_checklist_url ? [{ label: "Handover Document", value: "Attached (View in Leave Portal)" }] : []),
+          ...(handover_note && (!handover_checklist_url || !handover_note.startsWith("Attached:"))
+            ? [{ label: "Handover Note", value: handover_note }]
+            : []),
+          ...(reason ? [{ label: "Reason", value: reason }] : []),
+        ],
+        ctaLabel: isRelieverStage ? "Review & Confirm Relief" : "Review & Endorse",
+      })
+
+      // 2. Send submission acknowledgement email to the requester
+      await notifyUsers(supabase, {
+        userIds: [user.id],
+        title: "Leave request submitted",
+        message: `Your leave request for ${leaveType.name} (${start_date} to ${endDate}) was submitted and is pending ${
+          isRelieverStage
+            ? `relief confirmation by ${relieverName}`
+            : `approval at ${firstStage.stage_code.replaceAll("_", " ")}`
+        }.`,
+        actorId: user.id,
+        entityId: newRequest.id,
+        linkUrl: "/leave",
+        emailSubject: `Leave Request Submitted Successfully${refSuffix}`,
+        emailTitle: "Leave Request Submitted",
+        badgeText: "Submitted — Pending Review",
+        badgeVariant: "info",
+        detailsTitle: "Request Summary",
+        details: [
+          { label: "Leave Type", value: leaveType.name || "-" },
+          { label: "Duration", value: `${effectiveDays} day(s)` },
+          { label: "Period", value: `${start_date} to ${endDate}` },
+          { label: "Resumption Date", value: resumeDate || "-" },
+          { label: "Assigned Reliever", value: relieverName },
+          {
+            label: "Current Stage",
+            value: isRelieverStage
+              ? `Relief Confirmation (${relieverName})`
+              : firstStage.stage_code.replaceAll("_", " "),
+          },
+        ],
+        ctaLabel: "View Leave Status",
+      })
+    } else if (initialStatus === "pending_evidence") {
+      // Notify requester that evidence upload is required
+      await notifyUsers(supabase, {
+        userIds: [user.id],
+        title: "Supporting evidence required for leave request",
+        message: `Your leave request for ${leaveType.name} (${start_date} to ${endDate}) requires supporting documentation before it can proceed to approvals.`,
+        actorId: user.id,
+        entityId: newRequest.id,
+        linkUrl: "/leave",
+        emailSubject: `Action Required: Supporting Evidence Needed for Leave Request${refSuffix}`,
+        emailTitle: "Supporting Evidence Required",
+        badgeText: "Evidence Required",
+        badgeVariant: "warning",
+        detailsTitle: "Leave Request Details",
+        details: [
+          { label: "Leave Type", value: leaveType.name || "-" },
+          { label: "Duration", value: `${effectiveDays} day(s)` },
+          { label: "Period", value: `${start_date} to ${endDate}` },
+          ...(eligibility.missingDocuments?.length
+            ? [{ label: "Required Documents", value: eligibility.missingDocuments.join(", ") }]
+            : []),
+        ],
+        ctaLabel: "Upload Required Evidence",
       })
     }
 
@@ -948,6 +1047,7 @@ export async function PATCH(request: NextRequest) {
       reason,
       reliever_identifier,
       handover_note,
+      handover_checklist_url,
     } = parsed.data
 
     const { data: existingRequest, error: fetchError } = await supabase
@@ -1022,14 +1122,47 @@ export async function PATCH(request: NextRequest) {
         .eq("stage_code", stageCodeForRole("reliever"))
         .eq("superseded", false)
 
+      const { data: reqProfile } = await supabase
+        .from("profiles")
+        .select("id, full_name, first_name, last_name, company_email, department")
+        .eq("id", existingRequest.user_id)
+        .maybeSingle()
+      const reqName =
+        reqProfile?.full_name ||
+        `${reqProfile?.first_name || ""} ${reqProfile?.last_name || ""}`.trim() ||
+        reqProfile?.company_email ||
+        "Employee"
+      const { data: ltRow } = await supabase
+        .from("leave_types")
+        .select("id, name")
+        .eq("id", existingRequest.leave_type_id)
+        .maybeSingle()
+      const ltName = ltRow?.name || "Leave"
+      const ref = formatLeaveReference(existingRequest.id)
+      const refSuffix = ref ? ` — ${ref}` : ""
+
       await notifyStageApprover({
         supabase,
         approverUserId: newReliever.id,
-        title: "Leave request reassigned to you as reliever",
-        message: "A leave request now requires your reliever approval before workflow continues.",
+        title: "Leave relief confirmation required",
+        message: `${reqName} has designated you as reliever for ${ltName} (${existingRequest.days_count} day(s), ${existingRequest.start_date} to ${existingRequest.end_date}). Review the handover note and confirm coverage so the workflow can proceed.`,
         actorId: user.id,
         entityId: existingRequest.id,
         linkUrl: "/leave",
+        emailSubject: `Action Required: Leave Relief Reassigned to You — ${reqName}${refSuffix}`,
+        emailTitle: "Leave Relief Confirmation Required",
+        badgeText: "Relief Required",
+        detailsTitle: "Leave Request Details",
+        details: [
+          { label: "Employee", value: reqName },
+          { label: "Department", value: reqProfile?.department || "-" },
+          { label: "Leave Type", value: ltName },
+          { label: "Duration", value: `${existingRequest.days_count} day(s)` },
+          { label: "Period", value: `${existingRequest.start_date} to ${existingRequest.end_date}` },
+          { label: "Resumption Date", value: existingRequest.resume_date || "-" },
+          ...(existingRequest.handover_note ? [{ label: "Handover Note", value: existingRequest.handover_note }] : []),
+        ],
+        ctaLabel: "Review & Confirm Relief",
       })
 
       return NextResponse.json({ message: "Reliever updated and request returned to reliever approval" })
@@ -1061,7 +1194,7 @@ export async function PATCH(request: NextRequest) {
     const { data: requester } = await supabase
       .from("profiles")
       .select(
-        "id, department, department_id, is_department_lead, lead_departments, gender, employment_date, work_location, employment_type, marital_status, has_children, pregnancy_status"
+        "id, full_name, first_name, last_name, company_email, department, department_id, is_department_lead, lead_departments, gender, employment_date, work_location, employment_type, marital_status, has_children, pregnancy_status"
       )
       .eq("id", user.id)
       .single()
@@ -1179,6 +1312,10 @@ export async function PATCH(request: NextRequest) {
         reliever_id: relieverId,
         supervisor_id: departmentLeadStage?.approver_user_id || null,
         handover_note: handover_note || existingRequest.handover_note,
+        handover_checklist_url:
+          typeof handover_checklist_url !== "undefined"
+            ? handover_checklist_url
+            : existingRequest.handover_checklist_url,
         requested_days_mode: policy.accrual_mode || "calendar_days",
         request_kind:
           existingRequest.request_kind === "extension" ? "extension" : emergency_override ? "emergency" : "standard",
@@ -1213,6 +1350,41 @@ export async function PATCH(request: NextRequest) {
       },
       { failOpen: true }
     )
+
+    if (updatedRequest && updatedRequest.status === "pending") {
+      const isRelieverStage = firstStage.approver_role_code === "reliever"
+      const reqName =
+        requester.full_name || `${requester.first_name || ""} ${requester.last_name || ""}`.trim() || "Employee"
+      const ref = formatLeaveReference(updatedRequest.id)
+      const refSuffix = ref ? ` — ${ref}` : ""
+
+      await notifyStageApprover({
+        supabase,
+        approverUserId: firstStage.approver_user_id,
+        title: isRelieverStage ? "Updated leave relief request" : "Updated leave request awaiting your approval",
+        message: `${reqName} updated their leave request for ${leaveType.name} (${targetDays} day(s), ${targetStartDate} to ${endDate}). Review the updated details and confirm.`,
+        actorId: user.id,
+        entityId: updatedRequest.id,
+        linkUrl: "/leave",
+        emailSubject: isRelieverStage
+          ? `Action Required: Updated Leave Relief for ${reqName}${refSuffix}`
+          : `Action Required: Updated Leave Request — ${reqName}${refSuffix}`,
+        emailTitle: isRelieverStage ? "Updated Leave Relief Request" : "Updated Leave Request",
+        badgeText: isRelieverStage ? "Relief Required" : "Action Required",
+        detailsTitle: "Updated Request Details",
+        details: [
+          { label: "Employee", value: reqName },
+          { label: "Department", value: requester.department || "-" },
+          { label: "Leave Type", value: leaveType.name || "-" },
+          { label: "Duration", value: `${targetDays} day(s)` },
+          { label: "Period", value: `${targetStartDate} to ${endDate}` },
+          { label: "Resumption Date", value: resumeDate || "-" },
+          ...(updatedRequest.handover_note ? [{ label: "Handover Note", value: updatedRequest.handover_note }] : []),
+          ...(updatedRequest.reason ? [{ label: "Reason", value: updatedRequest.reason }] : []),
+        ],
+        ctaLabel: isRelieverStage ? "Review & Confirm Relief" : "Review & Endorse",
+      })
+    }
 
     return NextResponse.json({
       data: {
@@ -1259,7 +1431,9 @@ export async function DELETE(request: NextRequest) {
 
     const { data: existingRequest, error: fetchError } = await supabase
       .from("leave_requests")
-      .select("id, user_id, status, approval_stage, current_stage_code")
+      .select(
+        "id, user_id, reliever_id, start_date, end_date, leave_type_id, status, approval_stage, current_stage_code"
+      )
       .eq("id", id)
       .single()
 
@@ -1294,6 +1468,42 @@ export async function DELETE(request: NextRequest) {
       },
       { failOpen: true }
     )
+
+    if (existingRequest.reliever_id && existingRequest.reliever_id !== user.id) {
+      const ref = formatLeaveReference(id)
+      const refSuffix = ref ? ` — ${ref}` : ""
+      const { data: callerProfile } = await supabase
+        .from("profiles")
+        .select("full_name, first_name, last_name, company_email")
+        .eq("id", user.id)
+        .maybeSingle()
+      const callerName =
+        callerProfile?.full_name ||
+        `${callerProfile?.first_name || ""} ${callerProfile?.last_name || ""}`.trim() ||
+        callerProfile?.company_email ||
+        "Employee"
+
+      await notifyUsers(dataClient, {
+        userIds: [existingRequest.reliever_id],
+        title: "Leave request cancelled",
+        message: `${callerName} cancelled their pending leave request (${existingRequest.start_date} to ${existingRequest.end_date}). Your reliever commitment has been released.`,
+        actorId: user.id,
+        linkUrl: "/leave",
+        entityId: id,
+        emailEvent: "approval_required",
+        emailSubject: `Reliever Duty Released — ${callerName}${refSuffix}`,
+        emailTitle: "Reliever Duty Released",
+        badgeText: "Request Cancelled",
+        badgeVariant: "info",
+        detailsTitle: "Cancelled Request Details",
+        details: [
+          { label: "Employee", value: callerName },
+          { label: "Period", value: `${existingRequest.start_date} to ${existingRequest.end_date}` },
+          { label: "Status", value: "Cancelled by Requester (Relief Released)" },
+        ],
+        ctaLabel: "Open Leave Portal",
+      })
+    }
 
     return NextResponse.json({ message: "Leave request deleted successfully" })
   } catch (error) {

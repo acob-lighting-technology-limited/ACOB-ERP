@@ -2,7 +2,18 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { Check, ChevronDown, ChevronLeft, ChevronRight, Clock, Loader2, Users, Utensils, Wallet } from "lucide-react"
+import {
+  Check,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Loader2,
+  Star,
+  Users,
+  Utensils,
+  Wallet,
+} from "lucide-react"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
@@ -13,6 +24,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn, getInitials } from "@/lib/utils"
 import { apiFetch } from "@/lib/api-client"
 import { formatWATDate, formatWATTime, toLocalISODate, toLocalYearMonth } from "@/lib/utils/date"
+import { LunchReviewDialog } from "./_components/lunch-review-dialog"
 import {
   groupHeading,
   menuHeading,
@@ -53,6 +65,8 @@ interface HistoryRow {
   company_subsidy: number
   employee_deduction: number
   picks: string[]
+  menu_id?: string | null
+  user_review?: { id: string; rating: number; comment: string | null } | null
 }
 
 interface LunchContentProps {
@@ -164,6 +178,9 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState<string | null>(null)
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false)
+  const [selectedReviewMenuId, setSelectedReviewMenuId] = useState<string | null>(null)
+  const [selectedReviewDate, setSelectedReviewDate] = useState<string | null>(null)
 
   const loadHistory = useCallback(async (yearMonth: string) => {
     setHistoryLoading(true)
@@ -269,21 +286,10 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
       sortable: true,
       accessor: (row) => row.date,
       render: (row) => (
-        <div className="whitespace-nowrap">
-          <span className="text-foreground block text-xs font-semibold sm:text-sm">
-            {formatWATDate(row.date, { day: "numeric", month: "short" })}
-          </span>
-          <span className="text-muted-foreground block text-[11px]">
-            {WEEKDAYS[new Date(`${row.date}T12:00:00+01:00`).getDay()]}
-          </span>
-        </div>
+        <span className="text-foreground text-xs font-semibold sm:text-sm">
+          {formatWATDate(row.date, { weekday: "short", day: "numeric", month: "short" })}
+        </span>
       ),
-    },
-    {
-      key: "weekday",
-      label: "Day",
-      accessor: (row) => WEEKDAYS[new Date(`${row.date}T12:00:00+01:00`).getDay()],
-      hideOnMobile: true,
     },
     {
       key: "picks",
@@ -303,23 +309,6 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
         ),
     },
     {
-      key: "cost",
-      label: "Meal Cost",
-      sortable: true,
-      accessor: (row) => row.cost,
-      render: (row) => <span className="text-muted-foreground font-mono text-xs">{naira(row.cost)}</span>,
-      hideOnMobile: true,
-    },
-    {
-      key: "company_subsidy",
-      label: "Company Paid",
-      accessor: (row) => row.company_subsidy,
-      render: (row) => (
-        <span className="font-mono text-xs font-medium text-emerald-600">{naira(row.company_subsidy)}</span>
-      ),
-      hideOnMobile: true,
-    },
-    {
       key: "employee_deduction",
       label: "Deduction",
       sortable: true,
@@ -329,6 +318,48 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
           {naira(row.employee_deduction)}
         </span>
       ),
+    },
+    {
+      key: "feedback",
+      label: "Feedback",
+      render: (row) => {
+        if (!row.menu_id) {
+          return <span className="text-muted-foreground text-xs">—</span>
+        }
+        if (row.user_review) {
+          return (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 gap-1.5 border-amber-500/30 bg-amber-500/10 px-2.5 text-xs font-semibold text-amber-600 hover:bg-amber-500/20"
+              onClick={() => {
+                setSelectedReviewMenuId(row.menu_id || null)
+                setSelectedReviewDate(row.date)
+                setReviewDialogOpen(true)
+              }}
+              title="Click to edit or delete your review"
+            >
+              <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+              {row.user_review.rating} / 5
+            </Button>
+          )
+        }
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 gap-1.5 px-2.5 text-xs font-medium"
+            onClick={() => {
+              setSelectedReviewMenuId(row.menu_id || null)
+              setSelectedReviewDate(row.date)
+              setReviewDialogOpen(true)
+            }}
+          >
+            <Star className="h-3.5 w-3.5 fill-amber-500/20 text-amber-500" />
+            Feedback
+          </Button>
+        )
+      },
     },
   ]
 
@@ -621,21 +652,13 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
                 <div className="flex items-center justify-between gap-2 border-b pb-2">
                   <div>
                     <span className="text-foreground block text-sm font-semibold">
-                      {formatWATDate(row.date, { day: "numeric", month: "short", year: "numeric" })}
-                    </span>
-                    <span className="text-muted-foreground block text-xs">
-                      {formatWATDate(row.date, { weekday: "long" })}
+                      {formatWATDate(row.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
                     </span>
                   </div>
                   <div className="text-right">
                     <span className="block font-mono text-sm font-bold text-red-500">
                       {naira(row.employee_deduction)}
                     </span>
-                    {row.cost > 0 && (
-                      <span className="text-muted-foreground block font-mono text-[11px]">
-                        Meal cost: {naira(row.cost)}
-                      </span>
-                    )}
                   </div>
                 </div>
                 <div>
@@ -652,11 +675,52 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
                     <span className="text-muted-foreground text-xs italic">Logged by admin</span>
                   )}
                 </div>
+                {row.menu_id && (
+                  <div className="pt-1">
+                    {row.user_review ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 w-full gap-1.5 border-amber-500/30 bg-amber-500/10 text-xs font-semibold text-amber-600 hover:bg-amber-500/20"
+                        onClick={() => {
+                          setSelectedReviewMenuId(row.menu_id || null)
+                          setSelectedReviewDate(row.date)
+                          setReviewDialogOpen(true)
+                        }}
+                      >
+                        <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+                        Reviewed: {row.user_review.rating} / 5 (Edit)
+                      </Button>
+                    ) : (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-7 w-full gap-1.5 text-xs font-medium"
+                        onClick={() => {
+                          setSelectedReviewMenuId(row.menu_id || null)
+                          setSelectedReviewDate(row.date)
+                          setReviewDialogOpen(true)
+                        }}
+                      >
+                        <Star className="h-3.5 w-3.5 fill-amber-500/20 text-amber-500" />
+                        Give Feedback
+                      </Button>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           />
         </div>
       )}
+
+      <LunchReviewDialog
+        open={reviewDialogOpen}
+        onOpenChange={setReviewDialogOpen}
+        menuId={selectedReviewMenuId}
+        date={selectedReviewDate}
+        onSaved={() => void loadHistory(historyMonth)}
+      />
     </DataTablePage>
   )
 }

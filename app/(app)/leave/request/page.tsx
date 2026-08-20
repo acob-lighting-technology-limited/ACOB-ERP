@@ -55,6 +55,7 @@ export default function LeaveRequestPage() {
     reliever_identifier: "",
     reason: "",
     handover_note: "",
+    handover_file: null as File | null,
   })
 
   const { data: leaveTypes = [], isLoading: loadingTypes } = useQuery({
@@ -87,25 +88,51 @@ export default function LeaveRequestPage() {
     return toLocalISODate(resume)
   })()
 
-  // Mirrors the API's required fields so a blank reliever, reason or handover note is caught
-  // here rather than coming back as a generic "Missing required fields" after submitting.
   const canSubmit =
     Boolean(formData.leave_type_id) &&
     Boolean(formData.start_date) &&
     formData.reliever_identifier.trim().length > 0 &&
     formData.reason.trim().length > 0 &&
-    formData.handover_note.trim().length > 0
+    (Boolean(formData.handover_file) || formData.handover_note.trim().length > 0)
 
   const { mutate: submitRequest, isPending: loading } = useMutation({
     mutationFn: async (body: typeof formData) => {
+      let handoverChecklistUrl: string | null = null
+
+      if (body.handover_file) {
+        const uploadPayload = new FormData()
+        uploadPayload.set("file", body.handover_file)
+        uploadPayload.set("document_type", "handover_document")
+        const uploadRes = await apiFetch("/api/hr/leave/evidence/upload", {
+          method: "POST",
+          body: uploadPayload,
+        })
+        const uploadJson = await uploadRes.json().catch(() => ({}))
+        if (!uploadRes.ok || !uploadJson?.data?.file_url) {
+          throw new Error(uploadJson?.error || "Failed to upload handover document")
+        }
+        handoverChecklistUrl = String(uploadJson.data.file_url)
+      }
+
+      const payload = {
+        leave_type_id: body.leave_type_id,
+        start_date: body.start_date,
+        days_count: body.days_count,
+        reliever_identifier: body.reliever_identifier,
+        reason: body.reason,
+        handover_note:
+          body.handover_note.trim() || (body.handover_file ? `Attached: ${body.handover_file.name}` : null),
+        handover_checklist_url: handoverChecklistUrl,
+      }
+
       const response = await apiFetch("/api/hr/leave/requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify(payload),
       })
-      const payload = await response.json()
-      if (!response.ok) throw new Error(payload.error || "Failed to submit leave request")
-      return payload
+      const resData = await response.json()
+      if (!response.ok) throw new Error(resData.error || "Failed to submit leave request")
+      return resData
     },
     onSuccess: () => {
       toast.success("Leave request submitted")
@@ -225,14 +252,32 @@ export default function LeaveRequestPage() {
             </FormFieldGroup>
 
             <FormFieldGroup
-              label="Handover Note"
+              label="Handover Document"
               required
-              description="What your reliever needs to pick up while you are away."
+              description="Upload your formal handover document (PDF, Word, or Excel) detailing coverage."
+            >
+              <Input
+                type="file"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+                onChange={(e) => setFormData((prev) => ({ ...prev, handover_file: e.target.files?.[0] || null }))}
+              />
+              {formData.handover_file && (
+                <p className="text-muted-foreground mt-1 text-xs">
+                  Selected: {formData.handover_file.name} ({Math.max(1, Math.round(formData.handover_file.size / 1024))}{" "}
+                  KB)
+                </p>
+              )}
+            </FormFieldGroup>
+
+            <FormFieldGroup
+              label="Handover Notes (Optional)"
+              description="Additional handover details or instructions for your reliever (optional)."
             >
               <Textarea
                 value={formData.handover_note}
                 onChange={(e) => setFormData((prev) => ({ ...prev, handover_note: e.target.value }))}
-                rows={3}
+                rows={2}
+                placeholder="Additional notes (optional)..."
               />
             </FormFieldGroup>
 

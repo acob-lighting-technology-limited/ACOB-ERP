@@ -1,13 +1,6 @@
 import { createClient } from "@/lib/supabase/client"
-import type { Task, TaskUserProfile } from "@/types/task"
+import type { Task, TaskUserProfile, TaskPersonSummary } from "@/types/task"
 import { getOfficeWeekMonday } from "@/lib/meeting-week"
-
-type BasicProfile = {
-  id: string
-  first_name: string
-  last_name: string
-  department?: string | null
-}
 
 type ActionItemDueDateRow = {
   id: string
@@ -39,26 +32,27 @@ function resolveActionItemDueDate(actionItem?: ActionItemDueDateRow | null) {
 export async function loadUserTasks(
   supabase: ReturnType<typeof createClient>,
   userId: string,
-  userProfile: TaskUserProfile | null
+  _userProfile: TaskUserProfile | null
 ): Promise<Task[]> {
+  // 1. Fetch direct tasks assigned to user or created by user
   const { data: directTasks } = await supabase
     .from("tasks")
     .select("*")
+    .eq("is_archived", false)
     .or(`assigned_to.eq.${userId},assigned_by.eq.${userId}`)
     .neq("category", "weekly_action")
     .order("created_at", { ascending: false })
 
-  const { data: departmentTasks } =
-    userProfile?.department && userProfile?.is_department_lead
-      ? await supabase
-          .from("tasks")
-          .select("*")
-          .eq("department", userProfile.department)
-          .eq("assignment_type", "department")
-          .neq("source_type", "help_desk")
+  // 2. Fetch multi-assignment tasks
+  const { data: assignments } = await supabase.from("task_assignments").select("task_id").eq("user_id", userId)
+
+  const multiTaskIds = (assignments || []).map((a: { task_id: string }) => a.task_id)
+  const { data: multiTasks } =
+    multiTaskIds.length > 0
+      ? await supabase.from("tasks").select("*").in("id", multiTaskIds).eq("is_archived", false)
       : { data: [] }
 
-  const allTasks = [...(directTasks || []), ...(departmentTasks || [])].filter(
+  const allTasks = [...(directTasks || []), ...(multiTasks || [])].filter(
     (task) => String(task.source_type || "") !== "action_item"
   )
   const uniqueTasks = Array.from(new Map(allTasks.map((task) => [task.id, task])).values()) as Task[]
@@ -66,26 +60,36 @@ export async function loadUserTasks(
   const taskIds = uniqueTasks.map((task) => task.id)
 
   const userIds = new Set<string>()
+  const goalIds = new Set<string>()
   for (const task of uniqueTasks) {
     if (task.assigned_by) userIds.add(task.assigned_by)
     if (task.assigned_to) userIds.add(task.assigned_to)
+    if (task.created_by) userIds.add(task.created_by)
+    if (task.reviewed_by) userIds.add(task.reviewed_by)
+    if (task.goal_id) goalIds.add(task.goal_id)
   }
 
-  const { data: profiles } =
+  const [profilesRes, goalsRes, commentsRes] = await Promise.all([
     userIds.size > 0
-      ? await supabase.from("profiles").select("id, first_name, last_name, department").in("id", Array.from(userIds))
-      : { data: [] }
+      ? supabase.from("profiles").select("id, first_name, last_name, department").in("id", Array.from(userIds))
+      : { data: [] },
+    goalIds.size > 0
+      ? supabase.from("goals_objectives").select("id, title").in("id", Array.from(goalIds))
+      : { data: [] },
+    taskIds.length > 0
+      ? supabase.from("task_updates").select("task_id").in("task_id", taskIds).eq("update_type", "comment")
+      : { data: [] },
+  ])
 
-  const profileMap = new Map(
-    ((profiles as BasicProfile[] | null) || []).map((profile) => [profile.id, profile] as const)
+  const profileMap = new Map<string, TaskPersonSummary>(
+    ((profilesRes.data || []) as TaskPersonSummary[]).map((p) => [p.id, p])
+  )
+  const goalMap = new Map<string, string>(
+    ((goalsRes.data || []) as Array<{ id: string; title: string }>).map((g) => [g.id, g.title])
   )
 
-  const { data: taskComments } =
-    taskIds.length > 0
-      ? await supabase.from("task_updates").select("task_id").in("task_id", taskIds).eq("update_type", "comment")
-      : { data: [] }
   const commentCountMap = new Map<string, number>()
-  for (const row of taskComments || []) {
+  for (const row of commentsRes.data || []) {
     const taskId = String((row as { task_id?: string | null }).task_id || "")
     if (!taskId) continue
     commentCountMap.set(taskId, (commentCountMap.get(taskId) || 0) + 1)
@@ -112,27 +116,11 @@ export async function loadUserTasks(
       taskData.due_date = resolveActionItemDueDate(actionItemDueDateMap.get(String(task.source_id))) || task.due_date
     }
 
-    if (task.assigned_by) {
-      const profile = profileMap.get(task.assigned_by)
-      if (profile) {
-        taskData.assigned_by_user = {
-          first_name: profile.first_name,
-          last_name: profile.last_name,
-          department: profile.department,
-        }
-      }
-    }
-
-    if (task.assigned_to) {
-      const profile = profileMap.get(task.assigned_to)
-      if (profile) {
-        taskData.assigned_to_user = profile
-      }
-    }
-
-    if (task.assignment_type === "department") {
-      taskData.can_change_status = false
-    }
+    if (task.assigned_by) taskData.assigned_by_user = profileMap.get(task.assigned_by)
+    if (task.assigned_to) taskData.assigned_to_user = profileMap.get(task.assigned_to)
+    if (task.created_by) taskData.created_by_user = profileMap.get(task.created_by)
+    if (task.reviewed_by) taskData.reviewed_by_user = profileMap.get(task.reviewed_by)
+    if (task.goal_id) taskData.goal_title = goalMap.get(task.goal_id) || null
 
     return taskData
   })

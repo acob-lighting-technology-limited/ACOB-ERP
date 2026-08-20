@@ -4,6 +4,8 @@
  * Uses Application-Only (Client Credentials) authentication
  */
 
+import { Buffer } from "node:buffer"
+
 import type {
   OneDriveItem,
   OneDriveFolderResponse,
@@ -51,6 +53,11 @@ function buildChildrenEndpoint(relativePath: string): string {
 
   const encodedPath = encodeURIComponent(normalizedRelativePath.replace(/^\//, ""))
   return `/root:/${encodedPath}:/children`
+}
+
+function buildSharingToken(webUrl: string): string {
+  const base64 = Buffer.from(webUrl, "utf-8").toString("base64")
+  return `u!${base64.replace(/=+$/, "").replace(/\//g, "_").replace(/\+/g, "-")}`
 }
 
 function buildItemEndpoint(relativePath: string, suffix = ""): string {
@@ -538,6 +545,26 @@ export class OneDriveService {
       `${buildItemEndpoint(target.relativePath)}?select=@microsoft.graph.downloadUrl`
     )
 
+    if (!item["@microsoft.graph.downloadUrl"]) {
+      throw new Error("Download URL not available")
+    }
+
+    return item["@microsoft.graph.downloadUrl"]
+  }
+
+  /**
+   * Resolves an item from its SharePoint/OneDrive web URL (the `webUrl` returned at
+   * upload time) via the Graph `/shares` endpoint. Used to stream files that were
+   * stored with only their web URL recorded.
+   */
+  async getItemByWebUrl(webUrl: string): Promise<OneDriveItem> {
+    return this.graphApiRequest<OneDriveItem>(
+      `/shares/${buildSharingToken(webUrl)}/driveItem?select=id,name,size,file,webUrl,@microsoft.graph.downloadUrl`
+    )
+  }
+
+  async getDownloadUrlByWebUrl(webUrl: string): Promise<string> {
+    const item = await this.getItemByWebUrl(webUrl)
     if (!item["@microsoft.graph.downloadUrl"]) {
       throw new Error("Download URL not available")
     }

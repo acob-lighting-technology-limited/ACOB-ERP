@@ -170,7 +170,11 @@ export function AttendanceContent({
     let count = 0
     for (const day of unifiedDays ?? []) {
       if (day.date.startsWith(currentYM)) {
-        if (day.status === "lateness_with_permission" || day.status === "absent_with_permission") {
+        if (
+          day.status === "lateness_with_permission" ||
+          day.status === "incomplete_with_permission" ||
+          day.status === "absent_with_permission"
+        ) {
           count++
         }
       }

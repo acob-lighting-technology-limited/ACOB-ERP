@@ -6,6 +6,8 @@ import { getDepartmentScope, resolveAdminScope } from "@/lib/admin/rbac"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
+import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 
 const log = logger("departments")
 
@@ -15,7 +17,7 @@ type DepartmentsClient = Awaited<ReturnType<typeof createClient>>
 
 const UpdateDepartmentSchema = z.object({
   name: z.string().trim().min(1, "Department name is required"),
-  description: z.string().optional().nullable(),
+  description: z.string().trim().min(1, "Department description is required"),
   department_head_id: z.string().optional().nullable(),
   department_code: z
     .string()
@@ -208,32 +210,39 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
       return NextResponse.json({ error: "Department not found" }, { status: 404 })
     }
 
-    const { count: assignedProfilesCount, error: countError } = await supabase
+    const db = getServiceRoleClientOrFallback(supabase)
+
+    // Check for active employees assigned to this department
+    const { data: assignedProfiles, error: profilesError } = await db
       .from("profiles")
-      .select("id", { count: "exact", head: true })
-      .eq("department_id", existingDepartment.id)
+      .select("id, first_name, last_name, company_email, employment_status")
+      .or(`department_id.eq.${existingDepartment.id},department.eq.${existingDepartment.name}`)
 
-    if (countError) throw countError
-    let effectiveAssignedProfilesCount = assignedProfilesCount || 0
-    if (effectiveAssignedProfilesCount === 0) {
-      const { count: legacyAssignedProfilesCount, error: legacyCountError } = await supabase
-        .from("profiles")
-        .select("id", { count: "exact", head: true })
-        .is("department_id", null)
-        .eq("department", existingDepartment.name)
+    if (profilesError) throw profilesError
 
-      if (legacyCountError) throw legacyCountError
-      effectiveAssignedProfilesCount = legacyAssignedProfilesCount || 0
-    }
+    const activeAssigned = (assignedProfiles ?? []).filter((p) =>
+      isAssignableEmploymentStatus(p.employment_status, { allowLegacyNullStatus: false })
+    )
 
-    if (effectiveAssignedProfilesCount > 0) {
+    if (activeAssigned.length > 0) {
+      const names = activeAssigned
+        .map((p) => {
+          const name = [p.first_name, p.last_name].filter(Boolean).join(" ")
+          return name ? `${name} (${p.company_email || "no email"})` : p.company_email || "Unknown employee"
+        })
+        .slice(0, 3)
+        .join(", ")
+      const more = activeAssigned.length > 3 ? ` and ${activeAssigned.length - 3} other(s)` : ""
+
       return NextResponse.json(
-        { error: "Cannot deactivate department while users are assigned to it" },
+        {
+          error: `Cannot deactivate department while ${activeAssigned.length} active employee${activeAssigned.length > 1 ? "s are" : " is"} assigned: ${names}${more}. Please reassign them under HR > Employees first.`,
+        },
         { status: 409 }
       )
     }
 
-    const { error } = await supabase
+    const { error } = await db
       .from("departments")
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq("id", params.id)

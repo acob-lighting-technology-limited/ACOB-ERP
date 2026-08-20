@@ -120,14 +120,44 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Fetch caller's existing reviews for menus in this period
+    const userReviewsByMenuId = new Map<string, { id: string; rating: number; comment: string | null }>()
+    if (menus.length > 0) {
+      const { data: reviewRows } = await dataClient
+        .from("lunch_reviews")
+        .select("id, menu_id, rating, comment")
+        .eq("user_id", user.id)
+        .in(
+          "menu_id",
+          menus.map((m) => m.id)
+        )
+
+      for (const r of (reviewRows || []) as {
+        id: string
+        menu_id: string
+        rating: number
+        comment: string | null
+      }[]) {
+        userReviewsByMenuId.set(r.menu_id, {
+          id: r.id,
+          rating: r.rating,
+          comment: r.comment,
+        })
+      }
+    }
+
     return NextResponse.json({
       yearMonth,
-      rows: logs.map((row) => ({
-        ...row,
-        picks: picksByDate.get(row.date) || [],
-        // Lets the row offer a "Review this meal" action.
-        menu_id: menuIdByDate.get(row.date) || null,
-      })),
+      rows: logs.map((row) => {
+        const menuId = menuIdByDate.get(row.date) || null
+        return {
+          ...row,
+          picks: picksByDate.get(row.date) || [],
+          // Lets the row offer a "Review this meal" action.
+          menu_id: menuId,
+          user_review: menuId ? userReviewsByMenuId.get(menuId) || null : null,
+        }
+      }),
     })
   } catch (error) {
     log.error({ err: String(error) }, "Error in GET /api/hr/lunch/history")

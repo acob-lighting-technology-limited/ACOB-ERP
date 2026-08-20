@@ -1,4 +1,4 @@
-import { sendLeaveWorkflowEmail } from "@/lib/leave-mailer"
+import { sendLeaveWorkflowEmail, type LeaveWorkflowDetail, type LeaveBadgeVariant } from "@/lib/leave-mailer"
 import { resolveChannelEligibleUserIds } from "@/lib/notifications/delivery-policy"
 import { logger } from "@/lib/logger"
 import type { SupabaseClient } from "@supabase/supabase-js"
@@ -689,7 +689,7 @@ function buildNotificationRows(params: {
   }))
 }
 
-function formatLeaveReference(entityId?: string) {
+export function formatLeaveReference(entityId?: string) {
   if (!entityId) return null
   const raw = entityId.replace(/[^a-zA-Z0-9]/g, "").toUpperCase()
   const compact = raw.slice(0, 8)
@@ -737,6 +737,11 @@ export async function notifyUsers(
     emailSubject?: string
     emailTitle?: string
     emailMessage?: string
+    badgeText?: string
+    badgeVariant?: LeaveBadgeVariant
+    detailsTitle?: string
+    details?: LeaveWorkflowDetail[]
+    ctaLabel?: string
   }
 ) {
   const uniqueIds = Array.from(new Set(params.userIds.filter(Boolean)))
@@ -792,12 +797,28 @@ export async function notifyUsers(
       params.emailSubject ||
       (params.emailEvent ? buildLeaveEmailSubject(params.emailEvent, params.entityId) : params.title)
 
+    const defaultBadgeVariant: Record<string, LeaveBadgeVariant> = {
+      approved: "success",
+      rejected: "destructive",
+      approval_required: "warning",
+      ready_for_approval: "warning",
+      sla_reminder: "warning",
+      sla_breached: "destructive",
+      lapsed: "default",
+    }
+    const badgeVariant = params.badgeVariant || (params.emailEvent ? defaultBadgeVariant[params.emailEvent] : undefined)
+
     await sendLeaveWorkflowEmail({
       to: emails,
       subject,
       title: params.emailTitle || params.title,
       message: params.emailMessage || params.message,
+      badgeText: params.badgeText,
+      badgeVariant,
+      detailsTitle: params.detailsTitle,
+      details: params.details,
       ctaPath: params.linkUrl,
+      ctaLabel: params.ctaLabel,
     })
   }
 }

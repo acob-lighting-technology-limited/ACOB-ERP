@@ -119,6 +119,31 @@ const nextConfig = {
     ignoreBuildErrors: false,
   },
 
+  async redirects() {
+    return [
+      {
+        source: "/admin/finance",
+        destination: "/admin/accounts",
+        permanent: true,
+      },
+      {
+        source: "/admin/finance/:path*",
+        destination: "/admin/accounts/:path*",
+        permanent: true,
+      },
+      {
+        source: "/dept/:dept_id/finance",
+        destination: "/dept/:dept_id/accounts",
+        permanent: true,
+      },
+      {
+        source: "/dept/:dept_id/finance/:path*",
+        destination: "/dept/:dept_id/accounts/:path*",
+        permanent: true,
+      },
+    ]
+  },
+
   async headers() {
     return [
       {

@@ -21,6 +21,7 @@ export type AdminRouteKeyV2 =
   | "auditlogs.main"
   | "assets.main"
   | "assets.issues"
+  | "accounts.main"
   | "communications.main"
   | "communications.broadcast"
   | "communications.meetings"
@@ -61,6 +62,7 @@ export const GRANTABLE_ADMIN_ROUTES: AdminRouteKeyV2[] = [
   "hr.pms",
   "hr.pms.cbt.manage",
   "jobdescriptions.main",
+  "accounts.main",
   "finance.main",
   "payroll.main",
   "purchasing.main",
@@ -148,7 +150,8 @@ export function resolveAdminRouteKeyV2(pathname: string): AdminRouteKeyV2 {
   if (pathname.startsWith("/admin/correspondence")) return "correspondence.main"
   if (pathname.startsWith("/admin/documentation")) return "documentation.main"
   if (pathname.startsWith("/admin/feedback")) return "feedback.main"
-  if (pathname.startsWith("/admin/finance")) return "finance.main"
+  if (pathname.startsWith("/admin/accounts")) return "accounts.main"
+  if (pathname.startsWith("/admin/finance")) return "accounts.main"
   if (pathname.startsWith("/admin/help-desk")) return "helpdesk.main"
   // Payroll owns its own key. The two legacy HR paths still resolve here so the
   // redirect stubs behave identically to the new /admin/payroll route — this
@@ -229,6 +232,7 @@ export function getRoutePolicyV2(route: AdminRouteKeyV2): RoutePolicyV2 {
       return { visibility: "dept", mutations: "dept", adminOnly: false, domain: "communications" }
     case "feedback.main":
       return { visibility: "dept", mutations: "dept", adminOnly: false, domain: "communications" }
+    case "accounts.main":
     case "finance.main":
       return { visibility: "dept", mutations: "dept", adminOnly: false, domain: "finance" }
     case "helpdesk.main":
@@ -276,6 +280,10 @@ export function canAccessRouteV2(context: AccessContextV2, route: AdminRouteKeyV
     }
     // Dashboard is always accessible to any admin-like role
     if (route === "admin.dashboard") return true
+    // Accounts and Finance map to each other so existing grants stay valid
+    if (route === "accounts.main" || route === "finance.main") {
+      return adminHasRoute(context, "accounts.main") || adminHasRoute(context, "finance.main")
+    }
     // Leave, Attendance, Resource Booking (Fleet/Resources) and PMS are grantable
     // on their own, but full "Employees & HR" (hr.main) also includes them — so
     // admins who already had HR keep access (no lockout). CBT folds into PMS.

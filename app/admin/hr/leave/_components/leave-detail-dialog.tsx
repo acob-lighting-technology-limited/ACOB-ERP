@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Check, X, Clock, FileText, Calendar, User, FileCheck, Layers } from "lucide-react"
 import { LeaveItem, approvalStageKey, approvalStageLabel, resolvePersonName, getStageBadge } from "../view"
 import { formatWATDateTime } from "@/lib/utils/date"
+import { leaveEvidenceHref, leaveHandoverHref } from "@/lib/hr/leave-attachment-links"
 
 interface LeaveDetailDialogProps {
   open: boolean
@@ -161,6 +162,30 @@ export function LeaveDetailDialog({
                   {leave.reason || "-"}
                 </span>
               </div>
+              {leave.handover_checklist_url && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Handover Doc:</span>
+                  <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
+                    <a
+                      href={leaveHandoverHref(leave.id, leave.handover_checklist_url)}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <FileText className="mr-1 h-3.5 w-3.5" />
+                      View Handover File
+                    </a>
+                  </Button>
+                </div>
+              )}
+              {leave.handover_note &&
+                (!leave.handover_checklist_url || !leave.handover_note.startsWith("Attached:")) && (
+                  <div className="mt-2 flex flex-col gap-1 border-t pt-2">
+                    <span className="text-muted-foreground text-xs">Handover Note:</span>
+                    <span className="text-foreground bg-background rounded border p-2 font-medium">
+                      {leave.handover_note}
+                    </span>
+                  </div>
+                )}
               {leave.required_documents && leave.required_documents.length > 0 && (
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Required Docs:</span>
@@ -294,7 +319,7 @@ export function LeaveDetailDialog({
                       </Badge>
                     </div>
                     <Button variant="outline" size="sm" className="h-7 text-xs" asChild>
-                      <a href={doc.file_url} target="_blank" rel="noreferrer">
+                      <a href={leaveEvidenceHref(doc.id, doc.file_url)} target="_blank" rel="noreferrer">
                         View File
                       </a>
                     </Button>

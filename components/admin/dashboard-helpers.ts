@@ -22,7 +22,8 @@ export function normalizeAdminDomains(domains: string[] | null | undefined): Adm
 
 export function getDomainForAdminPath(path: string): AdminDomain | null {
   if (path.startsWith("/admin/hr")) return "hr"
-  if (path.startsWith("/admin/finance") || path.startsWith("/admin/purchasing")) return "finance"
+  if (path.startsWith("/admin/accounts") || path.startsWith("/admin/finance") || path.startsWith("/admin/purchasing"))
+    return "finance"
   if (path.startsWith("/admin/assets") || path.startsWith("/admin/inventory")) return "assets"
   if (path.startsWith("/admin/reports") || path.startsWith("/admin/audit-logs")) return "reports"
   if (path.startsWith("/admin/tasks")) return "tasks"
@@ -212,9 +213,9 @@ export const primaryModules: ModuleAction[] = [
     roles: ["developer", "super_admin", "admin"],
   },
   {
-    title: "Finance",
-    description: "Review finance modules and payment operations",
-    href: "/admin/finance",
+    title: "Accounts",
+    description: "Review accounts modules and payment operations",
+    href: "/admin/accounts",
     icon: CreditCard,
     color: "bg-indigo-500",
     roles: ["developer", "super_admin", "admin"],
@@ -273,7 +274,7 @@ export const secondaryModules: ModuleAction[] = [
   {
     title: "Payments",
     description: "Manage department payments",
-    href: "/admin/finance/payments",
+    href: "/admin/accounts/payments",
     icon: CreditCard,
     color: "bg-indigo-500",
     roles: ["developer", "super_admin", "admin"],

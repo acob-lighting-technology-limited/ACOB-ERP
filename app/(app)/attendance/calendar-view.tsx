@@ -73,6 +73,7 @@ const CELL_BG: Record<string, string> = {
   present: "bg-blue-50/80 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800",
   late: "bg-yellow-50/80 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800",
   lateness_with_permission: "bg-amber-50/80 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800",
+  incomplete_with_permission: "bg-teal-50/80 border-teal-200 dark:bg-teal-950/30 dark:border-teal-800",
   early_departure: "bg-orange-50/80 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800",
   early_departure_with_permission: "bg-orange-50/80 border-orange-200 dark:bg-orange-950/30 dark:border-orange-800",
   early_closure: "bg-blue-50/80 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800",
@@ -95,6 +96,8 @@ function shortStatusLabel(status: string, fullLabel: string): string {
   switch (status) {
     case "lateness_with_permission":
       return "LWP"
+    case "incomplete_with_permission":
+      return "IWP"
     case "absent_with_permission":
       return "AWP"
     case "out_of_station":

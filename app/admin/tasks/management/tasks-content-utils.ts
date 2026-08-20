@@ -93,11 +93,11 @@ export function applyTaskFilters(
 }
 
 export function validateTaskForm(form: TaskFormState): string | null {
-  if (form.assignment_type === "individual" && !form.assigned_to)
-    return "Please select a employee member for individual assignment"
-  if (form.assignment_type === "department" && !form.department)
-    return "Please select a department for department assignment"
-  if (!form.goal_id) return "Please link this task to an approved department goal"
+  if (!form.title.trim()) return "Please enter a task title"
+  const hasAssignee = form.assigned_to || (form.assigned_users && form.assigned_users.length > 0)
+  if (!hasAssignee && form.assignment_type !== "department") {
+    return "Please select at least one assignee for this task"
+  }
   if (form.task_start_date && form.task_end_date) {
     return dateValidation.validateDateRange(form.task_start_date, form.task_end_date, "task date")
   }

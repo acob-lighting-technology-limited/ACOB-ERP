@@ -53,7 +53,8 @@ test("canAccessAdminSection: dev section is developer-only", () => {
 })
 
 test("canAccessAdminSection: route-limited admin only sees granted sections", () => {
-  const scope = makeScope({ role: "admin", adminRoutes: ["finance.main"] })
+  const scope = makeScope({ role: "admin", adminRoutes: ["accounts.main"] })
+  assert.equal(canAccessAdminSection(scope, "accounts"), true)
   assert.equal(canAccessAdminSection(scope, "finance"), true)
   assert.equal(canAccessAdminSection(scope, "hr"), false)
   assert.equal(canAccessAdminSection(scope, "admin"), true) // dashboard always granted

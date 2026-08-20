@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
-import { Plus, Target } from "lucide-react"
+import { Plus, Target, Trash2, ListPlus } from "lucide-react"
 import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -55,8 +55,8 @@ export function GoalsContent({
   cycles = [],
   canCreateGoal = false,
   managedDepartments = [],
-  pageTitle = "Department Goals",
-  pageDescription = "View the department goals already set by your lead.",
+  pageTitle = "Department Strategic Goals",
+  pageDescription = "View and manage departmental strategic goals and linked tasks.",
   backHref = "/pms",
   backLabel = "Back to PMS",
   showCreateTaskAction = false,
@@ -85,12 +85,6 @@ export function GoalsContent({
     [goals, managedDepartments]
   )
 
-  const approvalClass = (status: Goal["approval_status"]) => {
-    if (status === "approved") return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-    if (status === "rejected") return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-    return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-  }
-
   const columns = useMemo<DataTableColumn<GoalRow>[]>(
     () => [
       {
@@ -100,7 +94,16 @@ export function GoalsContent({
         accessor: (row) => row.title,
         resizable: true,
         initialWidth: 280,
-        render: (row) => <span className="font-medium">{row.title}</span>,
+        render: (row) => (
+          <div>
+            <p className="text-foreground font-medium">{row.title}</p>
+            {row.description ? (
+              <p className="text-muted-foreground truncate text-xs" title={row.description}>
+                {row.description}
+              </p>
+            ) : null}
+          </div>
+        ),
       },
       {
         key: "department",
@@ -121,7 +124,11 @@ export function GoalsContent({
         label: "Priority",
         sortable: true,
         accessor: (row) => row.priority,
-        render: (row) => <span className="capitalize">{row.priority}</span>,
+        render: (row) => (
+          <Badge variant="outline" className="text-[11px] capitalize">
+            {row.priority}
+          </Badge>
+        ),
         hideOnMobile: true,
       },
       {
@@ -129,21 +136,20 @@ export function GoalsContent({
         label: "Status",
         sortable: true,
         accessor: (row) => row.status,
-        render: (row) => <span className="capitalize">{String(row.status || "").replace("_", " ")}</span>,
-      },
-      {
-        key: "approval",
-        label: "Approval",
-        sortable: true,
-        accessor: (row) => row.approval_status,
-        render: (row) => <Badge className={approvalClass(row.approval_status)}>{row.approval_status}</Badge>,
+        render: (row) => (
+          <Badge variant="secondary" className="text-[11px] capitalize">
+            {String(row.status || "in_progress").replace("_", " ")}
+          </Badge>
+        ),
       },
       {
         key: "due_date",
         label: "Due Date",
         sortable: true,
         accessor: (row) => row.due_date || "",
-        render: (row) => (row.due_date ? formatWATDate(row.due_date) : "-"),
+        render: (row) => (
+          <span className="text-muted-foreground text-xs">{row.due_date ? formatWATDate(row.due_date) : "-"}</span>
+        ),
         hideOnMobile: true,
       },
     ],
@@ -158,23 +164,17 @@ export function GoalsContent({
   const filters = useMemo<DataTableFilter<GoalRow>[]>(
     () => [
       {
-        key: "approval_status",
-        label: "Approval",
-        mode: "custom",
-        options: [
-          { value: "pending", label: "Pending" },
-          { value: "approved", label: "Approved" },
-          { value: "rejected", label: "Rejected" },
-        ],
-        filterFn: (row, selected) => selected.includes(row.approval_status),
+        key: "department",
+        label: "Department",
+        options: availableDepartments.map((d) => ({ value: d, label: d })),
       },
       ...cycleFilters,
     ],
-    [cycleFilters]
+    [availableDepartments, cycleFilters]
   )
 
   async function handleCreateGoal() {
-    if (!form.department || !form.title) {
+    if (!form.department || !form.title.trim()) {
       toast.error("Department and goal title are required")
       return
     }
@@ -197,6 +197,19 @@ export function GoalsContent({
       toast.error(error instanceof Error ? error.message : "Failed to create goal")
     } finally {
       setSaving(false)
+    }
+  }
+
+  async function handleArchiveGoal(goal: GoalRow) {
+    try {
+      const response = await apiFetch(`/api/hr/performance/goals?id=${encodeURIComponent(goal.id)}`, {
+        method: "DELETE",
+      })
+      if (!response.ok) throw new Error("Failed to archive goal")
+      setGoals((current) => current.filter((g) => g.id !== goal.id))
+      toast.success("Goal archived")
+    } catch (error) {
+      toast.error("Failed to archive goal")
     }
   }
 
@@ -239,16 +252,35 @@ export function GoalsContent({
         pagination={{ pageSize: 50 }}
         searchPlaceholder="Search goal, department, status, or cycle..."
         searchFn={(row, query) =>
-          `${row.title} ${row.description} ${row.department} ${row.priority} ${row.status} ${row.cycleLabel}`
+          `${row.title} ${row.description || ""} ${row.department || ""} ${row.priority} ${row.status} ${row.cycleLabel}`
             .toLowerCase()
-            .includes(query)
+            .includes(query.toLowerCase())
+        }
+        rowActions={
+          canCreateGoal
+            ? [
+                {
+                  label: "Create Task under Goal",
+                  icon: ListPlus,
+                  onClick: (row) => {
+                    window.location.href = `/admin/tasks?goal_id=${encodeURIComponent(row.id)}`
+                  },
+                },
+                {
+                  label: "Archive Goal",
+                  icon: Trash2,
+                  variant: "destructive",
+                  onClick: (row) => handleArchiveGoal(row),
+                },
+              ]
+            : undefined
         }
         expandable={{
           render: (row) => (
-            <div className="space-y-3">
+            <div className="space-y-3 p-3 text-xs">
               <div>
-                <p className="text-muted-foreground text-xs uppercase">Description</p>
-                <p className="text-sm">{row.description || "No description provided."}</p>
+                <p className="text-muted-foreground text-[10px] font-semibold uppercase">Description</p>
+                <p className="pt-0.5 text-sm">{row.description || "No description provided."}</p>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <div className="rounded-lg border p-3">
@@ -298,54 +330,27 @@ export function GoalsContent({
               </div>
               {showCreateTaskAction ? (
                 <Link href={`/admin/tasks?goal_id=${encodeURIComponent(row.id)}`}>
-                  <Button size="sm" variant="outline">
-                    Create Task
+                  <Button size="sm" variant="outline" className="text-xs">
+                    Create Task under this Goal
                   </Button>
                 </Link>
               ) : null}
             </div>
           ),
         }}
-        emptyTitle="No department goals found"
-        emptyDescription="No goals match the current filters."
-        emptyIcon={Target}
-        skeletonRows={5}
-        viewToggle
-        cardRenderer={(row) => (
-          <div className="space-y-3 rounded-xl border p-3.5 sm:p-4">
-            <div className="flex items-start justify-between gap-2 border-b pb-2">
-              <div>
-                <span className="text-foreground block text-sm font-semibold">{row.title}</span>
-                {row.department && <span className="text-muted-foreground block text-xs">{row.department}</span>}
-              </div>
-              <Badge className={approvalClass(row.approval_status)}>{row.approval_status}</Badge>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div>
-                <span className="text-muted-foreground block text-[10px] font-medium uppercase">Priority</span>
-                <span className="text-foreground font-medium capitalize">{row.priority}</span>
-              </div>
-              <div>
-                <span className="text-muted-foreground block text-[10px] font-medium uppercase">Due Date</span>
-                <span className="text-foreground font-medium">{row.due_date ? formatWATDate(row.due_date) : "-"}</span>
-              </div>
-            </div>
-          </div>
-        )}
-        urlSync
       />
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Create Department Goal</DialogTitle>
+            <DialogTitle>Create Strategic Goal</DialogTitle>
             <DialogDescription>
-              Goals are departmental. After saving the goal, create tasks under it and assign them from task manager.
+              Create a strategic goal for your department. Tasks can be created directly under this goal.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label>Department</Label>
+          <div className="space-y-3.5 pt-2 text-xs">
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Department *</Label>
               <Select
                 value={form.department}
                 onValueChange={(value) => setForm((current) => ({ ...current, department: value }))}
@@ -362,24 +367,26 @@ export function GoalsContent({
                 </SelectContent>
               </Select>
             </div>
-            <div className="space-y-2">
-              <Label>Goal Title</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Goal Title *</Label>
               <Input
                 value={form.title}
                 onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))}
+                placeholder="e.g. Reduce client response time to under 1 hour"
               />
             </div>
-            <div className="space-y-2">
-              <Label>Description</Label>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-medium">Description</Label>
               <Textarea
-                rows={4}
+                rows={3}
                 value={form.description}
                 onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+                placeholder="Key scope and success indicators..."
               />
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Priority</Label>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Priority</Label>
                 <Select
                   value={form.priority}
                   onValueChange={(value) => setForm((current) => ({ ...current, priority: value }))}
@@ -388,14 +395,15 @@ export function GoalsContent({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="medium">Medium</SelectItem>
                     <SelectItem value="low">Low</SelectItem>
+                    <SelectItem value="medium">Medium</SelectItem>
+                    <SelectItem value="high">High</SelectItem>
+                    <SelectItem value="urgent">Urgent</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
-              <div className="space-y-2">
-                <Label>Due Date</Label>
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Due Date</Label>
                 <Input
                   type="date"
                   value={form.due_date}
@@ -403,11 +411,14 @@ export function GoalsContent({
                 />
               </div>
             </div>
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => setIsDialogOpen(false)} disabled={saving}>
                 Cancel
               </Button>
-              <Button onClick={() => void handleCreateGoal()} disabled={saving}>
+              <Button
+                onClick={() => void handleCreateGoal()}
+                disabled={saving || !form.title.trim() || !form.department}
+              >
                 {saving ? "Saving..." : "Save Goal"}
               </Button>
             </div>

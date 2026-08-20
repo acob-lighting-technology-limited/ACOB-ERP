@@ -31,9 +31,9 @@ export const ADMIN_ROUTE_GROUPS: RouteGroup[] = [
     ],
   },
   {
-    label: "Finance",
+    label: "Accounts",
     routes: [
-      { key: "finance.main", label: "Finance", hint: "Payments, Bills, Invoices & Finance Reports" },
+      { key: "accounts.main", label: "Accounts", hint: "Payments, Bills, Invoices, Requisitions & Reports" },
       { key: "purchasing.main", label: "Purchasing", hint: "Orders, Receipts & Suppliers" },
       { key: "payroll.main", label: "Payroll", hint: "Payroll periods & entries — salary data" },
     ],

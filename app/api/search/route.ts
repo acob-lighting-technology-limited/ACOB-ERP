@@ -482,7 +482,7 @@ export async function GET(request: NextRequest) {
     for (const p of (paymentsRes?.data || []) as Array<Record<string, unknown>>) {
       const id = String(p.id)
       const href =
-        tier === "admin" ? `/admin/finance/payments?paymentId=${id}` : `/dept/${scope.primaryDeptId}/finance/payments`
+        tier === "admin" ? `/admin/accounts/payments?paymentId=${id}` : `/dept/${scope.primaryDeptId}/accounts/payments`
       results.push({
         id,
         type: "payment",

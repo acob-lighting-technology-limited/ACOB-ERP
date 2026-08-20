@@ -37,7 +37,8 @@ const UpdateGoalSchema = z.object({
   priority: z.enum(["low", "medium", "high"]).optional(),
   due_date: z.string().optional().nullable(),
   weight_pct: z.number().min(0).max(100).optional().nullable(),
-  approval_status: z.enum(["pending"]).optional(),
+  approval_status: z.enum(["approved", "pending", "rejected"]).optional(),
+  is_archived: z.boolean().optional(),
 })
 
 type GoalOwnerRecord = {
@@ -75,6 +76,8 @@ type GoalRow = {
   due_date?: string | null
   created_at?: string | null
   updated_at?: string | null
+  approval_status?: string | null
+  is_archived?: boolean | null
 }
 
 async function attachGoalCycles(supabase: Awaited<ReturnType<typeof createClient>>, goals: GoalRow[]) {
@@ -104,7 +107,6 @@ function canManageGoalOwner(
 ) {
   if (scope?.isAdminLike === true && scope.scopeMode !== "lead") return true
   if (!profile?.is_department_lead || !goalDepartment) return false
-  // Prefer scope.managedDepartments (alias-expanded) over raw profile.lead_departments
   const managedDepartments = scope?.managedDepartments?.length
     ? expandDepartmentScopeForQuery(scope.managedDepartments)
     : expandDepartmentScopeForQuery(Array.isArray(profile.lead_departments) ? profile.lead_departments : [])
@@ -127,6 +129,8 @@ export async function GET(request: NextRequest) {
     const userId = searchParams.get("user_id")
     const department = searchParams.get("department")
     const cycleId = searchParams.get("cycle_id")
+    const includeArchived = searchParams.get("include_archived") === "true"
+
     const { data: profile } = await supabase
       .from("profiles")
       .select("role, department, is_department_lead, lead_departments")
@@ -144,28 +148,25 @@ export async function GET(request: NextRequest) {
       targetDepartment = goalOwnerProfile?.department || targetDepartment
     }
 
-    if (!targetDepartment) {
-      return NextResponse.json({ data: [] })
-    }
-
     const getScope = await getRequestScope()
-    // Global admin (scopeMode: "global") may access any department's goals.
-    // Admin in lead mode is restricted the same as a department lead.
     const isGlobalAdmin = getScope?.isAdminLike === true && getScope.scopeMode !== "lead"
 
-    if (
-      targetDepartment !== profile?.department &&
-      !isGlobalAdmin &&
-      !canManageGoalOwner(getScope, profile, targetDepartment)
-    ) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    let query = supabase.from("goals_objectives").select("*").order("created_at", { ascending: false })
+
+    if (!includeArchived) {
+      query = query.eq("is_archived", false)
     }
 
-    let query = supabase
-      .from("goals_objectives")
-      .select("*")
-      .eq("department", targetDepartment)
-      .order("created_at", { ascending: false })
+    if (targetDepartment) {
+      if (
+        targetDepartment !== profile?.department &&
+        !isGlobalAdmin &&
+        !canManageGoalOwner(getScope, profile, targetDepartment)
+      ) {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+      }
+      query = query.eq("department", targetDepartment)
+    }
 
     if (cycleId) {
       query = query.eq("review_cycle_id", cycleId)
@@ -224,35 +225,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Weight validation: if weight_pct is set, check existing goals don't exceed 100%
-    let weightWarning: string | null = null
-    if (typeof weight_pct === "number" && review_cycle_id) {
-      const { data: existingGoals } = await supabase
-        .from("goals_objectives")
-        .select("weight_pct")
-        .eq("department", department)
-        .eq("review_cycle_id", review_cycle_id)
-        .eq("approval_status", "approved")
-        .not("weight_pct", "is", null)
-
-      const existingTotal = (existingGoals || []).reduce(
-        (sum, goal) => sum + (typeof goal.weight_pct === "number" ? goal.weight_pct : 0),
-        0
-      )
-      if (existingTotal + weight_pct > 100) {
-        return NextResponse.json(
-          {
-            error: `Adding this weight (${weight_pct}%) would bring total approved goal weights to ${existingTotal + weight_pct}%, exceeding 100%. Current total: ${existingTotal}%.`,
-          },
-          { status: 400 }
-        )
-      }
-      if (existingTotal + weight_pct < 100) {
-        weightWarning = `Current total goal weight will be ${existingTotal + weight_pct}% (${100 - existingTotal - weight_pct}% unallocated).`
-      }
-    }
-
-    // Create goal
+    // Create goal directly in active/approved state
     const { data: goal, error } = await supabase
       .from("goals_objectives")
       .insert({
@@ -266,14 +239,11 @@ export async function POST(request: NextRequest) {
         due_date,
         weight_pct: weight_pct ?? null,
         status: "in_progress",
-        // Goal creation is already restricted to department leads and admins
-        // (see canCreateForDepartment above) — the creator IS the approving
-        // authority, so there is nobody left to ask. Leaving these at the
-        // column default parked every lead-created goal at "pending approval"
-        // forever, and the weight check below only counts approved goals.
         approval_status: "approved",
         approved_by: user.id,
         approved_at: new Date().toISOString(),
+        is_archived: false,
+        updated_by: user.id,
       })
       .select("*")
       .returns<GoalRow[]>()
@@ -299,7 +269,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       data: (await attachGoalCycles(supabase, [goal]))[0],
       message: "Goal created successfully",
-      ...(weightWarning ? { warning: weightWarning } : {}),
     })
   } catch (error) {
     log.error({ err: String(error) }, "Unhandled error in POST")
@@ -307,7 +276,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// PATCH: approve or reject a KPI (managers/admins only)
 export async function PATCH(request: NextRequest) {
   const rl = await rateLimit(`hr-performance-goals:${getClientId(request)}`, { limit: 20, windowSec: 60 })
   if (!rl.allowed)
@@ -326,30 +294,12 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role, is_department_lead")
-      .eq("id", user.id)
-      .single()
-
-    const patchScope = await getRequestScope()
-    const isGlobalAdminPatch = patchScope?.isAdminLike === true && patchScope.scopeMode !== "lead"
-    if (!profile || (!isGlobalAdminPatch && !profile.is_department_lead)) {
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
-    }
-
     const body = await request.json()
     const parsed = UpdateGoalApprovalSchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
     }
-    const { id, approval_status } = parsed.data
-    const rejectionReason = parsed.data.rejection_reason?.trim() || null
-
-    // A rejected goal must explain itself so the owner knows what to revise.
-    if (approval_status === "rejected" && !rejectionReason) {
-      return NextResponse.json({ error: "A reason is required when rejecting a goal" }, { status: 400 })
-    }
+    const { id, approval_status, rejection_reason } = parsed.data
 
     const { data: goal, error } = await supabase
       .from("goals_objectives")
@@ -357,28 +307,18 @@ export async function PATCH(request: NextRequest) {
         approval_status,
         approved_by: user.id,
         approved_at: new Date().toISOString(),
-        rejection_reason: approval_status === "rejected" ? rejectionReason : null,
+        rejection_reason: approval_status === "rejected" ? rejection_reason : null,
+        updated_by: user.id,
+        updated_at: new Date().toISOString(),
       })
       .eq("id", id)
       .select()
       .single()
 
     if (error) {
-      log.error({ err: error }, "Error approving goal")
+      log.error({ err: error }, "Error updating goal approval")
       return NextResponse.json({ error: "Failed to update goal approval" }, { status: 500 })
     }
-
-    await writeAuditLog(
-      supabase,
-      {
-        action: "update",
-        entityType: "goal",
-        entityId: id,
-        newValues: { approval_status, approved_by: user.id },
-        context: { actorId: user.id, source: "api", route: "/api/hr/performance/goals" },
-      },
-      { failOpen: true }
-    )
 
     return NextResponse.json({ data: goal, message: `KPI ${approval_status} successfully` })
   } catch (error) {
@@ -426,10 +366,10 @@ export async function PUT(request: NextRequest) {
     if (!isOwner && !managerCanUpdate) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
-    // Update goal
+
     const { data: goal, error } = await supabase
       .from("goals_objectives")
-      .update({ ...updates, updated_at: new Date().toISOString() })
+      .update({ ...updates, updated_by: user.id, updated_at: new Date().toISOString() })
       .eq("id", id)
       .select()
       .single()
@@ -457,6 +397,87 @@ export async function PUT(request: NextRequest) {
     })
   } catch (error) {
     log.error({ err: String(error) }, "Unhandled error in PUT")
+    return NextResponse.json({ error: "An error occurred" }, { status: 500 })
+  }
+}
+
+export async function DELETE(request: NextRequest) {
+  const rl = await rateLimit(`hr-performance-goals:${getClientId(request)}`, { limit: 20, windowSec: 60 })
+  if (!rl.allowed)
+    return NextResponse.json(
+      { error: "Too many requests. Please try again later.", code: "RATE_LIMITED" },
+      { status: 429 }
+    )
+  try {
+    const supabase = await createClient()
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    }
+
+    const { searchParams } = request.nextUrl
+    const id = searchParams.get("id")
+    if (!id) return NextResponse.json({ error: "Goal ID is required" }, { status: 400 })
+
+    const [{ data: existingGoal }, { data: profile }] = await Promise.all([
+      supabase.from("goals_objectives").select("id, user_id, department").eq("id", id).single<GoalOwnerRecord>(),
+      supabase
+        .from("profiles")
+        .select("role, department, is_department_lead, lead_departments")
+        .eq("id", user.id)
+        .single<GoalProfileRecord>(),
+    ])
+
+    if (!existingGoal) return NextResponse.json({ error: "Goal not found" }, { status: 404 })
+    const delScope = await getRequestScope()
+    const isOwner = existingGoal.user_id === user.id
+    const managerCanDelete = canManageGoalOwner(delScope, profile, existingGoal.department)
+    if (!isOwner && !managerCanDelete) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    // Soft delete / archive
+    const now = new Date().toISOString()
+    const { data: archivedGoal, error } = await supabase
+      .from("goals_objectives")
+      .update({
+        is_archived: true,
+        archived_by: user.id,
+        archived_at: now,
+        updated_by: user.id,
+        updated_at: now,
+      })
+      .eq("id", id)
+      .select()
+      .single()
+
+    if (error) {
+      log.error({ err: error }, "Error archiving goal")
+      return NextResponse.json({ error: "Failed to archive goal" }, { status: 500 })
+    }
+
+    await writeAuditLog(
+      supabase,
+      {
+        action: "archive",
+        entityType: "goal",
+        entityId: id,
+        newValues: { is_archived: true, archived_by: user.id, archived_at: now },
+        context: { actorId: user.id, source: "api", route: "/api/hr/performance/goals" },
+      },
+      { failOpen: true }
+    )
+
+    return NextResponse.json({
+      data: archivedGoal,
+      message: "Goal archived successfully",
+    })
+  } catch (error) {
+    log.error({ err: String(error) }, "Unhandled error in DELETE")
     return NextResponse.json({ error: "An error occurred" }, { status: 500 })
   }
 }

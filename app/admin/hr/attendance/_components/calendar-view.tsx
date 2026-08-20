@@ -23,6 +23,7 @@ import {
   ATTENDANCE_STATUS_LABELS,
   MANUAL_ATTENDANCE_STATUS_OPTIONS,
   isEarlyDeparture,
+  getManualStatusEditOptions,
 } from "@/lib/hr/attendance-status"
 import { formatTime } from "./status-badge"
 import { apiFetch } from "@/lib/api-client"
@@ -246,23 +247,7 @@ export function CalendarView({ employees }: CalendarViewProps) {
   const daysByDate = new Map<string, UnifiedDay>((days ?? []).map((d) => [d.date, d]))
 
   const isCreating = editTarget !== null && editTarget.record === null
-  const clockIn = editTarget?.record?.clock_in ?? null
-  const clockOut = editTarget?.record?.clock_out ?? null
-  const hasClockIn = Boolean(clockIn)
-  const hasClockOut = Boolean(clockOut)
-  const hasAnyPunch = hasClockIn || hasClockOut
-
-  const isLatePunch = hasClockIn && isLate(clockIn)
-  const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
-  const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
-
-  const showAWP = !hasAnyPunch
-  const showLWP = hasAnyPunch && !isOnTimePresent
-
-  const statusOptions = [
-    ...(showLWP ? [{ value: "lateness_with_permission", label: "LWP" }] : []),
-    ...(showAWP ? [{ value: "absent_with_permission", label: "AWP" }] : []),
-  ]
+  const { isOnTimePresent, options: statusOptions } = getManualStatusEditOptions(editTarget?.record ?? null)
 
   const hasManualComment = editForm.manual_comment.trim().length >= 3
   const cannotSave = saving || !editForm.status || !hasManualComment || isOnTimePresent

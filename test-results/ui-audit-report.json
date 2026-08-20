@@ -1,13 +1,13 @@
 {
-  "generatedAt": "2026-08-14T09:21:13.011Z",
+  "generatedAt": "2026-08-19T16:54:11.937Z",
   "summary": {
-    "totalPages": 233,
-    "missingLoading": 13,
-    "headerViolations": 3,
+    "totalPages": 239,
+    "missingLoading": 22,
+    "headerViolations": 4,
     "tableViolations": 0,
     "statsViolations": 0,
     "modalViolations": 2,
-    "adHocEmptyStatePages": 2,
+    "adHocEmptyStatePages": 3,
     "adHocErrorStatePages": 0,
     "adHocSectionPages": 1,
     "adHocFormFieldPages": 4
@@ -26,22 +26,33 @@
       "app/admin/hr/payroll",
       "app/admin/hr/payroll/[id]",
       "app/admin/hr/payroll/dummy",
+      "app/admin/hr/pms/cbt/extra/scores",
+      "app/admin/payroll",
+      "app/admin/payroll/[id]",
+      "app/admin/payroll/calculator",
+      "app/admin/payroll/dummy",
+      "app/admin/security/bypass-override",
+      "app/admin/settings/cbt",
+      "app/cbt2",
+      "app/dept/[dept_id]/hr/pms/cbt/question",
       "app/launch"
     ],
     "header": [
       "app/(app)/requisition/[id]/page.tsx",
       "app/birthday/page.tsx",
+      "app/cbt2/page.tsx",
       "app/launch/page.tsx"
     ],
     "table": [],
     "stats": [],
     "modal": [
       "app/(app)/lunch/_components/lunch-review-dialog.tsx",
-      "app/admin/hr/payroll/view.tsx"
+      "app/admin/payroll/view.tsx"
     ],
     "adHocEmptyStatePages": [
       "app/(app)/pms/development-plans/page.tsx",
-      "app/(app)/pms/peer-feedback/page.tsx"
+      "app/(app)/pms/peer-feedback/page.tsx",
+      "app/admin/hr/pms/cbt/extra/scores/page.tsx"
     ],
     "adHocErrorStatePages": [],
     "adHocSectionPages": [
@@ -50,8 +61,8 @@
     "adHocFormFieldPages": [
       "app/(app)/pms/peer-feedback/page.tsx",
       "app/admin/hr/pms/cbt/extra/page.tsx",
-      "app/admin/hr/pms/cbt/question/page.tsx",
-      "app/admin/hr/site-locations/page.tsx"
+      "app/admin/hr/site-locations/page.tsx",
+      "app/cbt2/page.tsx"
     ]
   }
 }

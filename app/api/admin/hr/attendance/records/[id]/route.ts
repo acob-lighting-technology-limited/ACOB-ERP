@@ -94,7 +94,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
           ))
     const isCoveredWithoutTimes =
       nextStatus === "waiver" || nextStatus === "absent_with_permission" || nextStatus === "out_of_station"
-    const isLWP = nextStatus === "lateness_with_permission"
+    const isLWP = nextStatus === "lateness_with_permission" || nextStatus === "incomplete_with_permission"
 
     const quotaCheck = await validateLwpAwpMonthlyQuota({
       dataClient,
@@ -119,7 +119,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     if (isLWP && !clockIn && !clockOut) {
       return NextResponse.json(
-        { error: "LWP requires at least one clock punch (clock in or clock out)" },
+        { error: "LWP/IWP requires at least one clock punch (clock in or clock out)" },
         { status: 400 }
       )
     }

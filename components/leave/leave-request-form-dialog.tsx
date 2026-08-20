@@ -26,7 +26,7 @@ function prettyDocName(name: string) {
   return name.replaceAll("_", " ")
 }
 
-interface LeaveRequestFormData {
+export interface LeaveRequestFormData {
   leave_type_id: string
   start_date: string
   days_count: number
@@ -34,6 +34,8 @@ interface LeaveRequestFormData {
   reason: string
   reliever_identifier: string
   handover_note: string
+  handover_file: File | null
+  handover_checklist_url: string | null
   attachment: File | null
 }
 
@@ -404,15 +406,34 @@ export function LeaveRequestFormDialog({
 
           <div className="space-y-2">
             <Label>
-              Handover Note <span className="text-destructive">*</span>
+              Handover Document{" "}
+              {!editingRequestId || !formData.handover_checklist_url ? (
+                <span className="text-destructive">*</span>
+              ) : null}
             </Label>
+            <Input
+              type="file"
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
+              required={!editingRequestId && !formData.handover_checklist_url}
+              onChange={(event) => setFormData((prev) => ({ ...prev, handover_file: event.target.files?.[0] || null }))}
+            />
+            <p className="text-muted-foreground text-xs">
+              {formData.handover_file
+                ? `${formData.handover_file.name} (${Math.max(1, Math.round(formData.handover_file.size / 1024))} KB)`
+                : formData.handover_checklist_url
+                  ? "A handover document is already attached. Upload a new file to replace it."
+                  : "Upload your formal handover document (PDF, Word, or Excel) detailing coverage."}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label>Handover Notes (Optional)</Label>
             <Textarea
-              rows={3}
+              rows={2}
               value={formData.handover_note}
               onChange={(event) => setFormData((prev) => ({ ...prev, handover_note: event.target.value }))}
-              placeholder="Summarize duties and handover details"
+              placeholder="Additional handover details or instructions for your reliever (optional)..."
             />
-            <p className="text-muted-foreground text-xs">What your reliever needs to pick up while you are away.</p>
           </div>
 
           <div className="space-y-2">

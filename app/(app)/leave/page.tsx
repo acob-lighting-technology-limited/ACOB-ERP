@@ -36,6 +36,7 @@ export interface LeaveRequest {
   days_count: number
   reason: string
   handover_note?: string | null
+  handover_checklist_url?: string | null
   status: string
   approval_stage: string
   reliever_id?: string | null

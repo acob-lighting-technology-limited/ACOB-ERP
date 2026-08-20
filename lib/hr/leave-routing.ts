@@ -1,4 +1,5 @@
 import { notifyUsers } from "@/lib/hr/leave-workflow"
+import type { LeaveWorkflowDetail } from "@/lib/leave-mailer"
 import { applyAssignableStatusFilter } from "@/lib/workforce/assignment-policy"
 import { DEPT_EXECUTIVE_MANAGEMENT, DEPT_CORPORATE_SERVICES } from "@/config/constants"
 import type { SupabaseClient } from "@supabase/supabase-js"
@@ -425,6 +426,13 @@ export async function notifyStageApprover(params: {
   actorId: string
   entityId: string
   linkUrl?: string
+  emailSubject?: string
+  emailTitle?: string
+  emailMessage?: string
+  badgeText?: string
+  detailsTitle?: string
+  details?: LeaveWorkflowDetail[]
+  ctaLabel?: string
 }) {
   await notifyUsers(params.supabase, {
     userIds: [params.approverUserId],
@@ -434,5 +442,12 @@ export async function notifyStageApprover(params: {
     entityId: params.entityId,
     linkUrl: params.linkUrl || "/leave",
     emailEvent: "approval_required",
+    emailSubject: params.emailSubject,
+    emailTitle: params.emailTitle,
+    emailMessage: params.emailMessage,
+    badgeText: params.badgeText,
+    detailsTitle: params.detailsTitle,
+    details: params.details,
+    ctaLabel: params.ctaLabel,
   })
 }
