@@ -1,10 +1,10 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useMemo } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Building2, Target, User } from "lucide-react"
+import { Target, Users, User, Calendar, CheckSquare, Square } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -20,8 +20,10 @@ import {
 import { ItemInfoButton } from "@/components/ui/item-info-button"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Badge } from "@/components/ui/badge"
 import type { Task } from "@/types/task"
 import type { employee } from "@/app/admin/tasks/management/admin-tasks-content"
+import { formatFullName } from "@/lib/utils"
 
 interface GoalOption {
   id: string
@@ -30,16 +32,16 @@ interface GoalOption {
 
 const taskFormSchema = z.object({
   title: z.string().min(1, "Task title is required"),
-  description: z.string(),
-  priority: z.string(),
-  status: z.string(),
-  assigned_to: z.string(),
-  department: z.string(),
-  due_date: z.string(),
-  assignment_type: z.enum(["individual", "department"]),
-  goal_id: z.string().min(1, "Goal is required"),
-  task_start_date: z.string(),
-  task_end_date: z.string(),
+  description: z.string().optional(),
+  priority: z.string().default("medium"),
+  status: z.string().default("pending"),
+  assigned_to: z.string().optional(),
+  department: z.string().optional(),
+  due_date: z.string().optional(),
+  assignment_type: z.enum(["individual", "multiple", "department"]).default("individual"),
+  goal_id: z.string().optional().nullable(),
+  task_start_date: z.string().optional(),
+  task_end_date: z.string().optional(),
 })
 
 type TaskFormValues = z.infer<typeof taskFormSchema>
@@ -52,7 +54,7 @@ export interface TaskFormState {
   assigned_to: string
   department: string
   due_date: string
-  assignment_type: "individual" | "department"
+  assignment_type: "individual" | "multiple" | "department"
   assigned_users: string[]
   project_id: string
   goal_id: string
@@ -87,7 +89,9 @@ export function TaskFormDialog({
   initialGoals = [],
   assignmentAuthorityLabel,
 }: TaskFormDialogProps) {
-  const [goalOptions, setGoalOptions] = useState<GoalOption[]>([])
+  const [goalOptions, setGoalOptions] = useState<GoalOption[]>(initialGoals)
+  const [isMultiAssign, setIsMultiAssign] = useState(false)
+  const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
 
   const form = useForm<TaskFormValues>({
     resolver: zodResolver(taskFormSchema),
@@ -121,34 +125,29 @@ export function TaskFormDialog({
     reset({
       title: taskForm.title,
       description: taskForm.description,
-      priority: taskForm.priority,
-      status: taskForm.status,
-      assigned_to: taskForm.assigned_to,
-      department: taskForm.department,
-      due_date: taskForm.due_date,
-      assignment_type: taskForm.assignment_type,
-      goal_id: taskForm.goal_id,
-      task_start_date: taskForm.task_start_date,
-      task_end_date: taskForm.task_end_date,
+      priority: taskForm.priority || "medium",
+      status: taskForm.status || "pending",
+      assigned_to: taskForm.assigned_to || "",
+      department: taskForm.department || "",
+      due_date: taskForm.due_date || "",
+      assignment_type: taskForm.assignment_type || "individual",
+      goal_id: taskForm.goal_id || "",
+      task_start_date: taskForm.task_start_date || "",
+      task_end_date: taskForm.task_end_date || "",
     })
-  }, [
-    isOpen,
-    reset,
-    selectedTask?.id,
-    taskForm.assigned_to,
-    taskForm.assignment_type,
-    taskForm.department,
-    taskForm.description,
-    taskForm.due_date,
-    taskForm.goal_id,
-    taskForm.priority,
-    taskForm.status,
-    taskForm.task_end_date,
-    taskForm.task_start_date,
-    taskForm.title,
-  ])
 
-  const assignmentType = watch("assignment_type")
+    if (taskForm.assigned_users && taskForm.assigned_users.length > 1) {
+      setIsMultiAssign(true)
+      setSelectedUserIds(taskForm.assigned_users)
+    } else if (taskForm.assigned_to) {
+      setIsMultiAssign(false)
+      setSelectedUserIds([taskForm.assigned_to])
+    } else {
+      setIsMultiAssign(false)
+      setSelectedUserIds([])
+    }
+  }, [isOpen, reset, selectedTask?.id, taskForm])
+
   const assignedTo = watch("assigned_to")
   const departmentValue = watch("department")
   const goalId = watch("goal_id")
@@ -156,65 +155,79 @@ export function TaskFormDialog({
   const priorityValue = watch("priority")
   const statusValue = watch("status")
 
+  // Fetch available goals based on target department
   useEffect(() => {
-    const selectedEmployee = scopedAssignableEmployees.find((member) => member.id === assignedTo)
     const targetDepartment =
-      assignmentType === "department"
-        ? departmentValue
-        : assignmentType === "individual"
-          ? selectedEmployee?.department || ""
-          : ""
+      departmentValue ||
+      scopedAssignableEmployees.find((e) => e.id === assignedTo)?.department ||
+      scopedAssignableDepartments[0] ||
+      ""
 
-    if (!targetDepartment) {
-      setGoalOptions([])
-      return
-    }
-
-    const query = `?department=${encodeURIComponent(targetDepartment)}`
+    const query = targetDepartment ? `?department=${encodeURIComponent(targetDepartment)}` : ""
 
     fetch(`/api/hr/performance/goals${query}`)
-      .then((response) => response.json())
+      .then((res) => res.json())
       .then((payload) => {
-        const approvedStates = new Set(["approved", "approved_by_lead", "approved_by_manager", "active"])
-        const approvedGoals = (payload.data ?? []).filter((goal: { approval_status?: string }) =>
-          approvedStates.has(String(goal.approval_status || "").toLowerCase())
-        )
-
-        setGoalOptions(approvedGoals.map((goal: { id: string; title: string }) => ({ id: goal.id, title: goal.title })))
+        const activeGoals = (payload.data ?? []).map((g: { id: string; title: string }) => ({
+          id: g.id,
+          title: g.title,
+        }))
+        setGoalOptions(activeGoals)
       })
-      .catch(() => setGoalOptions([]))
-  }, [assignedTo, assignmentType, departmentValue, scopedAssignableEmployees])
+      .catch(() => setGoalOptions(initialGoals))
+  }, [assignedTo, departmentValue, scopedAssignableDepartments, scopedAssignableEmployees, initialGoals])
 
-  useEffect(() => {
-    if (goalOptions.length > 0 || initialGoals.length === 0) return
-    const selectedEmployee = scopedAssignableEmployees.find((member) => member.id === assignedTo)
-    const targetDepartment =
-      assignmentType === "department"
-        ? departmentValue
-        : assignmentType === "individual"
-          ? selectedEmployee?.department || ""
-          : ""
-    if (!targetDepartment) return
-    setGoalOptions(initialGoals)
-  }, [assignedTo, assignmentType, departmentValue, goalOptions.length, initialGoals, scopedAssignableEmployees])
+  const employeeSelectOptions = useMemo(() => {
+    return scopedAssignableEmployees.map((member) => ({
+      value: member.id,
+      label: `${formatFullName(member.first_name, member.last_name)} (${member.department})`,
+    }))
+  }, [scopedAssignableEmployees])
 
-  function buildTaskFormState() {
+  const handleToggleUser = (userId: string) => {
+    setSelectedUserIds((prev) => {
+      const next = prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+      if (next.length === 1) {
+        setValue("assigned_to", next[0])
+      }
+      return next
+    })
+  }
+
+  const handleSelectAllDepartment = (deptName?: string) => {
+    const targetDept = deptName || departmentValue || scopedAssignableDepartments[0]
+    const deptMembers = scopedAssignableEmployees
+      .filter((e) => !targetDept || e.department === targetDept)
+      .map((e) => e.id)
+
+    setSelectedUserIds(deptMembers)
+    setIsMultiAssign(true)
+  }
+
+  const handleClearAllAssignees = () => {
+    setSelectedUserIds([])
+    setValue("assigned_to", "")
+  }
+
+  function buildTaskFormState(): TaskFormState {
     const values = getValues()
+    const targetUsers = isMultiAssign ? selectedUserIds : values.assigned_to ? [values.assigned_to] : []
+
     return {
       title: values.title ?? "",
       description: values.description ?? "",
       priority: values.priority ?? "medium",
       status: values.status ?? "pending",
-      assigned_to: values.assigned_to ?? "",
+      assigned_to: targetUsers.length === 1 ? targetUsers[0] : "",
       department: values.department ?? "",
       due_date: values.due_date ?? "",
-      assignment_type: (values.assignment_type ?? "individual") as "individual" | "department",
-      assigned_users: [],
+      assignment_type: targetUsers.length > 1 ? "multiple" : "individual",
+      assigned_users: targetUsers,
       project_id: "",
-      goal_id: values.goal_id ?? "",
+      goal_id: values.goal_id === "__none__" ? "" : (values.goal_id ?? ""),
       task_start_date: values.task_start_date ?? "",
       task_end_date: values.task_end_date ?? "",
-    } satisfies TaskFormState
+    }
   }
 
   function handleSaveClick() {
@@ -225,68 +238,74 @@ export function TaskFormDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <DialogTitle>{selectedTask ? "Edit Task" : "Create New Task"}</DialogTitle>
             <ItemInfoButton
-              title="Task workflow guide"
-              summary="Tasks now belong to approved department goals and can be assigned to one person or a department queue."
+              title="Task & KPI Guide"
+              summary="Direct individual accountability with optional strategic goal linking."
               details={[
                 {
-                  label: "Goal-first workflow",
+                  label: "Direct Assignment",
                   value:
-                    "A department lead creates the yearly goal first, then creates tasks under that goal for individual staff or the department queue.",
+                    "Assign tasks to a single person or multiple team members. When assigning to multiple people, individual task copies are created so each person is tracked independently.",
                 },
                 {
-                  label: "Assignment scope",
+                  label: "Goal Alignment",
                   value:
-                    "Group work is no longer created here. Use one assignee for individual execution or assign the task to the department queue.",
+                    "Linking to a strategic goal is optional. Linked tasks drive that goal's KPI progress, while unlinked tasks track operational execution.",
                 },
                 {
-                  label: "KPI impact",
+                  label: "Review Workflow",
                   value:
-                    "Weekly task progress feeds KPI only after the linked goal progress is reviewed and approved by the lead.",
+                    "Employees submit completed tasks for review. Department leads and admins review and approve tasks to finalize KPI credit.",
                 },
               ]}
             />
           </div>
           <DialogDescription>
             {selectedTask
-              ? "Update the task details below."
-              : "Create a department-aligned task linked to an approved goal."}
+              ? "Update task details, due dates, or linked goal."
+              : "Assign an operational or goal-linked task to team members."}
           </DialogDescription>
           {assignmentAuthorityLabel ? (
             <p className="text-muted-foreground text-xs">{assignmentAuthorityLabel}</p>
           ) : null}
         </DialogHeader>
 
-        <div className="space-y-4 py-4">
+        <div className="space-y-4 py-2 text-sm">
           <div>
-            <Label htmlFor="title">Task Title *</Label>
+            <Label htmlFor="title" className="text-xs font-semibold">
+              Task Title *
+            </Label>
             <Input
               id="title"
               {...register("title")}
-              placeholder="e.g., Close outstanding generator maintenance tickets"
+              placeholder="e.g. Prepare monthly revenue reconciliation report"
+              className="mt-1"
             />
-            {errors.title ? <p className="text-destructive mt-1 text-xs">{errors.title.message}</p> : null}
+            {errors.title && <p className="text-destructive mt-1 text-xs">{errors.title.message}</p>}
           </div>
 
           <div>
-            <Label htmlFor="description">Description</Label>
+            <Label htmlFor="description" className="text-xs font-semibold">
+              Description
+            </Label>
             <Textarea
               id="description"
               {...register("description")}
-              placeholder="Describe the expected outcome, scope, and reporting expectation."
-              rows={4}
+              placeholder="Describe expected scope, deliverables, and instructions..."
+              rows={3}
+              className="mt-1"
             />
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 sm:grid-cols-2">
             <div>
-              <Label htmlFor="priority">Priority</Label>
-              <Select value={priorityValue} onValueChange={(value) => setValue("priority", value)}>
-                <SelectTrigger>
+              <Label className="text-xs font-semibold">Priority</Label>
+              <Select value={priorityValue} onValueChange={(val) => setValue("priority", val)}>
+                <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
                 <SelectContent>
@@ -299,149 +318,183 @@ export function TaskFormDialog({
             </div>
 
             <div>
-              <Label htmlFor="status">Status</Label>
-              <Select value={statusValue} onValueChange={(value) => setValue("status", value)}>
-                <SelectTrigger>
+              <Label className="text-xs font-semibold">Initial Status</Label>
+              <Select value={statusValue} onValueChange={(val) => setValue("status", val)}>
+                <SelectTrigger className="mt-1">
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="pending">Pending</SelectItem>
                   <SelectItem value="in_progress">In Progress</SelectItem>
-                  <SelectItem value="completed">Completed</SelectItem>
+                  {selectedTask && <SelectItem value="submitted_for_review">Submitted for Review</SelectItem>}
+                  {selectedTask && <SelectItem value="completed">Completed</SelectItem>}
                 </SelectContent>
               </Select>
             </div>
           </div>
 
-          <div>
-            <Label htmlFor="assignment_type">Assignment Type *</Label>
+          {/* Assignment Section */}
+          <div className="bg-muted/20 space-y-3 rounded-lg border p-3.5">
+            <div className="flex items-center justify-between">
+              <Label className="flex items-center gap-1.5 text-xs font-semibold">
+                <Users className="h-3.5 w-3.5" />
+                Assignee Selection
+              </Label>
+              {!selectedTask && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => handleSelectAllDepartment()}
+                  >
+                    Select All in Dept
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground h-6 px-2 text-xs"
+                    onClick={handleClearAllAssignees}
+                  >
+                    Clear
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={isMultiAssign ? "secondary" : "outline"}
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={() => setIsMultiAssign(!isMultiAssign)}
+                  >
+                    {isMultiAssign ? "Multi-Assign Active" : "Enable Multi-Assign"}
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            {!isMultiAssign ? (
+              <div>
+                <SearchableSelect
+                  value={assignedTo || ""}
+                  onValueChange={(val) => {
+                    const member = scopedAssignableEmployees.find((e) => e.id === val)
+                    setValue("assigned_to", val)
+                    if (member?.department) {
+                      setValue("department", member.department)
+                    }
+                    setSelectedUserIds(val ? [val] : [])
+                  }}
+                  placeholder="Select a team member..."
+                  searchPlaceholder="Search staff name or department..."
+                  icon={<User className="h-3.5 w-3.5" />}
+                  options={employeeSelectOptions}
+                />
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-muted-foreground text-xs">
+                  Select team members. Individual tasks will be created for each chosen person:
+                </p>
+                <div className="bg-background max-h-36 space-y-1 overflow-y-auto rounded border p-2">
+                  {scopedAssignableEmployees.map((emp) => {
+                    const isChecked = selectedUserIds.includes(emp.id)
+                    return (
+                      <button
+                        key={emp.id}
+                        type="button"
+                        onClick={() => handleToggleUser(emp.id)}
+                        className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs transition-colors ${
+                          isChecked ? "bg-primary/10 text-primary font-medium" : "hover:bg-muted"
+                        }`}
+                      >
+                        <span className="flex items-center gap-2">
+                          {isChecked ? (
+                            <CheckSquare className="text-primary h-3.5 w-3.5 shrink-0" />
+                          ) : (
+                            <Square className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                          )}
+                          <span>{formatFullName(emp.first_name, emp.last_name)}</span>
+                        </span>
+                        <Badge variant="outline" className="py-0 text-[10px]">
+                          {emp.department}
+                        </Badge>
+                      </button>
+                    )
+                  })}
+                </div>
+                <div className="text-muted-foreground text-xs">
+                  Selected: <span className="text-foreground font-medium">{selectedUserIds.length}</span> staff
+                  member(s)
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Goal Linking Section */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="goal_id" className="flex items-center gap-1.5 text-xs font-semibold">
+                <Target className="text-primary h-3.5 w-3.5" />
+                Strategic Goal / KPI Link (Optional)
+              </Label>
+              <Badge variant="secondary" className="text-[10px]">
+                Optional
+              </Badge>
+            </div>
             <Select
-              value={assignmentType}
-              onValueChange={(value: "individual" | "department") => {
-                setValue("assignment_type", value)
-                setValue("assigned_to", value === "individual" ? assignedTo : "")
-                setValue("department", value === "department" ? departmentValue : "")
-                setValue("goal_id", "")
-              }}
+              value={goalId || "__none__"}
+              onValueChange={(val) => setValue("goal_id", val === "__none__" ? "" : val)}
             >
-              <SelectTrigger>
-                <SelectValue placeholder="Select assignment type" />
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Select a goal (Optional)" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="individual">
-                  <div className="flex items-center gap-2">
-                    <User className="h-4 w-4" />
-                    Individual Assignment
-                  </div>
+                <SelectItem value="__none__">
+                  <span className="text-muted-foreground italic">None (Ad-Hoc / Operational Task)</span>
                 </SelectItem>
-                <SelectItem value="department">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-4 w-4" />
-                    Department Queue
-                  </div>
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          {assignmentType === "individual" ? (
-            <div>
-              <Label htmlFor="assigned_to">Assign To *</Label>
-              <SearchableSelect
-                value={assignedTo}
-                onValueChange={(value) => {
-                  const selectedEmployee = scopedAssignableEmployees.find((member) => member.id === value)
-                  setValue("assigned_to", value)
-                  setValue("department", selectedEmployee?.department || "")
-                  setValue("goal_id", "")
-                }}
-                placeholder="Select staff member"
-                searchPlaceholder="Search employee..."
-                icon={<User className="h-4 w-4" />}
-                options={scopedAssignableEmployees.map((member) => ({
-                  value: member.id,
-                  label: `${member.first_name} ${member.last_name} - ${member.department}`,
-                }))}
-              />
-            </div>
-          ) : (
-            <div>
-              <Label htmlFor="department">Department *</Label>
-              <Select
-                value={departmentValue}
-                onValueChange={(value) => {
-                  setValue("department", value)
-                  setValue("goal_id", "")
-                }}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                  {scopedAssignableDepartments.length === 0 ? (
-                    <SelectItem value="__none__" disabled>
-                      No departments found
-                    </SelectItem>
-                  ) : (
-                    scopedAssignableDepartments.map((department) => (
-                      <SelectItem key={department} value={department}>
-                        {department}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
-              <p className="text-muted-foreground mt-1 text-xs">
-                Department tasks stay in the queue until a lead moves them forward.
-              </p>
-            </div>
-          )}
-
-          <div>
-            <Label htmlFor="goal_id">Department Goal *</Label>
-            <Select value={goalId} onValueChange={(value) => setValue("goal_id", value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select the approved goal this task contributes to" />
-              </SelectTrigger>
-              <SelectContent>
-                {goalOptions.length === 0 ? (
-                  <SelectItem value="__empty__" disabled>
-                    No approved goals available
+                {goalOptions.map((g) => (
+                  <SelectItem key={g.id} value={g.id}>
+                    {g.title}
                   </SelectItem>
-                ) : (
-                  goalOptions.map((goal) => (
-                    <SelectItem key={goal.id} value={goal.id}>
-                      {goal.title}
-                    </SelectItem>
-                  ))
-                )}
+                ))}
               </SelectContent>
             </Select>
-            <div className="text-muted-foreground mt-2 flex items-start gap-2 text-xs">
-              <Target className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <p>
-                Fallback goals are no longer auto-created. Approve the right department goal first, then link the task
-                here.
-              </p>
-            </div>
+            <p className="text-muted-foreground text-[11px]">
+              Linking to an active goal feeds this task directly into the strategic KPI score for performance
+              appraisals.
+            </p>
           </div>
 
-          <div>
-            <Label htmlFor="due_date">Due Date</Label>
-            <Input id="due_date" type="date" {...register("due_date")} />
+          {/* Timeline Section */}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="task_start_date" className="flex items-center gap-1 text-xs font-semibold">
+                <Calendar className="h-3 w-3" />
+                Start Date
+              </Label>
+              <Input id="task_start_date" type="date" {...register("task_start_date")} className="mt-1 text-xs" />
+            </div>
+
+            <div>
+              <Label htmlFor="due_date" className="flex items-center gap-1 text-xs font-semibold">
+                <Calendar className="h-3 w-3" />
+                Due Date / Deadline
+              </Label>
+              <Input id="due_date" type="date" {...register("due_date")} className="mt-1 text-xs" />
+            </div>
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="pt-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
           <Button
             onClick={handleSaveClick}
-            loading={isSaving}
-            disabled={!titleValue || !goalId || (assignmentType === "individual" ? !assignedTo : !departmentValue)}
+            disabled={isSaving || !titleValue || (!isMultiAssign && !assignedTo && selectedUserIds.length === 0)}
           >
-            {selectedTask ? "Update Task" : "Create Task"}
+            {isSaving ? "Saving..." : selectedTask ? "Update Task" : "Create Task"}
           </Button>
         </DialogFooter>
       </DialogContent>
