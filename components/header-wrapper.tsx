@@ -40,6 +40,16 @@ export function HeaderWrapper({ user, canAccessAdmin = false }: HeaderWrapperPro
     return null
   }
 
+  // Suspended account page is an isolated security lockout screen
+  if (pathname?.startsWith("/suspended")) {
+    return null
+  }
+
+  // Maintenance page is an isolated screen
+  if (pathname?.startsWith("/maintenance")) {
+    return null
+  }
+
   const isAdminMode = pathname?.startsWith("/admin")
 
   return <Navbar user={user} canAccessAdmin={canAccessAdmin} isAdminMode={isAdminMode} />
