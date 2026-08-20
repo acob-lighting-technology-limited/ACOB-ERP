@@ -7,11 +7,14 @@ import {
   type AttendanceLike,
   type EarlyClosureInfo,
 } from "@/lib/hr/attendance-status"
+import { isLate } from "@/lib/hr/attendance-utils"
 
 /**
  * Attendance status chip. When `record` is provided and the primary status is "Late"
  * while the employee also left early, a secondary "Left Early" (or "LEWP" if approved)
  * chip is shown alongside it — so a late + early-departure day surfaces both facts.
+ * When late arrival (> 08:20) occurs with a missing clock-out, surfaces [ Late ] [ Inc ]
+ * (or [ LWP ] [ IWP ] if excused).
  */
 export function StatusBadge({
   status,
@@ -27,14 +30,37 @@ export function StatusBadge({
   const normalized = normalizeStoredAttendanceStatus(status) || status
   const s = waived ? "waiver" : normalized
 
+  let primaryStatus = s
   let secondary: { label: string; className: string } | null = null
-  if (record && (s === "late" || s === "lateness_with_permission")) {
-    const facts = getEarlyDepartureFacts(record, earlyClosure)
-    if (facts.leftEarly) {
-      const key = facts.approved ? "early_departure_with_permission" : "early_departure"
-      secondary = {
-        label: facts.approved ? "LEWP" : "Left Early",
-        className: ATTENDANCE_STATUS_COLORS[key as keyof typeof ATTENDANCE_STATUS_COLORS],
+
+  if (record) {
+    const clockInIsLate = isLate(record.clock_in)
+
+    if (s === "late" || s === "lateness_with_permission") {
+      const facts = getEarlyDepartureFacts(record, earlyClosure)
+      if (facts.leftEarly) {
+        const key = facts.approved ? "early_departure_with_permission" : "early_departure"
+        secondary = {
+          label: facts.approved ? "LEWP" : "Left Early",
+          className: ATTENDANCE_STATUS_COLORS[key as keyof typeof ATTENDANCE_STATUS_COLORS],
+        }
+      } else if (record.clock_in && !record.clock_out) {
+        const isApproved = s === "lateness_with_permission"
+        const key = isApproved ? "incomplete_with_permission" : "incomplete"
+        secondary = {
+          label: isApproved ? "IWP" : "Inc",
+          className: ATTENDANCE_STATUS_COLORS[key as keyof typeof ATTENDANCE_STATUS_COLORS],
+        }
+      }
+    } else if (s === "incomplete" || s === "incomplete_with_permission") {
+      if (clockInIsLate) {
+        primaryStatus = "late"
+        const isApprovedIwp = s === "incomplete_with_permission"
+        const key = isApprovedIwp ? "incomplete_with_permission" : "incomplete"
+        secondary = {
+          label: isApprovedIwp ? "IWP" : "Inc",
+          className: ATTENDANCE_STATUS_COLORS[key as keyof typeof ATTENDANCE_STATUS_COLORS],
+        }
       }
     }
   }
@@ -42,11 +68,11 @@ export function StatusBadge({
   const primary = (
     <Badge
       className={
-        ATTENDANCE_STATUS_COLORS[s as keyof typeof ATTENDANCE_STATUS_COLORS] ??
+        ATTENDANCE_STATUS_COLORS[primaryStatus as keyof typeof ATTENDANCE_STATUS_COLORS] ??
         "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
       }
     >
-      {ATTENDANCE_STATUS_LABELS[s as keyof typeof ATTENDANCE_STATUS_LABELS] ?? s}
+      {ATTENDANCE_STATUS_LABELS[primaryStatus as keyof typeof ATTENDANCE_STATUS_LABELS] ?? primaryStatus}
     </Badge>
   )
 
@@ -112,6 +138,7 @@ export function labelSource(record: SourceInfo | string | null | undefined): str
       info.status === "waiver" ||
       info.status === "absent_with_permission" ||
       info.status === "lateness_with_permission" ||
+      info.status === "incomplete_with_permission" ||
       info.status === "out_of_station" ||
       info.waived === true
 

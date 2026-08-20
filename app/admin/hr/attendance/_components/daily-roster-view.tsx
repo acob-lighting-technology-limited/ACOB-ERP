@@ -21,7 +21,11 @@ import { toast } from "sonner"
 import { toLocalISODate, isLate } from "@/lib/hr/attendance-utils"
 import { computeAttendanceDay } from "@/lib/hr/attendance-ssot"
 import { type AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
-import { MANUAL_ATTENDANCE_STATUS_OPTIONS, isEarlyDeparture } from "@/lib/hr/attendance-status"
+import {
+  MANUAL_ATTENDANCE_STATUS_OPTIONS,
+  isEarlyDeparture,
+  getManualStatusEditOptions,
+} from "@/lib/hr/attendance-status"
 import { StatusBadge, formatTime, labelSource } from "./status-badge"
 import { apiFetch } from "@/lib/api-client"
 
@@ -41,7 +45,7 @@ function getHourBreakdown(r: AttendanceRecord, policy: AttendancePolicy = DEFAUL
   // because the missing half of the day is unverifiable.
   if ((inMin === null) !== (outMin === null)) {
     const { hoursLost } = computeAttendanceDay({
-      status: "incomplete",
+      status: r.status ?? "incomplete",
       clockIn: r.clock_in,
       clockOut: r.clock_out,
       policy,
@@ -378,6 +382,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
         { value: "present", label: "Present" },
         { value: "late", label: "Late" },
         { value: "lateness_with_permission", label: "LWP" },
+        { value: "incomplete_with_permission", label: "IWP" },
         { value: "incomplete", label: "Incomplete" },
         { value: "absent", label: "Absent" },
         { value: "absent_with_permission", label: "AWP" },
@@ -392,22 +397,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
   ]
 
   const clockIn = editRecord?.clock_in ?? null
-  const clockOut = editRecord?.clock_out ?? null
-  const hasClockIn = Boolean(clockIn)
-  const hasClockOut = Boolean(clockOut)
-  const hasAnyPunch = hasClockIn || hasClockOut
-
-  const isLatePunch = hasClockIn && isLate(clockIn)
-  const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
-  const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
-
-  const showAWP = !hasAnyPunch
-  const showLWP = hasAnyPunch && !isOnTimePresent
-
-  const statusOptions = [
-    ...(showLWP ? [{ value: "lateness_with_permission", label: "LWP" }] : []),
-    ...(showAWP ? [{ value: "absent_with_permission", label: "AWP" }] : []),
-  ]
+  const { isOnTimePresent, options: statusOptions } = getManualStatusEditOptions(editRecord)
 
   const hasManualComment = editForm.manual_comment.trim().length >= 3
   const cannotSave = saving || !editForm.status || !hasManualComment || isOnTimePresent
