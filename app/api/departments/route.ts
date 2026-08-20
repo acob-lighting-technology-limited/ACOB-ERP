@@ -6,6 +6,7 @@ import { getDepartmentScope, resolveAdminScope } from "@/lib/admin/rbac"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { DEPT_ADMIN_HR, isSameDepartment } from "@/shared/departments"
 
 const log = logger("departments")
 
@@ -107,7 +108,8 @@ export async function POST(request: Request) {
 
     const scope = await resolveAdminScope(supabase as DepartmentsClient, user.id)
     const managedDepartments = scope?.managedDepartments || []
-    const canManageDepartments = !!scope && (scope.isAdminLike || managedDepartments.includes("Admin & HR"))
+    const canManageDepartments =
+      !!scope && (scope.isAdminLike || managedDepartments.some((dept) => isSameDepartment(dept, DEPT_ADMIN_HR)))
     if (!canManageDepartments) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
