@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { resolveAdminScope } from "@/lib/admin/rbac"
 import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
 import { logger } from "@/lib/logger"
+import { getDefaultDepartmentDescription } from "@/shared/departments"
 import { DepartmentsPage, type Department, type DepartmentEmployee, type DepartmentsData } from "./view"
 
 const log = logger("departments-page")
@@ -30,7 +31,7 @@ async function getInitialData(): Promise<DepartmentsData | undefined> {
       supabase
         .from("profiles")
         .select(
-          "id, first_name, last_name, company_email, additional_email, designation, employment_status, department"
+          "id, first_name, last_name, company_email, additional_email, designation, employment_status, department, department_id"
         ),
     ])
 
@@ -42,18 +43,26 @@ async function getInitialData(): Promise<DepartmentsData | undefined> {
     const deps = (departments ?? []) as Department[]
 
     // Build employee count map
-    const scopedDeptNames = new Set(deps.map((d) => d.name))
     const employeesByDept: Record<string, DepartmentEmployee[]> = {}
+    for (const d of deps) {
+      employeesByDept[d.name] = []
+    }
+
     for (const p of (profiles ?? []) as DepartmentEmployee[]) {
       if (!isAssignableEmploymentStatus(p.employment_status, { allowLegacyNullStatus: false })) continue
-      const deptName = p.department || "Unassigned"
-      if (!scopedDeptNames.has(deptName)) continue
-      if (!employeesByDept[deptName]) employeesByDept[deptName] = []
-      employeesByDept[deptName].push(p)
+      const matchedDept = deps.find(
+        (d) =>
+          (p.department_id && d.id === p.department_id) ||
+          (p.department && d.name.trim().toLowerCase() === p.department.trim().toLowerCase())
+      )
+      if (matchedDept) {
+        employeesByDept[matchedDept.name].push(p)
+      }
     }
 
     const depsWithCounts = deps.map((d) => ({
       ...d,
+      description: d.description?.trim() || getDefaultDepartmentDescription(d.name),
       employee_count: employeesByDept[d.name]?.length ?? 0,
     }))
 
