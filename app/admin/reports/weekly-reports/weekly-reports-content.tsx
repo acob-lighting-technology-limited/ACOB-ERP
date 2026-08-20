@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
-import { formatWATDate } from "@/lib/utils/date"
+import { formatWATDate, formatWATTimeDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { getCurrentOfficeWeek, getReportingOfficeWeek } from "@/lib/meeting-week"
@@ -292,7 +292,7 @@ export function WeeklyReportsContent({
         hideOnMobile: true,
         accessor: (report) => report.created_at,
         render: (report) => {
-          const created = formatWATDate(report.created_at, { day: "2-digit", month: "short", year: "numeric" })
+          const created = formatWATTimeDate(report.created_at)
           const updatedAt = (report as WeeklyReport & { updated_at?: string | null }).updated_at
           const wasEdited = Boolean(updatedAt && new Date(updatedAt).getTime() > new Date(report.created_at).getTime())
           return (
@@ -398,7 +398,7 @@ export function WeeklyReportsContent({
         </div>
       }
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             title="Reports"
             value={stats.total}
@@ -568,7 +568,7 @@ export function WeeklyReportsContent({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Submitted</span>
-                  <span>{formatWATDate(report.created_at)}</span>
+                  <span>{formatWATTimeDate(report.created_at)}</span>
                 </div>
               </div>
             </div>

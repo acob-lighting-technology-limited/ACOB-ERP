@@ -30,8 +30,8 @@ export function CommunicationsPage({
     ...(showMeetings
       ? [
           {
-            title: "Meetings",
-            description: "Open meeting communication tools (mailings and reminders).",
+            title: "General Meeting",
+            description: "Open general meeting communication tools (reports and reminders).",
             href: `${base}/communications/meetings`,
             icon: Mail,
             color: "bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20",

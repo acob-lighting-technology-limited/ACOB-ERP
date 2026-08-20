@@ -75,7 +75,7 @@ function escapeHtml(input: string): string {
 }
 
 function normalizeDepartmentLabel(input: string): string {
-  return input.replace(/^ACOB\s+/i, "").trim() || "Admin & HR"
+  return input.replace(/^ACOB\s+/i, "").trim() || "Admin and HR"
 }
 
 function buildBroadcastSender(department: string): string {
@@ -343,7 +343,7 @@ serve(async (req) => {
       return new Response(JSON.stringify({ error: "Broadcast body is required" }), { status: 400 })
     }
 
-    const department = (broadcastDepartment || "Admin & HR").trim() || "Admin & HR"
+    const department = (broadcastDepartment || "Admin and HR").trim() || "Admin and HR"
     const preparedBy = (broadcastPreparedByName || "").trim() || "ACOB Team"
     const subject = withSubjectPrefix(
       "Communications",

@@ -898,7 +898,7 @@ function buildEmailHtml(
 ): string {
   const safePreparedBy = escapeHtml((preparedByName || "").trim() || "Terna")
   const safeDesignation = escapeHtml((preparedByDesignation || "").trim())
-  const safeDepartment = escapeHtml((preparedByDepartment || "").trim() || "Admin & HR")
+  const safeDepartment = escapeHtml((preparedByDepartment || "").trim() || "Admin and HR")
   const title = buildEmailTitle(ctx)
   const weekBadge =
     ctx.weekLabels.length <= 3
@@ -1300,7 +1300,7 @@ serve(async (req) => {
       nextMeetingDateLabel,
       preparedByName || "Terna",
       preparedByDesignation || null,
-      preparedByDepartment || "Admin & HR",
+      preparedByDepartment || "Admin and HR",
       emailCtx
     )
     logWeeklyReportEvent(requestStartedAt, "email html built", {
@@ -1356,7 +1356,7 @@ serve(async (req) => {
         entityType: "mail_summary",
         entityId: auditEntityId,
         actorId: requestedByUserId || null,
-        department: "Admin & HR",
+        department: "Admin and HR",
         source: "edge",
         route: "/functions/send-weekly-report",
         metadata: {
@@ -1371,7 +1371,7 @@ serve(async (req) => {
           failure_count: failureCount,
           prepared_by: preparedByName || "Terna",
           prepared_by_designation: preparedByDesignation || null,
-          prepared_by_department: preparedByDepartment || "Admin & HR",
+          prepared_by_department: preparedByDepartment || "Admin and HR",
           attachments: attachments.map((a) => a.filename),
           failed_recipients: results.filter((r) => !r.success).map((r) => r.to),
           delivery_results: results.map((r) => ({ to: r.to, success: r.success, emailId: r.emailId ?? null })),

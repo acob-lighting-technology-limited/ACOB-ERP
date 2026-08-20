@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
-import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
+import { formatWATDate, formatWATTimeDate } from "@/lib/utils/date"
 import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { AlertCircle, CalendarDays, Download, FileText, Loader2, Lock, Pencil, Plus, Trash2 } from "lucide-react"
@@ -67,10 +67,6 @@ function formatMeetingDate(value?: string | null): string {
   const date = new Date(`${value}T00:00:00`)
   if (Number.isNaN(date.getTime())) return "-"
   return formatWATDate(date, { day: "2-digit", month: "short", year: "numeric" })
-}
-
-function formatSubmittedDate(value: string): string {
-  return formatWATDateTime(value, { day: "2-digit", month: "short", year: "numeric" })
 }
 
 export function MeetingDocumentTypeTable({
@@ -183,14 +179,6 @@ export function MeetingDocumentTypeTable({
         label: String(year),
       })),
     [yearOptions]
-  )
-
-  const lockFilterOptions = useMemo(
-    () => [
-      { value: "open", label: "Open" },
-      { value: "locked", label: "Locked" },
-    ],
-    []
   )
 
   const stats = useMemo(() => {
@@ -364,15 +352,7 @@ export function MeetingDocumentTypeTable({
         accessor: (row) => row.created_at,
         resizable: true,
         initialWidth: 220,
-        render: (row) => formatSubmittedDate(row.created_at),
-      },
-      {
-        key: "lock_status",
-        label: "Status",
-        accessor: (row) => (row.is_locked ? "locked" : "open"),
-        render: (row) => (
-          <Badge variant={row.is_locked ? "secondary" : "outline"}>{row.is_locked ? "Locked" : "Open"}</Badge>
-        ),
+        render: (row) => formatWATTimeDate(row.created_at),
       },
     ],
     [uploadedByNameMap]
@@ -390,13 +370,8 @@ export function MeetingDocumentTypeTable({
         label: "Year",
         options: yearFilterOptions,
       },
-      {
-        key: "lock_status",
-        label: "Status",
-        options: lockFilterOptions,
-      },
     ],
-    [lockFilterOptions, weekFilterOptions, yearFilterOptions]
+    [weekFilterOptions, yearFilterOptions]
   )
 
   const rowActions = useMemo(() => {
@@ -458,7 +433,7 @@ export function MeetingDocumentTypeTable({
         )
       }
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             title="Documents"
             value={stats.total}
@@ -681,7 +656,7 @@ export function MeetingDocumentTypeTable({
               row.uploaded_by && uploadedByNameMap.has(row.uploaded_by) ? uploadedByNameMap.get(row.uploaded_by) : "-"
 
             return (
-              <div className="grid gap-4 md:grid-cols-4">
+              <div className="grid gap-4 md:grid-cols-3">
                 <div className="rounded-lg border p-4">
                   <p className="text-muted-foreground text-xs tracking-wide uppercase">File Name</p>
                   <p className="mt-2 text-sm break-words">{row.file_name}</p>
@@ -694,10 +669,6 @@ export function MeetingDocumentTypeTable({
                   <p className="text-muted-foreground text-xs tracking-wide uppercase">Submitted By</p>
                   <p className="mt-2 text-sm">{submittedBy}</p>
                 </div>
-                <div className="rounded-lg border p-4">
-                  <p className="text-muted-foreground text-xs tracking-wide uppercase">Status</p>
-                  <p className="mt-2 text-sm">{row.is_locked ? "Locked after grace period" : "Editable"}</p>
-                </div>
               </div>
             )
           },
@@ -709,12 +680,9 @@ export function MeetingDocumentTypeTable({
 
           return (
             <div className="space-y-3 rounded-xl border p-4">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="font-medium">{`W${row.meeting_week} ${row.meeting_year}`}</p>
-                  <p className="text-muted-foreground text-sm">{formatMeetingDate(row.meeting_date)}</p>
-                </div>
-                <Badge variant={row.is_locked ? "secondary" : "outline"}>{row.is_locked ? "Locked" : "Open"}</Badge>
+              <div>
+                <p className="font-medium">{`W${row.meeting_week} ${row.meeting_year}`}</p>
+                <p className="text-muted-foreground text-sm">{formatMeetingDate(row.meeting_date)}</p>
               </div>
               <div className="grid gap-1 text-sm">
                 <div className="flex items-center justify-between">
@@ -723,7 +691,7 @@ export function MeetingDocumentTypeTable({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Submitted</span>
-                  <span>{formatSubmittedDate(row.created_at)}</span>
+                  <span>{formatWATTimeDate(row.created_at)}</span>
                 </div>
               </div>
             </div>

@@ -27,6 +27,7 @@ import { ReminderTypeSelector } from "./ReminderTypeSelector"
 import { getCurrentOfficeWeek, getOfficeWeekFromDate } from "@/lib/meeting-week"
 import { getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
 import { apiFetch } from "@/lib/api-client"
+import { DEPT_ADMIN_HR } from "@/shared/departments"
 
 const log = logger("communications-composer")
 
@@ -124,7 +125,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
   // Broadcast fields
   const [broadcastSubject, setBroadcastSubject] = useState("")
   const [broadcastBodyHtml, setBroadcastBodyHtml] = useState("<p><br></p>")
-  const [broadcastDepartment, setBroadcastDepartment] = useState(currentUser?.department || "Admin & HR")
+  const [broadcastDepartment, setBroadcastDepartment] = useState(currentUser?.department || DEPT_ADMIN_HR)
   const [broadcastPreparedById, setBroadcastPreparedById] = useState("none")
   const [broadcastReplyToEmail, setBroadcastReplyToEmail] = useState("")
   const [broadcastAttachments, setBroadcastAttachments] = useState<File[]>([])
@@ -189,7 +190,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
 
   // ── Derived options ────────────────────────────────────────────────────────
   const departmentOptions = useMemo(() => {
-    const set = new Set<string>(["Admin & HR"])
+    const set = new Set<string>([DEPT_ADMIN_HR])
     for (const dept of employees.map((e) => e.department).filter(Boolean) as string[]) set.add(dept)
     return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [employees])
@@ -711,7 +712,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
             meetingPreparedByDesignation:
               reminderType === "meeting" ? selectedMeetingPreparedBy?.designation || null : undefined,
             meetingPreparedByDepartment:
-              reminderType === "meeting" ? selectedMeetingPreparedBy?.department || "Admin & HR" : undefined,
+              reminderType === "meeting" ? selectedMeetingPreparedBy?.department || DEPT_ADMIN_HR : undefined,
             sessionDate: reminderType === "knowledge_sharing" ? sessionDate : undefined,
             sessionTime: reminderType === "knowledge_sharing" ? sessionTime : undefined,
             duration: reminderType === "knowledge_sharing" ? duration : undefined,
@@ -810,7 +811,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
         if (selectedKnowledgePresenter) payload.knowledgeSharingPresenter = selectedKnowledgePresenter
         payload.meetingPreparedByName = selectedMeetingPreparedBy?.full_name || "ACOB Team"
         payload.meetingPreparedByDesignation = selectedMeetingPreparedBy?.designation || null
-        payload.meetingPreparedByDepartment = selectedMeetingPreparedBy?.department || "Admin & HR"
+        payload.meetingPreparedByDepartment = selectedMeetingPreparedBy?.department || DEPT_ADMIN_HR
       } else if (reminderType === "knowledge_sharing") {
         payload.sessionDate = formatDateNice(sessionDate)
         payload.sessionTime = sessionTime
@@ -870,7 +871,7 @@ export function CommunicationsComposer({ employees, mode = "meetings", currentUs
       await logMailAudit({
         action: "meeting_reminder_sent",
         entityId: crypto.randomUUID(),
-        department: currentUserDept || "Admin & HR",
+        department: currentUserDept || DEPT_ADMIN_HR,
         metadata: {
           reminder_type: reminderType,
           success_count: successCount,

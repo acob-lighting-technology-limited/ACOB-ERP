@@ -32,18 +32,32 @@ const SAFE_SECTION_SPACER_XML =
   '<w:p><w:pPr><w:pStyle w:val="BodyText"/><w:spacing w:before="25"/><w:ind w:left="0" w:firstLine="0"/></w:pPr></w:p>'
 
 const TEMPLATE_HEADINGS = [
-  { key: "Accounts", candidates: ["ACCOUNTS DEPARTMEMT:"] },
-  { key: "Admin & HR", candidates: ["ADMIN/HR:"] },
-  { key: "Business, Growth and Innovation", candidates: ["BUSINESS GROWTH AND INNOVATION:"] },
-  { key: "IT and Communications", candidates: ["IT & COMMUNICATIONS DEPARTMENT:"] },
+  { key: "Accounts", candidates: ["ACCOUNTS DEPARTMEMT:", "ACCOUNTS DEPARTMENT:"] },
+  { key: "Admin and HR", candidates: ["ADMIN/HR:", "ADMIN & HR:", "ADMIN AND HR:"] },
+  {
+    key: "Business, Growth and Innovation",
+    candidates: ["BUSINESS GROWTH AND INNOVATION:", "BUSINESS GROWTH & INNOVATION:"],
+  },
+  {
+    key: "IT and Communications",
+    candidates: ["IT & COMMUNICATIONS DEPARTMENT:", "IT AND COMMUNICATIONS DEPARTMENT:"],
+  },
   {
     key: "Operations and Maintenance",
-    candidates: ["OPERATIONS AND MAINTENANCE DEPARTMENT:", "OPERATIONS DEPARTMENT:"],
+    candidates: [
+      "OPERATIONS AND MAINTENANCE DEPARTMENT:",
+      "OPERATIONS DEPARTMENT:",
+      "OPERATIONS & MAINTENANCE DEPARTMENT:",
+    ],
   },
   { key: "Project", candidates: ["PROJECT DEPARTMENT:"] },
   {
     key: "Regulatory and Compliance",
-    candidates: ["REGULATORY & COMPLIANCE DEPARTMENT:", "LEGAL, REGULATORY AND COMPLIANCE:"],
+    candidates: [
+      "REGULATORY & COMPLIANCE DEPARTMENT:",
+      "REGULATORY AND COMPLIANCE DEPARTMENT:",
+      "LEGAL, REGULATORY AND COMPLIANCE:",
+    ],
   },
   { key: "Technical", candidates: ["TECHNICAL DEPARTMENT"] },
 ] as const

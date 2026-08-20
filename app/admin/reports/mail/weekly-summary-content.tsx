@@ -508,10 +508,10 @@ export function WeeklySummaryContent({ employees, presenterDirectory = [], curre
   return (
     <PageWrapper maxWidth="full" background="gradient">
       <PageHeader
-        title="Weekly Summary Mailings"
-        description="Send selected weekly meeting documents to selected recipients."
+        title="General Meeting Reports"
+        description="Send selected weekly meeting documents and reports to selected recipients."
         icon={Mail}
-        backLink={{ href: "/admin/reports", label: "Back to Reports" }}
+        backLink={{ href: "/admin/communications/meetings", label: "Back to General Meeting" }}
       />
 
       <div className="grid items-start gap-6 lg:grid-cols-3">

@@ -237,7 +237,7 @@ function buildMeetingReminderHtml(
   const displayTime = formatTimeWithMeridiem(meetingTime)
   const preparedBy = escapeHtml(preparedByName?.trim() || "ACOB Team")
   const designation = escapeHtml(preparedByDesignation?.trim() || "")
-  const department = escapeHtml(preparedByDepartment?.trim() || "Admin & HR")
+  const department = escapeHtml(preparedByDepartment?.trim() || "Admin and HR")
   const presenterName = getKnowledgePresenterName(kssPresenter)
   const isGuestPresenter = Boolean(presenterName) && !kssPresenter?.id
   const presenterDisplayText = presenterName ? `${presenterName}${isGuestPresenter ? " (Guest)" : ""}` : ""
@@ -753,7 +753,7 @@ serve(async (req) => {
         entityType: "communications_mail",
         entityId: auditEntityId,
         actorId: requestedByUserId || null,
-        department: "Admin & HR",
+        department: "Admin and HR",
         source: "edge",
         route: "/functions/send-meeting-reminder",
         metadata: {
@@ -769,7 +769,7 @@ serve(async (req) => {
           kss_roster_status: kssRosterStatus || null,
           prepared_by: meetingPreparedByName || null,
           prepared_by_designation: meetingPreparedByDesignation || null,
-          prepared_by_department: meetingPreparedByDepartment || "Admin & HR",
+          prepared_by_department: meetingPreparedByDepartment || "Admin and HR",
         },
       })
     } catch (auditErr) {

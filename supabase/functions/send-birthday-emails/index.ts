@@ -192,7 +192,7 @@ serve(async (req) => {
           action: "birthday_emails_sent",
           entityType: "birthday_email",
           entityId: crypto.randomUUID(),
-          department: "Admin & HR",
+          department: "Admin and HR",
           source: "edge",
           route: "/functions/send-birthday-emails",
           metadata: { date: mmdd, year, candidates: profiles?.length ?? 0, sent: successCount },
