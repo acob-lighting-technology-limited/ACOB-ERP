@@ -38,7 +38,7 @@ export default function PurchasingDashboard() {
         title="Purchasing"
         description="Manage suppliers and purchase orders"
         icon={ShoppingCart}
-        backLink={{ href: "/admin/finance", label: "Back to Finance" }}
+        backLink={{ href: "/admin/accounts", label: "Back to Accounts" }}
       />
 
       {/* Stats */}
