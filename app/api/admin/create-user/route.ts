@@ -294,6 +294,17 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    // Resolve department_id if department name is provided
+    let departmentId: string | null = null
+    if (department) {
+      const { data: deptRow } = await serviceSupabase
+        .from("departments")
+        .select("id")
+        .eq("name", department)
+        .maybeSingle()
+      departmentId = deptRow?.id || null
+    }
+
     // Update profile with all details
     const { error: profileError } = await serviceSupabase
       .from("profiles")
@@ -303,6 +314,7 @@ export async function PATCH(request: NextRequest) {
         other_names: otherNames || null,
         company_email: email,
         department: department,
+        department_id: departmentId,
         designation: resolvedDesignation || null,
         phone_number: phoneNumber || null,
         role: targetRole,
