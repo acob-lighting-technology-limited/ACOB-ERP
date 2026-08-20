@@ -52,8 +52,8 @@ export async function GET(request: NextRequest) {
       d.setDate(d.getDate() + days)
       return toLocalISODate(d)
     }
-    const from = fromParam || shift(-14)
-    const to = toParam || shift(14)
+    const from = fromParam || shift(-180)
+    const to = toParam || shift(60)
 
     const dataClient = getServiceRoleClientOrFallback(supabase)
     const settings = await loadLunchSettings(dataClient)
@@ -67,10 +67,37 @@ export async function GET(request: NextRequest) {
 
     if (error) throw new Error(`Failed to load menus: ${error.message}`)
 
+    const menuIds = (menuRows || []).map((row) => row.id)
+    const { data: reviewRows } =
+      menuIds.length > 0
+        ? await dataClient
+            .from("lunch_reviews")
+            .select("id, menu_id, rating, comment, created_at")
+            .in("menu_id", menuIds)
+        : { data: [] }
+
+    const reviewsByMenu = new Map<
+      string,
+      { id: string; rating: number; comment: string | null; created_at: string }[]
+    >()
+    for (const r of (reviewRows || []) as {
+      id: string
+      menu_id: string
+      rating: number
+      comment: string | null
+      created_at: string
+    }[]) {
+      reviewsByMenu.set(r.menu_id, [...(reviewsByMenu.get(r.menu_id) || []), r])
+    }
+
     const menus = await Promise.all(
       (menuRows || []).map(async (row) => {
         const menu = await hydrateMenu(dataClient, row)
         const votes = await loadVotesForMenu(dataClient, menu.id)
+        const menuReviews = reviewsByMenu.get(menu.id) || []
+        const totalRating = menuReviews.reduce((sum, r) => sum + r.rating, 0)
+        const averageRating = menuReviews.length > 0 ? Number((totalRating / menuReviews.length).toFixed(1)) : null
+
         return {
           ...menu,
           votes,
@@ -79,6 +106,9 @@ export async function GET(request: NextRequest) {
           eatingCount: votes.filter((v) => v.is_eating).length,
           votingOpen: isVotingOpen(menu, settings),
           resolvedDeadline: resolveVotingDeadline(menu, settings).toISOString(),
+          review_count: menuReviews.length,
+          average_rating: averageRating,
+          reviews: menuReviews,
         }
       })
     )
