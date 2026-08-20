@@ -21,23 +21,44 @@ export interface Task {
   started_at?: string | null
   completed_at?: string | null
   created_at: string
+  updated_at?: string | null
   source_type?: TaskSourceType
   source_id?: string | null
   assignment_type?: TaskAssignmentType
   assigned_to?: string | null
   assigned_by?: string | null
+  assigned_at?: string | null
   department?: string | null
   goal_id?: string | null
   goal_title?: string | null
   task_start_date?: string | null
   task_end_date?: string | null
+  created_by?: string | null
+  updated_by?: string | null
+  reviewed_by?: string | null
+  reviewed_at?: string | null
+  reassigned_to?: string | null
+  unable_to_complete_reason?: string | null
+  failure_reason?: string | null
+  extension_reason?: string | null
+  is_archived?: boolean
+  archived_by?: string | null
+  archived_at?: string | null
+
+  // Enriched relational data
   assigned_to_user?: TaskPersonSummary
-  assigned_by_user?: Omit<TaskPersonSummary, "id" | "completed">
+  assigned_by_user?: TaskPersonSummary
+  created_by_user?: TaskPersonSummary
+  updated_by_user?: TaskPersonSummary
+  reviewed_by_user?: TaskPersonSummary
+  reassigned_to_user?: TaskPersonSummary
+  assigned_users?: TaskPersonSummary[]
   can_change_status?: boolean
   comment_count?: number
 }
 
 export interface TaskUserProfile {
+  id?: string
   department?: string | null
   role?: string | null
   is_department_lead?: boolean | null
