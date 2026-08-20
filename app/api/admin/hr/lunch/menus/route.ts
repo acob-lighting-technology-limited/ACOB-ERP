@@ -4,6 +4,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getRequestScope } from "@/lib/admin/api-scope"
 import {
   hydrateMenu,
+  loadViewsForMenus,
   loadVotesForMenu,
   normalizeMenuGroups,
   notifyStaffOfMenu,
@@ -68,14 +69,14 @@ export async function GET(request: NextRequest) {
     if (error) throw new Error(`Failed to load menus: ${error.message}`)
 
     const menuIds = (menuRows || []).map((row) => row.id)
-    const { data: reviewRows } =
+    const [viewsByMenu, reviewRowsRes] = await Promise.all([
+      loadViewsForMenus(dataClient, menuIds),
       menuIds.length > 0
-        ? await dataClient
-            .from("lunch_reviews")
-            .select("id, menu_id, rating, comment, created_at")
-            .in("menu_id", menuIds)
-        : { data: [] }
+        ? dataClient.from("lunch_reviews").select("id, menu_id, rating, comment, created_at").in("menu_id", menuIds)
+        : Promise.resolve({ data: [] }),
+    ])
 
+    const reviewRows = reviewRowsRes.data || []
     const reviewsByMenu = new Map<
       string,
       { id: string; rating: number; comment: string | null; created_at: string }[]
@@ -97,6 +98,7 @@ export async function GET(request: NextRequest) {
         const menuReviews = reviewsByMenu.get(menu.id) || []
         const totalRating = menuReviews.reduce((sum, r) => sum + r.rating, 0)
         const averageRating = menuReviews.length > 0 ? Number((totalRating / menuReviews.length).toFixed(1)) : null
+        const viewers = viewsByMenu.get(menu.id) || []
 
         return {
           ...menu,
@@ -109,6 +111,8 @@ export async function GET(request: NextRequest) {
           review_count: menuReviews.length,
           average_rating: averageRating,
           reviews: menuReviews,
+          viewers,
+          view_count: viewers.length,
         }
       })
     )

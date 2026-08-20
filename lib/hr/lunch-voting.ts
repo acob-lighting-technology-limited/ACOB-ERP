@@ -97,6 +97,16 @@ export interface LunchVoter {
   voted_at: string
 }
 
+export interface LunchMenuViewRecord {
+  user_id: string
+  full_name: string
+  department: string | null
+  avatar_url: string | null
+  first_viewed_at: string
+  last_viewed_at: string
+  view_count: number
+}
+
 /** Aggregated count for one option, used by both the admin and staff views. */
 export interface LunchOptionTally {
   option_id: string

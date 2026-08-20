@@ -24,6 +24,7 @@ interface LunchVoteOverrideDialogProps {
   onOpenChange: (open: boolean) => void
   menu: (LunchMenu & { votes: LunchVoteRecord[] }) | null
   employees: { id: string; full_name: string }[]
+  defaultUserId?: string | null
   onSaved: () => void
 }
 
@@ -40,10 +41,11 @@ export function LunchVoteOverrideDialog({
   onOpenChange,
   menu,
   employees,
+  defaultUserId,
   onSaved,
 }: LunchVoteOverrideDialogProps) {
   const [saving, setSaving] = useState(false)
-  const [userId, setUserId] = useState("")
+  const [userId, setUserId] = useState(defaultUserId || "")
   const [answer, setAnswer] = useState<Answer>("eating")
   const [selections, setSelections] = useState<Record<string, string>>({})
 
@@ -65,12 +67,16 @@ export function LunchVoteOverrideDialog({
   }, [existingVote])
 
   useEffect(() => {
-    if (!open) {
+    if (open) {
+      if (defaultUserId) {
+        setUserId(defaultUserId)
+      }
+    } else {
       setUserId("")
       setAnswer("eating")
       setSelections({})
     }
-  }, [open])
+  }, [open, defaultUserId])
 
   const missing = menu && answer === "eating" ? menu.groups.filter((g) => g.is_required && !selections[g.id]) : []
 
