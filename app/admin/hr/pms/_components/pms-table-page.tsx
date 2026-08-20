@@ -74,6 +74,8 @@ function renderStatusBadge(rawStatus: unknown) {
   const s = strStatus.toLowerCase()
   if (s === "lwp" || s === "lateness_with_permission" || norm === "lateness_with_permission") {
     badgeClasses = "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+  } else if (s === "iwp" || s === "incomplete_with_permission" || norm === "incomplete_with_permission") {
+    badgeClasses = "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
   } else if (
     s === "awp" ||
     s === "absence_with_permission" ||
