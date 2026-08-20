@@ -186,7 +186,10 @@ export function AdminAttendanceRecordsPage({
     URL.revokeObjectURL(url)
   }
 
-  const incomplete = records.filter((r) => !r.clock_out).length
+  const today = toLocalISODate()
+  const incomplete = records.filter(
+    (r) => r.status === "incomplete" || (r.date < today && Boolean(r.clock_in) && !r.clock_out)
+  ).length
   const totalHours = records.reduce((s, r) => s + (r.total_hours ?? 0), 0)
 
   const columns: DataTableColumn<AttendanceRecord>[] = [

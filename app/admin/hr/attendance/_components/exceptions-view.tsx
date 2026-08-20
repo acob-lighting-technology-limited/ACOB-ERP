@@ -49,15 +49,24 @@ interface ExceptionsViewProps {
   lockedDepartment?: string
 }
 
+function isPastRecord(r: { date?: string | null }) {
+  return Boolean(r.date && r.date < toLocalISODate())
+}
+
 function issueBadge(record: AttendanceRecord) {
+  const isPast = isPastRecord(record)
   const statusKey =
-    record.status === "incomplete" || (record.clock_in && !record.clock_out) ? "incomplete" : record.status
+    record.status === "incomplete" || (isPast && record.clock_in && !record.clock_out) ? "incomplete" : record.status
   return <StatusBadge status={statusKey} record={record} />
 }
 
 function isException(r: AttendanceRecord) {
+  const isPast = isPastRecord(r)
   return (
-    r.status === "late" || r.status === "incomplete" || r.status === "absent" || (Boolean(r.clock_in) && !r.clock_out)
+    r.status === "late" ||
+    r.status === "incomplete" ||
+    r.status === "absent" ||
+    (isPast && Boolean(r.clock_in) && !r.clock_out)
   )
 }
 
@@ -150,7 +159,8 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
   const stats = useMemo(
     () => ({
       late: records.filter((r) => r.status === "late").length,
-      incomplete: records.filter((r) => r.status === "incomplete" || (r.clock_in && !r.clock_out)).length,
+      incomplete: records.filter((r) => r.status === "incomplete" || (isPastRecord(r) && r.clock_in && !r.clock_out))
+        .length,
       absent: records.filter((r) => r.status === "absent").length,
     }),
     [records]
@@ -264,7 +274,7 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
         if (values.length === 0) return true
         return values.some((v) => {
           if (v === "late") return r.status === "late"
-          if (v === "incomplete") return r.status === "incomplete" || (Boolean(r.clock_in) && !r.clock_out)
+          if (v === "incomplete") return r.status === "incomplete" || (isPastRecord(r) && Boolean(r.clock_in) && !r.clock_out)
           if (v === "absent") return r.status === "absent"
           return false
         })

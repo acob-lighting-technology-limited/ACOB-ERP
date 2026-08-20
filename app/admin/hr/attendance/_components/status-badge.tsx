@@ -7,13 +7,13 @@ import {
   type AttendanceLike,
   type EarlyClosureInfo,
 } from "@/lib/hr/attendance-status"
-import { isLate } from "@/lib/hr/attendance-utils"
+import { isLate, toLocalISODate } from "@/lib/hr/attendance-utils"
 
 /**
  * Attendance status chip. When `record` is provided and the primary status is "Late"
  * while the employee also left early, a secondary "Left Early" (or "LEWP" if approved)
  * chip is shown alongside it — so a late + early-departure day surfaces both facts.
- * When late arrival (> 08:20) occurs with a missing clock-out, surfaces [ Late ] [ Inc ]
+ * When late arrival (> 08:20) occurs with a missing clock-out on a past day, surfaces [ Late ] [ Inc ]
  * (or [ LWP ] [ IWP ] if excused).
  */
 export function StatusBadge({
@@ -21,11 +21,13 @@ export function StatusBadge({
   waived,
   record,
   earlyClosure,
+  recordDate,
 }: {
   status: string
   waived?: boolean
   record?: AttendanceLike | null
   earlyClosure?: EarlyClosureInfo
+  recordDate?: string
 }) {
   const normalized = normalizeStoredAttendanceStatus(status) || status
   const s = waived ? "waiver" : normalized
@@ -35,6 +37,8 @@ export function StatusBadge({
 
   if (record) {
     const clockInIsLate = isLate(record.clock_in)
+    const effectiveDate = recordDate || record.date
+    const isPastDate = Boolean(effectiveDate && effectiveDate < toLocalISODate())
 
     if (s === "late" || s === "lateness_with_permission") {
       const facts = getEarlyDepartureFacts(record, earlyClosure)
@@ -44,7 +48,7 @@ export function StatusBadge({
           label: facts.approved ? "LEWP" : "Left Early",
           className: ATTENDANCE_STATUS_COLORS[key as keyof typeof ATTENDANCE_STATUS_COLORS],
         }
-      } else if (record.clock_in && !record.clock_out) {
+      } else if (isPastDate && record.clock_in && !record.clock_out) {
         const isApproved = s === "lateness_with_permission"
         const key = isApproved ? "incomplete_with_permission" : "incomplete"
         secondary = {
