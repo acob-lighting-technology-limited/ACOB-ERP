@@ -137,7 +137,7 @@ export default function InvoiceDetailPage() {
       title={invoice.invoice_number}
       description={`Created on ${formatDate(invoice.created_at)}`}
       icon={FileText}
-      backLinkHref="/admin/finance/invoices"
+      backLinkHref="/admin/accounts/invoices"
       backLinkLabel="Back to Invoices"
       actions={
         <div className="flex flex-wrap gap-2">
