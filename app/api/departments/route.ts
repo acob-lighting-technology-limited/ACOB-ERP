@@ -15,7 +15,7 @@ type DepartmentsClient = Awaited<ReturnType<typeof createClient>>
 
 const CreateDepartmentSchema = z.object({
   name: z.string().trim().min(1, "Department name is required"),
-  description: z.string().optional().nullable(),
+  description: z.string().trim().min(1, "Department description is required"),
   department_head_id: z.string().optional().nullable(),
   department_code: z
     .string()
