@@ -446,10 +446,12 @@ export function DataTable<TData>({
   const activePage = isServerPagination ? currentPage : clientPage
   const pageSize = pagination?.pageSize ?? data.length
 
-  // ─── Reset page on filter/search change ───────────────────────────────────
+  // ─── Reset page on filter/search/dataset change ───────────────────────────
+  // data.length covers the parent swapping the row set under us (e.g. a scope
+  // tab), which would otherwise strand the user on a page that no longer exists.
   useEffect(() => {
     if (!isServerPagination) setClientPage(0)
-  }, [searchQuery, filterValues, isServerPagination])
+  }, [searchQuery, filterValues, data.length, isServerPagination])
 
   // ─── Filtering ─────────────────────────────────────────────────────────────
   const filteredData = useMemo(() => {
