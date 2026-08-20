@@ -122,7 +122,7 @@ export default async function AdminPaymentsPage() {
       initialPayments={paymentsData.payments}
       initialDepartments={paymentsData.departments}
       currentUser={paymentsData.currentUser}
-      basePath="/admin/finance/payments"
+      basePath="/admin/accounts/payments"
     />
   )
 }
