@@ -117,5 +117,7 @@ test("route resolver maps critical override routes", () => {
   assert.equal(resolveAdminRouteKeyV2("/admin/hr/leave"), "hr.leave")
   assert.equal(resolveAdminRouteKeyV2("/admin/hr/attendance"), "hr.attendance")
   assert.equal(resolveAdminRouteKeyV2("/admin/hr/resources"), "hr.fleet")
+  assert.equal(resolveAdminRouteKeyV2("/admin/accounts"), "accounts.main")
+  assert.equal(resolveAdminRouteKeyV2("/admin/finance"), "accounts.main")
   assert.equal(resolveAdminRouteKeyV2("/admin/reports/general-meeting/weekly-reports"), "reports.weekly")
 })
