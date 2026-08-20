@@ -24,6 +24,7 @@ export type UnifiedAttendanceStatus =
   | "early_closure"
   | "late_resumption"
   | "incomplete"
+  | "incomplete_with_permission"
   | "absent"
   | "absent_with_permission"
   | "out_of_station"
@@ -48,6 +49,8 @@ export const ATTENDANCE_STATUS_COLORS: Record<UnifiedAttendanceStatus, string> =
     "bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-300 border-blue-200 dark:border-blue-800",
   late_resumption: "bg-sky-100 text-sky-800 dark:bg-sky-950/40 dark:text-sky-300 border-sky-200 dark:border-sky-800",
   incomplete: "bg-cyan-100 text-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-300 border-cyan-200 dark:border-cyan-800",
+  incomplete_with_permission:
+    "bg-gradient-to-r from-cyan-100 to-green-100 text-green-800 border-cyan-200 dark:from-cyan-950/40 dark:to-green-950/40 dark:text-green-300",
   absent: "bg-red-100 text-red-800 dark:bg-red-950/40 dark:text-red-300 border-red-200 dark:border-red-800",
   absent_with_permission:
     "bg-gradient-to-r from-red-100 to-green-100 text-green-800 border-red-200 dark:from-red-950/40 dark:to-green-950/40 dark:text-green-300",
@@ -79,6 +82,7 @@ export const ATTENDANCE_STATUS_LABELS: Record<UnifiedAttendanceStatus, string> =
   early_closure: "Early Closure",
   late_resumption: "Late Resumption",
   incomplete: "Incomplete",
+  incomplete_with_permission: "IWP",
   absent: "Absent",
   absent_with_permission: "AWP",
   out_of_station: "OOS",
@@ -98,6 +102,7 @@ export const DB_WRITABLE_STATUSES = [
   "late",
   "absent",
   "incomplete",
+  "incomplete_with_permission",
   "waiver",
   "lateness_with_permission",
   "absent_with_permission",
@@ -108,6 +113,7 @@ export type DbAttendanceStatus = (typeof DB_WRITABLE_STATUSES)[number]
 
 export const PERMISSION_ATTENDANCE_STATUSES = [
   "lateness_with_permission",
+  "incomplete_with_permission",
   "absent_with_permission",
   "out_of_station",
 ] as const
@@ -119,6 +125,7 @@ export const MANUAL_ATTENDANCE_STATUS_OPTIONS: Array<{ value: DbAttendanceStatus
   { value: "present", label: "Present" },
   { value: "late", label: "Late" },
   { value: "incomplete", label: "Incomplete" },
+  { value: "incomplete_with_permission", label: "IWP" },
   { value: "waiver", label: "Waiver" },
   { value: "lateness_with_permission", label: "LWP" },
   { value: "absent_with_permission", label: "AWP" },
@@ -181,13 +188,18 @@ export function getEarlyDepartureFacts(
   }
 }
 
-type ManualPermissionValue = "lateness_with_permission" | "absent_with_permission" | "early_departure_with_permission"
+type ManualPermissionValue =
+  | "lateness_with_permission"
+  | "absent_with_permission"
+  | "early_departure_with_permission"
+  | "incomplete_with_permission"
 
 export interface ManualStatusEditOptions {
-  /** Fully present and on-time — no LWP/AWP/LEWP override is applicable. */
+  /** Fully present and on-time — no LWP/AWP/LEWP/IWP override is applicable. */
   isOnTimePresent: boolean
   showLWP: boolean
   showAWP: boolean
+  showIWP: boolean
   /** Early departure with permission is applicable (on-time arrival, left early). */
   showLEWP: boolean
   /** Status choices to offer in the manual single-day editor. */
@@ -197,7 +209,7 @@ export interface ManualStatusEditOptions {
 }
 
 /**
- * Single source of truth for which manual overrides (LWP/AWP) apply to a day, based on
+ * Single source of truth for which manual overrides (LWP/AWP/IWP/LEWP) apply to a day, based on
  * its punches. Used by the per-day attendance editor so the rule isn't duplicated between
  * its "open" and "render" paths (and can be reused by any other single-day edit surface).
  */
@@ -215,25 +227,29 @@ export function getManualStatusEditOptions(
   const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
 
   const showAWP = !hasAnyPunch
-  const showLWP = hasAnyPunch && !isOnTimePresent
+  const showIWP = hasAnyPunch && (!hasClockIn || !hasClockOut)
+  const showLWP = isLatePunch
   // Left-early-with-permission applies when they arrived on time but left early.
   const showLEWP = isEarlyOut && !isLatePunch
 
   const initialStatus: ManualStatusEditOptions["initialStatus"] = !hasAnyPunch
     ? "absent_with_permission"
-    : showLEWP
-      ? "early_departure_with_permission"
-      : !isOnTimePresent
-        ? "lateness_with_permission"
-        : ""
+    : showIWP && !isLatePunch
+      ? "incomplete_with_permission"
+      : showLEWP
+        ? "early_departure_with_permission"
+        : showLWP
+          ? "lateness_with_permission"
+          : ""
 
   const options: ManualStatusEditOptions["options"] = [
     ...(showLWP ? [{ value: "lateness_with_permission" as const, label: "LWP" }] : []),
     ...(showLEWP ? [{ value: "early_departure_with_permission" as const, label: "LEWP" }] : []),
+    ...(showIWP ? [{ value: "incomplete_with_permission" as const, label: "IWP" }] : []),
     ...(showAWP ? [{ value: "absent_with_permission" as const, label: "AWP" }] : []),
   ]
 
-  return { isOnTimePresent, showLWP, showAWP, showLEWP, options, initialStatus }
+  return { isOnTimePresent, showLWP, showAWP, showIWP, showLEWP, options, initialStatus }
 }
 
 export function deriveUnifiedAttendanceStatus(
