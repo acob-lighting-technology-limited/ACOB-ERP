@@ -391,12 +391,12 @@ export function AssetFormDialog({
 
               {assignmentType === "office" && (
                 <div>
-                  <Label htmlFor="office_location">Office Location *</Label>
+                  <Label htmlFor="office_location">Assigned Room / Office *</Label>
                   <SearchableSelect
                     value={officeLocation}
                     onValueChange={(value) => setValue("office_location", value)}
-                    placeholder="Select office location"
-                    searchPlaceholder="Search office locations..."
+                    placeholder="Select room or office"
+                    searchPlaceholder="Search rooms and offices..."
                     icon={<Building className="h-4 w-4" />}
                     options={officeLocations.map((location) => ({
                       value: location,
