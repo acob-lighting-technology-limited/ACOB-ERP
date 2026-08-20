@@ -34,9 +34,9 @@ export function renderWelcomeEmail({ pendingUser, tempPassword, portalUrl, prepa
   const officeLoc = pendingUser.office_location ? escapeHtml(pendingUser.office_location) : "N/A"
   const safeTempPassword = escapeHtml(tempPassword)
   const safePortalUrl = escapeHtml(portalUrl)
-  const preparedByName = escapeHtml((preparedBy?.name || "Admin & HR").trim())
+  const preparedByName = escapeHtml((preparedBy?.name || "Admin and HR").trim())
   const preparedByDesignation = escapeHtml((preparedBy?.designation || "").trim())
-  const preparedByDepartment = escapeHtml((preparedBy?.department || "Admin & HR").trim())
+  const preparedByDepartment = escapeHtml((preparedBy?.department || "Admin and HR").trim())
 
   return `
 <!DOCTYPE html>
@@ -100,7 +100,7 @@ export function renderWelcomeEmail({ pendingUser, tempPassword, portalUrl, prepa
                     <td class="value">${role}</td>
                 </tr>
                 <tr>
-                    <td class="label">Office Location</td>
+                    <td class="label">Office / Room</td>
                     <td class="value">${officeLoc}</td>
                 </tr>
             </table>

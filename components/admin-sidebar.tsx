@@ -118,7 +118,7 @@ function buildDeptNavigation(deptId: string): NavItem[] {
         // department, so the org-wide department list belongs to /admin only.
         { name: "Attendance", href: `${base}/hr/attendance` },
         { name: "Leave", href: `${base}/hr/leave` },
-        { name: "Office Location", href: `${base}/hr/office-location` },
+        { name: "Rooms & Offices", href: `${base}/hr/office-location` },
       ],
     },
     {
@@ -271,7 +271,7 @@ const adminNavigation: NavItem[] = [
       { name: "Lunch Register", href: "/admin/hr/employees/lunch" },
       // Resource Booking — /admin/hr/resources is a re-export of the same page.
       { name: "Resource Booking", href: "/admin/hr/fleet" },
-      { name: "Office Location", href: "/admin/hr/office-location" },
+      { name: "Rooms & Offices", href: "/admin/hr/office-location" },
       { name: "Site Locations", href: "/admin/hr/site-locations" },
     ],
   },
@@ -404,10 +404,10 @@ const adminNavigation: NavItem[] = [
     children: [
       { name: "Broadcast", href: "/admin/communications/broadcast" },
       {
-        name: "Meetings",
+        name: "General Meeting",
         href: "/admin/communications/meetings",
         children: [
-          { name: "Mail", href: "/admin/communications/meetings/mail" },
+          { name: "Reports", href: "/admin/communications/meetings/mail" },
           { name: "Reminders", href: "/admin/communications/meetings/reminders" },
         ],
       },
@@ -492,6 +492,39 @@ const ADMIN_ROUTE_ALIASES: Record<string, string[]> = {
   "/admin/finance": ["/admin/payments"],
   // Tools — feedback is surfaced through tools.
   "/admin/tools": ["/admin/feedback"],
+}
+
+function getRouteMatchLength(targetHref: string, pathname: string, deptId?: string): number {
+  const isRootDashboard = targetHref === "/admin" || (deptId && targetHref === `/dept/${deptId}`)
+  if (isRootDashboard) {
+    return pathname === targetHref ? targetHref.length + 1000 : 0
+  }
+  if (pathname === targetHref) return targetHref.length + 1000
+  if (pathname.startsWith(`${targetHref}/`)) return targetHref.length
+
+  const aliases = ADMIN_ROUTE_ALIASES[targetHref] || []
+  for (const alias of aliases) {
+    if (pathname === alias) return alias.length + 1000
+    if (pathname.startsWith(`${alias}/`)) return alias.length
+  }
+  return 0
+}
+
+function getItemMatchScore(item: NavItem, pathname: string, deptId?: string): number {
+  let best = getRouteMatchLength(item.href, pathname, deptId)
+  if (item.children) {
+    for (const child of item.children) {
+      const childScore = getRouteMatchLength(child.href, pathname, deptId)
+      if (childScore > best) best = childScore
+      if (child.children) {
+        for (const gc of child.children) {
+          const gcScore = getRouteMatchLength(gc.href, pathname, deptId)
+          if (gcScore > best) best = gcScore
+        }
+      }
+    }
+  }
+  return best
 }
 
 export function AdminSidebar({ user, profile, adminScopeMode = "global", deptId, deptConsoleHref }: AdminSidebarProps) {
@@ -660,19 +693,22 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global", deptId,
     }))
     .filter((section) => section.items.length > 0)
 
-  const isAdminNavItemActive = (href: string): boolean => {
-    if (!pathname) return false
-    // Exact-match only for root dashboard hrefs so they don't light up on every sub-page.
-    if (href === "/admin" || (deptId && href === `/dept/${deptId}`)) return pathname === href
-    if (pathname === href || pathname.startsWith(`${href}/`)) return true
+  const activeTopLevelHref = useMemo(() => {
+    if (!pathname) return null
 
-    const aliases = ADMIN_ROUTE_ALIASES[href]
-    if (aliases && aliases.some((alias) => pathname === alias || pathname.startsWith(`${alias}/`))) {
-      return true
+    let bestHref: string | null = null
+    let bestScore = 0
+
+    for (const item of activeNavigation) {
+      const score = getItemMatchScore(item, pathname, deptId)
+      if (score > bestScore) {
+        bestScore = score
+        bestHref = item.href
+      }
     }
 
-    return false
-  }
+    return bestHref
+  }, [pathname, activeNavigation, deptId])
 
   // True for roles that can access the /admin shell (developer / admin / super_admin).
   const isAdminLikeUser = ["developer", "admin", "super_admin"].includes(String(profile?.role || "").toLowerCase())
@@ -737,11 +773,7 @@ export function AdminSidebar({ user, profile, adminScopeMode = "global", deptId,
             {section.items.map((item) => {
               const hasChildren = !isCollapsed && item.children && item.children.length > 0
               const isOpen = openSections.has(item.href)
-              const isActive = isAdminNavItemActive(item.href)
-              const hasActiveChild = item.children?.some(
-                (child) => pathname === child.href || pathname?.startsWith(child.href + "/")
-              )
-              const highlighted = isActive || Boolean(hasActiveChild)
+              const highlighted = item.href === activeTopLevelHref
               const activeCls =
                 "bg-[var(--admin-primary)] text-white shadow-sm dark:text-[var(--admin-primary-foreground)]"
               const inactiveCls =

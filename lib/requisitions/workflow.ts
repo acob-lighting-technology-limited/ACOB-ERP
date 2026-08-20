@@ -5,7 +5,7 @@ export const REQUISITION_STAGES: {
   label: string
   approverRoleLabel: string
 }[] = [
-  { code: "pending_reviewed_by", label: "Review", approverRoleLabel: "Admin & HR Lead" },
+  { code: "pending_reviewed_by", label: "Review", approverRoleLabel: "Admin and HR Lead" },
   { code: "pending_authorized_by", label: "Authorize", approverRoleLabel: "Corporate Services Lead" },
   { code: "pending_verified_by", label: "Verify", approverRoleLabel: "Accounts Lead" },
   { code: "pending_approved_by", label: "Approve", approverRoleLabel: "Executive Management Lead (MD)" },
@@ -48,7 +48,7 @@ export function getNextStage(currentStage: RequisitionStageCode): RequisitionSta
 export function getStageLabel(stageCode: string): string {
   switch (stageCode) {
     case "pending_reviewed_by":
-      return "Pending Admin & HR Review"
+      return "Pending Admin and HR Review"
     case "pending_authorized_by":
       return "Pending Corporate Services Authorization"
     case "pending_verified_by":

@@ -303,7 +303,7 @@ export function getTargetDescription(log: AuditLog): string {
     const dept = str(log.new_values?.department) || str(log.old_values?.department)
     if (dept) return `${dept} (Dept)`
     const location = str(log.new_values?.office_location) || str(log.old_values?.office_location)
-    if (location) return `${location} (Location)`
+    if (location) return `${location} (Room/Office)`
     return "No target captured"
   }
 

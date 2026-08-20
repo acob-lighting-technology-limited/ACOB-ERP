@@ -15,6 +15,8 @@ import { NProgressHandler } from "@/components/nprogress-handler"
 import { ClientErrorMonitor } from "@/components/telemetry/client-error-monitor"
 import { QueryProvider } from "@/providers/query-provider"
 import { SeasonalFaviconSwitcher } from "@/components/seasonal-favicon-switcher"
+import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
+import { getAvatarSignedUrl } from "@/lib/profile-photos"
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -40,13 +42,27 @@ async function HeaderWrapperWithData() {
 
   const canAccessAdmin = Boolean(await resolveAdminScope(supabase, data.user.id))
 
+  const dataClient = getServiceRoleClientOrFallback(supabase)
+  const { data: profile } = await dataClient
+    .from("profiles")
+    .select("avatar_path, first_name, last_name")
+    .eq("id", data.user.id)
+    .maybeSingle()
+
+  const avatarUrl = profile?.avatar_path ? await getAvatarSignedUrl(dataClient, profile.avatar_path) : null
+
   // Serialize only the necessary user data to avoid hydration issues
   const userData = {
     email: data.user.email,
-    user_metadata: data.user.user_metadata,
+    user_metadata: {
+      ...data.user.user_metadata,
+      first_name: profile?.first_name || data.user.user_metadata?.first_name,
+      last_name: profile?.last_name || data.user.user_metadata?.last_name,
+      avatar_url: avatarUrl || data.user.user_metadata?.avatar_url || data.user.user_metadata?.picture,
+    },
   }
 
-  return <HeaderWrapper user={userData} canAccessAdmin={canAccessAdmin} />
+  return <HeaderWrapper user={userData} canAccessAdmin={canAccessAdmin} avatarUrl={avatarUrl} />
 }
 
 export default function RootLayout({

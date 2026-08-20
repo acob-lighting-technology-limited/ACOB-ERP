@@ -21,7 +21,7 @@ export const ADMIN_ROUTE_GROUPS: RouteGroup[] = [
       {
         key: "hr.main",
         label: "Employees & HR",
-        hint: "Employees, Departments, Office Location & Performance (also covers Leave & Attendance)",
+        hint: "Employees, Departments, Rooms & Offices & Performance (also covers Leave & Attendance)",
       },
       { key: "hr.leave", label: "Leave" },
       { key: "hr.attendance", label: "Attendance" },
