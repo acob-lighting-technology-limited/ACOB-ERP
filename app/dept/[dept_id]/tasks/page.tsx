@@ -32,10 +32,10 @@ export default async function DeptTasksPage({ params, searchParams }: DeptTasksP
   const userProfile: UserProfile = {
     id: userId,
     role: scope.role,
-    department: scope.deptName,
+    department: deptName,
     is_department_lead: true,
-    lead_departments: [scope.deptName],
-    managed_departments: [scope.deptName],
+    lead_departments: expandedDepts,
+    managed_departments: expandedDepts,
     is_global_task_assigner: false,
   }
 

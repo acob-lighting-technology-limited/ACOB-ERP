@@ -12,15 +12,7 @@ export interface TaskAssignmentTargetProfile {
   department?: string | null
 }
 
-function normalizeDepartment(value: string | null | undefined) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-}
-
-function uniqueDepartments(values: Array<string | null | undefined>) {
-  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)))
-}
+import { normalizeDepartmentName, normalizeDepartmentList, isSameDepartment } from "@/shared/departments"
 
 export function hasGlobalTaskAssignmentAuthority(profile: TaskAssignmentAuthorityProfile | null | undefined): boolean {
   if (!profile) return false
@@ -40,7 +32,7 @@ export function getAssignableDepartments(profile: TaskAssignmentAuthorityProfile
     return [] // Empty means all departments in global context, or caller provides full list
   }
 
-  const departments = uniqueDepartments([
+  const departments = normalizeDepartmentList([
     profile.department,
     ...(Array.isArray(profile.lead_departments) ? profile.lead_departments : []),
   ])
@@ -55,8 +47,7 @@ export function profileLeadsDepartment(
   if (!profile) return false
   if (hasGlobalTaskAssignmentAuthority(profile)) return true
   if (!profile.is_department_lead) return false
-  const target = normalizeDepartment(departmentName)
-  return getAssignableDepartments(profile).some((department) => normalizeDepartment(department) === target)
+  return getAssignableDepartments(profile).some((dept) => isSameDepartment(dept, departmentName))
 }
 
 export function canAssignToDepartment(
@@ -66,9 +57,7 @@ export function canAssignToDepartment(
   if (!assigner || !department) return false
   if (!canAssignTasks(assigner)) return false
   if (hasGlobalTaskAssignmentAuthority(assigner)) return true
-  return getAssignableDepartments(assigner).some(
-    (managedDepartment) => normalizeDepartment(managedDepartment) === normalizeDepartment(department)
-  )
+  return getAssignableDepartments(assigner).some((managedDept) => isSameDepartment(managedDept, department))
 }
 
 export function canAssignToProfile(
