@@ -5,6 +5,7 @@ import { createClient as createAdminClient } from "@supabase/supabase-js"
 import { rateLimit, getClientId } from "@/lib/rate-limit"
 import {
   areRequiredDocumentsVerified,
+  formatLeaveReference,
   getLeavePolicy,
   notifyUsers,
   syncAttendanceForApprovedLeave,
@@ -245,6 +246,28 @@ export async function PATCH(request: NextRequest) {
 
     const now = new Date().toISOString()
 
+    const [{ data: requesterProfile }, { data: leaveTypeRow }] = await Promise.all([
+      supabaseAdmin
+        .from("profiles")
+        .select("id, full_name, first_name, last_name, company_email, department")
+        .eq("id", typedLeaveRequest.user_id)
+        .maybeSingle(),
+      supabaseAdmin
+        .from("leave_types")
+        .select("id, name, code")
+        .eq("id", typedLeaveRequest.leave_type_id)
+        .maybeSingle(),
+    ])
+
+    const requesterName =
+      requesterProfile?.full_name ||
+      `${requesterProfile?.first_name || ""} ${requesterProfile?.last_name || ""}`.trim() ||
+      requesterProfile?.company_email ||
+      "Employee"
+    const leaveTypeName = leaveTypeRow?.name || "Leave"
+    const ref = formatLeaveReference(leave_request_id)
+    const refSuffix = ref ? ` — ${ref}` : ""
+
     if (action === "rejected") {
       const { error: rejectionError } = await supabaseAdmin.rpc("atomic_leave_reject", {
         p_leave_request_id: leave_request_id,
@@ -269,11 +292,25 @@ export async function PATCH(request: NextRequest) {
       await notifyUsers(supabaseAdmin, {
         userIds: [typedLeaveRequest.user_id],
         title: "Leave request rejected",
-        message: `Your leave request was rejected at ${stageCode.replaceAll("_", " ")}. Reason: ${comments}`,
+        message: `Your leave request for ${leaveTypeName} (${typedLeaveRequest.start_date} to ${typedLeaveRequest.end_date}) was rejected at the ${humanStage(stageCode)} stage by ${actorName}.`,
         actorId: actorProfileId,
         linkUrl: "/leave",
         entityId: leave_request_id,
         emailEvent: "rejected",
+        emailSubject: `Leave Request Rejected${refSuffix}`,
+        emailTitle: "Leave Request Rejected",
+        badgeText: "Request Rejected",
+        badgeVariant: "destructive",
+        detailsTitle: "Rejection Details",
+        details: [
+          { label: "Leave Type", value: leaveTypeName },
+          { label: "Duration", value: `${typedLeaveRequest.days_count} day(s)` },
+          { label: "Period", value: `${typedLeaveRequest.start_date} to ${typedLeaveRequest.end_date}` },
+          { label: "Rejected At", value: humanStage(stageCode) },
+          { label: "Rejected By", value: actorName },
+          { label: "Reason / Comments", value: comments || "No comments provided" },
+        ],
+        ctaLabel: "View Leave Details",
       })
 
       // If a different reliever had already been attached, tell them the commitment is no longer active.
@@ -281,11 +318,23 @@ export async function PATCH(request: NextRequest) {
         await notifyUsers(supabaseAdmin, {
           userIds: [typedLeaveRequest.reliever_id],
           title: "Reliever commitment released",
-          message: "This leave request was rejected, so your reliever commitment for it is no longer active.",
+          message: `The leave request for ${requesterName} (${typedLeaveRequest.start_date} to ${typedLeaveRequest.end_date}) was rejected, so your reliever coverage commitment is no longer required.`,
           actorId: actorProfileId,
           linkUrl: "/leave",
           entityId: leave_request_id,
           emailEvent: "approval_required",
+          emailSubject: `Reliever Duty Released — ${requesterName}${refSuffix}`,
+          emailTitle: "Reliever Commitment Released",
+          badgeText: "Relief Released",
+          badgeVariant: "info",
+          detailsTitle: "Request Details",
+          details: [
+            { label: "Employee", value: requesterName },
+            { label: "Leave Type", value: leaveTypeName },
+            { label: "Period", value: `${typedLeaveRequest.start_date} to ${typedLeaveRequest.end_date}` },
+            { label: "Status", value: "Rejected (Relief Released)" },
+          ],
+          ctaLabel: "Open Leave Portal",
         })
       }
 
@@ -365,22 +414,50 @@ export async function PATCH(request: NextRequest) {
       await notifyUsers(supabaseAdmin, {
         userIds: [typedLeaveRequest.user_id],
         title: "Leave approved - proceed on leave",
-        message: `${actorName} completed final approval. Start: ${typedLeaveRequest.start_date}, Resume: ${typedLeaveRequest.resume_date}.`,
+        message: `Congratulations! Your leave request for ${leaveTypeName} has received final approval from ${actorName}. You are authorized to proceed on leave.`,
         actorId: actorProfileId,
         linkUrl: "/leave",
         entityId: leave_request_id,
         emailEvent: "approved",
+        emailSubject: `Leave Request Approved — Proceed on Leave${refSuffix}`,
+        emailTitle: "Leave Request Approved",
+        badgeText: "Final Approval Granted",
+        badgeVariant: "success",
+        detailsTitle: "Approved Leave Schedule",
+        details: [
+          { label: "Leave Type", value: leaveTypeName },
+          { label: "Approved Duration", value: `${typedLeaveRequest.days_count} day(s)` },
+          { label: "Start Date", value: typedLeaveRequest.start_date },
+          { label: "End Date", value: typedLeaveRequest.end_date },
+          { label: "Resumption Date", value: typedLeaveRequest.resume_date || "-" },
+          { label: "Final Approver", value: `${actorName} (${humanStage(stageCode)})` },
+          ...(comments ? [{ label: "Approver Feedback", value: comments }] : []),
+        ],
+        ctaLabel: "View Approved Leave",
       })
 
       if (typedLeaveRequest.reliever_id && typedLeaveRequest.reliever_id !== typedLeaveRequest.user_id) {
         await notifyUsers(supabaseAdmin, {
           userIds: [typedLeaveRequest.reliever_id],
           title: "Reliever commitment is now active",
-          message: `This leave is fully approved (${typedLeaveRequest.start_date} to ${typedLeaveRequest.end_date}). You cannot request overlapping leave during this period.`,
+          message: `The leave request for ${requesterName} is fully approved. Your relief coverage commitment is active from ${typedLeaveRequest.start_date} to ${typedLeaveRequest.end_date}.`,
           actorId: actorProfileId,
           linkUrl: "/leave",
           entityId: leave_request_id,
           emailEvent: "approval_required",
+          emailSubject: `Reliever Commitment Confirmed — ${requesterName}${refSuffix}`,
+          emailTitle: "Reliever Commitment Active",
+          badgeText: "Relief Coverage Active",
+          badgeVariant: "info",
+          detailsTitle: "Relief Schedule",
+          details: [
+            { label: "Employee On Leave", value: requesterName },
+            { label: "Department", value: requesterProfile?.department || "-" },
+            { label: "Leave Type", value: leaveTypeName },
+            { label: "Relief Period", value: `${typedLeaveRequest.start_date} to ${typedLeaveRequest.end_date}` },
+            { label: "Expected Resumption", value: typedLeaveRequest.resume_date || "-" },
+          ],
+          ctaLabel: "Open Leave Portal",
         })
       }
 
@@ -427,24 +504,56 @@ export async function PATCH(request: NextRequest) {
       return apiError(`Failed to advance leave request: ${transitionError.message}`, ApiErrorCode.DATABASE_ERROR, 500)
     }
 
+    // 1. Notify Requester of endorsement
     await notifyUsers(supabaseAdmin, {
       userIds: [leaveRequest.user_id],
       title: `${humanStage(stageCode)} approved your leave request`,
-      message: `${actorName} approved at ${humanStage(stageCode)} stage. Next: ${humanStage(nextStage.stage_code)}.`,
+      message: `${actorName} endorsed your leave request at the ${humanStage(stageCode)} stage. Your request has moved to ${humanStage(nextStage.stage_code)} for review.`,
       actorId: actorProfileId,
       linkUrl: "/leave",
       entityId: leave_request_id,
       emailEvent: "approval_required",
+      emailSubject: `Leave Request Endorsed at ${humanStage(stageCode)}${refSuffix}`,
+      emailTitle: `Leave Request Endorsed`,
+      badgeText: "Endorsed — In Progress",
+      badgeVariant: "info",
+      detailsTitle: "Workflow Progress",
+      details: [
+        { label: "Leave Type", value: leaveTypeName },
+        { label: "Duration", value: `${typedLeaveRequest.days_count} day(s)` },
+        { label: "Period", value: `${typedLeaveRequest.start_date} to ${typedLeaveRequest.end_date}` },
+        { label: "Endorsed By", value: `${actorName} (${humanStage(stageCode)})` },
+        ...(comments ? [{ label: "Endorsement Notes", value: comments }] : []),
+        { label: "Next Pending Stage", value: humanStage(nextStage.stage_code) },
+      ],
+      ctaLabel: "Track Request Status",
     })
 
+    // 2. Notify Next Stage Approver
     await notifyUsers(supabaseAdmin, {
       userIds: [nextStage.approver_user_id],
       title: "Leave request awaiting your approval",
-      message: `A leave request is now waiting at ${nextStage.stage_code.replaceAll("_", " ")}.`,
+      message: `${requesterName} has a leave request for ${leaveTypeName} (${typedLeaveRequest.days_count} day(s), ${typedLeaveRequest.start_date} to ${typedLeaveRequest.end_date}) awaiting your endorsement at ${humanStage(nextStage.stage_code)}.`,
       actorId: actorProfileId,
       linkUrl: "/leave",
       entityId: leave_request_id,
       emailEvent: "approval_required",
+      emailSubject: `Action Required: Leave Request Awaiting Your Approval — ${requesterName}${refSuffix}`,
+      emailTitle: "Leave Request Awaiting Your Approval",
+      badgeText: "Action Required",
+      badgeVariant: "warning",
+      detailsTitle: "Leave Request Details",
+      details: [
+        { label: "Employee", value: requesterName },
+        { label: "Department", value: requesterProfile?.department || "-" },
+        { label: "Leave Type", value: leaveTypeName },
+        { label: "Duration", value: `${typedLeaveRequest.days_count} day(s)` },
+        { label: "Period", value: `${typedLeaveRequest.start_date} to ${typedLeaveRequest.end_date}` },
+        { label: "Resumption Date", value: typedLeaveRequest.resume_date || "-" },
+        { label: "Previous Endorsement", value: `${actorName} (${humanStage(stageCode)})` },
+        ...(comments ? [{ label: "Previous Approver Notes", value: comments }] : []),
+      ],
+      ctaLabel: "Review & Endorse",
     })
 
     await writeAuditLog(
