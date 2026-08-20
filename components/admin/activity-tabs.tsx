@@ -200,7 +200,7 @@ export function AdminActivityTabs({
       feedback: { href: "/admin/feedback", label: "View all feedback" },
       correspondence: { href: "/admin/correspondence", label: "View all correspondence" },
       helpdesk: { href: "/admin/help-desk", label: "View all tickets" },
-      payments: { href: "/admin/finance/payments", label: "View all payments" },
+      payments: { href: "/admin/accounts/payments", label: "View all payments" },
       leave: { href: "/admin/hr/leave", label: "View all leave" },
       attendance: { href: "/admin/hr/attendance", label: "View all attendance" },
       assets: { href: "/admin/assets", label: "View all assets" },
@@ -374,7 +374,7 @@ export function AdminActivityTabs({
             {payments.length > 0 ? (
               <ul className={listClass}>
                 {payments.map((p) => (
-                  <ItemRow key={p.id} href="/admin/finance/payments">
+                  <ItemRow key={p.id} href="/admin/accounts/payments">
                     <p className="truncate text-sm font-medium">{p.title}</p>
                     <div className="mt-0.5 flex items-center gap-1.5">
                       <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
