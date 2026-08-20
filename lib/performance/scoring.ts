@@ -164,6 +164,7 @@ export async function computeIndividualPerformanceScore(
     .from("goals_objectives")
     .select("id, title, target_value, achieved_value, priority, is_system_generated, weight_pct, department")
     .eq("approval_status", "approved")
+    .eq("is_archived", false)
 
   if (params.cycleId) {
     goalQuery = goalQuery.eq("review_cycle_id", params.cycleId)
@@ -197,8 +198,9 @@ export async function computeIndividualPerformanceScore(
     const goalIds = goals.map((g) => g.id)
     const { data: allTaskRows } = await supabase
       .from("tasks")
-      .select("id, goal_id, status, assignment_type, assigned_to, department")
+      .select("id, goal_id, status, assignment_type, assigned_to, department, is_archived")
       .in("goal_id", goalIds)
+      .eq("is_archived", false)
 
     const tasksByGoalId = new Map<string, typeof allTaskRows>()
     for (const task of allTaskRows || []) {
@@ -211,12 +213,21 @@ export async function computeIndividualPerformanceScore(
       const taskSummary = tasksByGoalId.get(goal.id) || []
 
       const relevantTasks = taskSummary.filter((task) => {
-        if (task.assignment_type === "individual") {
+        // Exclude reassigned or cancelled tasks from personal scoring (neutral)
+        if (task.status === "reassigned" || task.status === "cancelled") {
+          return false
+        }
+
+        if (task.assignment_type === "individual" || !task.assignment_type) {
           return task.assigned_to === params.userId
         }
 
-        if (task.assignment_type === "department") {
-          return Boolean(userDepartment && task.department === userDepartment && userCompletedTaskIds.has(task.id))
+        if (task.assignment_type === "multiple" || task.assignment_type === "department") {
+          return (
+            task.assigned_to === params.userId ||
+            userCompletedTaskIds.has(task.id) ||
+            Boolean(userDepartment && task.department === userDepartment)
+          )
         }
 
         return false
@@ -656,6 +667,7 @@ export async function computeDepartmentPerformanceScore(
     .select("status, source_type, category")
     .eq("department", params.department)
     .eq("source_type", "manual")
+    .eq("is_archived", false)
     .or("category.is.null,category.neq.weekly_action")
 
   if (cycle) {
@@ -686,11 +698,13 @@ export async function computeDepartmentPerformanceScore(
         )
       : null
 
+  const validDeptTasks = (departmentTasks || []).filter(
+    (task) => !["reassigned", "cancelled"].includes(String(task.status || "").toLowerCase())
+  )
+
   const taskProjectDeliveryScore =
-    departmentTasks && departmentTasks.length > 0
-      ? roundScore(
-          (departmentTasks.filter((task) => task.status === "completed").length / departmentTasks.length) * 100
-        )
+    validDeptTasks.length > 0
+      ? roundScore((validDeptTasks.filter((task) => task.status === "completed").length / validDeptTasks.length) * 100)
       : null
 
   let behaviourLeadershipScore: number | null = null
