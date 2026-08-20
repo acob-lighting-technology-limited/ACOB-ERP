@@ -1,29 +1,15 @@
 import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
-import {
-  expandDepartmentScopeForQuery,
-  getDepartmentScope,
-  normalizeDepartmentName,
-  resolveAdminScope,
-} from "@/lib/admin/rbac"
-import { AdminTasksContent, type employee, type UserProfile } from "./management/admin-tasks-content"
-import type { Task } from "@/types/task"
+import { AdminTasksContent } from "./management/admin-tasks-content"
+import type { Task, employee, UserProfile } from "./management/admin-tasks-content"
+import type { TaskPersonSummary } from "@/types/task"
+import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
+import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
+import { normalizeDepartmentName } from "@/shared/departments"
 import { listAssignableProfiles } from "@/lib/workforce/assignment-policy"
-import { hasGlobalTaskAssignmentAuthority } from "@/lib/tasks/assignment-scope"
 
-import { logger } from "@/lib/logger"
-
-const log = logger("tasks")
-
-type ProfileDepartmentRow = {
-  id: string
-  first_name: string
-  last_name: string
-  department: string | null
-}
-
-type GoalFilterOption = {
+interface GoalFilterOption {
   id: string
   title: string
 }
@@ -33,112 +19,107 @@ type GoalRow = {
   title: string
 }
 
+export const dynamic = "force-dynamic"
+export const revalidate = 0
+
 async function getAdminTasksData() {
-  const supabase = await createClient()
-  const dataClient = getServiceRoleClientOrFallback(supabase)
-
-  const {
-    data: { user },
-    error: userError,
-  } = await supabase.auth.getUser()
-
-  if (userError || !user) {
+  const scope = await getRequestScope()
+  if (!scope) {
     return { redirect: "/auth/login" as const }
   }
 
-  const scope = await resolveAdminScope(supabase, user.id)
-  if (!scope) {
-    return { redirect: "/profile" as const }
+  const supabase = await createClient()
+
+  // 1. Get current authenticated user
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
+  if (!user) {
+    return { redirect: "/auth/login" as const }
   }
-  const canAssignGlobally = hasGlobalTaskAssignmentAuthority({
-    id: user.id,
-    department: scope.department,
-    is_department_lead: scope.isDepartmentLead,
-    lead_departments: scope.leadDepartments,
-  })
-  const departmentScope =
-    scope.scopeMode === "lead"
-      ? getDepartmentScope(scope, "general")
-      : canAssignGlobally
-        ? null
-        : getDepartmentScope(scope, "general")
-  const queryDepartmentScope = departmentScope ? expandDepartmentScopeForQuery(departmentScope) : null
+
+  // 2. Fetch user profile with role info
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, role, department, is_department_lead, lead_departments")
+    .eq("id", user.id)
+    .single()
+
+  const departmentScope = getScopedDepartments(scope)
+  const isGlobalTaskAssigner = scope.isAdminLike === true && scope.scopeMode !== "lead"
+  const isDeptLead = profile?.is_department_lead ?? false
 
   const userProfile: UserProfile = {
     id: user.id,
-    role: scope.role,
-    department: scope.department,
-    is_department_lead: scope.isDepartmentLead,
-    lead_departments: scope.leadDepartments,
-    managed_departments: scope.managedDepartments,
-    is_global_task_assigner: scope.scopeMode === "lead" ? false : canAssignGlobally,
+    role: profile?.role || "employee",
+    department: profile?.department,
+    is_department_lead: isDeptLead,
+    lead_departments: profile?.lead_departments || [],
+    managed_departments: isGlobalTaskAssigner ? [] : (departmentScope ?? profile?.lead_departments ?? []),
+    is_global_task_assigner: isGlobalTaskAssigner,
   }
 
-  // Build query based on role - exclude weekly action point items
-  const tasksQuery = dataClient
-    .from("tasks")
-    .select("*")
-    .neq("category", "weekly_action")
-    .order("created_at", { ascending: false })
+  const dataClient = getServiceRoleClientOrFallback(supabase)
 
-  // Fetch employee - leads can only see employee in their departments
+  // 3. Fetch non-archived tasks and active assignable profiles
   const [tasksResult, employeeResult] = await Promise.all([
-    tasksQuery,
+    dataClient
+      .from("tasks")
+      .select("*")
+      .eq("is_archived", false)
+      .neq("category", "weekly_action")
+      .order("created_at", { ascending: false }),
     listAssignableProfiles(dataClient, {
       select:
         "id, first_name, last_name, company_email, department, employment_status, is_department_lead, lead_departments",
-      departmentScope: queryDepartmentScope,
+      departmentScope: departmentScope && departmentScope.length > 0 ? departmentScope : undefined,
       allowLegacyNullStatus: true,
     }),
   ])
 
-  if (tasksResult.error || employeeResult.error) {
-    log.error("Error loading data:", tasksResult.error || employeeResult.error)
-    return { tasks: [], employee: [], departments: [], userProfile }
-  }
+  const rawTasks = (tasksResult.data || []) as Task[]
 
-  const allIndivUserIds = Array.from(
-    new Set(
-      ((tasksResult.data as Task[] | null) || [])
-        .filter((t) => t.assignment_type === "individual" && t.assigned_to)
-        .map((t) => t.assigned_to) || []
-    )
-  ) as string[]
+  // Collect all profile and goal IDs
+  const profileIds = new Set<string>()
+  const goalIds = new Set<string>()
 
-  // 2. Fetch profiles for individual assignments
-  const { data: indivProfiles } =
-    allIndivUserIds.length > 0
-      ? await dataClient.from("profiles").select("id, first_name, last_name, department").in("id", allIndivUserIds)
-      : { data: [] }
-  const indivProfileMap = new Map(((indivProfiles as ProfileDepartmentRow[] | null) || []).map((p) => [p.id, p]))
-  const taskGoalIds = Array.from(
-    new Set((((tasksResult.data as Task[] | null) || []).map((task) => task.goal_id).filter(Boolean) as string[]) || [])
+  rawTasks.forEach((t) => {
+    if (t.assigned_to) profileIds.add(t.assigned_to)
+    if (t.assigned_by) profileIds.add(t.assigned_by)
+    if (t.created_by) profileIds.add(t.created_by)
+    if (t.reviewed_by) profileIds.add(t.reviewed_by)
+    if (t.goal_id) goalIds.add(t.goal_id)
+  })
+
+  const [profilesRes, goalsRes] = await Promise.all([
+    profileIds.size > 0
+      ? dataClient.from("profiles").select("id, first_name, last_name, department").in("id", Array.from(profileIds))
+      : { data: [] },
+    goalIds.size > 0
+      ? dataClient.from("goals_objectives").select("id, title").in("id", Array.from(goalIds))
+      : { data: [] },
+  ])
+
+  const profileMap = new Map<string, TaskPersonSummary>(
+    ((profilesRes.data || []) as TaskPersonSummary[]).map((p) => [p.id, p])
   )
-  const { data: taskGoalRows } =
-    taskGoalIds.length > 0
-      ? await dataClient.from("goals_objectives").select("id, title").in("id", taskGoalIds)
-      : { data: [] as GoalRow[] }
-  const taskGoalMap = new Map(((taskGoalRows as GoalRow[] | null) || []).map((goal) => [goal.id, goal.title]))
+  const goalMap = new Map<string, string>(
+    ((goalsRes.data || []) as Array<{ id: string; title: string }>).map((g) => [g.id, g.title])
+  )
 
-  const tasksWithUsers = ((tasksResult.data as Task[] | null) || []).map((task) => {
-    const taskData: Task = { ...task }
-
-    if (task.assignment_type === "individual" && task.assigned_to) {
-      const assignedProfile = indivProfileMap.get(task.assigned_to)
-      taskData.assigned_to_user = assignedProfile
-        ? {
-            ...assignedProfile,
-            department: assignedProfile.department || "",
-          }
-        : undefined
-    }
-    taskData.goal_title = task.goal_id ? taskGoalMap.get(task.goal_id) || null : null
-
-    return taskData
-  }) as Task[]
+  const tasksWithUsers = rawTasks.map((task) => {
+    const copy: Task = { ...task }
+    if (task.assigned_to) copy.assigned_to_user = profileMap.get(task.assigned_to)
+    if (task.assigned_by) copy.assigned_by_user = profileMap.get(task.assigned_by)
+    if (task.created_by) copy.created_by_user = profileMap.get(task.created_by)
+    if (task.reviewed_by) copy.reviewed_by_user = profileMap.get(task.reviewed_by)
+    if (task.goal_id) copy.goal_title = goalMap.get(task.goal_id) || null
+    return copy
+  })
 
   // For leads, filter tasks strictly by their departments
-  let filteredTasks = (tasksWithUsers || []).filter((task) => String(task.source_type || "") !== "action_item")
+  let filteredTasks = tasksWithUsers.filter((task) => String(task.source_type || "") !== "action_item")
   if (departmentScope) {
     const scopedDepartmentTokens = new Set(
       departmentScope.map((departmentName) => normalizeDepartmentName(departmentName))
@@ -171,23 +152,21 @@ async function getAdminTasksData() {
     departments.sort()
   }
 
-  let goalsQuery = dataClient.from("goals_objectives").select("id, title, department, approval_status")
+  let goalsQuery = dataClient.from("goals_objectives").select("id, title, department").eq("is_archived", false)
   if (departmentScope && departmentScope.length > 0) {
     goalsQuery = goalsQuery.in("department", departmentScope)
   }
   const { data: goalRowsRaw } = await goalsQuery.order("title", { ascending: true })
-  const goalRows = (goalRowsRaw || [])
-    .filter((goal) => {
-      const approvalStatus = String(goal.approval_status || "").toLowerCase()
-      return approvalStatus === "approved"
-    })
-    .map((goal) => ({ id: goal.id, title: goal.title })) as GoalFilterOption[]
+  const goalRows = ((goalRowsRaw || []) as GoalRow[]).map((goal) => ({
+    id: goal.id,
+    title: goal.title,
+  })) as GoalFilterOption[]
 
   return {
     tasks: filteredTasks as Task[],
     employee: (employeeResult.data || []) as employee[],
     departments,
-    goals: (goalRows || []) as GoalFilterOption[],
+    goals: goalRows,
     userProfile,
   }
 }
@@ -196,25 +175,17 @@ export default async function AdminTasksPage(props: { searchParams?: Promise<{ g
   const searchParams = await props.searchParams
   const data = await getAdminTasksData()
 
-  if ("redirect" in data && data.redirect) {
+  if ("redirect" in data && typeof data.redirect === "string") {
     redirect(data.redirect)
-  }
-
-  const pageData = data as {
-    tasks: Task[]
-    employee: employee[]
-    departments: string[]
-    goals: GoalFilterOption[]
-    userProfile: UserProfile
   }
 
   return (
     <AdminTasksContent
-      initialTasks={pageData.tasks}
-      initialemployee={pageData.employee}
-      initialDepartments={pageData.departments}
-      initialGoals={pageData.goals}
-      userProfile={pageData.userProfile}
+      initialTasks={data.tasks}
+      initialemployee={data.employee}
+      initialDepartments={data.departments}
+      initialGoals={data.goals}
+      userProfile={data.userProfile}
       initialGoalId={searchParams?.goal_id || ""}
     />
   )
