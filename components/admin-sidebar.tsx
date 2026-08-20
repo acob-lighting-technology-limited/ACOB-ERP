@@ -147,15 +147,15 @@ function buildDeptNavigation(deptId: string): NavItem[] {
     {
       section: "management",
       name: "Accounts",
-      href: `${base}/finance`,
+      href: `${base}/accounts`,
       icon: Landmark,
       roles: [],
       children: [
-        { name: "Requisitions", href: `${base}/finance/requisitions` },
-        { name: "Payments", href: `${base}/finance/payments` },
-        { name: "Bills", href: `${base}/finance/bills` },
-        { name: "Invoices", href: `${base}/finance/invoices` },
-        { name: "Finance Reports", href: `${base}/finance/reports` },
+        { name: "Requisitions", href: `${base}/accounts/requisitions` },
+        { name: "Payments", href: `${base}/accounts/payments` },
+        { name: "Bills", href: `${base}/accounts/bills` },
+        { name: "Invoices", href: `${base}/accounts/invoices` },
+        { name: "Finance Reports", href: `${base}/accounts/reports` },
         {
           name: "Assets",
           href: `${base}/assets`,
@@ -318,16 +318,16 @@ const adminNavigation: NavItem[] = [
     // filterNavChildren), so nesting them here does not collapse the gates.
     section: "management",
     name: "Accounts",
-    href: "/admin/finance",
+    href: "/admin/accounts",
     icon: Landmark,
     roles: ["developer", "super_admin", "admin"],
     children: [
-      { name: "Requisitions", href: "/admin/finance/requisitions" },
-      { name: "Payments", href: "/admin/finance/payments" },
-      { name: "Bills", href: "/admin/finance/bills" },
-      { name: "Invoices", href: "/admin/finance/invoices" },
+      { name: "Requisitions", href: "/admin/accounts/requisitions" },
+      { name: "Payments", href: "/admin/accounts/payments" },
+      { name: "Bills", href: "/admin/accounts/bills" },
+      { name: "Invoices", href: "/admin/accounts/invoices" },
       { name: "Payroll", href: "/admin/payroll" },
-      { name: "Finance Reports", href: "/admin/finance/reports" },
+      { name: "Finance Reports", href: "/admin/accounts/reports" },
       {
         name: "Purchasing",
         href: "/admin/purchasing",
@@ -487,7 +487,8 @@ const adminSections = [
 ]
 
 const ADMIN_ROUTE_ALIASES: Record<string, string[]> = {
-  // Finance — legacy /admin/payments/* redirects into the finance surface.
+  // Accounts — legacy /admin/finance and /admin/payments/* redirect into accounts.
+  "/admin/accounts": ["/admin/finance", "/admin/payments"],
   "/admin/finance": ["/admin/payments"],
   // Tools — feedback is surfaced through tools.
   "/admin/tools": ["/admin/feedback"],
