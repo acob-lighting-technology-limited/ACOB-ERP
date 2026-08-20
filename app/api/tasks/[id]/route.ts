@@ -6,13 +6,8 @@ import { logger } from "@/lib/logger"
 import { checkRequestSize } from "@/lib/api/request-size"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { apiError, ApiErrorCode } from "@/lib/api/errors"
-import {
-  canAssignTasks,
-  canAssignToDepartment,
-  canAssignToProfile,
-  type TaskAssignmentAuthorityProfile,
-  type TaskAssignmentTargetProfile,
-} from "@/lib/tasks/assignment-scope"
+import { getRequestScope, type AdminScope } from "@/lib/admin/api-scope"
+import { canAssignToDepartment, canAssignToProfile } from "@/lib/tasks/assignment-scope"
 import { TASK_STATUSES, TASK_ASSIGNMENT_TYPES } from "@/lib/tasks/constants"
 
 const log = logger("task-detail-route")
@@ -29,16 +24,43 @@ const UpdateTaskSchema = z.object({
   goal_id: z.string().uuid().optional().nullable(),
   task_start_date: z.string().optional().nullable(),
   task_end_date: z.string().optional().nullable(),
+  extension_reason: z.string().trim().max(5000).optional().nullable(),
+  is_archived: z.boolean().optional(),
 })
 
-async function assertManagerAccess(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, department, is_department_lead, lead_departments")
-    .eq("id", userId)
-    .single<TaskAssignmentAuthorityProfile>()
+type ProfileRecord = {
+  id: string
+  role?: string | null
+  department?: string | null
+  is_department_lead?: boolean | null
+  lead_departments?: string[] | null
+}
 
-  return profile && canAssignTasks(profile) ? profile : null
+function isAdminProfile(scope: AdminScope | null) {
+  return scope?.isAdminLike === true && scope.scopeMode !== "lead"
+}
+
+export async function GET(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+  const params = await props.params
+  try {
+    const supabase = await createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return apiError("Unauthorized", ApiErrorCode.UNAUTHORIZED, 401)
+
+    const { data: task, error } = await supabase.from("tasks").select("*").eq("id", params.id).single()
+
+    if (error || !task) {
+      return apiError("Task not found", ApiErrorCode.NOT_FOUND, 404)
+    }
+
+    return NextResponse.json({ data: task })
+  } catch (error) {
+    log.error({ err: String(error) }, "Unhandled error in task GET")
+    return apiError("Failed to fetch task", ApiErrorCode.INTERNAL_ERROR, 500)
+  }
 }
 
 export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -55,9 +77,19 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     } = await supabase.auth.getUser()
 
     if (!user) return apiError("Unauthorized", ApiErrorCode.UNAUTHORIZED, 401)
-    const assignerProfile = await assertManagerAccess(supabase, user.id)
-    if (!assignerProfile) {
-      return apiError("Forbidden", ApiErrorCode.FORBIDDEN, 403)
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, role, department, is_department_lead, lead_departments")
+      .eq("id", user.id)
+      .single<ProfileRecord>()
+
+    const scope = await getRequestScope()
+    const isAdmin = isAdminProfile(scope)
+    const isLead = Boolean(profile?.is_department_lead)
+
+    if (!isAdmin && !isLead) {
+      return apiError("Forbidden: Only department leads or administrators can edit tasks", ApiErrorCode.FORBIDDEN, 403)
     }
 
     const sizeError = checkRequestSize(request)
@@ -76,17 +108,9 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     const payload = parsed.data
     const { data: existingTask } = await supabase
       .from("tasks")
-      .select("id, title, department, assignment_type, assigned_to, source_type, goal_id")
+      .select("id, title, department, assignment_type, assigned_to, source_type, goal_id, due_date")
       .eq("id", params.id)
-      .single<{
-        id: string
-        title?: string | null
-        department?: string | null
-        assignment_type?: string | null
-        assigned_to?: string | null
-        source_type?: "manual" | "help_desk" | null
-        goal_id?: string | null
-      }>()
+      .single()
 
     if (!existingTask) {
       return apiError("Task not found", ApiErrorCode.NOT_FOUND, 404)
@@ -100,47 +124,49 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     const assignmentFieldsTouched =
       payload.assignment_type !== undefined || payload.assigned_to !== undefined || payload.department !== undefined
 
-    if (assignmentFieldsTouched && finalAssignmentType === "individual") {
-      if (!finalAssignedTo) {
-        return apiError("Assignee is required for individual tasks", ApiErrorCode.MISSING_REQUIRED_FIELD, 400)
+    if (!isAdmin && isLead) {
+      if (assignmentFieldsTouched && finalAssignedTo) {
+        const { data: assignee } = await supabase
+          .from("profiles")
+          .select("id, department")
+          .eq("id", finalAssignedTo)
+          .single()
+
+        if (!assignee || !canAssignToProfile(profile, assignee)) {
+          return apiError(
+            "You can only assign tasks to users within your approved departmental scope",
+            ApiErrorCode.FORBIDDEN,
+            403
+          )
+        }
+        finalDepartment = assignee.department || finalDepartment
       }
 
-      const { data: assignee } = await supabase
-        .from("profiles")
-        .select("id, department")
-        .eq("id", finalAssignedTo)
-        .single<TaskAssignmentTargetProfile>()
-
-      if (!assignee) {
-        return apiError("Selected assignee was not found", ApiErrorCode.NOT_FOUND, 400)
-      }
-
-      if (!canAssignToProfile(assignerProfile, assignee)) {
-        return apiError("You can only assign tasks within your approved scope", ApiErrorCode.FORBIDDEN, 403)
-      }
-
-      finalDepartment = assignee.department || finalDepartment
-    }
-
-    if (assignmentFieldsTouched && finalAssignmentType === "department") {
-      if (!finalDepartment) {
-        return apiError("Department is required for department tasks", ApiErrorCode.MISSING_REQUIRED_FIELD, 400)
-      }
-      if (!canAssignToDepartment(assignerProfile, finalDepartment)) {
-        return apiError("You can only assign tasks within your approved scope", ApiErrorCode.FORBIDDEN, 403)
+      if (assignmentFieldsTouched && finalDepartment && !canAssignToDepartment(profile, finalDepartment)) {
+        return apiError("You can only assign tasks within your approved department scope", ApiErrorCode.FORBIDDEN, 403)
       }
     }
 
-    const updatePayload: Record<string, unknown> = { ...payload, updated_at: new Date().toISOString() }
-    if ((payload.assignment_type || "").length > 0) {
-      updatePayload.assigned_to = payload.assignment_type === "individual" ? payload.assigned_to || null : null
+    const now = new Date().toISOString()
+    const updatePayload: Record<string, unknown> = {
+      ...payload,
+      updated_by: user.id,
+      updated_at: now,
     }
+
+    if (payload.assigned_to !== undefined && payload.assigned_to !== existingTask.assigned_to) {
+      updatePayload.assigned_at = now
+    }
+
+    if (payload.due_date && payload.due_date !== existingTask.due_date) {
+      if (payload.extension_reason) {
+        updatePayload.extension_reason = payload.extension_reason
+      }
+    }
+
     if (assignmentFieldsTouched) {
       updatePayload.department = finalDepartment
-    }
-
-    if (payload.goal_id !== undefined) {
-      updatePayload.goal_id = payload.goal_id
+      updatePayload.assigned_to = finalAssignedTo
     }
 
     const { data: updatedTask, error } = await supabase
@@ -160,7 +186,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
         action: "task.update",
         entityType: "task",
         entityId: params.id,
-        newValues: payload,
+        newValues: updatePayload,
         context: { actorId: user.id, source: "api", route: "/api/tasks/[id]" },
       },
       { failOpen: true }
@@ -187,30 +213,58 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
     } = await supabase.auth.getUser()
 
     if (!user) return apiError("Unauthorized", ApiErrorCode.UNAUTHORIZED, 401)
-    if (!(await assertManagerAccess(supabase, user.id))) {
-      return apiError("Forbidden", ApiErrorCode.FORBIDDEN, 403)
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("id, role, department, is_department_lead, lead_departments")
+      .eq("id", user.id)
+      .single<ProfileRecord>()
+
+    const scope = await getRequestScope()
+    const isAdmin = isAdminProfile(scope)
+    const isLead = Boolean(profile?.is_department_lead)
+
+    if (!isAdmin && !isLead) {
+      return apiError(
+        "Forbidden: Only department leads or administrators can archive tasks",
+        ApiErrorCode.FORBIDDEN,
+        403
+      )
     }
 
-    const { data: existingTask } = await supabase.from("tasks").select("id, title, status").eq("id", params.id).single()
+    const now = new Date().toISOString()
+    // Soft delete / archive to protect audit trails
+    const { data: archivedTask, error } = await supabase
+      .from("tasks")
+      .update({
+        is_archived: true,
+        archived_by: user.id,
+        archived_at: now,
+        updated_by: user.id,
+        updated_at: now,
+      })
+      .eq("id", params.id)
+      .select()
+      .single()
 
-    const { error } = await supabase.from("tasks").delete().eq("id", params.id)
     if (error) return apiError(error.message, ApiErrorCode.DATABASE_ERROR, 500)
 
     await writeAuditLog(
       supabase,
       {
-        action: "task.delete",
+        action: "task.archive",
         entityType: "task",
         entityId: params.id,
-        oldValues: existingTask || null,
+        oldValues: { is_archived: false },
+        newValues: { is_archived: true, archived_by: user.id, archived_at: now },
         context: { actorId: user.id, source: "api", route: "/api/tasks/[id]" },
       },
       { failOpen: true }
     )
 
-    return NextResponse.json({ success: true })
+    return NextResponse.json({ success: true, data: archivedTask })
   } catch (error) {
     log.error({ err: String(error) }, "Unhandled error in task DELETE")
-    return apiError("Failed to delete task", ApiErrorCode.INTERNAL_ERROR, 500)
+    return apiError("Failed to archive task", ApiErrorCode.INTERNAL_ERROR, 500)
   }
 }
