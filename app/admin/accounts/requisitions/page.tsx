@@ -368,10 +368,10 @@ export default function AdminRequisitionsPage() {
 
   return (
     <DataTablePage
-      title="Company Requisitions (Finance Overview)"
+      title="Company Requisitions (Accounts Overview)"
       description="Manage, review, and audit company payment request forms, funding lines, and approvals."
       icon={FileCheck2}
-      backLink={{ href: "/admin/finance", label: "Back to Finance" }}
+      backLink={{ href: "/admin/accounts", label: "Back to Accounts" }}
       tabs={TABS}
       activeTab={tab}
       onTabChange={setTab}
