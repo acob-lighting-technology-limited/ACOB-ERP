@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { formatWATDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRouter, useSearchParams } from "next/navigation"
-import { CircleDollarSign, Download, Eye, FileClock, FileText, Plus, Send, Wallet } from "lucide-react"
+import { CircleDollarSign, Download, Eye, FileClock, FileText, Pencil, Plus, Send, Wallet } from "lucide-react"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -313,17 +313,17 @@ export function InvoicesPage({
           {
             label: "View",
             icon: Eye,
-            onClick: (invoice) => router.push(`${financeBasePath ?? "/admin/finance"}/invoices/${invoice.id}`),
+            onClick: (invoice) => router.push(`${financeBasePath ?? "/admin/accounts"}/invoices/${invoice.id}`),
           },
           {
-            label: "Send",
-            icon: Send,
-            onClick: (invoice) => router.push(`${financeBasePath ?? "/admin/finance"}/invoices/${invoice.id}`),
+            label: "Open Invoice",
+            icon: CircleDollarSign,
+            onClick: (invoice) => router.push(`${financeBasePath ?? "/admin/accounts"}/invoices/${invoice.id}`),
           },
           {
-            label: "Download",
-            icon: Download,
-            onClick: (invoice) => router.push(`${financeBasePath ?? "/admin/finance"}/invoices/${invoice.id}`),
+            label: "Edit",
+            icon: Pencil,
+            onClick: (invoice) => router.push(`${financeBasePath ?? "/admin/accounts"}/invoices/${invoice.id}`),
           },
         ]}
         expandable={{
