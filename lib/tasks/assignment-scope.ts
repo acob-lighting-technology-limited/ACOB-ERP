@@ -1,10 +1,10 @@
-import { DEPT_CORPORATE_SERVICES, DEPT_EXECUTIVE_MANAGEMENT } from "@/config/constants"
-
 export interface TaskAssignmentAuthorityProfile {
   id: string
+  role?: string | null
   department?: string | null
   is_department_lead?: boolean | null
   lead_departments?: string[] | null
+  isAdminLike?: boolean | null
 }
 
 export interface TaskAssignmentTargetProfile {
@@ -22,7 +22,24 @@ function uniqueDepartments(values: Array<string | null | undefined>) {
   return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)))
 }
 
+export function hasGlobalTaskAssignmentAuthority(profile: TaskAssignmentAuthorityProfile | null | undefined): boolean {
+  if (!profile) return false
+  if (profile.isAdminLike) return true
+  const role = String(profile.role || "").toLowerCase()
+  return ["admin", "super_admin", "developer", "hr_manager"].includes(role)
+}
+
+export function canAssignTasks(profile: TaskAssignmentAuthorityProfile | null | undefined): boolean {
+  if (!profile) return false
+  if (hasGlobalTaskAssignmentAuthority(profile)) return true
+  return Boolean(profile.is_department_lead)
+}
+
 export function getAssignableDepartments(profile: TaskAssignmentAuthorityProfile): string[] {
+  if (hasGlobalTaskAssignmentAuthority(profile)) {
+    return [] // Empty means all departments in global context, or caller provides full list
+  }
+
   const departments = uniqueDepartments([
     profile.department,
     ...(Array.isArray(profile.lead_departments) ? profile.lead_departments : []),
@@ -35,25 +52,11 @@ export function profileLeadsDepartment(
   profile: TaskAssignmentAuthorityProfile | null | undefined,
   departmentName: string
 ) {
-  if (!profile?.is_department_lead) return false
+  if (!profile) return false
+  if (hasGlobalTaskAssignmentAuthority(profile)) return true
+  if (!profile.is_department_lead) return false
   const target = normalizeDepartment(departmentName)
   return getAssignableDepartments(profile).some((department) => normalizeDepartment(department) === target)
-}
-
-export function isManagingDirectorAssigner(profile: TaskAssignmentAuthorityProfile | null | undefined) {
-  return profileLeadsDepartment(profile, DEPT_EXECUTIVE_MANAGEMENT)
-}
-
-export function isHeadCorporateServicesAssigner(profile: TaskAssignmentAuthorityProfile | null | undefined) {
-  return profileLeadsDepartment(profile, DEPT_CORPORATE_SERVICES)
-}
-
-export function hasGlobalTaskAssignmentAuthority(profile: TaskAssignmentAuthorityProfile | null | undefined) {
-  return isManagingDirectorAssigner(profile) || isHeadCorporateServicesAssigner(profile)
-}
-
-export function canAssignTasks(profile: TaskAssignmentAuthorityProfile | null | undefined) {
-  return Boolean(profile?.is_department_lead)
 }
 
 export function canAssignToDepartment(
