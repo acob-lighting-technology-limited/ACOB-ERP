@@ -212,9 +212,9 @@ export async function POST(req: Request) {
           callerProfile?.full_name ||
           [callerProfile?.first_name, callerProfile?.last_name].filter(Boolean).join(" ").trim() ||
           caller.email ||
-          "Admin & HR Lead",
+          "Admin and HR Lead",
         designation: callerProfile?.designation || null,
-        department: callerProfile?.department || "Admin & HR",
+        department: callerProfile?.department || "Admin and HR",
       },
     })
 

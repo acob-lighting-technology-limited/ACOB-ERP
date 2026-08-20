@@ -515,16 +515,16 @@ export default function EmployeeOnboardingForm() {
 
               <div className="space-y-6 pt-4">
                 <h3 className="text-foreground border-border flex items-center gap-2 border-b pb-2 text-lg font-semibold">
-                  <MapPin className="text-muted-foreground h-5 w-5" /> Office Location
+                  <MapPin className="text-muted-foreground h-5 w-5" /> Office / Room
                 </h3>
                 <div className="space-y-4">
                   <div className="space-y-2">
                     <label className="text-foreground text-sm font-medium">
-                      Office Location <span className="text-muted-foreground text-xs">(optional)</span>
+                      Office / Room <span className="text-muted-foreground text-xs">(optional)</span>
                     </label>
                     <Select onValueChange={(val) => setValue("office_location", val)} value={selectedOfficeLocation}>
                       <SelectTrigger className="h-11">
-                        <SelectValue placeholder="Select Office Location" />
+                        <SelectValue placeholder="Select Office / Room" />
                       </SelectTrigger>
                       <SelectContent>
                         {officeLocations.map((loc) => (

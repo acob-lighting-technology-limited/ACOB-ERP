@@ -6,6 +6,7 @@ import { sendExitNotificationEmail } from "@/lib/hr/exit-mailer"
 import type { ExitedEmployee } from "@/lib/hr/exit-mailer"
 import { ORG_EMAIL_SENDERS } from "@/lib/org-config"
 import { logger } from "@/lib/logger"
+import { DEPT_ADMIN_HR, isSameDepartment } from "@/shared/departments"
 
 const log = logger("api-bulk-exit")
 
@@ -134,15 +135,17 @@ export async function POST(request: Request) {
         deptLeadEmail = deptLeads?.[0]?.company_email ?? undefined
       }
 
-      // Admin & HR lead — also fetch their lead_departments to build the sender display name
-      const { data: hrLeads } = await dataClient
+      // Admin and HR lead — also fetch their lead_departments to build the sender display name
+      const { data: candidateHrLeads } = await dataClient
         .from("profiles")
-        .select("first_name, last_name, designation, company_email, lead_departments")
+        .select("first_name, last_name, designation, company_email, department, lead_departments")
         .eq("is_department_lead", true)
-        .contains("lead_departments", ["Admin & HR"])
         .eq("employment_status", "active")
-        .limit(1)
-      const hrLead = hrLeads?.[0]
+      const hrLead = (candidateHrLeads || []).find(
+        (p) =>
+          isSameDepartment(p.department, DEPT_ADMIN_HR) ||
+          (p.lead_departments || []).some((d: string) => isSameDepartment(d, DEPT_ADMIN_HR))
+      )
       // Exit notices send under the single org identity like every other
       // automated mail; replies route to the HR mailbox via ORG_MAIL_ROUTING.
       const exitEmailSender = ORG_EMAIL_SENDERS.system

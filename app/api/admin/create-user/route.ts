@@ -14,6 +14,7 @@ import { writeAuditLog } from "@/lib/audit/write-audit"
 import { checkIdempotency, getIdempotencyKey, storeIdempotencyKey } from "@/lib/idempotency"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { formatName } from "@/lib/utils"
+import { DEPT_ADMIN_HR, isSameDepartment } from "@/shared/departments"
 
 const log = logger("admin-create-user")
 
@@ -40,7 +41,8 @@ export async function PATCH(request: NextRequest) {
 
   const scope = await resolveAdminScope(supabase as AdminCreateUserClient, user.id)
   const managedDepartments = scope?.managedDepartments || []
-  const canManageUsers = !!scope && (scope.isAdminLike || managedDepartments.includes("Admin & HR"))
+  const canManageUsers =
+    !!scope && (scope.isAdminLike || managedDepartments.some((dept) => isSameDepartment(dept, DEPT_ADMIN_HR)))
   if (!canManageUsers) {
     return NextResponse.json({ success: false, error: "Forbidden: Insufficient privileges" }, { status: 403 })
   }

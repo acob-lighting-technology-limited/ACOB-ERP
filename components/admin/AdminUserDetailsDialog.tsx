@@ -78,7 +78,7 @@ export function AdminUserDetailsDialog({ user, open, onClose, feedbackByUserId }
                 <div className="mt-1">{properCase(user.residential_address)}</div>
               </div>
               <div>
-                <Label>Office Location</Label>
+                <Label>Office / Room</Label>
                 <div className="mt-1">{properCase(user.office_location)}</div>
               </div>
               <div>
@@ -133,7 +133,7 @@ export function AdminUserDetailsDialog({ user, open, onClose, feedbackByUserId }
                   `Department: ${properCase(user.department)}`,
                   `Phone: ${user.phone_number || ""}`,
                   `Address: ${properCase(user.residential_address)}`,
-                  `Office Location: ${properCase(user.office_location)}`,
+                  `Office / Room: ${properCase(user.office_location)}`,
                   `Bank: ${properCase(user.bank_name)} ${user.bank_account_number || ""}`,
                   `Account Name: ${properCase(user.bank_account_name)}`,
                   `DOB: ${formatDateOfBirth(user.date_of_birth, user.birthday) || ""}`,

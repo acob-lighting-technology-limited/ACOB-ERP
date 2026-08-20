@@ -4,6 +4,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { canAccessAdminSection, resolveAdminScope } from "@/lib/admin/rbac"
 import { sendExitNotificationEmail } from "@/lib/hr/exit-mailer"
 import { logger } from "@/lib/logger"
+import { DEPT_ADMIN_HR, isSameDepartment } from "@/shared/departments"
 
 const log = logger("api-exit-notification")
 
@@ -42,23 +43,28 @@ export async function POST(_: Request, { params }: RouteContext) {
     if (department && department !== "N/A") {
       const { data: deptLeads } = await dataClient
         .from("profiles")
-        .select("company_email")
+        .select("company_email, department, lead_departments")
         .eq("is_department_lead", true)
-        .contains("lead_departments", [department])
         .eq("employment_status", "active")
-        .limit(1)
-      deptLeadEmail = deptLeads?.[0]?.company_email ?? undefined
+      const matchedDeptLead = (deptLeads || []).find(
+        (p) =>
+          isSameDepartment(p.department, department) ||
+          (p.lead_departments || []).some((d: string) => isSameDepartment(d, department))
+      )
+      deptLeadEmail = matchedDeptLead?.company_email ?? undefined
     }
 
-    // Admin & HR lead for mailto link + "Prepared by" footer
-    const { data: hrLeads } = await dataClient
+    // Admin and HR lead for mailto link + "Prepared by" footer
+    const { data: candidateHrLeads } = await dataClient
       .from("profiles")
-      .select("first_name, last_name, designation, company_email")
+      .select("first_name, last_name, designation, company_email, department, lead_departments")
       .eq("is_department_lead", true)
-      .contains("lead_departments", ["Admin & HR"])
       .eq("employment_status", "active")
-      .limit(1)
-    const hrLead = hrLeads?.[0]
+    const hrLead = (candidateHrLeads || []).find(
+      (p) =>
+        isSameDepartment(p.department, DEPT_ADMIN_HR) ||
+        (p.lead_departments || []).some((d: string) => isSameDepartment(d, DEPT_ADMIN_HR))
+    )
 
     // All active staff — emails for email blast, ids for in-app
     const { data: activeStaff } = await dataClient

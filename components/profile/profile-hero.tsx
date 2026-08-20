@@ -144,7 +144,15 @@ export function ProfileHero({ profile, avatarUrl, attendance, onAvatarChange, on
       if (!response.ok) {
         throw new Error(payload?.error || "Failed to upload photo")
       }
-      onAvatarChange?.(payload?.data?.avatarUrl ?? null)
+      const newAvatarUrl = payload?.data?.avatarUrl ?? null
+      onAvatarChange?.(newAvatarUrl)
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("profile-avatar-changed", {
+            detail: { avatarUrl: newAvatarUrl },
+          })
+        )
+      }
       toast.success("Profile photo updated")
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to upload photo")
@@ -162,6 +170,13 @@ export function ProfileHero({ profile, avatarUrl, attendance, onAvatarChange, on
         throw new Error(payload?.error || "Failed to remove photo")
       }
       onAvatarChange?.(null)
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("profile-avatar-changed", {
+            detail: { avatarUrl: null },
+          })
+        )
+      }
       toast.success("Profile photo removed")
       setIsRemoveConfirmOpen(false)
       setIsLightboxOpen(false)
