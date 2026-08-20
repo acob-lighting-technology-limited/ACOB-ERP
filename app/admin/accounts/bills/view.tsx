@@ -302,14 +302,14 @@ export function BillsPage({
             label: "View",
             icon: Eye,
             onClick: (bill) => {
-              router.push(`${financeBasePath ?? "/admin/finance"}/bills/${bill.id}`)
+              router.push(`${financeBasePath ?? "/admin/accounts"}/bills/${bill.id}`)
             },
           },
           {
             label: "Open Bill",
             icon: CircleDollarSign,
             onClick: (bill) => {
-              router.push(`${financeBasePath ?? "/admin/finance"}/bills/${bill.id}`)
+              router.push(`${financeBasePath ?? "/admin/accounts"}/bills/${bill.id}`)
             },
           },
         ]}
