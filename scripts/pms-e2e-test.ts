@@ -184,7 +184,7 @@ async function resetTestState() {
     .eq("id", USERS.onyekachukwu)
 
   // 2. Clear Admin & HR department_head_id
-  await supabase.from("departments").update({ department_head_id: null }).eq("name", "Admin & HR")
+  await supabase.from("departments").update({ department_head_id: null }).eq("name", "Admin and HR")
 
   // 3. Cleanup leftover TEST: data
   const { data: testLeaves } = await supabase.from("leave_requests").select("id").ilike("reason", "TEST:%")
@@ -201,7 +201,7 @@ async function resetTestState() {
   const { data: hrDept } = await supabase
     .from("departments")
     .select("department_head_id")
-    .eq("name", "Admin & HR")
+    .eq("name", "Admin and HR")
     .single()
 
   if (onyeka?.is_department_lead === false && !hrDept?.department_head_id) {
@@ -442,7 +442,7 @@ async function testTaskPermissions() {
   console.log("\n  ── B3: Department Assignment Scope ──")
   assertTruthy("B3.1 Abdulsamad → IT dept OK", canAssignToDepartment(profiles.abdulsamad, "IT and Communications"))
   assertFalsy("B3.2 Abdulsamad → Accounts dept CANNOT", canAssignToDepartment(profiles.abdulsamad, "Accounts"))
-  assertFalsy("B3.3 Abdulsamad → Admin&HR CANNOT", canAssignToDepartment(profiles.abdulsamad, "Admin & HR"))
+  assertFalsy("B3.3 Abdulsamad → Admin&HR CANNOT", canAssignToDepartment(profiles.abdulsamad, "Admin and HR"))
   assertTruthy("B3.4 Peter (HCS) → any dept OK", canAssignToDepartment(profiles.peter, "Technical"))
   assertTruthy("B3.5 Alexander (MD) → any dept OK", canAssignToDepartment(profiles.alexander, "Logistics"))
   assertFalsy(
@@ -803,12 +803,12 @@ async function testHelpDesk() {
       title: "TEST: New office chairs procurement",
       description: "Ergonomic chairs for Admin & HR",
       request_type: "procurement",
-      service_department: "Admin & HR",
+      service_department: "Admin and HR",
       priority: "high",
       status: "new",
       requester_id: USERS.peace,
       created_by: USERS.peace,
-      requester_department: "Admin & HR",
+      requester_department: "Admin and HR",
       approval_required: true,
     })
     .select("id, status")
@@ -846,7 +846,7 @@ async function testHelpDesk() {
       title: "TEST: Gold-plated desk procurement",
       description: "Luxury desk request",
       request_type: "procurement",
-      service_department: "Admin & HR",
+      service_department: "Admin and HR",
       priority: "low",
       status: "pending_approval",
       requester_id: USERS.chibuikem,
@@ -880,7 +880,7 @@ async function testHelpDesk() {
       status: "department_queue",
       requester_id: USERS.peace,
       created_by: USERS.peace,
-      requester_department: "Admin & HR",
+      requester_department: "Admin and HR",
     })
     .select("id")
     .single()
@@ -917,7 +917,7 @@ async function testHelpDesk() {
       requester_id: USERS.peace,
       created_by: USERS.peace,
       assigned_to: USERS.chibuikem,
-      requester_department: "Admin & HR",
+      requester_department: "Admin and HR",
     })
     .select("id")
     .single()
@@ -1129,7 +1129,7 @@ async function testLeaveWorkflow() {
   const { data: hrLeads } = await supabase
     .from("profiles")
     .select("id, first_name")
-    .eq("department", "Admin & HR")
+    .eq("department", "Admin and HR")
     .eq("is_department_lead", true)
   assert("F1.1 Admin & HR lead count", hrLeads?.length || 0, 0)
 
@@ -1164,13 +1164,13 @@ async function testLeaveWorkflow() {
   const { data: hrDept } = await supabase
     .from("departments")
     .select("department_head_id")
-    .eq("name", "Admin & HR")
+    .eq("name", "Admin and HR")
     .single()
   assertFalsy("F3.1 departments.department_head_id is NULL", hrDept?.department_head_id)
   const { data: hrLeadProfile } = await supabase
     .from("profiles")
     .select("id")
-    .eq("department", "Admin & HR")
+    .eq("department", "Admin and HR")
     .eq("is_department_lead", true)
     .maybeSingle()
   assertFalsy("F3.2 No profile with is_department_lead for Admin & HR", hrLeadProfile)
@@ -1417,39 +1417,39 @@ async function testOnyekachukwuAsHRLead() {
   const { data: beforeLeads } = await supabase
     .from("profiles")
     .select("id")
-    .eq("department", "Admin & HR")
+    .eq("department", "Admin and HR")
     .eq("is_department_lead", true)
   assert("I1.1 No Admin & HR lead before", beforeLeads?.length || 0, 0)
 
   // I2: Promote Onyekachukwu
   console.log("\n  ── I2: Promoting Onyekachukwu ──")
-  const { data: hrDept } = await supabase.from("departments").select("id").eq("name", "Admin & HR").single()
+  const { data: hrDept } = await supabase.from("departments").select("id").eq("name", "Admin and HR").single()
   assertTruthy("I2.1 Admin & HR dept exists", hrDept?.id)
 
   await supabase
     .from("profiles")
     .update({
       is_department_lead: true,
-      lead_departments: ["Admin & HR"],
+      lead_departments: ["Admin and HR"],
       department_id: hrDept?.id,
     })
     .eq("id", USERS.onyekachukwu)
 
   const onyeka = await getProfile(USERS.onyekachukwu)
   assertTruthy("I2.2 Onyekachukwu is now lead", onyeka?.is_department_lead)
-  assert("I2.3 Lead departments set", onyeka?.lead_departments?.[0], "Admin & HR")
+  assert("I2.3 Lead departments set", onyeka?.lead_departments?.[0], "Admin and HR")
 
   const { data: hrDeptAfter } = await supabase
     .from("departments")
     .select("department_head_id")
-    .eq("name", "Admin & HR")
+    .eq("name", "Admin and HR")
     .single()
   assert("I2.4 departments.department_head_id synced", hrDeptAfter?.department_head_id, USERS.onyekachukwu)
 
   // I3: Permission checks
   console.log("\n  ── I3: Permission Checks ──")
   assertTruthy("I3.1 Onyekachukwu can assign tasks", canAssignTasks(onyeka))
-  assertTruthy("I3.2 Can assign to Admin & HR dept", canAssignToDepartment(onyeka, "Admin & HR"))
+  assertTruthy("I3.2 Can assign to Admin & HR dept", canAssignToDepartment(onyeka, "Admin and HR"))
   assertFalsy("I3.3 Cannot assign to IT dept", canAssignToDepartment(onyeka, "IT and Communications"))
   const peace = await getProfile(USERS.peace)
   assertTruthy("I3.4 Can assign to Peace (same dept)", canAssignToProfile(onyeka, peace))
@@ -1459,7 +1459,7 @@ async function testOnyekachukwuAsHRLead() {
   const { data: hrLeadProfile } = await supabase
     .from("profiles")
     .select("id")
-    .eq("department", "Admin & HR")
+    .eq("department", "Admin and HR")
     .eq("is_department_lead", true)
     .maybeSingle()
   assertTruthy("I4.1 Admin & HR lead resolves to Onyekachukwu", hrLeadProfile?.id === USERS.onyekachukwu)

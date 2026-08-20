@@ -41,8 +41,51 @@ export function matchesCadence(cadence: string, reviewType: string | null | unde
   return true
 }
 
-export function isQuarterlyCycle(reviewType: string | null | undefined): boolean {
-  return matchesCadence("quarterly", reviewType)
+export function isQuarterlyCycle(reviewType: string | null | undefined, name?: string | null): boolean {
+  return matchesCadence("quarterly", reviewType, name)
+}
+
+export function isBiannualCycle(reviewType: string | null | undefined, name?: string | null): boolean {
+  return matchesCadence("biannual", reviewType, name)
+}
+
+export function isAnnualCycle(reviewType: string | null | undefined, name?: string | null): boolean {
+  return matchesCadence("annual", reviewType, name)
+}
+
+export function getCadenceType(reviewType: string | null | undefined, name?: string | null): PmsCadence {
+  if (isBiannualCycle(reviewType, name)) return "biannual"
+  if (isAnnualCycle(reviewType, name)) return "annual"
+  if (isQuarterlyCycle(reviewType, name)) return "quarterly"
+  return "all"
+}
+
+/**
+ * Given any cycle (quarterly, biannual, or annual), finds the underlying quarterly
+ * cycles that fall within its date window.
+ */
+export function getCoveredQuarterlyCycles<T extends CadenceCycle>(parentCycle: T, allCycles: T[]): T[] {
+  if (isQuarterlyCycle(parentCycle.review_type, parentCycle.name)) {
+    return [parentCycle]
+  }
+
+  const quarterlyCycles = allCycles.filter((c) => isQuarterlyCycle(c.review_type, c.name))
+  if (!parentCycle.start_date || !parentCycle.end_date) return []
+
+  const pStart = parentCycle.start_date
+  const pEnd = parentCycle.end_date
+
+  return quarterlyCycles.filter((q) => q.start_date && q.end_date && q.start_date >= pStart && q.end_date <= pEnd)
+}
+
+/**
+ * Computes the arithmetic average of available numeric quarterly scores,
+ * returning null if no scores are present.
+ */
+export function rollupQuarterlyScores(scores: Array<number | null | undefined>): number | null {
+  const valid = scores.filter((v): v is number => typeof v === "number" && Number.isFinite(v))
+  if (valid.length === 0) return null
+  return Math.round((valid.reduce((sum, v) => sum + v, 0) / valid.length) * 100) / 100
 }
 
 /**

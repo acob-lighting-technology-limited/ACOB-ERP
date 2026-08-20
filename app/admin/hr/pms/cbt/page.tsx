@@ -92,7 +92,7 @@ type CycleRow = {
 const TABS: DataTableTab[] = [
   { key: "individual", label: "Individual" },
   { key: "department", label: "Department" },
-  { key: "cycle", label: "Cycle" },
+  { key: "cycle", label: "Cadence" },
 ]
 
 function employeeName(user: CbtUser | undefined) {
@@ -375,17 +375,17 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
   const { filters: individualCycleFilters } = useCycleFilters<IndividualRow>({
     cycles: data.cycles,
     getRowCycleId: (row) => row.review_cycle_id,
-    defaultCadence: "all",
+    defaultCadence: "quarterly",
   })
   const { filters: departmentCycleFilters } = useCycleFilters<DepartmentRow>({
     cycles: data.cycles,
     getRowCycleId: (row) => row.cycleId,
-    defaultCadence: "all",
+    defaultCadence: "quarterly",
   })
   const { filters: cycleTabCycleFilters } = useCycleFilters<CycleRow>({
     cycles: data.cycles,
     getRowCycleId: (row) => row.id,
-    defaultCadence: "all",
+    defaultCadence: "quarterly",
   })
 
   const individualColumns: DataTableColumn<IndividualRow>[] = [

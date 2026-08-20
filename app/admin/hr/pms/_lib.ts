@@ -2,6 +2,9 @@ import { redirect } from "next/navigation"
 import { createClient } from "@/lib/supabase/server"
 import { computeDepartmentPerformanceScore } from "@/lib/performance/scoring"
 import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
+import { pickCurrentCycle } from "@/lib/pms/cadence"
+import { toLocalISODate } from "@/lib/utils/date"
+import type { ReviewCycleOption } from "@/app/(app)/pms/_lib"
 
 type DepartmentRow = {
   name: string
@@ -16,6 +19,7 @@ type GoalRow = {
   department?: string | null
   approval_status: string | null
   status: string | null
+  review_cycle_id?: string | null
 }
 
 type DepartmentScore = Awaited<ReturnType<typeof computeDepartmentPerformanceScore>>
@@ -30,7 +34,7 @@ function average(values: Array<number | null | undefined>) {
   return round(valid.reduce((sum, value) => sum + value, 0) / valid.length)
 }
 
-export async function getAdminPmsData() {
+export async function getAdminPmsData(requestedCycleId?: string) {
   const supabase = await createClient()
   const {
     data: { user },
@@ -48,13 +52,40 @@ export async function getAdminPmsData() {
   const scopedDepts = getScopedDepartments(scope)
   let departments: string[] = []
 
+  const [{ data: allDepartments }, { data: cycleRows }] = await Promise.all([
+    scopedDepts === null
+      ? supabase.from("departments").select("name").order("name", { ascending: true }).returns<DepartmentRow[]>()
+      : Promise.resolve({ data: [] as DepartmentRow[] }),
+    supabase
+      .from("review_cycles")
+      .select("id, name, start_date, end_date, status, review_type")
+      .order("start_date", { ascending: false }),
+  ])
+
+  const cycles: ReviewCycleOption[] = (cycleRows || []).map((c) => ({
+    id: c.id,
+    name: c.name || "Review Cycle",
+    startDate: c.start_date,
+    endDate: c.end_date,
+    status: c.status || "closed",
+    reviewType: c.review_type ?? null,
+  }))
+
+  const cadenceCycles = cycles.map((cycle) => ({
+    id: cycle.id,
+    review_type: cycle.reviewType,
+    start_date: cycle.startDate,
+    end_date: cycle.endDate,
+  }))
+
+  const activeCycleId =
+    (requestedCycleId && cycles.some((c) => c.id === requestedCycleId) ? requestedCycleId : null) ||
+    pickCurrentCycle(cadenceCycles, toLocalISODate(), "quarterly")?.id ||
+    cycles[0]?.id ||
+    null
+
   if (scopedDepts === null) {
     // Global admin — see all departments
-    const { data: allDepartments } = await supabase
-      .from("departments")
-      .select("name")
-      .order("name", { ascending: true })
-      .returns<DepartmentRow[]>()
     departments = (allDepartments || []).map((row) => row.name).filter(Boolean)
   } else {
     // Lead or admin in lead mode — scope to managed departments (with aliases)
@@ -73,17 +104,19 @@ export async function getAdminPmsData() {
   const scopedUsers = scopedProfiles || []
   const scopedUserIds = scopedUsers.map((row) => row.id)
 
-  const { data: goalRows } =
-    departments.length > 0
-      ? await supabase
-          .from("goals_objectives")
-          .select("department, approval_status, status")
-          .in("department", departments)
-          .returns<GoalRow[]>()
-      : { data: [] as GoalRow[] }
+  let goalsQuery = supabase.from("goals_objectives").select("department, approval_status, status, review_cycle_id")
+
+  if (departments.length > 0) {
+    goalsQuery = goalsQuery.in("department", departments)
+  }
+  if (activeCycleId) {
+    goalsQuery = goalsQuery.eq("review_cycle_id", activeCycleId)
+  }
+
+  const { data: goalRows } = departments.length > 0 ? await goalsQuery.returns<GoalRow[]>() : { data: [] as GoalRow[] }
 
   const departmentScores: DepartmentScore[] = await Promise.all(
-    departments.map((department) => computeDepartmentPerformanceScore(supabase, { department }))
+    departments.map((department) => computeDepartmentPerformanceScore(supabase, { department, cycleId: activeCycleId }))
   )
 
   const goalBreakdown = departments.map((department) => {
@@ -101,6 +134,8 @@ export async function getAdminPmsData() {
     scopedUserCount: scopedUserIds.length,
     departmentScores,
     goalBreakdown,
+    cycles,
+    activeCycleId,
     summary: {
       overallPms: average(departmentScores.map((entry) => entry.department_pms)),
       overallKpi: average(departmentScores.map((entry) => entry.department_kpi)),
