@@ -50,6 +50,7 @@ import {
   ArrowUp,
   ArrowDown,
   ArrowUpDown,
+  Star,
 } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-client"
@@ -82,7 +83,7 @@ export interface LunchSettings {
   voting_deadline?: string
 }
 
-/** A menu row as returned by /api/admin/hr/lunch/menus — hydrated with votes. */
+/** A menu row as returned by /api/admin/hr/lunch/menus — hydrated with votes and reviews. */
 export interface AdminLunchMenu extends LunchMenu {
   votes: LunchVoteRecord[]
   tallies: LunchOptionTally[]
@@ -90,6 +91,9 @@ export interface AdminLunchMenu extends LunchMenu {
   eatingCount: number
   votingOpen: boolean
   resolvedDeadline: string
+  review_count?: number
+  average_rating?: number | null
+  reviews?: { id: string; rating: number; comment: string | null; created_at: string }[]
 }
 
 export interface LunchSummaryRow {
@@ -672,6 +676,26 @@ export function LunchRegisterPage({
   // Daily checklist columns
   const dailyColumns: DataTableColumn<{ id: string; employee: LunchEmployee }>[] = [
     {
+      key: "employee_name",
+      label: "Employee Name",
+      accessor: (row) => row.employee.full_name,
+      sortable: true,
+      render: (row) => <span className="text-foreground font-semibold">{row.employee.full_name}</span>,
+    },
+    {
+      key: "department",
+      label: "Department",
+      accessor: (row) => row.employee.department || "General",
+      sortable: true,
+      render: (row) => <span className="text-muted-foreground text-sm">{row.employee.department || "General"}</span>,
+    },
+    {
+      key: "employee_number",
+      label: "Staff Code",
+      accessor: (row) => row.employee.employee_number,
+      render: (row) => <span className="font-mono text-xs">{row.employee.employee_number}</span>,
+    },
+    {
       key: "checkbox",
       label: "Checked",
       render: (row) => (
@@ -683,24 +707,6 @@ export function LunchRegisterPage({
           className="h-5 w-5 border-2"
         />
       ),
-    },
-    {
-      key: "employee_name",
-      label: "Employee Name",
-      accessor: (row) => row.employee.full_name,
-      sortable: true,
-      render: (row) => (
-        <div>
-          <span className="text-foreground font-semibold">{row.employee.full_name}</span>
-          <div className="text-muted-foreground text-xs">{row.employee.department || "General"}</div>
-        </div>
-      ),
-    },
-    {
-      key: "employee_number",
-      label: "Staff Code",
-      accessor: (row) => row.employee.employee_number,
-      render: (row) => <span className="font-mono text-xs">{row.employee.employee_number}</span>,
     },
     {
       key: "status",
@@ -729,14 +735,84 @@ export function LunchRegisterPage({
       label: "Date",
       sortable: true,
       accessor: (row) => row.date,
+      render: (row) => <span className="text-foreground font-semibold">{menuHeading(row.date, todayDate)}</span>,
+    },
+    {
+      key: "deadline",
+      label: "Voting Closes",
+      accessor: (row) => row.resolvedDeadline,
       render: (row) => (
-        <div>
-          <span className="text-foreground font-semibold">{menuHeading(row.date, todayDate)}</span>
-          <div className="text-muted-foreground text-xs">
-            {formatWATDate(row.date, { weekday: "long", day: "numeric", month: "short" })}
-          </div>
+        <div className="flex items-center gap-1.5">
+          <span className="font-mono text-xs">{formatWATTime(row.resolvedDeadline)}</span>
+          {/* A stored value means this day was deliberately overridden; the
+              rest simply follow the lunch settings deadline. */}
+          {row.voting_deadline && (
+            <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
+              custom
+            </Badge>
+          )}
         </div>
       ),
+      hideOnMobile: true,
+    },
+    {
+      key: "votes",
+      label: "Eating",
+      sortable: true,
+      accessor: (row) => row.eatingCount,
+      render: (row) => (
+        <Badge
+          variant="outline"
+          className="border-2 border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-semibold text-emerald-600 hover:bg-emerald-500/10"
+        >
+          {row.eatingCount}
+        </Badge>
+      ),
+    },
+    {
+      key: "said_no",
+      label: "Said No",
+      sortable: true,
+      accessor: (row) => row.votes.length - row.eatingCount,
+      render: (row) => {
+        const notEating = row.votes.length - row.eatingCount
+        if (notEating === 0) {
+          return <span className="text-muted-foreground text-xs">—</span>
+        }
+        return (
+          <Badge
+            variant="outline"
+            className="border-2 border-rose-500/30 bg-rose-500/10 px-2.5 py-0.5 font-semibold text-rose-600 hover:bg-rose-500/10"
+          >
+            {notEating}
+          </Badge>
+        )
+      },
+    },
+    {
+      key: "feedback",
+      label: "Feedback",
+      sortable: true,
+      accessor: (row) => row.average_rating ?? 0,
+      render: (row) => {
+        const count = row.review_count ?? 0
+        const avg = row.average_rating
+        if (!count || avg === null || avg === undefined) {
+          return <span className="text-muted-foreground text-xs">—</span>
+        }
+        return (
+          <div className="flex items-center gap-1.5">
+            <Badge
+              variant="outline"
+              className="gap-1 border-amber-500/30 bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-600"
+            >
+              <Star className="h-3 w-3 fill-amber-500 text-amber-500" />
+              {avg.toFixed(1)}
+            </Badge>
+            <span className="text-muted-foreground text-xs">({count})</span>
+          </div>
+        )
+      },
     },
     {
       key: "status",
@@ -763,47 +839,46 @@ export function LunchRegisterPage({
         return <Badge className={tone}>{label}</Badge>
       },
     },
-    {
-      key: "deadline",
-      label: "Voting Closes",
-      accessor: (row) => row.resolvedDeadline,
-      render: (row) => (
-        <div className="flex items-center gap-1.5">
-          <span className="font-mono text-xs">{formatWATTime(row.resolvedDeadline)}</span>
-          {/* A stored value means this day was deliberately overridden; the
-              rest simply follow the lunch settings deadline. */}
-          {row.voting_deadline && (
-            <Badge variant="outline" className="px-1.5 py-0 text-[10px]">
-              custom
-            </Badge>
-          )}
-        </div>
-      ),
-      hideOnMobile: true,
-    },
-    {
-      key: "votes",
-      label: "Eating",
-      sortable: true,
-      accessor: (row) => row.eatingCount,
-      render: (row) => {
-        const notEating = row.votes.length - row.eatingCount
-        return (
-          <div className="flex items-center gap-1.5">
-            <Badge
-              variant="outline"
-              className="border-2 border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 font-semibold text-emerald-600 hover:bg-emerald-500/10"
-            >
-              {row.eatingCount}
-            </Badge>
-            {notEating > 0 && <span className="text-xs font-medium text-rose-500/80">{notEating} said no</span>}
-          </div>
-        )
-      },
-    },
   ]
 
   const menuFilters: DataTableFilter<AdminLunchMenu>[] = [
+    {
+      key: "year",
+      label: "Year",
+      options: [
+        { value: "2026", label: "2026" },
+        { value: "2025", label: "2025" },
+        { value: "2024", label: "2024" },
+      ],
+      mode: "custom" as const,
+      filterFn: (row, selectedValues) => {
+        if (selectedValues.length === 0) return true
+        return selectedValues.includes(row.date.substring(0, 4))
+      },
+    },
+    {
+      key: "month",
+      label: "Month",
+      options: [
+        { value: "01", label: "January" },
+        { value: "02", label: "February" },
+        { value: "03", label: "March" },
+        { value: "04", label: "April" },
+        { value: "05", label: "May" },
+        { value: "06", label: "June" },
+        { value: "07", label: "July" },
+        { value: "08", label: "August" },
+        { value: "09", label: "September" },
+        { value: "10", label: "October" },
+        { value: "11", label: "November" },
+        { value: "12", label: "December" },
+      ],
+      mode: "custom" as const,
+      filterFn: (row, selectedValues) => {
+        if (selectedValues.length === 0) return true
+        return selectedValues.includes(row.date.substring(5, 7))
+      },
+    },
     {
       key: "status",
       label: "Status",
@@ -875,6 +950,116 @@ export function LunchRegisterPage({
     },
   ]
 
+  // Review & Feedback columns
+  const reviewColumns: DataTableColumn<LunchReviewSummary>[] = [
+    {
+      key: "date",
+      label: "Date",
+      sortable: true,
+      accessor: (row) => row.date,
+      render: (row) => (
+        <span className="text-foreground font-semibold">
+          {formatWATDate(row.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+        </span>
+      ),
+    },
+    {
+      key: "average_rating",
+      label: "Average Rating",
+      sortable: true,
+      accessor: (row) => row.average_rating ?? 0,
+      render: (row) => {
+        if (row.average_rating === null || row.average_rating === undefined) {
+          return <span className="text-muted-foreground text-xs">—</span>
+        }
+        return (
+          <Badge
+            variant="outline"
+            className="gap-1 border-amber-500/30 bg-amber-500/10 px-2.5 py-0.5 text-xs font-semibold text-amber-600"
+          >
+            <Star className="h-3.5 w-3.5 fill-amber-500 text-amber-500" />
+            {row.average_rating.toFixed(1)} / 5
+          </Badge>
+        )
+      },
+    },
+    {
+      key: "review_count",
+      label: "Total Reviews",
+      sortable: true,
+      accessor: (row) => row.review_count,
+      render: (row) => (
+        <Badge variant="outline" className="text-xs font-medium">
+          {row.review_count} {row.review_count === 1 ? "review" : "reviews"}
+        </Badge>
+      ),
+    },
+    {
+      key: "comments_count",
+      label: "Comments",
+      sortable: true,
+      accessor: (row) => row.comments.length,
+      render: (row) => (
+        <span className="text-muted-foreground text-xs font-medium">
+          {row.comments.length} {row.comments.length === 1 ? "comment" : "comments"}
+        </span>
+      ),
+    },
+  ]
+
+  const reviewFilters: DataTableFilter<LunchReviewSummary>[] = [
+    {
+      key: "year",
+      label: "Year",
+      options: [
+        { value: "2026", label: "2026" },
+        { value: "2025", label: "2025" },
+        { value: "2024", label: "2024" },
+      ],
+      mode: "custom" as const,
+      filterFn: (row, selectedValues) => {
+        if (selectedValues.length === 0) return true
+        return selectedValues.includes(row.date.substring(0, 4))
+      },
+    },
+    {
+      key: "month",
+      label: "Month",
+      options: [
+        { value: "01", label: "January" },
+        { value: "02", label: "February" },
+        { value: "03", label: "March" },
+        { value: "04", label: "April" },
+        { value: "05", label: "May" },
+        { value: "06", label: "June" },
+        { value: "07", label: "July" },
+        { value: "08", label: "August" },
+        { value: "09", label: "September" },
+        { value: "10", label: "October" },
+        { value: "11", label: "November" },
+        { value: "12", label: "December" },
+      ],
+      mode: "custom" as const,
+      filterFn: (row, selectedValues) => {
+        if (selectedValues.length === 0) return true
+        return selectedValues.includes(row.date.substring(5, 7))
+      },
+    },
+    {
+      key: "has_comments",
+      label: "Comments",
+      options: [
+        { value: "with", label: "With comments" },
+        { value: "without", label: "Without comments" },
+      ],
+      mode: "custom" as const,
+      filterFn: (row, selectedValues) => {
+        if (selectedValues.length === 0) return true
+        return selectedValues.includes(row.comments.length > 0 ? "with" : "without")
+      },
+    },
+  ]
+
   // Leaderboard sorting & filtering
   const sortedLeaderboard = [...leaderboardSummaryData]
     .filter((r) => selectedLeaderboardDept === "all" || r.department === selectedLeaderboardDept)
@@ -915,7 +1100,6 @@ export function LunchRegisterPage({
           <input
             type="date"
             value={selectedDate}
-            max={todayDate}
             onChange={(e) => setSelectedDate(e.target.value)}
             className="border-input bg-background h-9 rounded-md border px-3 py-1.5 text-sm"
           />
@@ -924,7 +1108,6 @@ export function LunchRegisterPage({
             size="icon"
             className="h-8 w-8 shrink-0"
             onClick={() => adjustDate(1)}
-            disabled={selectedDate >= todayDate}
             title="Next day"
           >
             <ChevronRight className="h-4 w-4" />
@@ -1313,7 +1496,6 @@ export function LunchRegisterPage({
               <input
                 type="date"
                 value={selectedDate}
-                max={todayDate}
                 onChange={(e) => setSelectedDate(e.target.value)}
                 className="border-input bg-background h-9 rounded-md border px-3 py-1.5 text-sm"
               />
@@ -1322,7 +1504,6 @@ export function LunchRegisterPage({
                 size="icon"
                 className="h-8 w-8 shrink-0"
                 onClick={() => adjustDate(1)}
-                disabled={selectedDate >= todayDate}
                 title="Next day"
               >
                 <ChevronRight className="h-4 w-4" />
@@ -1878,59 +2059,76 @@ export function LunchRegisterPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      {activeTab === "reviews" &&
-        (reviewsLoading ? (
-          <div className="text-muted-foreground flex flex-col items-center justify-center gap-3 p-12">
-            <Loader2 className="text-primary h-8 w-8 animate-spin" />
-            <span>Loading feedback...</span>
-          </div>
-        ) : reviewsError ? (
-          <Card>
-            <CardContent className="text-destructive p-6 text-sm">{reviewsError}</CardContent>
-          </Card>
-        ) : reviews.length === 0 ? (
-          <Card>
-            <CardContent className="text-muted-foreground p-12 text-center text-sm">
-              No feedback yet. Staff can review a meal from their lunch history once the day has passed.
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="space-y-4">
-            <p className="text-muted-foreground text-xs">
-              Feedback is submitted anonymously — ratings and comments are never attributed to a staff member.
-            </p>
-            {reviews.map((entry) => (
-              <Card key={entry.menu_id}>
-                <CardHeader className="pb-3">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <CardTitle className="text-base">
-                      {formatWATDate(entry.date, { weekday: "long", day: "numeric", month: "long" })}
-                    </CardTitle>
-                    <div className="flex items-center gap-3 text-sm">
-                      <span className="font-semibold text-amber-500">
-                        {entry.average_rating !== null ? `${entry.average_rating.toFixed(1)} / 5` : "—"}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {entry.review_count} review{entry.review_count === 1 ? "" : "s"}
-                      </span>
-                    </div>
-                  </div>
-                </CardHeader>
-                {entry.comments.length > 0 && (
-                  <CardContent className="space-y-2">
-                    {entry.comments.map((comment) => (
-                      <div key={comment.id} className="bg-muted/30 rounded-lg border p-3 text-sm">
-                        <div className="text-muted-foreground mb-1 text-xs font-semibold">{comment.rating} / 5</div>
-                        <p className="whitespace-pre-wrap">{comment.comment}</p>
-                      </div>
-                    ))}
-                  </CardContent>
-                )}
-              </Card>
-            ))}
+      {activeTab === "reviews" && (
+        <div className="space-y-4">
+          <p className="text-muted-foreground text-xs">
+            Feedback is submitted anonymously — ratings and comments are never attributed to a staff member. Click on
+            any row to view written comments.
+          </p>
+          <DataTable<LunchReviewSummary>
+            data={reviews}
+            columns={reviewColumns}
+            getRowId={(row) => row.menu_id}
+            searchPlaceholder="Search dates or written comments..."
+            searchFn={(row, q) =>
+              row.date.toLowerCase().includes(q.toLowerCase()) ||
+              row.comments.some((c) => (c.comment || "").toLowerCase().includes(q.toLowerCase()))
+            }
+            filters={reviewFilters}
+            isLoading={reviewsLoading}
+            error={reviewsError}
+            onRetry={() => void loadReviews()}
+            expandable={{
+              render: (row) => <FeedbackExpandPanel entry={row} />,
+            }}
+          />
+        </div>
+      )}
+    </DataTablePage>
+  )
+}
+
+function FeedbackExpandPanel({ entry }: { entry: LunchReviewSummary }) {
+  if (entry.comments.length === 0) {
+    return (
+      <div className="bg-muted/10 text-muted-foreground border-b p-4 text-xs">
+        Ratings were submitted without written comments for this day.
+      </div>
+    )
+  }
+
+  return (
+    <div className="bg-muted/20 space-y-2.5 border-b px-6 py-4">
+      <div className="flex items-center justify-between">
+        <p className="text-muted-foreground text-xs font-semibold uppercase">
+          Anonymous Staff Comments ({entry.comments.length})
+        </p>
+        <span className="text-muted-foreground text-[11px]">
+          Feedback is submitted anonymously without employee names.
+        </span>
+      </div>
+      <div className="grid gap-2.5 sm:grid-cols-2">
+        {entry.comments.map((comment) => (
+          <div key={comment.id} className="bg-card space-y-1.5 rounded-lg border p-3 text-xs shadow-sm">
+            <div className="text-muted-foreground flex items-center justify-between text-[11px]">
+              <div className="flex items-center gap-1 font-semibold text-amber-500">
+                <Star className="h-3 w-3 fill-amber-500" />
+                {comment.rating} / 5
+              </div>
+              <span>
+                {formatWATDate(comment.created_at, {
+                  day: "numeric",
+                  month: "short",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </span>
+            </div>
+            <p className="text-foreground leading-relaxed whitespace-pre-wrap">{comment.comment}</p>
           </div>
         ))}
-    </DataTablePage>
+      </div>
+    </div>
   )
 }
 
