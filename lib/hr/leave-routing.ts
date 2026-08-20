@@ -1,7 +1,8 @@
 import { notifyUsers } from "@/lib/hr/leave-workflow"
 import type { LeaveWorkflowDetail } from "@/lib/leave-mailer"
 import { applyAssignableStatusFilter } from "@/lib/workforce/assignment-policy"
-import { DEPT_EXECUTIVE_MANAGEMENT, DEPT_CORPORATE_SERVICES } from "@/config/constants"
+import { DEPT_EXECUTIVE_MANAGEMENT, DEPT_CORPORATE_SERVICES, DEPT_ADMIN_HR } from "@/config/constants"
+import { isSameDepartment } from "@/shared/departments"
 import type { SupabaseClient } from "@supabase/supabase-js"
 
 type LeaveRoutingClient = SupabaseClient
@@ -46,7 +47,7 @@ export interface ResolvedRouteStage {
 }
 
 const DEPARTMENT_NAMES = {
-  adminHr: "Admin & HR",
+  adminHr: DEPT_ADMIN_HR,
   md: DEPT_EXECUTIVE_MANAGEMENT,
   hcs: DEPT_CORPORATE_SERVICES,
 } as const
@@ -56,7 +57,9 @@ function hasLeadForDepartment(profile: LeaveLeadProfile | null | undefined, depa
   if (!profile) return false
   const managed = Array.isArray(profile.lead_departments) ? profile.lead_departments : []
   return Boolean(
-    profile.is_department_lead && (profile.department === departmentName || managed.includes(departmentName))
+    profile.is_department_lead &&
+      (isSameDepartment(profile.department, departmentName) ||
+        managed.some((dept) => isSameDepartment(dept, departmentName)))
   )
 }
 

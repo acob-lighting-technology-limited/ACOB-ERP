@@ -14,7 +14,7 @@ function roleLabel(roleCode: string) {
     case "department_lead":
       return "Department Lead"
     case "admin_hr_lead":
-      return "Admin & HR Lead"
+      return "Admin and HR Lead"
     case "hcs":
       return "HCS"
     case "md":

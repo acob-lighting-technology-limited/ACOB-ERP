@@ -561,7 +561,7 @@ export function LeaveContent({
     const value = String(code || "").toLowerCase()
     if (value.includes("reliever")) return "Reliever"
     if (value.includes("department_lead")) return "Department Lead"
-    if (value.includes("admin_hr_lead")) return "Admin & HR Lead"
+    if (value.includes("admin_hr_lead")) return "Admin and HR Lead"
     if (value.includes("hcs")) return "HCS"
     if (value.includes("md")) return "MD"
     return formatName(code || "Stage")
@@ -744,7 +744,7 @@ export function LeaveContent({
                 const stageName: Record<string, string> = {
                   reliever: "Reliever",
                   department_lead: "Department Lead",
-                  admin_hr_lead: "Admin & HR Lead",
+                  admin_hr_lead: "Admin and HR Lead",
                   hcs: "HCS",
                   md: "MD",
                 }

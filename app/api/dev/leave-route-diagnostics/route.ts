@@ -11,10 +11,11 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { createClient as createAdminClient, type SupabaseClient } from "@supabase/supabase-js"
-import { DEPT_EXECUTIVE_MANAGEMENT, DEPT_CORPORATE_SERVICES } from "@/config/constants"
+import { DEPT_EXECUTIVE_MANAGEMENT, DEPT_CORPORATE_SERVICES, DEPT_ADMIN_HR } from "@/config/constants"
+import { isSameDepartment } from "@/shared/departments"
 
 const DEPARTMENT_NAMES: Record<string, string> = {
-  admin_hr_lead: "Admin & HR",
+  admin_hr_lead: DEPT_ADMIN_HR,
   md: DEPT_EXECUTIVE_MANAGEMENT,
   hcs: DEPT_CORPORATE_SERVICES,
 }
@@ -80,14 +81,22 @@ async function tryResolve(
 
     const match = ((data || []) as LeaveResolverProfile[]).find((p) => {
       const managed = Array.isArray(p.lead_departments) ? p.lead_departments : []
-      return p.is_department_lead && (p.department === departmentName || managed.includes(departmentName))
+      return (
+        p.is_department_lead &&
+        (isSameDepartment(p.department, departmentName) ||
+          managed.some((dept) => isSameDepartment(dept, departmentName)))
+      )
     })
 
     if (!match) return null
     if (
       ((data || []) as LeaveResolverProfile[]).filter((p) => {
         const managed = Array.isArray(p.lead_departments) ? p.lead_departments : []
-        return p.is_department_lead && (p.department === departmentName || managed.includes(departmentName))
+        return (
+          p.is_department_lead &&
+          (isSameDepartment(p.department, departmentName) ||
+            managed.some((dept) => isSameDepartment(dept, departmentName)))
+        )
       }).length > 1
     ) {
       return null // conflict
