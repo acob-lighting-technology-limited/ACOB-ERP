@@ -5,7 +5,7 @@ import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { logger } from "@/lib/logger"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
-import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
+import { deriveUnifiedAttendanceStatus, isPermissionAttendanceStatus } from "@/lib/hr/attendance-status"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { applyLunchBreak } from "@/lib/hr/attendance-ssot"
 
@@ -81,7 +81,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
   // Fetch today's record
   const { data: existing } = await supabase
     .from("attendance_records")
-    .select("id, clock_in, clock_out")
+    .select("id, clock_in, clock_out, status, source, manual_comment, waived")
     .eq("user_id", userId)
     .eq("date", date)
     .maybeSingle()
@@ -101,7 +101,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
 
     const { data: prev } = await supabase
       .from("attendance_records")
-      .select("id, clock_in, clock_out")
+      .select("id, clock_in, clock_out, status, source, manual_comment, waived")
       .eq("user_id", userId)
       .eq("date", prevDate)
       .maybeSingle()
@@ -115,13 +115,20 @@ async function processHikvisionEvent(event: ParsedEvent) {
       const rawHours = Math.max(0, (cappedOutTs - clockInTs) / (1000 * 60 * 60))
       const { breakMinutes: breakDuration, workedHours: totalHours } = applyLunchBreak(rawHours, policy)
 
-      const status = deriveUnifiedAttendanceStatus(
-        {
-          record: { clock_in: prev.clock_in, clock_out: cappedOut, status: null, waived: false },
-          recordDate: prevDate,
-        },
-        policy
-      )
+      const isManualStatus =
+        prev.status === "waiver" ||
+        prev.waived === true ||
+        (Boolean(prev.status) && isPermissionAttendanceStatus(prev.status))
+
+      const status = isManualStatus
+        ? prev.status
+        : deriveUnifiedAttendanceStatus(
+            {
+              record: { clock_in: prev.clock_in, clock_out: cappedOut, status: null, waived: false },
+              recordDate: prevDate,
+            },
+            policy
+          )
 
       const { error } = await supabase
         .from("attendance_records")
@@ -130,7 +137,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
           total_hours: totalHours,
           break_duration: breakDuration,
           status,
-          source: "hikvision",
+          source: prev.source === "manual" ? "manual" : "hikvision",
           clock_out_source: "hikvision",
         })
         .eq("id", prev.id)
@@ -260,13 +267,20 @@ async function processHikvisionEvent(event: ParsedEvent) {
     const rawHours = Math.max(0, (clockOut.getTime() - clockIn.getTime()) / (1000 * 60 * 60))
     const { breakMinutes: breakDuration, workedHours: totalHours } = applyLunchBreak(rawHours, policy)
 
-    const status = deriveUnifiedAttendanceStatus(
-      {
-        record: { clock_in: existing.clock_in, clock_out: time, status: null, waived: false },
-        recordDate: date,
-      },
-      policy
-    )
+    const isManualStatus =
+      existing.status === "waiver" ||
+      existing.waived === true ||
+      (Boolean(existing.status) && isPermissionAttendanceStatus(existing.status))
+
+    const status = isManualStatus
+      ? existing.status
+      : deriveUnifiedAttendanceStatus(
+          {
+            record: { clock_in: existing.clock_in, clock_out: time, status: null, waived: false },
+            recordDate: date,
+          },
+          policy
+        )
 
     const { error } = await supabase
       .from("attendance_records")
@@ -275,7 +289,7 @@ async function processHikvisionEvent(event: ParsedEvent) {
         total_hours: totalHours,
         break_duration: breakDuration,
         status,
-        source: "hikvision",
+        source: existing.source === "manual" ? "manual" : "hikvision",
         clock_out_source: "hikvision",
       })
       .eq("user_id", userId)
