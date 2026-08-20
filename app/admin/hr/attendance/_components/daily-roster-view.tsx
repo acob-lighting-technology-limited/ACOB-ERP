@@ -19,7 +19,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { Users, Clock, AlertCircle, FileText, Pencil, ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
 import { toLocalISODate, isLate } from "@/lib/hr/attendance-utils"
-import { computeAttendanceDay } from "@/lib/hr/attendance-ssot"
+import { computeAttendanceDay, netDayHoursFor } from "@/lib/hr/attendance-ssot"
 import { type AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import {
   MANUAL_ATTENDANCE_STATUS_OPTIONS,
@@ -43,7 +43,11 @@ function getHourBreakdown(r: AttendanceRecord, policy: AttendancePolicy = DEFAUL
   // One punch only — surface what the day actually costs (the recorded side's
   // bracket plus the incomplete penalty) instead of a dash. Work stays blank
   // because the missing half of the day is unverifiable.
+  // If the day is still in progress (today, clock_in present, no clock_out yet)
+  // suppress the incomplete penalty — only the late bracket is shown provisionally.
   if ((inMin === null) !== (outMin === null)) {
+    const isToday = r.date === toLocalISODate()
+    const isInProgress = isToday && Boolean(r.clock_in) && !r.clock_out
     const { hoursLost } = computeAttendanceDay({
       status: r.status ?? "incomplete",
       clockIn: r.clock_in,
@@ -51,11 +55,15 @@ function getHourBreakdown(r: AttendanceRecord, policy: AttendancePolicy = DEFAUL
       policy,
       earlyCloseTime: r.early_closure_time ?? null,
       lateResumptionTime: r.late_resumption_time ?? null,
+      inProgress: isInProgress,
     })
     return { total: null, work: null, overtime: null, missed: hoursLost }
   }
 
   if (inMin === null || outMin === null || outMin <= inMin) {
+    if (r.status === "absent" || r.status === "lwop" || r.status === "leave_without_pay") {
+      return { total: null, work: 0, overtime: null, missed: netDayHoursFor(policy) }
+    }
     return { total: null, work: null, overtime: null, missed: null }
   }
   const total = (outMin - inMin) / 60

@@ -320,7 +320,7 @@ export async function PATCH(request: NextRequest) {
       log.error({ err: String(notifyErr) }, "Failed to notify employee of appeal decision")
     }
 
-    // Email the requester + Admin & HR lead with the decision, reasons and timestamp.
+    // Email the requester + Admin and HR lead with the decision, reasons and timestamp.
     await notifyAttendanceMail(dataClient, {
       affectedUserId: appeal.user_id,
       actorId: scope.userId,

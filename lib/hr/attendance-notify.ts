@@ -1,13 +1,13 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { logger } from "@/lib/logger"
-import { normalizeDepartmentName } from "@/shared/departments"
+import { normalizeDepartmentName, DEPT_ADMIN_HR } from "@/shared/departments"
 import { loadAttendancePolicy } from "@/lib/hr/attendance-utils"
 import { ATTENDANCE_STATUS_LABELS, type UnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 import { sendAttendanceMail, type AttendanceMailDetail } from "@/lib/hr/attendance-mailer"
 
 const log = logger("attendance-notify")
 
-const ADMIN_HR_DEPARTMENT = "Admin & HR"
+const ADMIN_HR_DEPARTMENT = DEPT_ADMIN_HR
 
 type NotifyClient = SupabaseClient
 
@@ -174,7 +174,7 @@ export async function notifyAttendanceMail(client: NotifyClient, params: NotifyA
     if (employeeEmails.length > 0) {
       const employeeMessage = isAppeal
         ? `Your attendance appeal for ${params.date} has been ${verb}.`
-        : `Your attendance record for ${params.date} has been ${verb} by the Admin & HR team.`
+        : `Your attendance record for ${params.date} has been ${verb} by the Admin and HR team.`
 
       const employeeDetails: AttendanceMailDetail[] = [
         { label: "Date", value: params.date },
@@ -245,8 +245,8 @@ export async function notifyAttendanceInApp(client: NotifyClient, params: Notify
     const statusText = statusLabel(params.toStatus)
     const message =
       params.action === "created"
-        ? `Your attendance for ${params.date} was recorded as ${statusText} by the Admin & HR team.`
-        : `Your attendance for ${params.date} was updated to ${statusText} by the Admin & HR team.`
+        ? `Your attendance for ${params.date} was recorded as ${statusText} by the Admin and HR team.`
+        : `Your attendance for ${params.date} was updated to ${statusText} by the Admin and HR team.`
 
     await client.rpc("create_notification", {
       p_user_id: params.affectedUserId,

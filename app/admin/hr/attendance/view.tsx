@@ -259,7 +259,8 @@ function getHourBreakdown(
   status?: string,
   lateResumptionTime?: string | null,
   earlyClosureTime?: string | null,
-  policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY
+  policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY,
+  recordDate?: string
 ) {
   const covered =
     status === "waiver" ||
@@ -285,7 +286,10 @@ function getHourBreakdown(
   // One punch only — surface what the day actually costs (the recorded side's
   // bracket plus the incomplete penalty) instead of a dash. Work stays blank
   // because the missing half of the day is unverifiable.
+  // If the day is still in progress suppress the incomplete penalty.
   if (Boolean(record.clock_in) !== Boolean(record.clock_out)) {
+    const today = toLocalISODate()
+    const isInProgress = Boolean(recordDate && recordDate >= today) && Boolean(record.clock_in) && !record.clock_out
     const { hoursLost } = computeAttendanceDay({
       status: record.status ?? "incomplete",
       clockIn: record.clock_in,
@@ -293,6 +297,7 @@ function getHourBreakdown(
       policy,
       earlyCloseTime: earlyClosureTime ?? null,
       lateResumptionTime: lateResumptionTime ?? null,
+      inProgress: isInProgress,
     })
     return { total: null, work: null, overtime: null, missed: hoursLost }
   }
@@ -528,7 +533,14 @@ function EmployeeExpandPanel({ report, yearMonth, policy, onRecordChanged }: Emp
           <span></span>
         </div>
         {visibleDays.map((day) => {
-          const hours = getHourBreakdown(day.record, day.status, day.lateResumptionTime, day.earlyClosureTime, policy)
+          const hours = getHourBreakdown(
+            day.record,
+            day.status,
+            day.lateResumptionTime,
+            day.earlyClosureTime,
+            policy,
+            day.date
+          )
           return (
             <div
               key={day.date}
