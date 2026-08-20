@@ -5,11 +5,10 @@ import { normalizeDepartmentName } from "@/shared/departments"
 import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
 import { listAssignableProfiles } from "@/lib/workforce/assignment-policy"
 import { AdminTasksContent, type employee, type UserProfile } from "@/app/admin/tasks/management/admin-tasks-content"
-import type { Task } from "@/types/task"
+import type { Task, TaskPersonSummary } from "@/types/task"
 
 type GoalFilterOption = { id: string; title: string }
 type GoalRow = { id: string; title: string }
-type ProfileDepartmentRow = { id: string; first_name: string; last_name: string; department: string | null }
 
 interface DeptTasksPageProps {
   params: Promise<{ dept_id: string }>
@@ -41,7 +40,12 @@ export default async function DeptTasksPage({ params, searchParams }: DeptTasksP
   }
 
   const [tasksResult, employeeResult] = await Promise.all([
-    dataClient.from("tasks").select("*").neq("category", "weekly_action").order("created_at", { ascending: false }),
+    dataClient
+      .from("tasks")
+      .select("*")
+      .eq("is_archived", false)
+      .neq("category", "weekly_action")
+      .order("created_at", { ascending: false }),
     listAssignableProfiles(dataClient, {
       select:
         "id, first_name, last_name, company_email, department, employment_status, is_department_lead, lead_departments",
@@ -50,41 +54,44 @@ export default async function DeptTasksPage({ params, searchParams }: DeptTasksP
     }),
   ])
 
-  const allIndivUserIds = Array.from(
-    new Set(
-      ((tasksResult.data as Task[] | null) || [])
-        .filter((t) => t.assignment_type === "individual" && t.assigned_to)
-        .map((t) => t.assigned_to)
-    )
-  ) as string[]
+  const rawTasks = (tasksResult.data || []) as Task[]
 
-  const { data: indivProfiles } =
-    allIndivUserIds.length > 0
-      ? await dataClient.from("profiles").select("id, first_name, last_name, department").in("id", allIndivUserIds)
-      : { data: [] }
+  const profileIds = new Set<string>()
+  const goalIds = new Set<string>()
 
-  const indivProfileMap = new Map(((indivProfiles as ProfileDepartmentRow[] | null) || []).map((p) => [p.id, p]))
+  rawTasks.forEach((t) => {
+    if (t.assigned_to) profileIds.add(t.assigned_to)
+    if (t.assigned_by) profileIds.add(t.assigned_by)
+    if (t.created_by) profileIds.add(t.created_by)
+    if (t.reviewed_by) profileIds.add(t.reviewed_by)
+    if (t.goal_id) goalIds.add(t.goal_id)
+  })
 
-  const taskGoalIds = Array.from(
-    new Set(((tasksResult.data as Task[] | null) || []).map((t) => t.goal_id).filter(Boolean) as string[])
+  const [profilesRes, goalsRes] = await Promise.all([
+    profileIds.size > 0
+      ? dataClient.from("profiles").select("id, first_name, last_name, department").in("id", Array.from(profileIds))
+      : { data: [] },
+    goalIds.size > 0
+      ? dataClient.from("goals_objectives").select("id, title").in("id", Array.from(goalIds))
+      : { data: [] },
+  ])
+
+  const profileMap = new Map<string, TaskPersonSummary>(
+    ((profilesRes.data || []) as TaskPersonSummary[]).map((p) => [p.id, p])
   )
-  const { data: taskGoalRows } =
-    taskGoalIds.length > 0
-      ? await dataClient.from("goals_objectives").select("id, title").in("id", taskGoalIds)
-      : { data: [] as GoalRow[] }
-  const taskGoalMap = new Map(((taskGoalRows as GoalRow[] | null) || []).map((g) => [g.id, g.title]))
+  const goalMap = new Map<string, string>(
+    ((goalsRes.data || []) as Array<{ id: string; title: string }>).map((g) => [g.id, g.title])
+  )
 
-  const tasksWithUsers = ((tasksResult.data as Task[] | null) || []).map((task) => {
-    const taskData: Task = { ...task }
-    if (task.assignment_type === "individual" && task.assigned_to) {
-      const assignedProfile = indivProfileMap.get(task.assigned_to)
-      taskData.assigned_to_user = assignedProfile
-        ? { ...assignedProfile, department: assignedProfile.department || "" }
-        : undefined
-    }
-    taskData.goal_title = task.goal_id ? taskGoalMap.get(task.goal_id) || null : null
-    return taskData
-  }) as Task[]
+  const tasksWithUsers = rawTasks.map((task) => {
+    const copy: Task = { ...task }
+    if (task.assigned_to) copy.assigned_to_user = profileMap.get(task.assigned_to)
+    if (task.assigned_by) copy.assigned_by_user = profileMap.get(task.assigned_by)
+    if (task.created_by) copy.created_by_user = profileMap.get(task.created_by)
+    if (task.reviewed_by) copy.reviewed_by_user = profileMap.get(task.reviewed_by)
+    if (task.goal_id) copy.goal_title = goalMap.get(task.goal_id) || null
+    return copy
+  })
 
   // Filter to this dept
   const scopedTokens = new Set(expandedDepts.map((d) => normalizeDepartmentName(d)))
@@ -103,13 +110,15 @@ export default async function DeptTasksPage({ params, searchParams }: DeptTasksP
 
   const { data: goalRowsRaw } = await dataClient
     .from("goals_objectives")
-    .select("id, title, department, approval_status")
+    .select("id, title, department")
+    .eq("is_archived", false)
     .in("department", expandedDepts)
     .order("title", { ascending: true })
 
-  const goalRows = (goalRowsRaw || [])
-    .filter((g) => String(g.approval_status || "").toLowerCase() === "approved")
-    .map((g) => ({ id: g.id, title: g.title })) as GoalFilterOption[]
+  const goalRows = ((goalRowsRaw || []) as GoalRow[]).map((g) => ({
+    id: g.id,
+    title: g.title,
+  }))
 
   return (
     <AdminTasksContent
