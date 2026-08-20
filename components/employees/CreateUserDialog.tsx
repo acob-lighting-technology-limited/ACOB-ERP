@@ -25,7 +25,7 @@ import type { UserRole } from "@/types/database"
 import { getRoleDisplayName } from "@/lib/permissions"
 import { getAssignableRolesForActor } from "@/lib/role-management"
 import type { UserProfile } from "@/app/admin/hr/employees/admin-employee-content"
-import { OFFICE_LOCATIONS } from "@/lib/office-locations"
+import { OFFICE_LOCATIONS } from "@/lib/rooms-and-offices"
 
 const createUserSchema = z.object({
   firstName: z.string().min(2, "First name must be at least 2 characters"),
@@ -389,10 +389,10 @@ export function CreateUserDialog({
           </div>
 
           <div>
-            <Label htmlFor="create_office_location">Office Location (Optional)</Label>
+            <Label htmlFor="create_office_location">Office / Room (Optional)</Label>
             <Select value={watch("officeLocation")} onValueChange={(value) => setValue("officeLocation", value)}>
               <SelectTrigger id="create_office_location" className="mt-1.5">
-                <SelectValue placeholder="Select Office Location" />
+                <SelectValue placeholder="Select Office / Room" />
               </SelectTrigger>
               <SelectContent>
                 {OFFICE_LOCATIONS.map((loc) => (
