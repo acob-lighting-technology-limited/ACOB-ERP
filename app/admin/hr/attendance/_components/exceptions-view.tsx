@@ -20,7 +20,11 @@ import { StatCard } from "@/components/ui/stat-card"
 import { Clock, AlertTriangle, XCircle, FileText, Pencil } from "lucide-react"
 import { toast } from "sonner"
 import { toLocalISODate, monthBounds, toLocalYearMonth, isLate } from "@/lib/hr/attendance-utils"
-import { MANUAL_ATTENDANCE_STATUS_OPTIONS, isEarlyDeparture } from "@/lib/hr/attendance-status"
+import {
+  MANUAL_ATTENDANCE_STATUS_OPTIONS,
+  isEarlyDeparture,
+  getManualStatusEditOptions,
+} from "@/lib/hr/attendance-status"
 import { formatTime, labelSource, StatusBadge } from "./status-badge"
 import { apiFetch } from "@/lib/api-client"
 
@@ -268,23 +272,7 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
     },
   ]
 
-  const clockIn = editRecord?.clock_in ?? null
-  const clockOut = editRecord?.clock_out ?? null
-  const hasClockIn = Boolean(clockIn)
-  const hasClockOut = Boolean(clockOut)
-  const hasAnyPunch = hasClockIn || hasClockOut
-
-  const isLatePunch = hasClockIn && isLate(clockIn)
-  const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
-  const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
-
-  const showAWP = !hasAnyPunch
-  const showLWP = hasAnyPunch && !isOnTimePresent
-
-  const statusOptions = [
-    ...(showLWP ? [{ value: "lateness_with_permission", label: "LWP" }] : []),
-    ...(showAWP ? [{ value: "absent_with_permission", label: "AWP" }] : []),
-  ]
+  const { isOnTimePresent, options: statusOptions } = getManualStatusEditOptions(editRecord)
 
   const hasManualComment = editForm.manual_comment.trim().length >= 3
   const cannotSave = saving || !editForm.status || !hasManualComment || isOnTimePresent
