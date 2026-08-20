@@ -36,7 +36,7 @@ interface Props {
   params: Promise<{ dept_id: string }>
 }
 
-export default async function DeptFinancePaymentsPage({ params }: Props) {
+export default async function DeptAccountsPaymentsPage({ params }: Props) {
   const { dept_id } = await params
   const scope = await requireDeptScope(dept_id)
 
@@ -73,7 +73,7 @@ export default async function DeptFinancePaymentsPage({ params }: Props) {
         department_id: deptRow?.id ?? null,
         isAdmin: scope.isAdminLike,
       }}
-      basePath={`/dept/${dept_id}/finance/payments`}
+      basePath={`/dept/${dept_id}/accounts/payments`}
     />
   )
 }
