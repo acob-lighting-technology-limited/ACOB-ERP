@@ -108,6 +108,7 @@ export async function resolveAutoLinkedGoalId(params: GoalLinkParams): Promise<s
     .select("id, title, review_cycle_id")
     .eq("user_id", params.assignedTo)
     .eq("approval_status", "approved")
+    .eq("is_archived", false)
 
   if (cycle?.id) {
     goalsQuery = goalsQuery.eq("review_cycle_id", cycle.id)
