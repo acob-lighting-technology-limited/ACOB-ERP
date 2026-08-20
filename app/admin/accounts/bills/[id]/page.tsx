@@ -90,7 +90,7 @@ export default function BillDetailPage() {
       <PageHeader
         title={`Bill ${bill.bill_number}`}
         description={`Current status: ${bill.status}`}
-        backLink={{ href: "/admin/finance/bills", label: "Back to Bills" }}
+        backLink={{ href: "/admin/accounts/bills", label: "Back to Bills" }}
         actions={
           <>
             <Badge variant={statusColors[bill.status]} className="capitalize">
