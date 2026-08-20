@@ -245,7 +245,7 @@ export function FinanceReportsPage({
       title="Financial Reports"
       description="Review spending patterns, category concentration, and month-by-month finance activity."
       icon={BarChart3}
-      backLink={{ href: backLinkHref ?? "/admin/finance", label: "Back to Finance" }}
+      backLink={{ href: backLinkHref ?? "/admin/accounts", label: "Back to Accounts" }}
       actions={
         <Select value={period} onValueChange={setPeriod}>
           <SelectTrigger className="w-[180px]">
