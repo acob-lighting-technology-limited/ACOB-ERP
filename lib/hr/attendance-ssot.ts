@@ -80,6 +80,8 @@ const COVERED_STATUSES = new Set([
   "awp",
   "lateness_with_permission",
   "lwp",
+  "incomplete_with_permission",
+  "iwp",
   "early_closure",
   "late_resumption",
   "leave_without_pay",
@@ -97,8 +99,12 @@ export interface AttendanceDayInput {
   earlyCloseTime?: string | null
   /** Org-wide late-resumption time (HH:MM); late arrival is measured from it, no grace. */
   lateResumptionTime?: string | null
+  /** LWP / explicit approval — forgives the arrival lateness hours. */
+  latenessApproved?: boolean
   /** LEWP / explicit approval — forgives the early-departure hours only, never lateness. */
   earlyOutApproved?: boolean
+  /** IWP / explicit approval — forgives the missing punch penalty only. */
+  incompleteApproved?: boolean
 }
 
 export interface AttendanceDayResult {
@@ -214,7 +220,7 @@ export function computeAttendanceDay(input: AttendanceDayInput): AttendanceDayRe
     }
   }
 
-  // 1. Covered days never reach the bracket maths.
+  // 1. Covered days (or fully waived days) never reach the bracket maths.
   if (COVERED_STATUSES.has(status)) {
     return build(0, "Covered day — no hours lost", { covered: true })
   }
@@ -225,19 +231,23 @@ export function computeAttendanceDay(input: AttendanceDayInput): AttendanceDayRe
   }
 
   const effectiveEnd = input.earlyCloseTime || policy.endTime
+  const forgiveLateArrival =
+    Boolean(input.latenessApproved) || status === "lateness_with_permission" || status === "lwp"
   const forgiveEarlyOut = Boolean(input.earlyOutApproved) || status === "early_departure_with_permission"
+  const forgiveIncomplete =
+    Boolean(input.incompleteApproved) || status === "incomplete_with_permission" || status === "iwp"
 
-  const lateBracket = lateBracketFor(clockIn, policy, input.lateResumptionTime)
+  const rawLateBracket = lateBracketFor(clockIn, policy, input.lateResumptionTime)
+  const lateBracket = forgiveLateArrival ? 0 : rawLateBracket
   const earlyBracket = forgiveEarlyOut ? 0 : earlyBracketFor(clockOut, effectiveEnd, policy.startTime)
 
-  // 3. One punch missing — charge the side we know, plus the incomplete penalty,
-  //    since the other half of the day is unverifiable.
+  // 3. One punch missing — charge the side we know (unless forgiven), plus the incomplete penalty (unless forgiven).
   if (!clockIn || !clockOut) {
     const knownSide = clockIn ? lateBracket : earlyBracket
-    const penalty = policy.incompletePenalty ?? 1
+    const penalty = forgiveIncomplete ? 0 : (policy.incompletePenalty ?? 1)
     const parts = [
       clockIn ? `late bracket ${lateBracket} = -${lateBracket}` : `early bracket ${earlyBracket} = -${earlyBracket}`,
-      `missing punch = -${penalty}`,
+      forgiveIncomplete ? "missing punch approved = -0" : `missing punch = -${penalty}`,
     ]
     return build(knownSide + penalty, `Incomplete: ${parts.join(", ")}`, {
       lateBracket: clockIn ? lateBracket : 0,
