@@ -92,7 +92,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No workdays found in the specified date range" }, { status: 400 })
     }
 
-    if (["lateness_with_permission", "absent_with_permission"].includes(status) && !scope.isAdminLike) {
+    if (
+      ["lateness_with_permission", "incomplete_with_permission", "absent_with_permission"].includes(status) &&
+      !scope.isAdminLike
+    ) {
       for (const uid of allowedIds) {
         const check = await validateLwpAwpMonthlyQuota({
           dataClient,
