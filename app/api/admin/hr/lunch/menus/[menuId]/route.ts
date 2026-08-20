@@ -246,19 +246,11 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     const { data: menu } = await dataClient.from("lunch_menus").select("id, date").eq("id", menuId).maybeSingle()
     if (!menu) return NextResponse.json({ error: "Menu not found" }, { status: 404 })
 
-    const clearVotesRequested = request.nextUrl.searchParams.get("clear_votes") === "true"
-    const voteCount = await countVotes(dataClient, menuId)
-    if (voteCount > 0 && !clearVotesRequested) {
-      return NextResponse.json(
-        {
-          error: `${voteCount} ${voteCount === 1 ? "person has" : "people have"} voted on this menu. Deleting it removes their votes and lunch charges too.`,
-          requiresClearVotes: true,
-          voteCount,
-        },
-        { status: 409 }
-      )
-    }
-    if (voteCount > 0) await clearVotes(dataClient, menuId, menu.date)
+    // Always clean up votes and lunch charges on permanent delete
+    await clearVotes(dataClient, menuId, menu.date)
+
+    // Also clean up reviews on permanent delete
+    await dataClient.from("lunch_reviews").delete().eq("menu_id", menuId)
 
     const { error } = await dataClient.from("lunch_menus").delete().eq("id", menuId)
     if (error) throw new Error(`Failed to delete menu: ${error.message}`)
