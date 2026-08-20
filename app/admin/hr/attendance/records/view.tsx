@@ -26,10 +26,12 @@ import {
   ATTENDANCE_STATUS_LABELS,
   isEarlyDeparture,
   normalizeStoredAttendanceStatus,
+  getManualStatusEditOptions,
 } from "@/lib/hr/attendance-status"
 import { isLate } from "@/lib/hr/attendance-utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiFetch } from "@/lib/api-client"
+import { StatusBadge } from "../_components/status-badge"
 
 const log = logger("admin-attendance-records")
 
@@ -64,20 +66,6 @@ function formatDate(dateString: string) {
 function formatTime(t: string | null) {
   if (!t) return "-"
   return t.substring(0, 5)
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const norm = normalizeStoredAttendanceStatus(status) || status
-  return (
-    <Badge
-      className={
-        ATTENDANCE_STATUS_COLORS[norm as keyof typeof ATTENDANCE_STATUS_COLORS] ??
-        "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300"
-      }
-    >
-      {ATTENDANCE_STATUS_LABELS[norm as keyof typeof ATTENDANCE_STATUS_LABELS] ?? norm}
-    </Badge>
-  )
 }
 
 export function AdminAttendanceRecordsPage({
@@ -269,7 +257,7 @@ export function AdminAttendanceRecordsPage({
       label: "Status",
       sortable: true,
       accessor: (r) => r.status,
-      render: (r) => <StatusBadge status={r.status} />,
+      render: (r) => <StatusBadge status={r.status} record={r} />,
     },
     {
       key: "source",
@@ -335,8 +323,14 @@ export function AdminAttendanceRecordsPage({
       options: [
         { value: "present", label: "Present" },
         { value: "late", label: "Late" },
-        { value: "absent", label: "Absent" },
+        { value: "lateness_with_permission", label: "LWP" },
+        { value: "incomplete_with_permission", label: "IWP" },
         { value: "incomplete", label: "Incomplete" },
+        { value: "absent", label: "Absent" },
+        { value: "absent_with_permission", label: "AWP" },
+        { value: "out_of_station", label: "OOS" },
+        { value: "exempted", label: "Exempted" },
+        { value: "waiver", label: "Waiver" },
       ],
       placeholder: "All Statuses",
     },
@@ -352,23 +346,7 @@ export function AdminAttendanceRecordsPage({
     },
   ]
 
-  const clockIn = editRecord?.clock_in ?? null
-  const clockOut = editRecord?.clock_out ?? null
-  const hasClockIn = Boolean(clockIn)
-  const hasClockOut = Boolean(clockOut)
-  const hasAnyPunch = hasClockIn || hasClockOut
-
-  const isLatePunch = hasClockIn && isLate(clockIn)
-  const isEarlyOut = hasClockOut && isEarlyDeparture(clockOut as string)
-  const isOnTimePresent = hasClockIn && hasClockOut && !isLatePunch && !isEarlyOut
-
-  const showAWP = !hasAnyPunch
-  const showLWP = hasAnyPunch && !isOnTimePresent
-
-  const statusOptions = [
-    ...(showLWP ? [{ value: "lateness_with_permission", label: "LWP" }] : []),
-    ...(showAWP ? [{ value: "absent_with_permission", label: "AWP" }] : []),
-  ]
+  const { isOnTimePresent, options: statusOptions } = getManualStatusEditOptions(editRecord)
 
   const hasManualComment = editForm.manual_comment.trim().length >= 3
   const cannotSave = saving || !editForm.status || !hasManualComment || isOnTimePresent
