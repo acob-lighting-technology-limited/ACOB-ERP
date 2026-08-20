@@ -41,6 +41,40 @@ const DEPARTMENT_SHORT_CODES: Record<CanonicalDepartment, string> = {
   Technical: "TECH",
 } as const
 
+export const DEFAULT_DEPARTMENT_DESCRIPTIONS: Record<string, string> = {
+  Accounts: "Finance, accounting, budgeting, expenditure control, and financial reporting.",
+  "Admin & HR": "Human resources, staff welfare, office administration, and recruitment management.",
+  "Business, Growth and Innovation":
+    "Business development, strategic partnerships, sales expansion, and innovation initiatives.",
+  "Corporate Services": "Corporate communications, facilities, legal support, and operational logistics.",
+  "Executive Management": "Executive leadership, strategic direction, governance, and organizational oversight.",
+  "IT and Communications":
+    "Information technology infrastructure, software systems, network security, and internal communications.",
+  "Operations and Maintenance":
+    "Field operations, system maintenance, infrastructure reliability, and quality assurance.",
+  Project: "Project planning, execution, vendor coordination, and milestone delivery.",
+  "Regulatory and Compliance": "Legal compliance, policy adherence, statutory regulations, and industry standards.",
+  "Stakeholder Relations":
+    "Stakeholder engagement, client partnerships, external communication, and relationship management.",
+  Technical: "Technical engineering, research and development, design specifications, and hardware solutions.",
+  "Monitoring and Evaluation":
+    "Performance tracking, project impact assessment, metrics evaluation, and quality audit.",
+}
+
+export function getDefaultDepartmentDescription(departmentName: string): string {
+  const canonical = normalizeDepartmentName(departmentName)
+  if (DEFAULT_DEPARTMENT_DESCRIPTIONS[canonical]) {
+    return DEFAULT_DEPARTMENT_DESCRIPTIONS[canonical]
+  }
+  const matchedKey = Object.keys(DEFAULT_DEPARTMENT_DESCRIPTIONS).find(
+    (key) => key.toLowerCase() === departmentName.trim().toLowerCase()
+  )
+  if (matchedKey) {
+    return DEFAULT_DEPARTMENT_DESCRIPTIONS[matchedKey]
+  }
+  return `Department responsible for ${departmentName.trim()} operations and initiatives.`
+}
+
 function comparableDepartmentValue(value: string): string {
   return String(value || "")
     .trim()
