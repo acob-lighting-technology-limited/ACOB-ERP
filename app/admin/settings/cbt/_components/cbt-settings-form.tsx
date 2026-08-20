@@ -221,8 +221,8 @@ export function CbtSettingsForm({ initialSettings, profiles }: CbtSettingsFormPr
             CBT Access & Permissions
           </CardTitle>
           <CardDescription>
-            Grant access to view and manage CBT scores and questions (/cbt). Super Admin and Developer roles always
-            retain access.
+            Controls who can open the CBT test page (/cbt) to sit an assessment. Super Admin and Developer roles always
+            retain access. Managing CBT questions and scores stays an admin-console permission, granted separately.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -237,7 +237,7 @@ export function CbtSettingsForm({ initialSettings, profiles }: CbtSettingsFormPr
               </Badge>
             </div>
             <p className="text-muted-foreground text-xs">
-              Select additional user roles or positions that should have access to CBT overview and management.
+              Select additional user roles or positions that should be able to open the CBT test page.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               {AVAILABLE_ROLES.map((r) => {
@@ -250,7 +250,14 @@ export function CbtSettingsForm({ initialSettings, profiles }: CbtSettingsFormPr
                       checked ? "border-primary/50 bg-primary/5" : "border-border/60 bg-muted/20 hover:bg-muted/40"
                     }`}
                   >
-                    <Checkbox checked={checked} onCheckedChange={() => toggleRole(r.key)} className="mt-0.5" />
+                    <Checkbox
+                      checked={checked}
+                      onCheckedChange={() => toggleRole(r.key)}
+                      // The wrapping card is itself clickable — without this the click
+                      // fires here AND bubbles to the card, toggling twice (net zero).
+                      onClick={(e) => e.stopPropagation()}
+                      className="mt-0.5"
+                    />
                     <div>
                       <p className="text-sm font-semibold">{r.label}</p>
                       <p className="text-muted-foreground text-xs">{r.description}</p>
@@ -267,7 +274,7 @@ export function CbtSettingsForm({ initialSettings, profiles }: CbtSettingsFormPr
               Individual Staff Member Grants
             </Label>
             <p className="text-muted-foreground text-xs">
-              Grant CBT access to specific individuals regardless of their role.
+              Grant access to the CBT test page to specific individuals regardless of their role.
             </p>
 
             {selectedProfiles.length > 0 && (
