@@ -6,9 +6,22 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { formatWATDateTime } from "@/lib/utils/date"
 import { getCurrentOfficeWeek, getOfficeWeekMonday } from "@/lib/meeting-week"
 import { toast } from "sonner"
-import { CheckCircle2, Clock, Download, Eye, FileSpreadsheet, RefreshCw } from "lucide-react"
+import {
+  CheckCircle2,
+  Clock,
+  Download,
+  Eye,
+  FileSpreadsheet,
+  Gavel,
+  Paperclip,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Trash2,
+  TriangleAlert,
+} from "lucide-react"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
-import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
+import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { Button } from "@/components/ui/button"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
@@ -19,6 +32,8 @@ import { QUERY_KEYS } from "@/lib/query-keys"
 import { type ActionItem } from "@/lib/export-utils"
 import { logger } from "@/lib/logger"
 import { apiFetch } from "@/lib/api-client"
+import { DirectiveFormDialog, type EditableDirective } from "@/components/admin/action-tracker/directive-form-dialog"
+import { BlockerDialog, type BlockerTarget } from "@/components/admin/action-tracker/blocker-dialog"
 
 const log = logger("reports-action-tracker-action-tracker-co")
 
@@ -34,7 +49,23 @@ interface ActionTask {
   year: number
   original_week?: number
   work_item_number?: string
+  /**
+   * weekly_report = parsed from the department's "Tasks for New Week".
+   * management_directive = raised by management at the general meeting.
+   * The two are tracked side by side but never mixed into one list.
+   */
+  origin?: "weekly_report" | "management_directive"
+  meeting_date?: string
+  timeline_text?: string
+  assignees?: { id: string; name: string; department?: string }[]
+  /** What is preventing completion, with optional supporting evidence attached. */
+  blocker_note?: string
+  blocker_reported_at?: string
+  blocker_reported_by_name?: string
+  evidence_count?: number
 }
+
+type TrackerTab = "weekly" | "directives"
 
 interface DepartmentActionRow {
   id: string
@@ -120,6 +151,13 @@ function getDeptSummaryStatus(tasks: ActionTask[]): DepartmentActionRow["summary
   return "Pending"
 }
 
+function getItemStatusBadgeClass(status: string) {
+  if (status === "completed") return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+  if (status === "in_progress") return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+  if (status === "not_started") return "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
+  return "bg-slate-100 text-slate-600 dark:bg-slate-900/40 dark:text-slate-400"
+}
+
 function getSummaryBadgeClass(status: DepartmentActionRow["summaryStatus"]) {
   if (status === "Finished") return "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
   if (status === "Started") return "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
@@ -163,6 +201,13 @@ export function ActionTrackerContent({
   const [viewingDepartment, setViewingDepartment] = useState<DepartmentActionRow | null>(null)
   // Rows currently visible in the table (after search + filters + sort).
   const [processedDepartmentRows, setProcessedDepartmentRows] = useState<DepartmentActionRow[]>([])
+  const [activeTab, setActiveTab] = useState<TrackerTab>(() =>
+    searchParams.get("tab") === "directives" ? "directives" : "weekly"
+  )
+  const [directiveDialogOpen, setDirectiveDialogOpen] = useState(false)
+  const [editingDirective, setEditingDirective] = useState<EditableDirective | null>(null)
+  const [processedDirectives, setProcessedDirectives] = useState<ActionTask[]>([])
+  const [blockerTarget, setBlockerTarget] = useState<(BlockerTarget & { department: string }) | null>(null)
 
   const canMutateTask = (task: ActionTask) => canGlobalEdit || editableDepartments.includes(task.department)
 
@@ -237,20 +282,109 @@ export function ActionTrackerContent({
     }
   }
 
+  // One fetch, two categories: the department's report-derived action points and
+  // the directives management raised at the meeting. Splitting here (rather than
+  // with a second request) keeps the week/year controls driving both.
+  const weeklyTasks = useMemo(() => tasks.filter((task) => task.origin !== "management_directive"), [tasks])
+  const directives = useMemo(() => tasks.filter((task) => task.origin === "management_directive"), [tasks])
+
+  const handleDeleteDirective = async (directive: ActionTask) => {
+    if (!canMutateTask(directive)) {
+      toast.error("You can only edit actions in your departments")
+      return
+    }
+    if (!window.confirm(`Delete this directive?\n\n${directive.title}`)) return
+    try {
+      const response = await apiFetch(`/api/reports/action-tracker/${directive.id}`, { method: "DELETE" })
+      const payload = (await response.json().catch(() => null)) as { error?: string } | null
+      if (!response.ok) throw new Error(payload?.error || "Failed to delete directive")
+      toast.success("Directive deleted")
+      void refetch()
+    } catch (deleteError) {
+      toast.error(deleteError instanceof Error ? deleteError.message : "Failed to delete directive")
+    }
+  }
+
+  const openBlockerDialog = (task: ActionTask) => {
+    setBlockerTarget({
+      id: task.id,
+      title: task.title,
+      department: task.department,
+      blocker_note: task.blocker_note,
+      blocker_reported_at: task.blocker_reported_at,
+      blocker_reported_by_name: task.blocker_reported_by_name,
+    })
+  }
+
+  /**
+   * One control for both categories: an amber warning when a hindrance is on
+   * record, a quiet outline when there is nothing to report yet.
+   */
+  const renderBlockerButton = (task: ActionTask) => {
+    const hasBlocker = Boolean(task.blocker_note)
+    const evidenceCount = task.evidence_count || 0
+    return (
+      <Button
+        size="sm"
+        variant={hasBlocker ? "secondary" : "ghost"}
+        className={`h-8 gap-1.5 ${hasBlocker ? "text-amber-700 dark:text-amber-400" : "text-muted-foreground"}`}
+        onClick={() => openBlockerDialog(task)}
+      >
+        <TriangleAlert className="h-3.5 w-3.5" />
+        <span className="text-xs">{hasBlocker ? "Hindrance" : "Add"}</span>
+        {evidenceCount > 0 ? (
+          <span className="flex items-center gap-0.5 text-[11px]">
+            <Paperclip className="h-3 w-3" />
+            {evidenceCount}
+          </span>
+        ) : null}
+      </Button>
+    )
+  }
+
+  const openDirectiveEditor = (directive: ActionTask) => {
+    setEditingDirective({
+      id: directive.id,
+      title: directive.title,
+      description: directive.description,
+      status: directive.status,
+      department: directive.department,
+      week_number: directive.week_number,
+      year: directive.year,
+      meeting_date: directive.meeting_date,
+      timeline_text: directive.timeline_text,
+      assignees: (directive.assignees || []).map((person) => ({ id: person.id, name: person.name })),
+    })
+    setDirectiveDialogOpen(true)
+  }
+
   const stats = useMemo(() => {
-    const total = tasks.length
-    const completed = tasks.filter((task) => task.status === "completed").length
-    const pending = tasks.filter((task) => task.status !== "completed").length
-    const notStarted = tasks.filter((task) => task.status === "not_started").length
-    const inProgress = tasks.filter((task) => task.status === "in_progress").length
+    const source = activeTab === "directives" ? directives : weeklyTasks
+    const total = source.length
+    const completed = source.filter((task) => task.status === "completed").length
+    const pending = source.filter((task) => task.status !== "completed").length
+    const notStarted = source.filter((task) => task.status === "not_started").length
+    const inProgress = source.filter((task) => task.status === "in_progress").length
 
     return { total, completed, pending, notStarted, inProgress }
-  }, [tasks])
+  }, [activeTab, directives, weeklyTasks])
 
   // Built from the currently visible (search/filter/sort) rows, falling back to all tasks
   // before the table has reported its processed rows.
   const actionItemsForExport: ActionItem[] = useMemo(() => {
-    const source = processedDepartmentRows.length ? processedDepartmentRows.flatMap((row) => row.tasks) : tasks
+    if (activeTab === "directives") {
+      const directiveSource = processedDirectives.length ? processedDirectives : directives
+      return directiveSource.map((task) => ({
+        id: task.id,
+        title: task.title,
+        description: task.description,
+        department: task.department,
+        status: task.status,
+        week_number: task.week_number,
+        year: task.year,
+      }))
+    }
+    const source = processedDepartmentRows.length ? processedDepartmentRows.flatMap((row) => row.tasks) : weeklyTasks
     return source.map((task) => ({
       id: task.id,
       title: task.title,
@@ -260,7 +394,7 @@ export function ActionTrackerContent({
       week_number: task.week_number,
       year: task.year,
     }))
-  }, [tasks, processedDepartmentRows])
+  }, [activeTab, directives, processedDirectives, weeklyTasks, processedDepartmentRows])
 
   const toActionItems = (sourceTasks: ActionTask[]): ActionItem[] =>
     sourceTasks.map((task) => ({
@@ -297,7 +431,7 @@ export function ActionTrackerContent({
 
   const departmentRows = useMemo<DepartmentActionRow[]>(() => {
     const grouped = new Map<string, ActionTask[]>()
-    tasks.forEach((task) => {
+    weeklyTasks.forEach((task) => {
       const existing = grouped.get(task.department) || []
       existing.push(task)
       grouped.set(task.department, existing)
@@ -322,7 +456,7 @@ export function ActionTrackerContent({
         }
       })
       .sort((a, b) => a.department.localeCompare(b.department))
-  }, [tasks])
+  }, [weeklyTasks])
 
   const columns = useMemo<DataTableColumn<DepartmentActionRow>[]>(
     () => [
@@ -440,22 +574,208 @@ export function ActionTrackerContent({
     [departmentOptions, priorityOptions, weekFilter, weekOptions, yearFilter, yearOptions]
   )
 
+  const directiveColumns = useMemo<DataTableColumn<ActionTask>[]>(
+    () => [
+      {
+        key: "title",
+        label: "Directive / Action Point",
+        sortable: true,
+        accessor: (row) => row.title,
+        render: (row) => (
+          <div className="min-w-[240px]">
+            <p className="font-medium">{row.title}</p>
+            {row.description ? <p className="text-muted-foreground text-xs">{row.description}</p> : null}
+          </div>
+        ),
+        resizable: true,
+        initialWidth: 340,
+      },
+      {
+        key: "responsible",
+        label: "Responsible Staff",
+        sortable: true,
+        accessor: (row) => (row.assignees || []).map((person) => person.name).join(", ") || row.department,
+        render: (row) =>
+          row.assignees && row.assignees.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {row.assignees.map((person) => (
+                <Badge key={person.id} variant="secondary" className="text-[11px] font-normal">
+                  {person.name}
+                </Badge>
+              ))}
+            </div>
+          ) : (
+            <span className="text-muted-foreground text-sm">{row.department}</span>
+          ),
+        resizable: true,
+        initialWidth: 220,
+      },
+      {
+        key: "department",
+        label: "Department",
+        sortable: true,
+        accessor: (row) => row.department,
+        hideOnMobile: true,
+      },
+      {
+        key: "timeline",
+        label: "Timeline",
+        sortable: true,
+        accessor: (row) => row.timeline_text || "",
+        render: (row) => <span className="text-sm">{row.timeline_text || "—"}</span>,
+      },
+      {
+        key: "status",
+        label: "Status",
+        sortable: true,
+        accessor: (row) => row.status,
+        render: (row) => (
+          <Select
+            value={row.status}
+            disabled={!canMutateTask(row)}
+            onValueChange={(newStatus) => {
+              void handleStatusChange(row.id, newStatus)
+            }}
+          >
+            <SelectTrigger className="h-8 w-[150px] text-xs font-semibold uppercase">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="pending">Pending</SelectItem>
+              <SelectItem value="not_started">Not Started</SelectItem>
+              <SelectItem value="in_progress">In Progress</SelectItem>
+              <SelectItem value="completed">Completed</SelectItem>
+            </SelectContent>
+          </Select>
+        ),
+      },
+      {
+        key: "hindrance",
+        label: "Hindrance",
+        sortable: true,
+        accessor: (row) => row.blocker_note || "",
+        render: (row) => renderBlockerButton(row),
+      },
+      {
+        key: "meeting_date",
+        label: "Meeting",
+        sortable: true,
+        accessor: (row) => row.meeting_date || "",
+        render: (row) => (
+          <span className="text-muted-foreground text-xs">
+            {row.meeting_date
+              ? formatWATDateTime(new Date(row.meeting_date), { day: "2-digit", month: "short", year: "numeric" })
+              : "—"}
+          </span>
+        ),
+        hideOnMobile: true,
+      },
+    ],
+    // handleStatusChange and canMutateTask close over the current task list; the
+    // status select must see fresh permissions after a refetch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tasks, editableDepartments, canGlobalEdit]
+  )
+
+  const directiveFilters = useMemo<DataTableFilter<ActionTask>[]>(
+    () => [
+      {
+        key: "week",
+        label: "Week",
+        options: [],
+        render: () => (
+          <Select value={String(weekFilter)} onValueChange={(value) => setWeekFilter(Number(value))}>
+            <SelectTrigger className="w-full" aria-label="Week">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {weekOptions.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  Week {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ),
+      },
+      {
+        key: "year",
+        label: "Year",
+        options: [],
+        render: () => (
+          <Select value={String(yearFilter)} onValueChange={(value) => setYearFilter(Number(value))}>
+            <SelectTrigger className="w-full" aria-label="Year">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map((option) => (
+                <SelectItem key={option} value={String(option)}>
+                  {option}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ),
+      },
+      {
+        key: "status",
+        label: "Status",
+        options: [
+          { value: "pending", label: "Pending" },
+          { value: "not_started", label: "Not Started" },
+          { value: "in_progress", label: "In Progress" },
+          { value: "completed", label: "Completed" },
+        ],
+      },
+      {
+        key: "department",
+        label: "Department",
+        options: departmentOptions,
+      },
+    ],
+    [departmentOptions, weekFilter, weekOptions, yearFilter, yearOptions]
+  )
+
+  const tabs = useMemo<DataTableTab[]>(
+    () => [
+      { key: "weekly", label: `Weekly Action Points (${weeklyTasks.length})`, icon: FileSpreadsheet },
+      { key: "directives", label: `Management Directives (${directives.length})`, icon: Gavel },
+    ],
+    [weeklyTasks.length, directives.length]
+  )
+
   return (
     <DataTablePage
       title="Action Tracker"
       description="Monitor and manage weekly departmental actions."
       icon={FileSpreadsheet}
       backLink={{ href: "/admin/reports/general-meeting", label: "Back to General Meeting" }}
+      tabs={tabs}
+      activeTab={activeTab}
+      onTabChange={(tab) => setActiveTab(tab === "directives" ? "directives" : "weekly")}
       actions={
         <div className="flex flex-wrap items-center gap-2">
-          {tasks.length > 0 ? (
+          {activeTab === "directives" && (canGlobalEdit || editableDepartments.length > 0) ? (
+            <Button
+              size="sm"
+              className="h-8 gap-2"
+              onClick={() => {
+                setEditingDirective(null)
+                setDirectiveDialogOpen(true)
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              Add Directive
+            </Button>
+          ) : null}
+          {actionItemsForExport.length > 0 ? (
             <Button
               variant="outline"
               size="sm"
               className="h-8 gap-2"
               onClick={() => {
                 setExportScope({
-                  label: "All Departments",
+                  label: activeTab === "directives" ? "Management Directives" : "All Departments",
                   items: actionItemsForExport,
                 })
                 setExportOptionsOpen(true)
@@ -474,9 +794,9 @@ export function ActionTrackerContent({
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
           <StatCard
-            title="Total Action Points"
+            title={activeTab === "directives" ? "Total Directives" : "Total Action Points"}
             value={stats.total}
-            icon={FileSpreadsheet}
+            icon={activeTab === "directives" ? Gavel : FileSpreadsheet}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
           />
@@ -511,128 +831,225 @@ export function ActionTrackerContent({
         </div>
       }
     >
-      <DataTable<DepartmentActionRow>
-        data={departmentRows}
-        onProcessedDataChange={setProcessedDepartmentRows}
-        columns={columns}
-        filters={filters}
-        getRowId={(row) => row.id}
-        pagination={{ pageSize: 50 }}
-        searchPlaceholder="Search department or action points..."
-        searchFn={(row, query) => {
-          const normalizedQuery = query.toLowerCase()
-          return (
-            row.department.toLowerCase().includes(normalizedQuery) ||
-            row.tasks.some(
-              (task) =>
-                task.title.toLowerCase().includes(normalizedQuery) ||
-                (task.description || "").toLowerCase().includes(normalizedQuery)
+      {activeTab === "weekly" ? (
+        <DataTable<DepartmentActionRow>
+          data={departmentRows}
+          onProcessedDataChange={setProcessedDepartmentRows}
+          columns={columns}
+          filters={filters}
+          getRowId={(row) => row.id}
+          pagination={{ pageSize: 50 }}
+          searchPlaceholder="Search department or action points..."
+          searchFn={(row, query) => {
+            const normalizedQuery = query.toLowerCase()
+            return (
+              row.department.toLowerCase().includes(normalizedQuery) ||
+              row.tasks.some(
+                (task) =>
+                  task.title.toLowerCase().includes(normalizedQuery) ||
+                  (task.description || "").toLowerCase().includes(normalizedQuery)
+              )
             )
-          )
+          }}
+          isLoading={isLoading}
+          error={error instanceof Error ? error.message : null}
+          onRetry={() => {
+            void refetch()
+          }}
+          rowActions={[
+            {
+              label: "View",
+              icon: Eye,
+              onClick: (row) => setViewingDepartment(row),
+            },
+            {
+              label: "Export",
+              icon: Download,
+              onClick: (row) => {
+                setExportScope({
+                  label: row.department,
+                  department: row.department,
+                  items: toActionItems(row.tasks),
+                })
+                setExportOptionsOpen(true)
+              },
+            },
+          ]}
+          expandable={{
+            render: (row) => (
+              <div className="space-y-3">
+                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Action Points</p>
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/40">
+                      <tr>
+                        <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">#</th>
+                        <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Action Point</th>
+                        <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Status</th>
+                        <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Hindrance</th>
+                        <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Due Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {row.tasks.map((task, index) => (
+                        <tr key={task.id} className="border-t">
+                          <td className="text-muted-foreground px-3 py-2 text-xs">{index + 1}</td>
+                          <td className="px-3 py-2">
+                            <p className="font-medium">{task.title}</p>
+                            {task.description ? (
+                              <p className="text-muted-foreground text-xs">{task.description}</p>
+                            ) : null}
+                          </td>
+                          <td className="px-3 py-2">
+                            <Select
+                              value={task.status}
+                              disabled={!canMutateTask(task)}
+                              onValueChange={(newStatus) => {
+                                void handleStatusChange(task.id, newStatus)
+                              }}
+                            >
+                              <SelectTrigger className="h-8 w-[160px] text-xs font-semibold uppercase">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pending">Pending</SelectItem>
+                                <SelectItem value="not_started">Not Started</SelectItem>
+                                <SelectItem value="in_progress">In Progress</SelectItem>
+                                <SelectItem value="completed">Completed</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </td>
+                          <td className="px-3 py-2">{renderBlockerButton(task)}</td>
+                          <td className={`px-3 py-2 text-xs ${getDueDateClassName(task)}`}>{formatDueDate(task)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ),
+          }}
+          viewToggle
+          cardRenderer={(row) => (
+            <div className="space-y-3 rounded-xl border p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-medium">{row.department}</p>
+                  <p className="text-muted-foreground text-sm">{row.totalPoints} action points</p>
+                </div>
+                <Badge className={getSummaryBadgeClass(row.summaryStatus)}>{row.summaryStatus}</Badge>
+              </div>
+              <div className="grid gap-1 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Completed</span>
+                  <span>{row.completedPoints}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">In Progress</span>
+                  <span>{row.inProgressPoints}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          emptyTitle="No action points found"
+          emptyDescription="No action points matched the current filters."
+          emptyIcon={FileSpreadsheet}
+          skeletonRows={6}
+          urlSync
+        />
+      ) : (
+        <DataTable<ActionTask>
+          data={directives}
+          onProcessedDataChange={setProcessedDirectives}
+          columns={directiveColumns}
+          filters={directiveFilters}
+          getRowId={(row) => row.id}
+          pagination={{ pageSize: 50 }}
+          searchPlaceholder="Search directives, staff or department..."
+          searchFn={(row, query) => {
+            const normalizedQuery = query.toLowerCase()
+            return (
+              row.title.toLowerCase().includes(normalizedQuery) ||
+              (row.description || "").toLowerCase().includes(normalizedQuery) ||
+              row.department.toLowerCase().includes(normalizedQuery) ||
+              (row.timeline_text || "").toLowerCase().includes(normalizedQuery) ||
+              (row.assignees || []).some((person) => person.name.toLowerCase().includes(normalizedQuery))
+            )
+          }}
+          isLoading={isLoading}
+          error={error instanceof Error ? error.message : null}
+          onRetry={() => {
+            void refetch()
+          }}
+          rowActions={[
+            {
+              label: "Edit",
+              icon: Pencil,
+              onClick: (row) => openDirectiveEditor(row),
+            },
+            {
+              label: "Delete",
+              icon: Trash2,
+              onClick: (row) => {
+                void handleDeleteDirective(row)
+              },
+            },
+          ]}
+          viewToggle
+          cardRenderer={(row) => (
+            <div className="space-y-3 rounded-xl border p-4">
+              <div className="flex items-start justify-between gap-3">
+                <p className="font-medium">{row.title}</p>
+                <Badge className={`${getItemStatusBadgeClass(row.status)} shrink-0 capitalize`}>
+                  {row.status.replace(/_/g, " ")}
+                </Badge>
+              </div>
+              <div className="grid gap-1 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Responsible</span>
+                  <span className="text-right">
+                    {(row.assignees || []).map((person) => person.name).join(", ") || row.department}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">Timeline</span>
+                  <span>{row.timeline_text || "—"}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          emptyTitle="No management directives"
+          emptyDescription="No directives were recorded for this week. Add one from the meeting minutes."
+          emptyIcon={Gavel}
+          skeletonRows={6}
+          urlSync
+        />
+      )}
+
+      <DirectiveFormDialog
+        isOpen={directiveDialogOpen}
+        onClose={() => {
+          setDirectiveDialogOpen(false)
+          setEditingDirective(null)
         }}
-        isLoading={isLoading}
-        error={error instanceof Error ? error.message : null}
-        onRetry={() => {
+        onComplete={() => {
           void refetch()
         }}
-        rowActions={[
-          {
-            label: "View",
-            icon: Eye,
-            onClick: (row) => setViewingDepartment(row),
-          },
-          {
-            label: "Export",
-            icon: Download,
-            onClick: (row) => {
-              setExportScope({
-                label: row.department,
-                department: row.department,
-                items: toActionItems(row.tasks),
-              })
-              setExportOptionsOpen(true)
-            },
-          },
-        ]}
-        expandable={{
-          render: (row) => (
-            <div className="space-y-3">
-              <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Action Points</p>
-              <div className="overflow-x-auto rounded-lg border">
-                <table className="w-full text-sm">
-                  <thead className="bg-muted/40">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">#</th>
-                      <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Action Point</th>
-                      <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Status</th>
-                      <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Due Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {row.tasks.map((task, index) => (
-                      <tr key={task.id} className="border-t">
-                        <td className="text-muted-foreground px-3 py-2 text-xs">{index + 1}</td>
-                        <td className="px-3 py-2">
-                          <p className="font-medium">{task.title}</p>
-                          {task.description ? (
-                            <p className="text-muted-foreground text-xs">{task.description}</p>
-                          ) : null}
-                        </td>
-                        <td className="px-3 py-2">
-                          <Select
-                            value={task.status}
-                            disabled={!canMutateTask(task)}
-                            onValueChange={(newStatus) => {
-                              void handleStatusChange(task.id, newStatus)
-                            }}
-                          >
-                            <SelectTrigger className="h-8 w-[160px] text-xs font-semibold uppercase">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pending">Pending</SelectItem>
-                              <SelectItem value="not_started">Not Started</SelectItem>
-                              <SelectItem value="in_progress">In Progress</SelectItem>
-                              <SelectItem value="completed">Completed</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </td>
-                        <td className={`px-3 py-2 text-xs ${getDueDateClassName(task)}`}>{formatDueDate(task)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ),
+        departments={canGlobalEdit ? initialDepartments : editableDepartments}
+        editingDirective={editingDirective}
+        defaultWeek={weekFilter}
+        defaultYear={yearFilter}
+        defaultMeetingDate={lockState?.meetingDate}
+      />
+
+      <BlockerDialog
+        isOpen={Boolean(blockerTarget)}
+        onClose={() => setBlockerTarget(null)}
+        onComplete={() => {
+          void refetch()
         }}
-        viewToggle
-        cardRenderer={(row) => (
-          <div className="space-y-3 rounded-xl border p-4">
-            <div className="flex items-start justify-between gap-3">
-              <div>
-                <p className="font-medium">{row.department}</p>
-                <p className="text-muted-foreground text-sm">{row.totalPoints} action points</p>
-              </div>
-              <Badge className={getSummaryBadgeClass(row.summaryStatus)}>{row.summaryStatus}</Badge>
-            </div>
-            <div className="grid gap-1 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Completed</span>
-                <span>{row.completedPoints}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">In Progress</span>
-                <span>{row.inProgressPoints}</span>
-              </div>
-            </div>
-          </div>
-        )}
-        emptyTitle="No action points found"
-        emptyDescription="No action points matched the current filters."
-        emptyIcon={FileSpreadsheet}
-        skeletonRows={6}
-        urlSync
+        target={blockerTarget}
+        canEdit={canGlobalEdit || (blockerTarget ? editableDepartments.includes(blockerTarget.department) : false)}
       />
 
       <Dialog open={Boolean(viewingDepartment)} onOpenChange={(open) => !open && setViewingDepartment(null)}>
@@ -671,7 +1088,15 @@ export function ActionTrackerContent({
                       </Select>
                     </div>
                   </div>
-                  <p className={`text-xs ${getDueDateClassName(task)}`}>Due: {formatDueDate(task)}</p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className={`text-xs ${getDueDateClassName(task)}`}>Due: {formatDueDate(task)}</p>
+                    {renderBlockerButton(task)}
+                  </div>
+                  {task.blocker_note ? (
+                    <p className="mt-2 rounded border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-amber-800 dark:text-amber-300">
+                      {task.blocker_note}
+                    </p>
+                  ) : null}
                 </div>
               ))}
             </div>

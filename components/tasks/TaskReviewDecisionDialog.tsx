@@ -13,6 +13,13 @@ import { Badge } from "@/components/ui/badge"
 import type { Task } from "@/types/task"
 import { formatFullName } from "@/lib/utils"
 import { formatWATDate } from "@/lib/utils/date"
+import {
+  TASK_RATING_LABELS,
+  TASK_RATING_MAX,
+  TASK_RATING_MIN,
+  TASK_WEIGHT_DEFAULT,
+  isValidRating,
+} from "@/lib/tasks/scoring"
 
 export interface TaskReviewEmployee {
   id: string
@@ -40,6 +47,7 @@ export function TaskReviewDecisionDialog({
   const [comment, setComment] = useState("")
   const [newAssignee, setNewAssignee] = useState("")
   const [newDueDate, setNewDueDate] = useState("")
+  const [rating, setRating] = useState<number | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   if (!task) return null
@@ -59,6 +67,7 @@ export function TaskReviewDecisionDialog({
     setComment("")
     setNewAssignee("")
     setNewDueDate("")
+    setRating(null)
   }
 
   const handleSubmitDecision = async () => {
@@ -69,8 +78,16 @@ export function TaskReviewDecisionDialog({
       let payload: Record<string, unknown> = {}
 
       if (actionType === "approve") {
+        // Approval and rating are one action — a task cannot be completed
+        // unrated, because the rating is what turns its weight into a score.
+        if (!isValidRating(rating)) {
+          toast.error("Select a performance rating before approving this task")
+          setIsSubmitting(false)
+          return
+        }
         payload = {
           status: "completed",
+          rating,
           comment: comment || "Approved by department lead/admin",
         }
       } else if (actionType === "rework") {
@@ -277,6 +294,36 @@ export function TaskReviewDecisionDialog({
                   onChange={(e) => setNewDueDate(e.target.value)}
                   className="text-xs"
                 />
+              </div>
+            )}
+
+            {actionType === "approve" && (
+              <div className="space-y-1.5">
+                <Label className="text-xs font-medium">Performance Rating *</Label>
+                <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-5">
+                  {Array.from({ length: TASK_RATING_MAX - TASK_RATING_MIN + 1 }, (_, i) => TASK_RATING_MIN + i).map(
+                    (value) => (
+                      <Button
+                        key={value}
+                        type="button"
+                        variant={rating === value ? "default" : "outline"}
+                        size="sm"
+                        className="h-auto flex-col gap-0.5 py-2"
+                        onClick={() => setRating(value)}
+                      >
+                        <span className="text-sm font-semibold">{value}</span>
+                        <span className="text-[10px] leading-tight opacity-80">{TASK_RATING_LABELS[value]}</span>
+                      </Button>
+                    )
+                  )}
+                </div>
+                <p className="text-muted-foreground text-[11px]">
+                  This task carries a weight of {task.weight ?? TASK_WEIGHT_DEFAULT}, so it is worth up to{" "}
+                  {task.weight ?? TASK_WEIGHT_DEFAULT} points toward the assignee&apos;s KPI score
+                  {rating
+                    ? ` — this rating earns ${Math.round((((task.weight ?? TASK_WEIGHT_DEFAULT) * rating) / TASK_RATING_MAX) * 100) / 100} of them.`
+                    : "."}
+                </p>
               </div>
             )}
 

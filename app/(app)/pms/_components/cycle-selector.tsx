@@ -1,10 +1,11 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { matchesCadence, pickCurrentCycle, type PmsCadence } from "@/lib/pms/cadence"
+import { CADENCE_OPTIONS, cycleOptionLabel, matchesCadence, pickCurrentCycle, type PmsCadence } from "@/lib/pms/cadence"
 import { toLocalISODate } from "@/lib/utils/date"
+import { usePmsCadence } from "@/components/pms/use-pms-cadence"
 import type { ReviewCycleOption } from "../_lib"
 
 interface CycleSelectorProps {
@@ -12,13 +13,6 @@ interface CycleSelectorProps {
   activeCycleId?: string | null
   showLabel?: boolean
 }
-
-const CADENCE_OPTIONS: { value: PmsCadence; label: string }[] = [
-  { value: "all", label: "All cadences" },
-  { value: "quarterly", label: "Quarterly" },
-  { value: "biannual", label: "Biannual" },
-  { value: "annual", label: "Annual" },
-]
 
 /**
  * Cadence + cycle pickers, matching the pair every PMS table shows. Opens on the
@@ -30,10 +24,10 @@ export function CycleSelector({ cycles, activeCycleId, showLabel = false }: Cycl
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const [cadence, setCadence] = useState<PmsCadence>("quarterly")
+  const [cadence, setCadence] = usePmsCadence()
 
   const visibleCycles = useMemo(
-    () => cycles.filter((cycle) => matchesCadence(cadence, cycle.reviewType)),
+    () => cycles.filter((cycle) => matchesCadence(cadence, cycle.reviewType, cycle.name)),
     [cycles, cadence]
   )
 
@@ -41,9 +35,11 @@ export function CycleSelector({ cycles, activeCycleId, showLabel = false }: Cycl
     () =>
       cycles.map((cycle) => ({
         id: cycle.id,
+        name: cycle.name,
         review_type: cycle.reviewType,
         start_date: cycle.startDate,
         end_date: cycle.endDate,
+        status: cycle.status,
       })),
     [cycles]
   )
@@ -93,7 +89,7 @@ export function CycleSelector({ cycles, activeCycleId, showLabel = false }: Cycl
           {visibleCycles.map((cycle) => (
             <SelectItem key={cycle.id} value={cycle.id} className="text-xs">
               <div className="flex w-full items-center justify-between gap-2">
-                <span className="truncate">{cycle.name}</span>
+                <span className="truncate">{cycleOptionLabel(cycle, visibleCycles)}</span>
                 {cycle.status === "active" && (
                   <span className="shrink-0 rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-500">
                     Active

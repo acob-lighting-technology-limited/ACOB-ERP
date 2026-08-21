@@ -28,6 +28,7 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
       project_manager_id,
       description,
       status,
+      portfolio_id,
     } = body
 
     if (!project_name || !location || !deployment_start_date || !deployment_end_date) {
@@ -48,6 +49,7 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
         capacity_w: capacity_w === "" || capacity_w === null ? null : Number(capacity_w),
         technology_type,
         project_manager_id: project_manager_id || null,
+        portfolio_id: portfolio_id || null,
         description,
         status,
         updated_at: new Date().toISOString(),

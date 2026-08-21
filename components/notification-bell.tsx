@@ -43,6 +43,8 @@ import {
   FileText,
   AlertTriangle,
   ChevronRight,
+  Clock,
+  Star,
   Trash2,
 } from "lucide-react"
 import Link from "next/link"
@@ -84,6 +86,11 @@ const typeIcons = {
   approval_granted: CheckCircle,
   system: Settings,
   announcement: AlertTriangle,
+  task_due_soon: Clock,
+  task_awaiting_review: FileText,
+  task_needs_rating: Star,
+  task_blocked: AlertTriangle,
+  project_delayed: AlertTriangle,
 }
 
 // Category icons

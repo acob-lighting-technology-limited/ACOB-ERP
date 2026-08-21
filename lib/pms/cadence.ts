@@ -117,3 +117,37 @@ export function pickCurrentCycle<T extends CadenceCycle>(
   const byStartDesc = [...candidates].sort((a, b) => (b.start_date || "").localeCompare(a.start_date || ""))
   return byStartDesc[0] ?? null
 }
+
+/** The cadence PMS is scored on, and the default every PMS route opens with. */
+export const DEFAULT_PMS_CADENCE: PmsCadence = "quarterly"
+
+/** Value used by the cycle pickers to mean "every cycle in the current cadence". */
+export const ALL_CYCLES_VALUE = "__all__"
+
+/** The one cadence option list. Every PMS picker renders these, in this order. */
+export const CADENCE_OPTIONS: { value: PmsCadence; label: string }[] = [
+  { value: "quarterly", label: "Quarterly" },
+  { value: "biannual", label: "Biannual" },
+  { value: "annual", label: "Annual" },
+  { value: "all", label: "All cadences" },
+]
+
+/** Cycle labels drop the boilerplate "Performance Review" so the picker stays readable. */
+export function formatCycleLabel(name: string | null | undefined): string {
+  if (!name) return "-"
+  const cleaned = name.replace(/[-–—:]?\s*performance\s+review\s*[-–—:]?/gi, "").trim()
+  return cleaned || name
+}
+
+/**
+ * Two review_cycles rows can describe the same window (a seeded set landing on
+ * top of hand-created cycles). Identical labels in a picker are unusable, so a
+ * status suffix is appended whenever a name is not unique.
+ */
+export function cycleOptionLabel<T extends CadenceCycle & { status?: string | null }>(cycle: T, all: T[]): string {
+  const base = formatCycleLabel(cycle.name)
+  const duplicated = all.filter((other) => formatCycleLabel(other.name) === base).length > 1
+  if (!duplicated) return base
+  const status = (cycle.status || "").trim()
+  return status ? `${base} (${status})` : base
+}

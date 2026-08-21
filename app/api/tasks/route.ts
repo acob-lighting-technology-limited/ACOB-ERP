@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger"
 import { checkRequestSize } from "@/lib/api/request-size"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { apiError, ApiErrorCode } from "@/lib/api/errors"
+import { TASK_WEIGHT_MAX, TASK_WEIGHT_MIN } from "@/lib/tasks/scoring"
 import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { canAssignToDepartment, canAssignToProfile } from "@/lib/tasks/assignment-scope"
 import { TASK_STATUSES, TASK_ASSIGNMENT_TYPES } from "@/lib/tasks/constants"
@@ -24,6 +25,14 @@ const TaskBodySchema = z.object({
   assigned_to: z.string().uuid().optional().nullable(),
   assigned_users: z.array(z.string().uuid()).optional().default([]),
   goal_id: z.string().uuid().optional().nullable(),
+  project_id: z.string().uuid().optional().nullable(),
+  plan_id: z.string().uuid().optional().nullable(),
+  // Compulsory: task weight is the denominator of the employee's KPI score.
+  weight: z
+    .number()
+    .int()
+    .min(TASK_WEIGHT_MIN, `Task weight must be between ${TASK_WEIGHT_MIN} and ${TASK_WEIGHT_MAX}`)
+    .max(TASK_WEIGHT_MAX, `Task weight must be between ${TASK_WEIGHT_MIN} and ${TASK_WEIGHT_MAX}`),
   task_start_date: z.string().optional().nullable(),
   task_end_date: z.string().optional().nullable(),
   source_type: z.enum(["manual", "help_desk", "action_item"]).default("manual"),
@@ -73,6 +82,12 @@ export async function GET(request: NextRequest) {
         assigned_at,
         department,
         goal_id,
+        project_id,
+        plan_id,
+        weight,
+        rating,
+        rated_by,
+        rated_at,
         task_start_date,
         task_end_date,
         created_by,
@@ -306,6 +321,9 @@ export async function POST(request: NextRequest) {
         created_by: user.id,
         updated_by: user.id,
         goal_id: payload.goal_id || null,
+        project_id: payload.project_id || null,
+        plan_id: payload.plan_id || null,
+        weight: payload.weight,
         task_start_date: payload.task_start_date || null,
         task_end_date: payload.task_end_date || null,
         source_type: payload.source_type,
@@ -381,6 +399,9 @@ export async function POST(request: NextRequest) {
       created_by: user.id,
       updated_by: user.id,
       goal_id: payload.goal_id || null,
+      project_id: payload.project_id || null,
+      plan_id: payload.plan_id || null,
+      weight: payload.weight,
       task_start_date: payload.task_start_date || null,
       task_end_date: payload.task_end_date || null,
       source_type: payload.source_type,

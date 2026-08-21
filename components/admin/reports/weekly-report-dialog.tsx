@@ -195,12 +195,16 @@ export function WeeklyReportAdminDialog({
         }
       }
 
+      // Report-derived items only: a management directive must never be folded
+      // back into the department's "Tasks for New Week" text, nor decide whether
+      // the next week is already active.
       const { data } = await supabase
         .from("action_items")
         .select("title, status")
         .eq("department", formData.department)
         .eq("week_number", formData.week_number)
         .eq("year", formData.year)
+        .eq("origin", "weekly_report")
 
       if (data) {
         setIsNextWeekActive(data.some((a) => a.status !== "pending"))

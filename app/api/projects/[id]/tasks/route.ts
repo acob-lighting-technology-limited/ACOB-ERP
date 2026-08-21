@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { clampWeight } from "@/lib/tasks/scoring"
 import { logger } from "@/lib/logger"
 
 export const dynamic = "force-dynamic"
@@ -60,7 +61,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
   try {
     const body = await request.json()
-    const { title, description, status, assigned_to, priority } = body
+    const { title, description, status, assigned_to, priority, weight, goal_id } = body
 
     if (!title) {
       return NextResponse.json({ error: "Task title is required" }, { status: 400 })
@@ -75,6 +76,8 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         assigned_to: assigned_to || null,
         assigned_by: user.id,
         project_id: params.id,
+        goal_id: goal_id || null,
+        weight: clampWeight(weight),
         priority: priority || "medium",
         category: "general",
       })
@@ -107,10 +110,20 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
 
   try {
     const body = await request.json()
-    const { task_id, title, description, status, assigned_to, priority } = body
+    const { task_id, title, description, status, assigned_to, priority, weight } = body
 
     if (!task_id) {
       return NextResponse.json({ error: "task_id is required" }, { status: 400 })
+    }
+
+    // Completing a task also rates it, and the rating decides what the work is
+    // worth on the assignee's KPI. That only happens through the review route,
+    // so a task can never arrive at "completed" here without one.
+    if (status === "completed") {
+      return NextResponse.json(
+        { error: "Approve and rate this task from the task review flow so its rating is recorded" },
+        { status: 400 }
+      )
     }
 
     const { data: task, error } = await (supabase as any)
@@ -121,6 +134,7 @@ export async function PUT(request: NextRequest, props: { params: Promise<{ id: s
         status,
         assigned_to: assigned_to || null,
         priority,
+        ...(weight === undefined ? {} : { weight: clampWeight(weight) }),
         updated_at: new Date().toISOString(),
       })
       .eq("id", task_id)

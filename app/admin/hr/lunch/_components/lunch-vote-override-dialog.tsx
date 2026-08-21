@@ -101,7 +101,7 @@ export function LunchVoteOverrideDialog({
           ? "Their vote was removed."
           : answer === "eating"
             ? "Their choice was set."
-            : "Marked as not eating."
+            : "Marked as opted out."
       )
       onOpenChange(false)
       onSaved()
@@ -135,7 +135,7 @@ export function LunchVoteOverrideDialog({
             />
             {existingVote && (
               <p className="text-muted-foreground text-xs">
-                Currently: {existingVote.is_eating ? "eating" : "not eating"}
+                Currently: {existingVote.is_eating ? "opted in" : "opted out"}
               </p>
             )}
           </div>
@@ -147,8 +147,8 @@ export function LunchVoteOverrideDialog({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="eating">Eating — pick their dishes</SelectItem>
-                <SelectItem value="not_eating">Not eating (NO)</SelectItem>
+                <SelectItem value="eating">Opt In — pick their dishes</SelectItem>
+                <SelectItem value="not_eating">Opt Out (NO)</SelectItem>
                 <SelectItem value="none">Remove their vote entirely</SelectItem>
               </SelectContent>
             </Select>

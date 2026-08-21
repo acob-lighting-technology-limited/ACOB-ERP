@@ -20,6 +20,7 @@ import {
   Package,
   AlertTriangle,
   Clock,
+  Star,
   ChevronRight,
   RefreshCw,
   Mail,
@@ -51,6 +52,11 @@ const TYPE_ICONS: Record<string, typeof Info> = {
   approval_granted: CheckCircle,
   system: Info,
   announcement: Megaphone,
+  task_due_soon: Clock,
+  task_awaiting_review: FileText,
+  task_needs_rating: Star,
+  task_blocked: AlertTriangle,
+  project_delayed: AlertTriangle,
 }
 
 const TYPE_CARD_BG: Record<string, string> = {
@@ -64,6 +70,11 @@ const TYPE_CARD_BG: Record<string, string> = {
   approval_granted: "bg-emerald-50/50 dark:bg-emerald-950/10",
   system: "bg-slate-50/50 dark:bg-slate-950/10",
   announcement: "bg-red-50/50 dark:bg-red-950/10",
+  task_due_soon: "bg-amber-50/50 dark:bg-amber-950/10",
+  task_awaiting_review: "bg-orange-50/50 dark:bg-orange-950/10",
+  task_needs_rating: "bg-orange-50/50 dark:bg-orange-950/10",
+  task_blocked: "bg-red-50/50 dark:bg-red-950/10",
+  project_delayed: "bg-red-50/50 dark:bg-red-950/10",
 }
 
 const PRIORITY_BADGE_CLASS: Record<string, string> = {

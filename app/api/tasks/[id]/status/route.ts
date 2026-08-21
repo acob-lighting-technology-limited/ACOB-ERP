@@ -8,6 +8,7 @@ import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { apiError, ApiErrorCode } from "@/lib/api/errors"
 import { getRequestScope, type AdminScope } from "@/lib/admin/api-scope"
 import { TASK_STATUSES, type TaskStatus } from "@/lib/tasks/constants"
+import { TASK_RATING_MAX, TASK_RATING_MIN, isValidRating } from "@/lib/tasks/scoring"
 
 const log = logger("tasks-status-route")
 
@@ -18,6 +19,8 @@ const StatusBodySchema = z.object({
   reassigned_to: z.string().uuid().optional().nullable(),
   due_date: z.string().optional().nullable(),
   extension_reason: z.string().trim().max(5000).optional().nullable(),
+  // Required when completing a task: the rater's score of the delivered work.
+  rating: z.number().int().min(TASK_RATING_MIN).max(TASK_RATING_MAX).optional().nullable(),
 })
 
 const EMPLOYEE_TRANSITIONS: Record<string, TaskStatus[]> = {
@@ -49,6 +52,7 @@ type TaskRecord = {
   task_start_date?: string | null
   task_end_date?: string | null
   source_type?: string | null
+  project_id?: string | null
 }
 
 type ProfileRecord = {
@@ -117,7 +121,8 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
         description,
         task_start_date,
         task_end_date,
-        source_type
+        source_type,
+        project_id
       `
       )
       .eq("id", params.id)
@@ -140,10 +145,26 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     const isAdmin = isAdminProfile(taskScope)
     const isLead = isLeadForTask(profile ?? null, task.department)
     const isLeadOrAdmin = isAdmin || isLead
+
+    // A project task is rated by the manager of the project it belongs to; a
+    // task with no project is rated by its department lead (or an admin).
+    let projectManagerId: string | null = null
+    if (task.project_id) {
+      const { data: project } = await supabase
+        .from("projects")
+        .select("project_manager_id")
+        .eq("id", task.project_id)
+        .maybeSingle<{ project_manager_id: string | null }>()
+      projectManagerId = project?.project_manager_id ?? null
+    }
+    const isProjectManager = Boolean(projectManagerId) && projectManagerId === user.id
+
+    // Who may approve, rate, fail or reassign this task.
+    const canReview = isLeadOrAdmin || isProjectManager
     const isAssignee = task.assigned_to === user.id || Boolean(assignments && assignments.length > 0)
     const isAssigner = task.assigned_by === user.id
 
-    if (!isAssignee && !isAssigner && !isLeadOrAdmin) {
+    if (!isAssignee && !isAssigner && !canReview) {
       return apiError("Forbidden: You do not have permission to update this task", ApiErrorCode.FORBIDDEN, 403)
     }
 
@@ -151,7 +172,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     const nextStatus = parsed.data.status
 
     // State machine check for regular assignees
-    if (!isLeadOrAdmin) {
+    if (!canReview) {
       const allowed = EMPLOYEE_TRANSITIONS[oldStatus] || []
       if (!allowed.includes(nextStatus)) {
         return apiError(
@@ -175,11 +196,33 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     }
 
     if (nextStatus === "completed") {
-      updatePayload.completed_at = now
-      if (isLeadOrAdmin) {
-        updatePayload.reviewed_by = user.id
-        updatePayload.reviewed_at = now
+      // Approval and rating are one action: a task cannot reach "completed"
+      // unrated, so "finished but unscored" never exists to leak a zero into
+      // the employee's KPI.
+      if (!canReview) {
+        return apiError(
+          task.project_id
+            ? "Only the project manager, department lead or an administrator can approve and rate this task"
+            : "Only department leads or administrators can approve and rate a task",
+          ApiErrorCode.FORBIDDEN,
+          403
+        )
       }
+
+      if (!isValidRating(parsed.data.rating)) {
+        return apiError(
+          `A performance rating from ${TASK_RATING_MIN} to ${TASK_RATING_MAX} is required to complete a task`,
+          ApiErrorCode.MISSING_REQUIRED_FIELD,
+          400
+        )
+      }
+
+      updatePayload.completed_at = now
+      updatePayload.rating = parsed.data.rating
+      updatePayload.rated_by = user.id
+      updatePayload.rated_at = now
+      updatePayload.reviewed_by = user.id
+      updatePayload.reviewed_at = now
     }
 
     if (nextStatus === "unable_to_complete") {
@@ -187,7 +230,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     }
 
     if (nextStatus === "failed") {
-      if (!isLeadOrAdmin) {
+      if (!canReview) {
         return apiError(
           "Only department leads or administrators can mark a task as failed",
           ApiErrorCode.FORBIDDEN,
@@ -200,7 +243,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     }
 
     if (nextStatus === "reassigned") {
-      if (!isLeadOrAdmin) {
+      if (!canReview) {
         return apiError("Only department leads or administrators can reassign a task", ApiErrorCode.FORBIDDEN, 403)
       }
       const newAssigneeId = parsed.data.reassigned_to
@@ -214,7 +257,7 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
 
     // Timeline extension handling
     if (parsed.data.due_date) {
-      if (!isLeadOrAdmin) {
+      if (!canReview) {
         return apiError(
           "Only department leads or administrators can extend task deadlines",
           ApiErrorCode.FORBIDDEN,
@@ -305,23 +348,35 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       }
     }
 
-    // Send notifications based on transitions
-    if (nextStatus === "submitted_for_review" && task.assigned_by && task.assigned_by !== user.id) {
-      try {
-        await supabase.rpc("create_notification", {
-          p_user_id: task.assigned_by,
-          p_type: "task_submitted",
-          p_category: "tasks",
-          p_title: "Task submitted for review",
-          p_message: `${task.work_item_number || "Task"} was submitted for review: ${task.title}`,
-          p_priority: "normal",
-          p_link_url: "/admin/tasks",
-          p_actor_id: user.id,
-          p_entity_type: "task",
-          p_entity_id: task.id,
-        })
-      } catch (nErr) {
-        log.error({ err: String(nErr) }, "Notification failed")
+    // Send notifications based on transitions.
+    //
+    // Submitted work goes to whoever can actually approve and rate it: the
+    // project manager for project tasks, the assigning lead otherwise. Both
+    // are told when they are different people, since the lead still owns the
+    // assignee's workload even when a PM owns the rating.
+    if (nextStatus === "submitted_for_review") {
+      const reviewers = new Set<string>()
+      if (projectManagerId) reviewers.add(projectManagerId)
+      if (task.assigned_by) reviewers.add(task.assigned_by)
+      reviewers.delete(user.id)
+
+      for (const reviewerId of reviewers) {
+        try {
+          await supabase.rpc("create_notification", {
+            p_user_id: reviewerId,
+            p_type: "task_awaiting_review",
+            p_category: "tasks",
+            p_title: "Task awaiting your review",
+            p_message: `${task.work_item_number || "Task"} needs your approval and rating: ${task.title}`,
+            p_priority: "high",
+            p_link_url: "/admin/tasks",
+            p_actor_id: user.id,
+            p_entity_type: "task",
+            p_entity_id: task.id,
+          })
+        } catch (nErr) {
+          log.error({ err: String(nErr) }, "Notification failed")
+        }
       }
     }
 

@@ -3,17 +3,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { DataTableFilter } from "@/components/ui/data-table"
-import { matchesCadence, pickCurrentCycle, type CadenceCycle, type PmsCadence } from "@/lib/pms/cadence"
+import {
+  CADENCE_OPTIONS,
+  cycleOptionLabel,
+  matchesCadence,
+  pickCurrentCycle,
+  type CadenceCycle,
+  type PmsCadence,
+} from "@/lib/pms/cadence"
 import { toLocalISODate } from "@/lib/utils/date"
+import { usePmsCadence } from "./use-pms-cadence"
 
-export type CycleFilterCycle = CadenceCycle & { name: string }
-
-const CADENCE_OPTIONS: { value: PmsCadence; label: string }[] = [
-  { value: "all", label: "All cadences" },
-  { value: "quarterly", label: "Quarterly" },
-  { value: "biannual", label: "Biannual" },
-  { value: "annual", label: "Annual" },
-]
+export type CycleFilterCycle = CadenceCycle & { name: string; status?: string | null }
 
 /**
  * The standard PMS cycle filters: a Cadence picker and a Cycle picker, rendered
@@ -24,16 +25,11 @@ const CADENCE_OPTIONS: { value: PmsCadence; label: string }[] = [
  * and annual cycles into a quarterly view. Spread `filters` into the table's
  * `filters` array; row matching is handled here via `getRowCycleId`.
  *
- * Selection lives in this hook rather than in the table's own filter values,
- * because most PMS views load their cycles after mount while the table reads
- * configured defaults once. Both selections are applied by the cadence filter's
- * `filterFn`, which always carries a value.
+ * Selection lives in the shared `usePmsCadence` SSOT store and this hook rather
+ * than in the table's own filter values, because most PMS views load their cycles
+ * after mount while the table reads configured defaults once. Both selections
+ * are applied by the cadence filter's `filterFn`, which always carries a value.
  */
-function formatCycleOptionLabel(name: string | null | undefined): string {
-  if (!name) return "-"
-  const cleaned = name.replace(/[-–—:]?\s*performance\s+review\s*[-–—:]?/gi, "").trim()
-  return cleaned || name
-}
 
 export function useCycleFilters<TRow>({
   cycles,
@@ -41,7 +37,7 @@ export function useCycleFilters<TRow>({
   cycleKey = "cycle",
   cycleLabel = "Cycle",
   includeCyclePicker = true,
-  defaultCadence = "quarterly",
+  defaultCadence,
 }: {
   cycles: CycleFilterCycle[]
   getRowCycleId: (row: TRow) => string | null | undefined
@@ -55,8 +51,16 @@ export function useCycleFilters<TRow>({
   includeCyclePicker?: boolean
   defaultCadence?: PmsCadence
 }): { filters: DataTableFilter<TRow>[]; selectedCycleId: string; cadence: PmsCadence } {
-  const [cadence, setCadence] = useState<PmsCadence>(defaultCadence)
+  const [cadence, setCadence] = usePmsCadence()
   const [selectedCycleId, setSelectedCycleId] = useState("")
+
+  // If defaultCadence was explicitly passed and differs, set it
+  useEffect(() => {
+    if (defaultCadence && defaultCadence !== cadence) {
+      setCadence(defaultCadence)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const cycleInfoById = useMemo(() => {
     const map = new Map<string, { review_type?: string | null; name?: string | null }>()
@@ -69,12 +73,22 @@ export function useCycleFilters<TRow>({
     [cycles, cadence]
   )
 
-  // Land on the current cycle as soon as the cycle list arrives.
+  // Land on the current cycle as soon as the cycle list arrives or cadence changes.
   const seededRef = useRef(false)
   useEffect(() => {
-    if (seededRef.current || cycles.length === 0) return
-    seededRef.current = true
-    setSelectedCycleId(pickCurrentCycle(cycles, toLocalISODate(), cadence)?.id ?? "")
+    if (cycles.length === 0) return
+    if (!seededRef.current) {
+      seededRef.current = true
+      setSelectedCycleId(pickCurrentCycle(cycles, toLocalISODate(), cadence)?.id ?? "")
+    } else {
+      setSelectedCycleId((current) => {
+        const stillVisible = cycles.some(
+          (cycle) => cycle.id === current && matchesCadence(cadence, cycle.review_type, cycle.name)
+        )
+        if (stillVisible) return current
+        return pickCurrentCycle(cycles, toLocalISODate(), cadence)?.id ?? ""
+      })
+    }
   }, [cycles, cadence])
 
   const matchesSelection = useCallback(
@@ -100,8 +114,8 @@ export function useCycleFilters<TRow>({
         options: CADENCE_OPTIONS,
         multi: false,
         mode: "custom",
-        defaultValues: [defaultCadence],
-        filterFn: (row, values) => matchesSelection(row, (values[0] as PmsCadence) || defaultCadence),
+        defaultValues: [cadence],
+        filterFn: (row, values) => matchesSelection(row, (values[0] as PmsCadence) || cadence),
         render: (values, onChange) => (
           <Select
             value={values[0] || cadence}
@@ -136,7 +150,10 @@ export function useCycleFilters<TRow>({
       {
         key: cycleKey,
         label: cycleLabel,
-        options: visibleCycles.map((cycle) => ({ value: cycle.id, label: formatCycleOptionLabel(cycle.name) })),
+        options: visibleCycles.map((cycle) => ({
+          value: cycle.id,
+          label: cycleOptionLabel(cycle, visibleCycles),
+        })),
         multi: false,
         mode: "custom",
         // Row scoping is applied by the cadence filter above, which always has a
@@ -156,7 +173,7 @@ export function useCycleFilters<TRow>({
             <SelectContent>
               {visibleCycles.map((cycle) => (
                 <SelectItem key={cycle.id} value={cycle.id}>
-                  {formatCycleOptionLabel(cycle.name)}
+                  {cycleOptionLabel(cycle, visibleCycles)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -172,10 +189,10 @@ export function useCycleFilters<TRow>({
     cycleKey,
     cycleLabel,
     cycles,
-    defaultCadence,
     includeCyclePicker,
     matchesSelection,
     selectedCycleId,
+    setCadence,
     visibleCycles,
   ])
 

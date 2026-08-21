@@ -10,6 +10,8 @@ import { StatCard } from "@/components/ui/stat-card"
 import { Progress } from "@/components/ui/progress"
 import { FolderGit2, FolderKanban, RefreshCw, Calendar, MapPin, Wrench, ShieldCheck, Briefcase } from "lucide-react"
 import { ProjectTaskViewer } from "./_components/project-task-viewer"
+import { computeProjectHealth, type ProjectHealthTask } from "@/lib/projects/health"
+import { toLocalISODate } from "@/lib/utils/date"
 
 // Define user-facing project type (includes tasks count payload)
 export interface ProjectRow {
@@ -31,7 +33,8 @@ export interface ProjectRow {
     first_name: string | null
     last_name: string | null
   } | null
-  tasks?: Array<{ id: string; status: string }>
+  portfolio?: { id: string; name: string; code: string | null } | null
+  tasks?: ProjectHealthTask[]
 }
 
 async function fetchUserProjects(): Promise<ProjectRow[]> {
@@ -84,13 +87,22 @@ export function ProjectContent() {
     return types.sort().map((t) => ({ value: t!, label: t! }))
   }, [rows])
 
-  // Project Progress calculation helper
+  // Weighted delivery, from the same helper the admin project and portfolio
+  // dashboards use — a count of finished tasks would report a different number
+  // for the same project depending on which page you opened.
   const getProgressInfo = (project: ProjectRow) => {
     const projectTasks = project.tasks || []
     if (projectTasks.length === 0) return { percent: 0, text: "No tasks" }
-    const completed = projectTasks.filter((t) => t.status === "completed" || t.status === "cancelled").length
-    const percent = Math.round((completed / projectTasks.length) * 100)
-    return { percent, text: `${completed}/${projectTasks.length} Completed` }
+    const health = computeProjectHealth({
+      startDate: project.deployment_start_date,
+      endDate: project.deployment_end_date,
+      tasks: projectTasks,
+      today: toLocalISODate(),
+    })
+    return {
+      percent: health.deliveryPct ?? 0,
+      text: `${health.qualityPct ?? 0}% quality`,
+    }
   }
 
   // Project Status Badge formatter
@@ -152,7 +164,7 @@ export function ProjectContent() {
       },
       {
         key: "progress",
-        label: "Tasks Progress",
+        label: "Delivery / Quality",
         sortable: false,
         render: (r) => {
           const info = getProgressInfo(r)

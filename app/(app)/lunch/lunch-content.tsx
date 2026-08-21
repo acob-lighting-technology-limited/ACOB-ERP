@@ -445,7 +445,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
             .map((g) => g.options.find((o) => o.id === myVote.selections[g.id])?.name)
             .filter(Boolean)
             .join(" + ") || "Voted"
-        : "Not eating"
+        : "Opted out"
       : "Not voted"
 
   return (
@@ -666,7 +666,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
                     saying so out loud is visible to everyone. */}
                 <div className="border-t pt-3">
                   <PollRow
-                    label="NO — I'm not eating"
+                    label="NO — Not taking lunch"
                     description={null}
                     tally={tallies.find((t) => t.option_id === NOT_EATING_OPTION_ID)}
                     totalVotes={totalVotes}

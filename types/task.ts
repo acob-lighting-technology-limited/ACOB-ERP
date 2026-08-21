@@ -31,6 +31,13 @@ export interface Task {
   department?: string | null
   goal_id?: string | null
   goal_title?: string | null
+  project_id?: string | null
+  project_name?: string | null
+  plan_id?: string | null
+  weight: number
+  rating?: number | null
+  rated_by?: string | null
+  rated_at?: string | null
   task_start_date?: string | null
   task_end_date?: string | null
   created_by?: string | null
@@ -51,6 +58,7 @@ export interface Task {
   created_by_user?: TaskPersonSummary
   updated_by_user?: TaskPersonSummary
   reviewed_by_user?: TaskPersonSummary
+  rated_by_user?: TaskPersonSummary
   reassigned_to_user?: TaskPersonSummary
   assigned_users?: TaskPersonSummary[]
   can_change_status?: boolean

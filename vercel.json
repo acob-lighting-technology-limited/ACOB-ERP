@@ -15,6 +15,14 @@
     {
       "path": "/api/cron/pms/ensure-review-cycle",
       "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/cron/tasks/expire-overdue",
+      "schedule": "15 1 * * *"
+    },
+    {
+      "path": "/api/cron/tasks/reminders",
+      "schedule": "0 7 * * 1-5"
     }
   ]
 }

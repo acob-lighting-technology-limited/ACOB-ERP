@@ -254,6 +254,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
     {
       key: "clock_in",
       label: "Clock In",
+      sortable: true,
       accessor: (r) => r.clock_in ?? "",
       render: (r) => (
         <span className="flex items-center justify-center gap-1 text-sm">
@@ -272,6 +273,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
     {
       key: "clock_out",
       label: "Clock Out",
+      sortable: true,
       accessor: (r) => r.clock_out ?? "",
       render: (r) => (
         <span className="flex items-center justify-center gap-1 text-sm">

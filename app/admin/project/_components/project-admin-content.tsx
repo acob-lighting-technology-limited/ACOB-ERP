@@ -20,8 +20,12 @@ import {
   Briefcase,
 } from "lucide-react"
 import { toast } from "sonner"
+import type { employee } from "@/app/admin/tasks/management/admin-tasks-content"
 import { ProjectDialogs } from "./project-dialogs"
-import { ProjectTaskManager } from "./project-task-manager"
+import { PROJECT_HEALTH_LABELS, computeProjectHealth, type ProjectHealthTask } from "@/lib/projects/health"
+import { toLocalISODate } from "@/lib/utils/date"
+import { Progress } from "@/components/ui/progress"
+import { ProjectPlanBoard } from "./project-plan-board"
 
 // Define core project structure
 export interface Project {
@@ -37,22 +41,20 @@ export interface Project {
   status: "planning" | "active" | "on_hold" | "completed" | "cancelled"
   created_at: string
   updated_at: string
+  portfolio_id: string | null
   project_manager?: {
     id: string
     full_name: string | null
     first_name: string | null
     last_name: string | null
   } | null
+  portfolio?: { id: string; name: string; code: string | null } | null
+  /** Returned with the project so progress can be derived without a second call. */
+  tasks?: ProjectHealthTask[] | null
 }
 
 interface ProjectAdminContentProps {
-  profiles: Array<{
-    id: string
-    first_name: string | null
-    last_name: string | null
-    full_name: string | null
-    department: string | null
-  }>
+  profiles: employee[]
   currentUser: { id: string; role: string; department: string | null }
 }
 
@@ -102,6 +104,38 @@ export function ProjectAdminContent({ profiles, currentUser }: ProjectAdminConte
       totalCapacity: formatCapacity(totalCapacityWatts),
     }
   }, [rows])
+
+  // Health is derived from the project's own tasks on every render — nothing
+  // about progress is stored, so these figures cannot drift from the tasks.
+  const healthById = useMemo(() => {
+    const today = toLocalISODate()
+    return new Map(
+      rows.map((project) => [
+        project.id,
+        computeProjectHealth({
+          startDate: project.deployment_start_date,
+          endDate: project.deployment_end_date,
+          tasks: project.tasks || [],
+          today,
+        }),
+      ])
+    )
+  }, [rows])
+
+  const renderHealthBadge = (status: string) => {
+    switch (status) {
+      case "on_track":
+        return <Badge className="border-emerald-500/20 bg-emerald-500/10 text-emerald-500">On Track</Badge>
+      case "at_risk":
+        return <Badge className="border-amber-500/20 bg-amber-500/10 text-amber-500">At Risk</Badge>
+      case "behind_schedule":
+        return <Badge className="border-red-500/20 bg-red-500/10 text-red-500">Behind Schedule</Badge>
+      case "completed":
+        return <Badge className="border-blue-500/20 bg-blue-500/10 text-blue-500">Completed</Badge>
+      default:
+        return <Badge variant="outline">{status}</Badge>
+    }
+  }
 
   // Technology Types option list for filtering
   const techOptions = useMemo(() => {
@@ -183,14 +217,70 @@ export function ProjectAdminContent({ profiles, currentUser }: ProjectAdminConte
         ),
       },
       {
+        key: "portfolio",
+        label: "Portfolio",
+        sortable: true,
+        accessor: (r) => r.portfolio?.name || "",
+        render: (r) =>
+          r.portfolio ? (
+            <Badge variant="outline" className="text-xs">
+              {r.portfolio.code || r.portfolio.name}
+            </Badge>
+          ) : (
+            <span className="text-muted-foreground text-xs">Unassigned</span>
+          ),
+      },
+      {
+        key: "progress",
+        label: "Delivery / Quality",
+        sortable: true,
+        accessor: (r) => healthById.get(r.id)?.deliveryPct ?? 0,
+        render: (r) => {
+          const health = healthById.get(r.id)
+          if (!health || health.totalWeight === 0) {
+            return <span className="text-muted-foreground text-xs">No tasks</span>
+          }
+          return (
+            <div className="w-32 space-y-1">
+              <Progress value={health.deliveryPct ?? 0} className="h-1.5" />
+              <p className="text-muted-foreground text-[11px]">
+                {health.deliveryPct ?? 0}% delivered · {health.qualityPct ?? 0}% quality
+              </p>
+            </div>
+          )
+        },
+      },
+      {
+        key: "health",
+        label: "Health",
+        sortable: true,
+        accessor: (r) => PROJECT_HEALTH_LABELS[healthById.get(r.id)?.status ?? "on_track"],
+        render: (r) => {
+          const health = healthById.get(r.id)
+          if (!health) return null
+          return (
+            <div className="space-y-1">
+              {renderHealthBadge(health.status)}
+              {health.variancePct !== null && (
+                <p className="text-muted-foreground text-[11px]">
+                  {health.variancePct > 0 ? "+" : ""}
+                  {health.variancePct}% vs schedule
+                  {health.overdueCount > 0 ? ` · ${health.overdueCount} overdue` : ""}
+                </p>
+              )}
+            </div>
+          )
+        },
+      },
+      {
         key: "status",
-        label: "Status",
+        label: "Lifecycle",
         sortable: true,
         accessor: (r) => r.status,
         render: (r) => renderStatusBadge(r.status),
       },
     ],
-    []
+    [healthById]
   )
 
   // Filters definition
@@ -211,6 +301,16 @@ export function ProjectAdminContent({ profiles, currentUser }: ProjectAdminConte
         key: "technology_type",
         label: "Technology",
         options: techOptions,
+      },
+      {
+        key: "health",
+        label: "Health",
+        options: [
+          { value: "On Track", label: "On Track" },
+          { value: "At Risk", label: "At Risk" },
+          { value: "Behind Schedule", label: "Behind Schedule" },
+          { value: "Completed", label: "Completed" },
+        ],
       },
     ],
     [techOptions]
@@ -300,7 +400,7 @@ export function ProjectAdminContent({ profiles, currentUser }: ProjectAdminConte
         expandable={{
           render: (r) => (
             <div className="bg-muted/20 rounded-lg border p-2">
-              <ProjectTaskManager project={r} profiles={profiles} />
+              <ProjectPlanBoard project={r} profiles={profiles} />
             </div>
           ),
         }}

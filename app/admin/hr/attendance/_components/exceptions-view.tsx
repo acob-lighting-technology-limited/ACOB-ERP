@@ -202,6 +202,7 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
     {
       key: "clock_in",
       label: "Clock In",
+      sortable: true,
       accessor: (r) => r.clock_in ?? "",
       render: (r) => (
         <span className="flex items-center justify-center gap-1 text-sm">
@@ -220,6 +221,7 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
     {
       key: "clock_out",
       label: "Clock Out",
+      sortable: true,
       accessor: (r) => r.clock_out ?? "",
       render: (r) => (
         <span className="flex items-center justify-center gap-1 text-sm">
@@ -274,7 +276,8 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
         if (values.length === 0) return true
         return values.some((v) => {
           if (v === "late") return r.status === "late"
-          if (v === "incomplete") return r.status === "incomplete" || (isPastRecord(r) && Boolean(r.clock_in) && !r.clock_out)
+          if (v === "incomplete")
+            return r.status === "incomplete" || (isPastRecord(r) && Boolean(r.clock_in) && !r.clock_out)
           if (v === "absent") return r.status === "absent"
           return false
         })

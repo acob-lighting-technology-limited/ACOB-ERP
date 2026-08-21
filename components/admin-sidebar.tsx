@@ -28,6 +28,7 @@ import {
   Users,
   Building2,
   FolderKanban,
+  Layers,
   TrendingUp,
 } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
@@ -300,10 +301,14 @@ const adminNavigation: NavItem[] = [
   },
   {
     section: "management",
-    name: "Projects",
-    href: "/admin/project",
-    icon: FolderKanban,
+    name: "Portfolios",
+    href: "/admin/portfolios",
+    icon: Layers,
     roles: ["developer", "super_admin", "admin"],
+    children: [
+      { name: "Portfolios", href: "/admin/portfolios" },
+      { name: "Projects", href: "/admin/project" },
+    ],
   },
   {
     section: "management",

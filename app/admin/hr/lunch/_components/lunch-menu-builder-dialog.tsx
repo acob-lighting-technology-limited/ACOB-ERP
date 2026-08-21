@@ -204,7 +204,7 @@ export function LunchMenuBuilderDialog({
                 Fixed meal — one dish
               </p>
               <p className="text-muted-foreground">Spaghetti with peppered beef</p>
-              <p className="text-muted-foreground/70 mt-1 italic">Voting = &ldquo;I&apos;m eating&rdquo;</p>
+              <p className="text-muted-foreground/70 mt-1 italic">Voting = &ldquo;I&apos;m opting in&rdquo;</p>
             </div>
             <div>
               <p className="text-muted-foreground mb-1 text-[10px] font-bold tracking-wider uppercase">

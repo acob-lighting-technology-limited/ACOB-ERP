@@ -54,7 +54,10 @@ export async function POST(request: NextRequest) {
     const { error: viewErr } = await supabase.rpc("record_lunch_menu_view", { p_menu_id: menu.id })
 
     if (viewErr) {
-      log.error({ err: viewErr.message }, "failed to record lunch menu view")
+      // Surfaced rather than swallowed: a silent failure here is invisible
+      // everywhere except an admin wondering why the view count never moves.
+      log.error({ err: viewErr.message, menuId: menu.id }, "failed to record lunch menu view")
+      return NextResponse.json({ error: "Failed to record menu view" }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, tracked: true })
