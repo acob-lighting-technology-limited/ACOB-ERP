@@ -48,7 +48,10 @@ function parseTasksNewWeekLines(tasksNewWeek: string): string[] {
 }
 
 export async function fetchActionPointRows(supabase: ReportsPdfClient, week: number, year: number) {
-  const actions = await fetchActionTrackerItems(supabase, { week, year })
+  // The official Action Points report is the department-by-department weekly
+  // sheet. Management directives are tracked and exported as their own category
+  // from the Action Tracker rather than being folded into these rows.
+  const actions = await fetchActionTrackerItems(supabase, { week, year, origin: "weekly_report" })
   return actions.map((action) => ({
     id: action.id,
     title: action.title || null,

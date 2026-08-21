@@ -15,6 +15,13 @@ const ActionStatusSchema = z.object({
   department: z.string().trim().min(1).optional(),
   week_number: z.number().int().min(1).max(53).optional(),
   year: z.number().int().min(2000).max(9999).optional(),
+  // Management directive fields — ignored for tasks and for report-derived items.
+  meeting_date: z.string().trim().min(1).optional().nullable(),
+  timeline_text: z.string().trim().optional().nullable(),
+  assignee_ids: z.array(z.string().uuid()).optional(),
+  // Hindrance reporting — applies to every action item, not just directives.
+  // Sending null or an empty string clears a previously reported hindrance.
+  blocker_note: z.string().trim().optional().nullable(),
 })
 
 type ScopeProfile = {
@@ -125,6 +132,22 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       updates.completed_at = new Date().toISOString()
     }
 
+    // Only action_items carries hindrance columns; tasks rows have their own model.
+    if (entity.table === "action_items" && typeof parsed.data.blocker_note !== "undefined") {
+      const note = parsed.data.blocker_note?.trim() || null
+      updates.blocker_note = note
+      // Clearing the note clears the attribution with it, so a stale reporter is
+      // never left attached to an item with nothing reported.
+      updates.blocker_reported_at = note ? new Date().toISOString() : null
+      updates.blocker_reported_by = note ? user.id : null
+    }
+
+    const isDirective = entity.table === "action_items" && String(entity.item.origin) === "management_directive"
+    if (isDirective) {
+      if (typeof parsed.data.meeting_date !== "undefined") updates.meeting_date = parsed.data.meeting_date || null
+      if (typeof parsed.data.timeline_text !== "undefined") updates.timeline_text = parsed.data.timeline_text || null
+    }
+
     const { data: updatedItem, error } = await supabase
       .from(entity.table)
       .update(updates)
@@ -134,6 +157,21 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
 
     if (error || !updatedItem) {
       return NextResponse.json({ error: error?.message || "Failed to update action item" }, { status: 500 })
+    }
+
+    // Responsible staff are replaced wholesale — the dialog always submits the
+    // full list, so a removed name has to disappear rather than linger.
+    if (isDirective && parsed.data.assignee_ids) {
+      const assigneeIds = Array.from(new Set(parsed.data.assignee_ids))
+      await supabase.from("action_item_assignees").delete().eq("action_item_id", params.id)
+      if (assigneeIds.length > 0) {
+        const { error: assigneeError } = await supabase
+          .from("action_item_assignees")
+          .insert(assigneeIds.map((profileId) => ({ action_item_id: params.id, profile_id: profileId })))
+        if (assigneeError) {
+          log.error({ err: assigneeError.message, itemId: params.id }, "Failed to update directive assignees")
+        }
+      }
     }
 
     await writeAuditLog(

@@ -15,6 +15,14 @@ const CreateActionItemSchema = z.object({
   department: z.string().trim().min(1),
   week_number: z.number().int().min(1).max(53).optional(),
   year: z.number().int().min(2000).max(9999).optional(),
+  // Management directives (raised at the general meeting) are the same row type
+  // separated by origin. They deliberately carry no report_id, so the weekly
+  // report sync — which deletes every row with its report_id on each submit —
+  // can never wipe them.
+  origin: z.enum(["weekly_report", "management_directive"]).optional(),
+  meeting_date: z.string().trim().min(1).optional().nullable(),
+  timeline_text: z.string().trim().optional().nullable(),
+  assignee_ids: z.array(z.string().uuid()).optional(),
 })
 
 type ScopeProfile = {
@@ -65,15 +73,18 @@ export async function POST(request: NextRequest) {
     const officeWeek = getCurrentOfficeWeek()
     const targetWeek = parsed.data.week_number ?? officeWeek.week
     const targetYear = parsed.data.year ?? officeWeek.year
+    const origin = parsed.data.origin ?? "weekly_report"
 
     // Append manually-added items after any already synced from a report submission,
-    // so they don't jump ahead of the department's existing list.
+    // so they don't jump ahead of the department's existing list. Directives number
+    // within their own category rather than continuing the report-derived list.
     const { count: existingCount } = await supabase
       .from("action_items")
       .select("id", { count: "exact", head: true })
       .eq("department", parsed.data.department)
       .eq("week_number", targetWeek)
       .eq("year", targetYear)
+      .eq("origin", origin)
 
     const { data: item, error } = await supabase
       .from("action_items")
@@ -86,12 +97,27 @@ export async function POST(request: NextRequest) {
         year: targetYear,
         assigned_by: user.id,
         position: existingCount ?? 0,
+        origin,
+        meeting_date: origin === "management_directive" ? parsed.data.meeting_date || null : null,
+        timeline_text: origin === "management_directive" ? parsed.data.timeline_text || null : null,
       })
       .select("*")
       .single()
 
     if (error || !item)
       return NextResponse.json({ error: error?.message || "Failed to create action item" }, { status: 500 })
+
+    const assigneeIds = Array.from(new Set(parsed.data.assignee_ids || []))
+    if (origin === "management_directive" && assigneeIds.length > 0) {
+      const { error: assigneeError } = await supabase
+        .from("action_item_assignees")
+        .insert(assigneeIds.map((profileId) => ({ action_item_id: item.id, profile_id: profileId })))
+      if (assigneeError) {
+        // The directive itself is the record of account; a failed name link must
+        // not leave the caller thinking nothing was saved.
+        log.error({ err: assigneeError.message, itemId: item.id }, "Failed to attach directive assignees")
+      }
+    }
 
     await writeAuditLog(
       supabase,

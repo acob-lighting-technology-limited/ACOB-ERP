@@ -92,12 +92,40 @@ export async function POST(request: NextRequest) {
       original_week: item.original_week || previous.week,
       assigned_by: user.id,
       position: index,
+      // An unfinished management directive stays a directive when it rolls over,
+      // keeping the meeting it came from and its minuted timeline attached.
+      origin: item.origin,
+      meeting_date: item.meeting_date || null,
+      timeline_text: item.timeline_text || null,
+      // The hindrance travels with the item: the whole point of recording why an
+      // action point stalled is that it is still visible in the week it stalls
+      // into. Evidence files stay attached to the week they were filed against.
+      blocker_note: item.blocker_note || null,
+      blocker_reported_at: item.blocker_reported_at || null,
+      blocker_reported_by: item.blocker_reported_by || null,
     }))
 
     const { data: newItems, error: insertError } = await supabase.from("action_items").insert(insertPayload).select("*")
 
     if (insertError) {
       return NextResponse.json({ error: insertError.message }, { status: 500 })
+    }
+
+    // Responsible staff carry over with the directive, or accountability resets
+    // to the department every time an item misses its week.
+    const assigneeLinks = (newItems || []).flatMap((newItem, index) => {
+      const source = itemsToCarry[index]
+      if (!source || source.origin !== "management_directive") return []
+      return source.assignees.map((assignee) => ({
+        action_item_id: (newItem as { id: string }).id,
+        profile_id: assignee.id,
+      }))
+    })
+    if (assigneeLinks.length > 0) {
+      const { error: assigneeError } = await supabase.from("action_item_assignees").insert(assigneeLinks)
+      if (assigneeError) {
+        log.error({ err: assigneeError.message }, "Failed to carry forward directive assignees")
+      }
     }
 
     await writeAuditLog(

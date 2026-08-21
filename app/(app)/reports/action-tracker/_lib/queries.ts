@@ -10,6 +10,19 @@ export interface ActionTask {
   due_date?: string
   week_number: number
   year: number
+  /**
+   * weekly_report = parsed from the department's "Tasks for New Week".
+   * management_directive = raised by management at the general meeting.
+   */
+  origin?: "weekly_report" | "management_directive"
+  meeting_date?: string
+  timeline_text?: string
+  assignees?: { id: string; name: string; department?: string }[]
+  /** What is preventing completion, with optional supporting evidence attached. */
+  blocker_note?: string
+  blocker_reported_at?: string
+  blocker_reported_by_name?: string
+  evidence_count?: number
 }
 
 export interface ActionTrackerMetadata {
