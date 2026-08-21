@@ -338,11 +338,15 @@ export function PmsTablePage({
                           status: string
                           dueDate?: string | null
                           assignmentType?: string | null
+                          weight?: number | null
+                          rating?: number | null
                         }>
                       }
                     ).__tasks || []
                   if (tasks.length === 0) {
-                    return <p className="text-muted-foreground text-sm">No assigned tasks linked to this goal yet.</p>
+                    return (
+                      <p className="text-muted-foreground text-sm">No tasks in this group for the selected cycle.</p>
+                    )
                   }
 
                   return (
@@ -360,6 +364,9 @@ export function PmsTablePage({
                               <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">
                                 Due Date
                               </th>
+                              <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Weight</th>
+                              <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Rating</th>
+                              <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Earned</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -376,6 +383,13 @@ export function PmsTablePage({
                                   {String(task.assignmentType || "department").replace(/_/g, " ")}
                                 </td>
                                 <td className="px-3 py-2">{task.dueDate ? formatWATDate(task.dueDate) : "-"}</td>
+                                <td className="px-3 py-2">{task.weight ?? "-"}</td>
+                                <td className="px-3 py-2">{task.rating ? `${task.rating}/5` : "Unrated"}</td>
+                                <td className="px-3 py-2">
+                                  {task.weight
+                                    ? `${Math.round(((task.weight * (task.rating ?? 0)) / 5) * 100) / 100} / ${task.weight}`
+                                    : "-"}
+                                </td>
                               </tr>
                             ))}
                           </tbody>

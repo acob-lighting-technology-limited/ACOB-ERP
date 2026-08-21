@@ -4,6 +4,7 @@ import { deriveUnifiedAttendanceStatus, normalizeStoredAttendanceStatus } from "
 import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import { computeAttendanceDay, netDayHoursFor } from "@/lib/hr/attendance-ssot"
 import { pickCurrentCycle, getCoveredQuarterlyCycles, isQuarterlyCycle, rollupQuarterlyScores } from "@/lib/pms/cadence"
+import { computeWeightedTaskScore, isTaskInCycle } from "@/lib/tasks/scoring"
 
 type GoalScoreBreakdown = {
   goal_id: string
@@ -56,6 +57,22 @@ type PerformanceReviewScoreRow = {
 }
 
 type MetricValue = number | null
+
+type TaskScoreRow = {
+  id: string
+  goal_id: string | null
+  title: string | null
+  status: string | null
+  weight: number | null
+  rating: number | null
+  assignment_type: string | null
+  assigned_to: string | null
+  department: string | null
+  task_end_date: string | null
+  due_date: string | null
+  created_at: string | null
+  is_archived: boolean | null
+}
 
 const PRIORITY_WEIGHTS: Record<string, number> = {
   low: 1,
@@ -161,119 +178,121 @@ export async function computeIndividualPerformanceScore(
 
   const userDepartment = profile?.department || null
 
-  let goalQuery = supabase
-    .from("goals_objectives")
-    .select("id, title, target_value, achieved_value, priority, is_system_generated, weight_pct, department")
-    .eq("approval_status", "approved")
-    .eq("is_archived", false)
+  // ── KPI / Task Performance (70%) ──────────────────────────────
+  // Weighted task scoring: SUM(weight * rating/5) / SUM(weight).
+  //
+  // Every task carries a compulsory weight, so a task needs no goal to count —
+  // goals and projects are groupings for reporting, not a gate on scoring, and
+  // their own weight_pct/priority no longer influence any score (weighting the
+  // same work twice would make the result impossible to explain).
+  //
+  // A task belongs to the cycle its DUE DATE falls in, not its completion date:
+  // work due in March stays March's whether it is delivered late or not at all.
 
-  if (params.cycleId) {
-    goalQuery = goalQuery.eq("review_cycle_id", params.cycleId)
-  }
-
-  if (userDepartment) {
-    goalQuery = goalQuery.eq("department", userDepartment)
-  } else {
-    goalQuery = goalQuery.eq("user_id", params.userId)
-  }
-
-  const { data: goals } = await goalQuery
-
-  // ── Fix 1: Include department-assigned tasks this user individually completed ──
-  // Query task_user_completion to find tasks where this user recorded completion,
-  // even if the task was assigned to the whole department (not directly to them).
   const { data: userCompletions } = await supabase
     .from("task_user_completion")
     .select("task_id")
     .eq("user_id", params.userId)
   const userCompletedTaskIds = new Set((userCompletions || []).map((row) => row.task_id))
 
-  let kpiScore: number | null = null
-  const goalBreakdown: GoalScoreBreakdown[] = []
+  const TASK_FIELDS =
+    "id, goal_id, title, status, weight, rating, assignment_type, assigned_to, department, task_end_date, due_date, created_at, is_archived"
 
-  if (goals && goals.length > 0) {
-    let weightedPctSum = 0
-    let totalWeight = 0
+  const [{ data: assignedTasks }, { data: departmentTasks }, { data: completedTasks }] = await Promise.all([
+    supabase.from("tasks").select(TASK_FIELDS).eq("assigned_to", params.userId).eq("is_archived", false),
+    userDepartment
+      ? supabase
+          .from("tasks")
+          .select(TASK_FIELDS)
+          .eq("department", userDepartment)
+          .in("assignment_type", ["multiple", "department"])
+          .eq("is_archived", false)
+      : Promise.resolve({ data: [] as TaskScoreRow[] }),
+    userCompletedTaskIds.size > 0
+      ? supabase.from("tasks").select(TASK_FIELDS).in("id", Array.from(userCompletedTaskIds)).eq("is_archived", false)
+      : Promise.resolve({ data: [] as TaskScoreRow[] }),
+  ])
 
-    // ── Batch fetch all tasks for all goals in a single query (prevents N+1) ──
-    const goalIds = goals.map((g) => g.id)
-    const { data: allTaskRows } = await supabase
-      .from("tasks")
-      .select("id, goal_id, status, assignment_type, assigned_to, department, is_archived")
-      .in("goal_id", goalIds)
-      .eq("is_archived", false)
-
-    const tasksByGoalId = new Map<string, typeof allTaskRows>()
-    for (const task of allTaskRows || []) {
-      const bucket = tasksByGoalId.get(task.goal_id) || []
-      bucket.push(task)
-      tasksByGoalId.set(task.goal_id, bucket)
-    }
-
-    for (const goal of goals) {
-      const taskSummary = tasksByGoalId.get(goal.id) || []
-
-      const relevantTasks = taskSummary.filter((task) => {
-        // Exclude reassigned or cancelled tasks from personal scoring (neutral)
-        if (task.status === "reassigned" || task.status === "cancelled") {
-          return false
-        }
-
-        if (task.assignment_type === "individual" || !task.assignment_type) {
-          return task.assigned_to === params.userId
-        }
-
-        if (task.assignment_type === "multiple" || task.assignment_type === "department") {
-          return (
-            task.assigned_to === params.userId ||
-            userCompletedTaskIds.has(task.id) ||
-            Boolean(userDepartment && task.department === userDepartment)
-          )
-        }
-
-        return false
-      })
-
-      const totalTasks = relevantTasks.length
-      // Count a task as completed if its status is "completed" OR if this user
-      // individually completed it (via task_user_completion for dept-assigned tasks).
-      const completedTasks = relevantTasks.filter(
-        (task) => task.status === "completed" || userCompletedTaskIds.has(task.id)
-      ).length
-
-      const targetValue = typeof goal.target_value === "number" ? goal.target_value : Number(goal.target_value || 0)
-      const achievedValue =
-        typeof goal.achieved_value === "number" ? goal.achieved_value : Number(goal.achieved_value || 0)
-      const goalProgressPct = targetValue > 0 ? Math.min((achievedValue / targetValue) * 100, 100) : 0
-      const effectivePct = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : goalProgressPct
-
-      // ── Fix 5: Custom goal weights ──
-      // If weight_pct is set (e.g. 30 = 30%), use it directly.
-      // Otherwise fall back to priority-based weighting.
-      const customWeightPct = typeof goal.weight_pct === "number" ? goal.weight_pct : null
-      const weight = customWeightPct !== null ? customWeightPct : getPriorityWeight(goal.priority)
-      const isSystemGenerated = goal.is_system_generated === true
-      const usingCustomWeights = customWeightPct !== null
-
-      goalBreakdown.push({
-        goal_id: goal.id,
-        title: goal.title,
-        priority: String(goal.priority || "medium"),
-        priority_weight: usingCustomWeights ? weight : getPriorityWeight(goal.priority),
-        custom_weight_pct: customWeightPct,
-        linked_tasks_total: totalTasks,
-        linked_tasks_completed: completedTasks,
-        goal_progress_pct: roundScore(goalProgressPct),
-        effective_kpi_pct: roundScore(effectivePct),
-        is_system_generated: isSystemGenerated,
-      })
-
-      weightedPctSum += effectivePct * weight
-      totalWeight += weight
-    }
-
-    kpiScore = totalWeight > 0 ? roundScore(weightedPctSum / totalWeight) : null
+  const tasksById = new Map<string, TaskScoreRow>()
+  for (const row of [...(assignedTasks || []), ...(departmentTasks || []), ...(completedTasks || [])]) {
+    if (row?.id) tasksById.set(row.id, row as TaskScoreRow)
   }
+
+  const scorableTasks: TaskScoreRow[] = []
+  for (const task of tasksById.values()) {
+    if (cycle && !isTaskInCycle(task, cycle.start_date, cycle.end_date)) continue
+
+    // Department- and multi-assigned work only counts for this employee when
+    // they are the named assignee or individually recorded their completion.
+    const assignmentType = String(task.assignment_type || "individual")
+    if (assignmentType === "individual") {
+      if (task.assigned_to !== params.userId) continue
+    } else if (
+      task.assigned_to !== params.userId &&
+      !userCompletedTaskIds.has(task.id) &&
+      !(userDepartment && task.department === userDepartment)
+    ) {
+      continue
+    }
+
+    scorableTasks.push(task)
+  }
+
+  const taskScore = computeWeightedTaskScore(scorableTasks)
+  // A finalised review's stored kpi_score still wins further down; this is the
+  // live figure the continuous dashboard shows until then.
+  let kpiScore: number | null = taskScore.score
+
+  // Grouped by goal for the KPI breakdown table. Tasks with no goal are real
+  // scored work too, so they get their own row rather than being hidden.
+  const goalBreakdown: GoalScoreBreakdown[] = []
+  const tasksByGoalId = new Map<string, TaskScoreRow[]>()
+  for (const task of scorableTasks) {
+    const key = task.goal_id || ""
+    const bucket = tasksByGoalId.get(key) || []
+    bucket.push(task)
+    tasksByGoalId.set(key, bucket)
+  }
+
+  const goalIds = Array.from(tasksByGoalId.keys()).filter(Boolean)
+  const goalMetaById = new Map<
+    string,
+    { title: string; priority: string | null; is_system_generated: boolean | null }
+  >()
+  if (goalIds.length > 0) {
+    const { data: goalRows } = await supabase
+      .from("goals_objectives")
+      .select("id, title, priority, is_system_generated")
+      .in("id", goalIds)
+    for (const goal of goalRows || []) {
+      goalMetaById.set(goal.id, {
+        title: goal.title,
+        priority: goal.priority,
+        is_system_generated: goal.is_system_generated,
+      })
+    }
+  }
+
+  for (const [goalId, groupTasks] of tasksByGoalId) {
+    const group = computeWeightedTaskScore(groupTasks)
+    const meta = goalId ? goalMetaById.get(goalId) : undefined
+    goalBreakdown.push({
+      goal_id: goalId,
+      title: meta?.title || (goalId ? "Unknown goal" : "Ad-hoc / Operational tasks"),
+      priority: String(meta?.priority || "medium"),
+      // Goal weighting no longer drives the score; the group's total task
+      // weight is what actually decides how much this row moved the number.
+      priority_weight: group.availablePoints,
+      custom_weight_pct: null,
+      linked_tasks_total: group.taskCount,
+      linked_tasks_completed: groupTasks.filter((task) => task.status === "completed").length,
+      goal_progress_pct: group.score ?? 0,
+      effective_kpi_pct: group.score ?? 0,
+      is_system_generated: meta?.is_system_generated === true,
+    })
+  }
+
+  goalBreakdown.sort((a, b) => b.priority_weight - a.priority_weight)
 
   let attendanceScore: number | null = null
   const attendanceBreakdown: AttendanceBreakdown = {

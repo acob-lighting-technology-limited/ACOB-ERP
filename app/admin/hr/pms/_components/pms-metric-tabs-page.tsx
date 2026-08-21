@@ -15,8 +15,15 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "@/components/ui/data-table"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { exportPmsRowsToExcel, exportPmsRowsToPdf } from "@/lib/pms/export"
-import { matchesCadence as matchesCadenceFor, pickCurrentCycle, type PmsCadence } from "@/lib/pms/cadence"
+import {
+  CADENCE_OPTIONS,
+  cycleOptionLabel,
+  matchesCadence as matchesCadenceFor,
+  pickCurrentCycle,
+  type PmsCadence,
+} from "@/lib/pms/cadence"
 import { toLocalISODate } from "@/lib/utils/date"
+import { usePmsCadence } from "@/components/pms/use-pms-cadence"
 import { IndividualAttendanceExpandedRow } from "./individual-attendance-expanded-row"
 import { apiFetch } from "@/lib/api-client"
 
@@ -35,6 +42,7 @@ type MetricSnapshotPayload = {
     review_type: string | null
     start_date: string | null
     end_date: string | null
+    status?: string | null
   }[]
   rows: {
     individual: Record<string, unknown>[]
@@ -59,7 +67,7 @@ function clampMetricValue(value: string) {
   return String(Math.min(100, Math.max(1, parsed)))
 }
 
-// ─── Metric Add Dialog (unchanged) ───────────────────────────────────────────
+// ─── Metric Add Dialog (Behaviour & Goals only; KPI is computed from tasks) ───
 
 function MetricAddDialog({
   metric,
@@ -75,7 +83,7 @@ function MetricAddDialog({
   open: boolean
   onOpenChange: (open: boolean) => void
   users: { id: string; name: string; department: string }[]
-  cycles: { id: string; name: string; review_type: string | null }[]
+  cycles: { id: string; name: string; review_type: string | null; status?: string | null }[]
   onSaved: () => void
   initialUserId?: string
   initialCycleId?: string
@@ -86,7 +94,7 @@ function MetricAddDialog({
   const [saving, setSaving] = useState(false)
   const [goalId, setGoalId] = useState("")
   const [department, setDepartment] = useState("")
-  const [scoreValue, setScoreValue] = useState("")
+  const [scoreValue] = useState("")
   const [strengths, setStrengths] = useState("")
   const [areasForImprovement, setAreasForImprovement] = useState("")
   const [managerComments, setManagerComments] = useState("")
@@ -100,7 +108,7 @@ function MetricAddDialog({
   })
 
   const addableCycles = useMemo(() => {
-    return cycles.filter((c) => matchesCadenceFor("quarterly", c.review_type))
+    return cycles.filter((c) => matchesCadenceFor("quarterly", c.review_type, c.name))
   }, [cycles])
 
   useEffect(() => {
@@ -108,7 +116,6 @@ function MetricAddDialog({
     setUserId(initialUserId || "")
     const validInitial = addableCycles.find((c) => c.id === initialCycleId)
     setCycleId(validInitial?.id || addableCycles[0]?.id || "")
-    setScoreValue("")
     setStrengths("")
     setAreasForImprovement("")
     setManagerComments("")
@@ -131,19 +138,6 @@ function MetricAddDialog({
       try {
         const selectedUser = users.find((user) => user.id === userId)
         setDepartment(selectedUser?.department || "")
-
-        if (metric === "kpi") {
-          const response = await apiFetch(
-            `/api/hr/performance/reviews?user_id=${encodeURIComponent(userId)}&cycle_id=${encodeURIComponent(cycleId)}`,
-            { cache: "no-store" }
-          )
-          const payload = (await response.json().catch(() => null)) as {
-            data?: Array<{ kpi_score?: number | null }>
-          } | null
-          const item = payload?.data?.[0]
-          if (!active) return
-          setScoreValue(item?.kpi_score !== null && item?.kpi_score !== undefined ? String(item.kpi_score) : "")
-        }
 
         if (metric === "goals") {
           const response = await apiFetch(
@@ -207,18 +201,7 @@ function MetricAddDialog({
       if (!userId) throw new Error("Select an employee first")
       if (!cycleId) throw new Error("Select a cycle first")
 
-      if (metric === "kpi") {
-        const numericScore = Number(scoreValue)
-        if (!Number.isFinite(numericScore) || numericScore <= 0 || numericScore > 100)
-          throw new Error("KPI score must be between 1 and 100")
-        const response = await apiFetch("/api/hr/performance/reviews", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: userId, review_cycle_id: cycleId, kpi_score: numericScore }),
-        })
-        const payload = (await response.json().catch(() => null)) as { error?: string } | null
-        if (!response.ok) throw new Error(payload?.error || "Failed to save")
-      } else if (metric === "goals") {
+      if (metric === "goals") {
         const response = await apiFetch("/api/hr/performance/goals", {
           method: goalId ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
@@ -230,7 +213,7 @@ function MetricAddDialog({
         })
         const payload = (await response.json().catch(() => null)) as { error?: string } | null
         if (!response.ok) throw new Error(payload?.error || "Failed to save")
-      } else {
+      } else if (metric === "behaviour") {
         const response = await apiFetch("/api/hr/performance/reviews", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -263,9 +246,7 @@ function MetricAddDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>
-            Add {metric === "kpi" ? "KPI Score" : metric.charAt(0).toUpperCase() + metric.slice(1)}
-          </DialogTitle>
+          <DialogTitle>Add {metric.charAt(0).toUpperCase() + metric.slice(1)}</DialogTitle>
           <DialogDescription>
             Select employee and cycle first. Existing data auto-loads when available.
           </DialogDescription>
@@ -296,7 +277,7 @@ function MetricAddDialog({
               <SelectContent>
                 {addableCycles.map((cycle) => (
                   <SelectItem key={cycle.id} value={cycle.id}>
-                    {cycle.name}
+                    {cycleOptionLabel(cycle, addableCycles)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -308,25 +289,6 @@ function MetricAddDialog({
           <div className="text-muted-foreground flex items-center gap-2 text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading existing data...
-          </div>
-        ) : null}
-
-        {metric === "kpi" ? (
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label>Department</Label>
-              <Input value={department} disabled />
-            </div>
-            <div className="space-y-2">
-              <Label>KPI Score</Label>
-              <Input
-                type="number"
-                min="1"
-                max="100"
-                value={scoreValue}
-                onChange={(e) => setScoreValue(clampMetricValue(e.target.value))}
-              />
-            </div>
           </div>
         ) : null}
 
@@ -405,16 +367,12 @@ export function PmsMetricTabsPage({
   const [processedRawRows, setProcessedRawRows] = useState<Record<string, unknown>[]>([])
   const [data, setData] = useState<MetricSnapshotPayload | null>(null)
   const [cycleId, setCycleId] = useState("")
-  // Cycle cadence filter. PMS is scored quarterly, so every metric page opens on
-  // the quarterly cadence and the quarter that contains today; biannual/annual
-  // are opt-in via the picker.
-  const [cycleType, setCycleType] = useState<PmsCadence>("quarterly")
+  // Single Source of Truth for cadence across all PMS routes
+  const [cycleType, setCycleType] = usePmsCadence()
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [editingRow, setEditingRow] = useState<Record<string, unknown> | null>(null)
   const hasLoadedSnapshotRef = useRef(false)
-  // Read inside the fetch effect without making the cadence a fetch dependency:
-  // changing cadence already re-selects the cycle, which refetches on its own.
   const cycleTypeRef = useRef(cycleType)
   useEffect(() => {
     cycleTypeRef.current = cycleType
@@ -451,7 +409,7 @@ export function PmsMetricTabsPage({
           const available = payload.data.cycles || []
           const suggested = available.find((c) => c.id === payload.data?.selected_cycle_id)
           const next =
-            suggested && matchesCadenceFor(cadence, suggested.review_type)
+            suggested && matchesCadenceFor(cadence, suggested.review_type, suggested.name)
               ? suggested
               : pickCurrentCycle(available, toLocalISODate(), cadence)
           if (next) setCycleId(next.id)
@@ -477,7 +435,7 @@ export function PmsMetricTabsPage({
   const loadedCycleInCadence = useMemo(() => {
     const loadedId = cycleId || data?.selected_cycle_id
     const loaded = (data?.cycles || []).find((c) => c.id === loadedId)
-    return !loaded || matchesCadenceFor(cycleType, loaded.review_type)
+    return !loaded || matchesCadenceFor(cycleType, loaded.review_type, loaded.name)
   }, [data, cycleId, cycleType])
 
   const rawRows = useMemo(() => (loadedCycleInCadence ? data?.rows[tab] || [] : []), [data, tab, loadedCycleInCadence])
@@ -535,18 +493,13 @@ export function PmsMetricTabsPage({
     const result: DataTableFilter<Record<string, unknown>>[] = []
 
     const allCycles = data?.cycles || []
-    const visibleCycles = allCycles.filter((cycle) => matchesCadenceFor(cycleType, cycle.review_type))
+    const visibleCycles = allCycles.filter((cycle) => matchesCadenceFor(cycleType, cycle.review_type, cycle.name))
 
     result.push({
       key: "cycle_type",
       label: "Cadence",
-      defaultValues: ["quarterly"],
-      options: [
-        { value: "all", label: "All cadences" },
-        { value: "quarterly", label: "Quarterly" },
-        { value: "biannual", label: "Biannual" },
-        { value: "annual", label: "Annual" },
-      ],
+      defaultValues: [cycleType],
+      options: CADENCE_OPTIONS,
       mode: "custom",
       filterFn: () => true,
       render: (values, onChange) => (
@@ -558,22 +511,24 @@ export function PmsMetricTabsPage({
             setCycleType(next)
             // If the active cycle is not in the new cadence, jump to the most
             // recent one that is, so the table never shows a stale window.
-            const stillVisible = allCycles.find((c) => c.id === cycleId && matchesCadenceFor(next, c.review_type))
+            const stillVisible = allCycles.find(
+              (c) => c.id === cycleId && matchesCadenceFor(next, c.review_type, c.name)
+            )
             if (!stillVisible) {
-              // No cycle in this cadence: clear the selection rather than leave a
-              // foreign cycle's window driving the table.
-              setCycleId(allCycles.find((c) => matchesCadenceFor(next, c.review_type))?.id ?? "")
+              const fallback = pickCurrentCycle(allCycles, toLocalISODate(), next)
+              setCycleId(fallback?.id ?? "")
             }
           }}
         >
           <SelectTrigger className="w-full">
-            <SelectValue placeholder="All cadences" />
+            <SelectValue placeholder="Cadence" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All cadences</SelectItem>
-            <SelectItem value="quarterly">Quarterly</SelectItem>
-            <SelectItem value="biannual">Biannual</SelectItem>
-            <SelectItem value="annual">Annual</SelectItem>
+            {CADENCE_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       ),
@@ -582,23 +537,20 @@ export function PmsMetricTabsPage({
     result.push({
       key: "cycle",
       label: "Cycle",
-      options: visibleCycles.map((cycle) => ({ value: cycle.name, label: cycle.name })),
+      options: visibleCycles.map((cycle) => ({
+        value: cycle.id,
+        label: cycleOptionLabel(cycle, visibleCycles),
+      })),
       mode: "custom",
       filterFn: () => true,
-      render: (values, onChange) => {
-        // Never display a cycle the cadence filter has hidden.
-        const activeCycleName = visibleCycles.find((c) => c.id === cycleId)?.name || ""
-        const selected = values[0] || activeCycleName
-        const currentValue = visibleCycles.some((c) => c.name === selected) ? selected : ""
+      render: (_values, onChange) => {
+        const currentValue = visibleCycles.some((c) => c.id === cycleId) ? cycleId : ""
         return (
           <Select
             value={currentValue}
-            onValueChange={(name) => {
-              onChange([name])
-              const targetCycle = allCycles.find((c) => c.name === name)
-              if (targetCycle) {
-                setCycleId(targetCycle.id)
-              }
+            onValueChange={(id) => {
+              onChange([id])
+              setCycleId(id)
             }}
           >
             <SelectTrigger className="w-full">
@@ -606,8 +558,8 @@ export function PmsMetricTabsPage({
             </SelectTrigger>
             <SelectContent>
               {visibleCycles.map((cycle) => (
-                <SelectItem key={cycle.id} value={cycle.name}>
-                  {cycle.name}
+                <SelectItem key={cycle.id} value={cycle.id}>
+                  {cycleOptionLabel(cycle, visibleCycles)}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -635,10 +587,10 @@ export function PmsMetricTabsPage({
       })
     }
     return result
-  }, [tab, data, cycleId, cycleType])
+  }, [tab, data, cycleId, cycleType, setCycleType])
 
   const tableRowActions = useMemo<RowAction<Record<string, unknown>>[] | undefined>(() => {
-    if (tab === "individual" && metric !== "goals") {
+    if (tab === "individual" && (metric === "attendance" || metric === "behaviour")) {
       return [
         {
           label: metric === "attendance" ? "Manage Attendance" : "Edit",
@@ -746,10 +698,10 @@ export function PmsMetricTabsPage({
             <Download className="h-4 w-4" />
             Export
           </Button>
-          {metric !== "attendance" ? (
+          {metric === "behaviour" ? (
             <Button className="h-8 gap-2" size="sm" onClick={() => setIsModalOpen(true)}>
               <Plus className="h-4 w-4" />
-              {metric === "kpi" ? "Add KPI Score" : "Add Behaviour"}
+              Add Behaviour
             </Button>
           ) : null}
         </div>
@@ -835,7 +787,7 @@ export function PmsMetricTabsPage({
         }}
       />
 
-      {metric !== "attendance" ? (
+      {metric === "behaviour" ? (
         <MetricAddDialog
           metric={metric}
           open={isModalOpen}
