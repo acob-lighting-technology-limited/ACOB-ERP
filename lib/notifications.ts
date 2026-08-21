@@ -24,6 +24,10 @@ interface CreateNotificationParams {
     | "approval_rejected"
     | "system"
     | "announcement"
+    | "task_due_soon"
+    | "task_awaiting_review"
+    | "task_needs_rating"
+    | "project_delayed"
   category: "tasks" | "assets" | "feedback" | "approvals" | "system" | "mentions"
   title: string
   message: string
@@ -118,6 +122,100 @@ export async function notifyTaskAssigned(params: {
     actorId: params.assignedBy,
     entityType: "task",
     entityId: params.taskId,
+  })
+}
+
+/**
+ * Tell whoever must act that a task is now waiting on their decision.
+ *
+ * The rater is the project manager for project work and the assigning lead
+ * otherwise, so this lands with the one person who can actually approve and
+ * rate it rather than a broadcast nobody owns.
+ */
+export async function notifyTaskAwaitingReview(params: {
+  userId: string
+  taskId: string
+  taskTitle: string
+  submittedBy: string
+  projectName?: string | null
+}) {
+  return createNotification({
+    userId: params.userId,
+    type: "task_awaiting_review",
+    category: "tasks",
+    title: "Task awaiting your review",
+    message: `"${params.taskTitle}"${params.projectName ? ` (${params.projectName})` : ""} has been submitted and needs your approval and rating.`,
+    priority: "high",
+    linkUrl: `/admin/tasks`,
+    actorId: params.submittedBy,
+    entityType: "task",
+    entityId: params.taskId,
+  })
+}
+
+/** A deadline is close and the work is not finished yet. */
+export async function notifyTaskDueSoon(params: {
+  userId: string
+  taskId: string
+  taskTitle: string
+  dueDate: string
+  daysRemaining: number
+}) {
+  const when =
+    params.daysRemaining <= 0 ? "today" : params.daysRemaining === 1 ? "tomorrow" : `in ${params.daysRemaining} days`
+
+  return createNotification({
+    userId: params.userId,
+    type: "task_due_soon",
+    category: "tasks",
+    title: "Task deadline approaching",
+    message: `"${params.taskTitle}" is due ${when} (${params.dueDate}).`,
+    priority: params.daysRemaining <= 1 ? "high" : "normal",
+    linkUrl: `/tasks`,
+    entityType: "task",
+    entityId: params.taskId,
+  })
+}
+
+/** Submitted work still sitting unrated — the employee's KPI is held up by it. */
+export async function notifyTaskNeedsRating(params: {
+  userId: string
+  taskId: string
+  taskTitle: string
+  waitingDays: number
+}) {
+  return createNotification({
+    userId: params.userId,
+    type: "task_needs_rating",
+    category: "tasks",
+    title: "Task still waiting to be rated",
+    message: `"${params.taskTitle}" has been awaiting your rating for ${params.waitingDays} day${params.waitingDays === 1 ? "" : "s"}. It is held out of the assignee's KPI until you rate it.`,
+    priority: "high",
+    linkUrl: `/admin/tasks`,
+    entityType: "task",
+    entityId: params.taskId,
+  })
+}
+
+/** A project has slipped far enough behind its schedule to need attention. */
+export async function notifyProjectDelayed(params: {
+  userId: string
+  projectId: string
+  projectName: string
+  deliveryPct: number
+  timeElapsedPct: number
+  overdueCount: number
+}) {
+  return createNotification({
+    userId: params.userId,
+    type: "project_delayed",
+    category: "tasks",
+    title: "Project behind schedule",
+    message: `"${params.projectName}" is ${params.deliveryPct}% delivered with ${params.timeElapsedPct}% of its schedule elapsed${params.overdueCount > 0 ? `, and has ${params.overdueCount} overdue task${params.overdueCount === 1 ? "" : "s"}` : ""}.`,
+    priority: "high",
+    linkUrl: `/admin/project`,
+    entityType: "project",
+    entityId: params.projectId,
   })
 }
 

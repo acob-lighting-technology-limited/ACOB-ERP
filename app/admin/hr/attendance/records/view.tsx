@@ -217,6 +217,7 @@ export function AdminAttendanceRecordsPage({
     {
       key: "clock_in",
       label: "Clock In",
+      sortable: true,
       accessor: (r) => r.clock_in ?? "",
       hideOnMobile: true,
       render: (r) => (
@@ -230,6 +231,7 @@ export function AdminAttendanceRecordsPage({
     {
       key: "clock_out",
       label: "Clock Out",
+      sortable: true,
       accessor: (r) => r.clock_out ?? "",
       hideOnMobile: true,
       render: (r) =>
