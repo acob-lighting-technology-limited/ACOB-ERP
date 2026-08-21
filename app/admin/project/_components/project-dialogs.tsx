@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import {
   Dialog,
   DialogContent,
@@ -20,10 +20,10 @@ import { apiFetch } from "@/lib/api-client"
 interface ProjectDialogsProps {
   profiles: Array<{
     id: string
-    first_name: string | null
-    last_name: string | null
-    full_name: string | null
-    department: string | null
+    first_name: string
+    last_name: string
+    full_name?: string | null
+    department: string
   }>
   isAddOpen: boolean
   setIsAddOpen: (open: boolean) => void
@@ -54,6 +54,26 @@ export function ProjectDialogs({
   const [managerId, setManagerId] = useState("")
   const [description, setDescription] = useState("")
   const [status, setStatus] = useState<"planning" | "active" | "on_hold" | "completed" | "cancelled">("planning")
+  const [portfolioId, setPortfolioId] = useState("")
+  const [portfolios, setPortfolios] = useState<Array<{ id: string; name: string; code: string | null }>>([])
+
+  // A project may sit outside every portfolio, so a failed load must not block
+  // the form — it just leaves the selector empty.
+  useEffect(() => {
+    if (!isAddOpen && !isEditOpen) return
+    apiFetch("/api/portfolios", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((payload) =>
+        setPortfolios(
+          (payload.data ?? []).map((portfolio: { id: string; name: string; code: string | null }) => ({
+            id: portfolio.id,
+            name: portfolio.name,
+            code: portfolio.code,
+          }))
+        )
+      )
+      .catch(() => setPortfolios([]))
+  }, [isAddOpen, isEditOpen])
 
   // Sync form states with selected project for editing
   useEffect(() => {
@@ -67,6 +87,7 @@ export function ProjectDialogs({
       setManagerId(selectedProject.project_manager_id || "")
       setDescription(selectedProject.description || "")
       setStatus(selectedProject.status)
+      setPortfolioId(selectedProject.portfolio_id || "")
     } else {
       // Reset for add
       setProjectName("")
@@ -78,6 +99,7 @@ export function ProjectDialogs({
       setManagerId("")
       setDescription("")
       setStatus("planning")
+      setPortfolioId("")
     }
   }, [selectedProject, isEditOpen])
 
@@ -104,6 +126,7 @@ export function ProjectDialogs({
           project_manager_id: managerId || null,
           description: description || null,
           status,
+          portfolio_id: portfolioId || null,
         }),
       })
 
@@ -145,6 +168,7 @@ export function ProjectDialogs({
           project_manager_id: managerId || null,
           description: description || null,
           status,
+          portfolio_id: portfolioId || null,
         }),
       })
 
@@ -222,6 +246,24 @@ export function ProjectDialogs({
                   onChange={(e) => setCapacity(e.target.value)}
                   placeholder="e.g. 1155000"
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="add-portfolio" className="text-xs font-semibold">
+                  Portfolio
+                </Label>
+                <select
+                  id="add-portfolio"
+                  value={portfolioId}
+                  onChange={(e) => setPortfolioId(e.target.value)}
+                  className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  <option value="">No portfolio</option>
+                  {portfolios.map((portfolio) => (
+                    <option key={portfolio.id} value={portfolio.id}>
+                      {portfolio.code ? `${portfolio.code} — ${portfolio.name}` : portfolio.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="add-manager" className="text-xs font-semibold">
@@ -366,6 +408,24 @@ export function ProjectDialogs({
                   onChange={(e) => setCapacity(e.target.value)}
                   placeholder="Watts"
                 />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-portfolio" className="text-xs font-semibold">
+                  Portfolio
+                </Label>
+                <select
+                  id="edit-portfolio"
+                  value={portfolioId}
+                  onChange={(e) => setPortfolioId(e.target.value)}
+                  className="border-input bg-background ring-offset-background focus-visible:ring-ring flex h-10 w-full rounded-md border px-3 py-2 text-sm focus-visible:ring-2 focus-visible:outline-none"
+                >
+                  <option value="">No portfolio</option>
+                  {portfolios.map((portfolio) => (
+                    <option key={portfolio.id} value={portfolio.id}>
+                      {portfolio.code ? `${portfolio.code} — ${portfolio.name}` : portfolio.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit-manager" className="text-xs font-semibold">

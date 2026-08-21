@@ -34,9 +34,19 @@ export async function GET(request: NextRequest) {
           first_name,
           last_name
         ),
+        portfolio:portfolios!portfolio_id(
+          id,
+          name,
+          code
+        ),
         tasks:tasks(
           id,
-          status
+          status,
+          weight,
+          rating,
+          is_archived,
+          due_date,
+          task_end_date
         )
       `
       )
@@ -82,6 +92,7 @@ export async function POST(request: NextRequest) {
       project_manager_id,
       description,
       status,
+      portfolio_id,
     } = body
 
     if (!project_name || !location || !deployment_start_date || !deployment_end_date) {
@@ -101,6 +112,7 @@ export async function POST(request: NextRequest) {
         capacity_w: capacity_w === "" || capacity_w === null ? null : Number(capacity_w),
         technology_type,
         project_manager_id: project_manager_id || null,
+        portfolio_id: portfolio_id || null,
         description,
         status: status || "planning",
         created_by: user.id,
