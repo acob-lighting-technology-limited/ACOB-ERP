@@ -9,6 +9,7 @@ import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { QUERY_KEYS } from "@/lib/query-keys"
+import { cn } from "@/lib/utils"
 import { Download, RefreshCw, Users, UserCheck, UserX } from "lucide-react"
 
 export interface OnboardingRow {
@@ -252,9 +253,7 @@ export function OnboardingContent() {
         key: "employment_status",
         label: "Employment Status",
         options: employmentStatusOptions,
-        // Exited staff are excluded by default — they're gone, not part of the
-        // onboarding pipeline.
-        defaultValues: employmentStatusOptions.map((option) => option.value).filter((value) => value !== "exited"),
+        defaultValues: ["active", "contract"],
       },
       {
         key: "has_email",
@@ -288,8 +287,24 @@ export function OnboardingContent() {
       description="Every staff profile, including not-yet-onboarded placeholders, and whether the person has ever signed in."
       icon={UserCheck}
       backLink={{ href: "/admin", label: "Back to Admin" }}
-    >
-      <div className="space-y-6">
+      actions={
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminOnboarding() })}
+            disabled={isLoading}
+          >
+            <RefreshCw className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")} />
+            Refresh
+          </Button>
+          <Button size="sm" onClick={exportCsv} disabled={rows.length === 0}>
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
+          </Button>
+        </div>
+      }
+      stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             title="Profiles"
@@ -324,22 +339,9 @@ export function OnboardingContent() {
             description="Onboardable but haven't logged in yet"
           />
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <Button
-            variant="outline"
-            onClick={() => queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminOnboarding() })}
-            disabled={isLoading}
-          >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
-          </Button>
-          <Button onClick={exportCsv} disabled={rows.length === 0}>
-            <Download className="mr-2 h-4 w-4" />
-            Export CSV
-          </Button>
-        </div>
-
+      }
+    >
+      <div className="space-y-4">
         {meta && !meta.authSourceAvailable ? (
           <p className="text-muted-foreground text-xs">
             The auth service could not be read, so sign-in status falls back to in-app login logs only. Anyone whose

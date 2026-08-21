@@ -9,6 +9,16 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -21,7 +31,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Mail, MapPin, Pencil, Plus, Users } from "lucide-react"
+import { AlertTriangle, Mail, MapPin, Pencil, Plus, Trash2, Users } from "lucide-react"
 import { toast } from "sonner"
 import { StatCard } from "@/components/ui/stat-card"
 import { QUERY_KEYS } from "@/lib/query-keys"
@@ -79,7 +89,17 @@ function employeeName(employee: LocationEmployee) {
   return [employee.first_name, employee.last_name].filter(Boolean).join(" ") || "Unknown"
 }
 
-function LocationCard({ location, onEdit }: { location: OfficeLocation; onEdit: (location: OfficeLocation) => void }) {
+function LocationCard({
+  location,
+  onEdit,
+  onDelete,
+  canManage,
+}: {
+  location: OfficeLocation
+  onEdit: (location: OfficeLocation) => void
+  onDelete?: (location: OfficeLocation) => void
+  canManage?: boolean
+}) {
   return (
     <div className="space-y-3 rounded-xl border p-4">
       <div className="flex items-start justify-between gap-3">
@@ -98,9 +118,21 @@ function LocationCard({ location, onEdit }: { location: OfficeLocation; onEdit: 
         {location.department ? <Badge variant="secondary">{location.department}</Badge> : null}
       </div>
       <p className="text-muted-foreground text-sm">{location.description || "No description added"}</p>
-      <Button size="sm" variant="outline" onClick={() => onEdit(location)}>
-        Edit
-      </Button>
+      <div className="flex items-center gap-2">
+        <Button size="sm" variant="outline" onClick={() => onEdit(location)}>
+          Edit
+        </Button>
+        {canManage && onDelete && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="text-destructive hover:text-destructive"
+            onClick={() => onDelete(location)}
+          >
+            Delete
+          </Button>
+        )}
+      </div>
     </div>
   )
 }
@@ -113,6 +145,8 @@ export function OfficeLocationsPage({
   const queryClient = useQueryClient()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingLocation, setEditingLocation] = useState<OfficeLocation | null>(null)
+  const [deletingLocation, setDeletingLocation] = useState<OfficeLocation | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
     type: "office",
@@ -196,6 +230,28 @@ export function OfficeLocationsPage({
       log.error("Error saving office location:", err)
       const message = err instanceof Error ? err.message : "Failed to save room / office"
       toast.error(message)
+    }
+  }
+
+  async function handleDeleteLocation(location: OfficeLocation) {
+    try {
+      setIsDeleting(true)
+      const res = await apiFetch(`/api/admin/hr/office-locations/${location.id}`, {
+        method: "DELETE",
+      })
+      const json = (await res.json().catch(() => null)) as { error?: string } | null
+      if (!res.ok) {
+        throw new Error(json?.error || "Failed to delete room / office")
+      }
+      toast.success(`Room / Office "${location.name}" deleted successfully`)
+      setDeletingLocation(null)
+      void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminOfficeLocations() })
+    } catch (err: unknown) {
+      log.error("Error deleting office location:", err)
+      const message = err instanceof Error ? err.message : "Failed to delete room / office"
+      toast.error(message)
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -308,6 +364,13 @@ export function OfficeLocationsPage({
       label: "Edit",
       icon: Pencil,
       onClick: (location) => openEditDialog(location),
+      hidden: () => !canManageLocations,
+    },
+    {
+      label: "Delete",
+      icon: Trash2,
+      variant: "destructive",
+      onClick: (location) => setDeletingLocation(location),
       hidden: () => !canManageLocations,
     },
   ]
@@ -519,12 +582,54 @@ export function OfficeLocationsPage({
           },
         }}
         viewToggle
-        cardRenderer={(location) => <LocationCard location={location} onEdit={openEditDialog} />}
+        cardRenderer={(location) => (
+          <LocationCard
+            location={location}
+            onEdit={openEditDialog}
+            onDelete={(loc) => setDeletingLocation(loc)}
+            canManage={canManageLocations}
+          />
+        )}
         emptyTitle="No rooms or offices yet"
         emptyDescription="Create your first room or office to start organizing workplace assignments."
         emptyIcon={MapPin}
         skeletonRows={5}
       />
+
+      <AlertDialog open={!!deletingLocation} onOpenChange={(open) => !open && setDeletingLocation(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="text-destructive h-5 w-5" />
+              Delete Room / Office
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete{" "}
+              <span className="text-foreground font-semibold">{deletingLocation?.name}</span>? This will permanently
+              remove the room or office space from the system.
+            </AlertDialogDescription>
+            {deletingLocation && (deletingLocation.employee_count || 0) > 0 && (
+              <div className="rounded-md border border-amber-500/30 bg-amber-500/10 p-3 text-xs font-medium text-amber-700 dark:text-amber-300">
+                Warning: This location currently has {deletingLocation.employee_count} assigned employee(s). You must
+                reassign them before this location can be deleted.
+              </div>
+            )}
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={isDeleting}
+              onClick={(e) => {
+                e.preventDefault()
+                if (deletingLocation) void handleDeleteLocation(deletingLocation)
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {isDeleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </DataTablePage>
   )
 }
