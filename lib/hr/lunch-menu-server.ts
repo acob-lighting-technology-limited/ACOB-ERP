@@ -346,10 +346,12 @@ export async function loadViewsForMenus(
   for (const id of menuIds) result.set(id, [])
   if (menuIds.length === 0) return result
 
-  const { data: viewRows } = await client
+  const { data: viewRows, error: viewErr } = await client
     .from("lunch_menu_views")
     .select("menu_id, user_id, first_viewed_at, last_viewed_at, view_count")
     .in("menu_id", menuIds)
+
+  if (viewErr) log.error({ err: viewErr.message }, "failed to load lunch menu views")
 
   const views = (viewRows || []) as {
     menu_id: string

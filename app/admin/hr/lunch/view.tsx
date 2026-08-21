@@ -601,7 +601,7 @@ export function LunchRegisterPage({
         hasEaten ? cost : 0,
         hasEaten ? companySubsidy : 0,
         hasEaten ? employeeSurcharge : 0,
-        hasEaten ? "Eaten" : "Skipped",
+        hasEaten ? "Served" : "Skipped",
       ]
       csvRows.push(row.join(","))
     })
@@ -714,7 +714,7 @@ export function LunchRegisterPage({
         if (!vote.is_eating) {
           return (
             <Badge variant="outline" className="border-rose-500/30 bg-rose-500/10 text-xs font-medium text-rose-600">
-              NO — Not eating
+              NO — Opted out
             </Badge>
           )
         }
@@ -723,10 +723,10 @@ export function LunchRegisterPage({
               .map((g) => g.options.find((o) => o.id === vote.selections[g.id])?.name)
               .filter(Boolean)
               .join(" + ")
-          : "Eating"
+          : "Opted In"
         return (
           <Badge className="border-0 bg-emerald-500/10 text-xs font-medium text-emerald-600">
-            {dishNames || "Eating"}
+            {dishNames || "Opted In"}
           </Badge>
         )
       },
@@ -757,7 +757,7 @@ export function LunchRegisterPage({
                 : "border bg-gray-100 text-gray-400 hover:bg-gray-100/80"
             }
           >
-            {hasEaten ? "Eaten" : "Skipped"}
+            {hasEaten ? "Served" : "Skipped"}
           </Badge>
         )
       },
@@ -824,7 +824,7 @@ export function LunchRegisterPage({
     },
     {
       key: "votes",
-      label: "Eating",
+      label: "Opted In",
       sortable: true,
       accessor: (row) => row.eatingCount,
       render: (row) => (
@@ -838,7 +838,7 @@ export function LunchRegisterPage({
     },
     {
       key: "said_no",
-      label: "Said No",
+      label: "Opted Out",
       sortable: true,
       accessor: (row) => row.votes.length - row.eatingCount,
       render: (row) => {
@@ -1315,10 +1315,10 @@ export function LunchRegisterPage({
             <DialogContent className="max-w-md">
               <form onSubmit={handleSaveSettings}>
                 <DialogHeader>
-                  <DialogTitle>Lunch Price & Eating Days Settings</DialogTitle>
+                  <DialogTitle>Lunch Price & Schedule Settings</DialogTitle>
                   <DialogDescription>
-                    Adjust the daily price of food, subsidy, and configured eating days of the week. Changes apply to
-                    logs starting today.
+                    Adjust the daily price of food, subsidy, and lunch schedule days of the week. Changes apply to logs
+                    starting today.
                   </DialogDescription>
                 </DialogHeader>
 
@@ -1364,7 +1364,7 @@ export function LunchRegisterPage({
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Configured Eating Days</Label>
+                    <Label>Lunch Schedule Days</Label>
                     <div className="bg-muted/20 mt-1 grid grid-cols-2 gap-2 rounded-lg border p-3">
                       {WEEKDAYS.map((day) => {
                         const isChecked = settingsForm.eating_days.includes(day)
@@ -1610,8 +1610,8 @@ export function LunchRegisterPage({
               <Utensils className="text-muted-foreground/50 h-8 w-8" />
               <span className="text-foreground text-sm font-semibold">No Lunch Scheduled</span>
               <span className="text-muted-foreground max-w-sm text-xs">
-                {selectedDayName} is not configured as a lunch eating day. You can change this in settings (top right)
-                or navigate to another day using the selector above.
+                {selectedDayName} is not configured as a scheduled lunch day. You can change this in settings (top
+                right) or navigate to another day using the selector above.
               </span>
             </div>
           ) : (
@@ -1746,12 +1746,12 @@ export function LunchRegisterPage({
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-              {/* Metric 1: Most Lunch Meals Eaten */}
+              {/* Metric 1: Most Lunch Meals Served */}
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-sm">
                     <Utensils className="h-4 w-4 text-emerald-500" />
-                    Most Meals Eaten
+                    Most Meals Served
                   </CardTitle>
                   <p className="text-muted-foreground text-xs">Highest count of lunch meals logged</p>
                 </CardHeader>
@@ -1834,12 +1834,12 @@ export function LunchRegisterPage({
                 </CardContent>
               </Card>
 
-              {/* Metric 3: Least Meals Eaten */}
+              {/* Metric 3: Least Meals Served */}
               <Card>
                 <CardHeader className="pb-2">
                   <CardTitle className="flex items-center gap-2 text-sm">
                     <Users className="h-4 w-4 text-blue-500" />
-                    Least Meals Eaten
+                    Least Meals Served
                   </CardTitle>
                   <p className="text-muted-foreground text-xs">Lowest count of lunch meals logged</p>
                 </CardHeader>
@@ -1968,7 +1968,7 @@ export function LunchRegisterPage({
                               className="truncate leading-tight font-bold text-emerald-600"
                               style={{ fontSize: "10px" }}
                             >
-                              Eaten
+                              Served
                             </div>
                             <div className="text-muted-foreground leading-tight" style={{ fontSize: "10px" }}>
                               Deducted: ₦1,100
@@ -1989,7 +1989,7 @@ export function LunchRegisterPage({
             {/* Legend matching attendance CalendarView exact UI styling */}
             <div className="mt-3 flex flex-wrap gap-2">
               <Badge className="border-0 bg-emerald-500/10 text-xs text-emerald-500 hover:bg-emerald-500/10">
-                Eaten
+                Served
               </Badge>
               <Badge className="border bg-gray-100 text-xs text-gray-400 hover:bg-gray-100">Skipped</Badge>
             </div>
@@ -2385,11 +2385,11 @@ function MenuVotesPanel({ menu, totalStaff }: { menu: AdminLunchMenu; totalStaff
       {/* 0 ── quick stats, mirroring the attendance expanded-row layout */}
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <div>
-          <p className="text-muted-foreground text-xs uppercase">Eating</p>
+          <p className="text-muted-foreground text-xs uppercase">Opted In</p>
           <p className="font-semibold text-emerald-600">{menu.eatingCount}</p>
         </div>
         <div>
-          <p className="text-muted-foreground text-xs uppercase">Said No</p>
+          <p className="text-muted-foreground text-xs uppercase">Opted Out</p>
           <p className="font-semibold text-rose-500">{notEatingCount}</p>
         </div>
         <div>
@@ -2601,7 +2601,7 @@ function EmployeeLunchExpandPanel({
                       : "border bg-gray-100 text-gray-400"
                   }
                 >
-                  {hasEaten ? "Eaten" : "Skipped"}
+                  {hasEaten ? "Served" : "Skipped"}
                 </Badge>
               </div>
               <span className="text-muted-foreground font-mono">₦{hasEaten ? "2,200.00" : "0.00"}</span>

@@ -79,9 +79,9 @@ export function LunchMenuViewersDialog({
             menu.groups
               .map((g) => g.options.find((o) => o.id === vote.selections[g.id])?.name)
               .filter(Boolean)
-              .join(" + ") || "Eating"
+              .join(" + ") || "Opted In"
         } else {
-          mealChoice = "NO — Not eating"
+          mealChoice = "NO — Opted out"
         }
       }
 
@@ -218,8 +218,8 @@ export function LunchMenuViewersDialog({
                 <SelectItem value="all_viewers">All Viewers ({totalViewers})</SelectItem>
                 <SelectItem value="during_window">During Open Voting ({viewedDuringWindowCount})</SelectItem>
                 <SelectItem value="after_deadline">After Deadline ({viewedAfterDeadlineCount})</SelectItem>
-                <SelectItem value="voted">Viewed & Voted Eating</SelectItem>
-                <SelectItem value="said_no">Viewed & Said No</SelectItem>
+                <SelectItem value="voted">Viewed & Voted Opted In</SelectItem>
+                <SelectItem value="said_no">Viewed & Voted Opted Out</SelectItem>
                 <SelectItem value="no_vote">Viewed & Ignored (No Vote)</SelectItem>
                 <SelectItem value="not_viewed">Not Viewed Yet ({notViewedCount})</SelectItem>
               </SelectContent>
