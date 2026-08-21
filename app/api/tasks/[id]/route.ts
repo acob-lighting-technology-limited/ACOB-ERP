@@ -8,6 +8,7 @@ import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { apiError, ApiErrorCode } from "@/lib/api/errors"
 import { getRequestScope, type AdminScope } from "@/lib/admin/api-scope"
 import { canAssignToDepartment, canAssignToProfile } from "@/lib/tasks/assignment-scope"
+import { TASK_WEIGHT_MAX, TASK_WEIGHT_MIN } from "@/lib/tasks/scoring"
 import { TASK_STATUSES, TASK_ASSIGNMENT_TYPES } from "@/lib/tasks/constants"
 
 const log = logger("task-detail-route")
@@ -22,6 +23,9 @@ const UpdateTaskSchema = z.object({
   assignment_type: z.enum(TASK_ASSIGNMENT_TYPES).optional(),
   assigned_to: z.string().uuid().optional().nullable(),
   goal_id: z.string().uuid().optional().nullable(),
+  project_id: z.string().uuid().optional().nullable(),
+  plan_id: z.string().uuid().optional().nullable(),
+  weight: z.number().int().min(TASK_WEIGHT_MIN).max(TASK_WEIGHT_MAX).optional(),
   task_start_date: z.string().optional().nullable(),
   task_end_date: z.string().optional().nullable(),
   extension_reason: z.string().trim().max(5000).optional().nullable(),

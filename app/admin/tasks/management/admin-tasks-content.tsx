@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
+import { TASK_WEIGHT_DEFAULT } from "@/lib/tasks/scoring"
 import { formatName, formatFullName } from "@/lib/utils"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
 import {
@@ -93,7 +94,9 @@ const INITIAL_TASK_FORM: TaskFormState = {
   assignment_type: "individual",
   assigned_users: [],
   project_id: "",
+  plan_id: "",
   goal_id: "",
+  weight: TASK_WEIGHT_DEFAULT,
   task_start_date: "",
   task_end_date: "",
 }
@@ -203,8 +206,10 @@ export function AdminTasksContent({
         due_date: task.due_date ? task.due_date.split("T")[0] : "",
         assignment_type: task.assignment_type || "individual",
         assigned_users: [],
-        project_id: "",
+        project_id: task.project_id || "",
+        plan_id: task.plan_id || "",
         goal_id: task.goal_id || "",
+        weight: task.weight ?? TASK_WEIGHT_DEFAULT,
         task_start_date: task.task_start_date ? task.task_start_date.split("T")[0] : "",
         task_end_date: task.task_end_date ? task.task_end_date.split("T")[0] : "",
       })
@@ -251,6 +256,9 @@ export function AdminTasksContent({
         assigned_users: activeTaskForm.assigned_users || [],
         assigned_by: userId,
         goal_id: activeTaskForm.goal_id || null,
+        project_id: activeTaskForm.project_id || null,
+        plan_id: activeTaskForm.plan_id || null,
+        weight: activeTaskForm.weight,
         task_start_date: activeTaskForm.task_start_date || null,
         task_end_date: activeTaskForm.task_end_date || null,
         source_type: "manual",

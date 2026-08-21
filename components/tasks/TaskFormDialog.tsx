@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { z } from "zod"
-import { Target, Users, User, Calendar, CheckSquare, Square } from "lucide-react"
+import { Target, Users, User, Calendar, CheckSquare, Square, Scale, FolderKanban } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -24,10 +24,16 @@ import { Badge } from "@/components/ui/badge"
 import type { Task } from "@/types/task"
 import type { employee } from "@/app/admin/tasks/management/admin-tasks-content"
 import { formatFullName } from "@/lib/utils"
+import { TASK_WEIGHT_DEFAULT, TASK_WEIGHT_MAX, TASK_WEIGHT_MIN } from "@/lib/tasks/scoring"
 
 interface GoalOption {
   id: string
   title: string
+}
+
+interface ProjectOption {
+  id: string
+  project_name: string
 }
 
 const taskFormSchema = z.object({
@@ -40,6 +46,10 @@ const taskFormSchema = z.object({
   due_date: z.string().optional(),
   assignment_type: z.enum(["individual", "multiple", "department"]).default("individual"),
   goal_id: z.string().optional().nullable(),
+  project_id: z.string().optional().nullable(),
+  plan_id: z.string().optional().nullable(),
+  // Compulsory: this is the denominator of the assignee's KPI score.
+  weight: z.coerce.number().int().min(TASK_WEIGHT_MIN).max(TASK_WEIGHT_MAX),
   task_start_date: z.string().optional(),
   task_end_date: z.string().optional(),
 })
@@ -57,7 +67,9 @@ export interface TaskFormState {
   assignment_type: "individual" | "multiple" | "department"
   assigned_users: string[]
   project_id: string
+  plan_id: string
   goal_id: string
+  weight: number
   task_start_date: string
   task_end_date: string
 }
@@ -74,6 +86,12 @@ interface TaskFormDialogProps {
   scopedAssignableDepartments: string[]
   initialGoals?: GoalOption[]
   assignmentAuthorityLabel?: string
+  /** Set when the form is opened from inside a project: the project is fixed. */
+  lockedProjectId?: string | null
+  lockedProjectName?: string | null
+  /** Set when the form is opened from inside an implementation plan. */
+  lockedPlanId?: string | null
+  lockedPlanName?: string | null
 }
 
 export function TaskFormDialog({
@@ -88,8 +106,13 @@ export function TaskFormDialog({
   scopedAssignableDepartments,
   initialGoals = [],
   assignmentAuthorityLabel,
+  lockedProjectId = null,
+  lockedProjectName = null,
+  lockedPlanId = null,
+  lockedPlanName = null,
 }: TaskFormDialogProps) {
   const [goalOptions, setGoalOptions] = useState<GoalOption[]>(initialGoals)
+  const [projectOptions, setProjectOptions] = useState<ProjectOption[]>([])
   const [isMultiAssign, setIsMultiAssign] = useState(false)
   const [selectedUserIds, setSelectedUserIds] = useState<string[]>([])
 
@@ -105,6 +128,9 @@ export function TaskFormDialog({
       due_date: taskForm.due_date,
       assignment_type: taskForm.assignment_type,
       goal_id: taskForm.goal_id,
+      project_id: lockedProjectId || taskForm.project_id,
+      plan_id: lockedPlanId || taskForm.plan_id,
+      weight: taskForm.weight || TASK_WEIGHT_DEFAULT,
       task_start_date: taskForm.task_start_date,
       task_end_date: taskForm.task_end_date,
     },
@@ -132,6 +158,9 @@ export function TaskFormDialog({
       due_date: taskForm.due_date || "",
       assignment_type: taskForm.assignment_type || "individual",
       goal_id: taskForm.goal_id || "",
+      project_id: lockedProjectId || taskForm.project_id || "",
+      plan_id: lockedPlanId || taskForm.plan_id || "",
+      weight: taskForm.weight || TASK_WEIGHT_DEFAULT,
       task_start_date: taskForm.task_start_date || "",
       task_end_date: taskForm.task_end_date || "",
     })
@@ -146,11 +175,13 @@ export function TaskFormDialog({
       setIsMultiAssign(false)
       setSelectedUserIds([])
     }
-  }, [isOpen, reset, selectedTask?.id, taskForm])
+  }, [isOpen, reset, selectedTask?.id, taskForm, lockedProjectId, lockedPlanId])
 
   const assignedTo = watch("assigned_to")
   const departmentValue = watch("department")
   const goalId = watch("goal_id")
+  const projectId = watch("project_id")
+  const weightValue = watch("weight")
   const titleValue = watch("title")
   const priorityValue = watch("priority")
   const statusValue = watch("status")
@@ -176,6 +207,22 @@ export function TaskFormDialog({
       })
       .catch(() => setGoalOptions(initialGoals))
   }, [assignedTo, departmentValue, scopedAssignableDepartments, scopedAssignableEmployees, initialGoals])
+
+  // Projects are optional on a task, so a failed load must never block saving.
+  useEffect(() => {
+    if (!isOpen || lockedProjectId) return
+    fetch("/api/projects", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((payload) =>
+        setProjectOptions(
+          (payload.data ?? []).map((project: { id: string; project_name: string }) => ({
+            id: project.id,
+            project_name: project.project_name,
+          }))
+        )
+      )
+      .catch(() => setProjectOptions([]))
+  }, [isOpen, lockedProjectId])
 
   const employeeSelectOptions = useMemo(() => {
     return scopedAssignableEmployees.map((member) => ({
@@ -223,7 +270,9 @@ export function TaskFormDialog({
       due_date: values.due_date ?? "",
       assignment_type: targetUsers.length > 1 ? "multiple" : "individual",
       assigned_users: targetUsers,
-      project_id: "",
+      project_id: lockedProjectId || (values.project_id === "__none__" ? "" : (values.project_id ?? "")),
+      plan_id: lockedPlanId || (values.plan_id ?? ""),
+      weight: values.weight ?? TASK_WEIGHT_DEFAULT,
       goal_id: values.goal_id === "__none__" ? "" : (values.goal_id ?? ""),
       task_start_date: values.task_start_date ?? "",
       task_end_date: values.task_end_date ?? "",
@@ -461,8 +510,84 @@ export function TaskFormDialog({
               </SelectContent>
             </Select>
             <p className="text-muted-foreground text-[11px]">
-              Linking to an active goal feeds this task directly into the strategic KPI score for performance
-              appraisals.
+              Grouping only. Every task counts toward the KPI score through its weight, whether or not it is linked to a
+              goal.
+            </p>
+          </div>
+
+          {/* Project Linking Section */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="project_id" className="flex items-center gap-1.5 text-xs font-semibold">
+                <FolderKanban className="text-primary h-3.5 w-3.5" />
+                Project
+              </Label>
+              <Badge variant="secondary" className="text-[10px]">
+                {lockedProjectId ? "Fixed" : "Optional"}
+              </Badge>
+            </div>
+            {lockedProjectId ? (
+              <div className="bg-muted/50 text-muted-foreground mt-1 rounded-md border px-3 py-2 text-xs">
+                {lockedProjectName || "This project"}
+                {lockedPlanName ? ` · ${lockedPlanName}` : ""}
+              </div>
+            ) : (
+              <Select
+                value={projectId || "__none__"}
+                onValueChange={(val) => setValue("project_id", val === "__none__" ? "" : val)}
+              >
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select a project (Optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">
+                    <span className="text-muted-foreground italic">None (not project work)</span>
+                  </SelectItem>
+                  {projectOptions.map((project) => (
+                    <SelectItem key={project.id} value={project.id}>
+                      {project.project_name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            <p className="text-muted-foreground text-[11px]">
+              A project task is rated by that project&apos;s manager, and counts toward the project&apos;s progress.
+            </p>
+          </div>
+
+          {/* Weight — compulsory */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="weight" className="flex items-center gap-1.5 text-xs font-semibold">
+                <Scale className="text-primary h-3.5 w-3.5" />
+                Task Weight
+              </Label>
+              <Badge variant="outline" className="text-[10px]">
+                Required
+              </Badge>
+            </div>
+            <Select
+              value={String(weightValue ?? TASK_WEIGHT_DEFAULT)}
+              onValueChange={(val) => setValue("weight", Number(val))}
+            >
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder="Select a weight" />
+              </SelectTrigger>
+              <SelectContent>
+                {Array.from({ length: TASK_WEIGHT_MAX - TASK_WEIGHT_MIN + 1 }, (_, i) => TASK_WEIGHT_MIN + i).map(
+                  (value) => (
+                    <SelectItem key={value} value={String(value)}>
+                      {value}
+                      {value === TASK_WEIGHT_MIN ? " — minor" : value === TASK_WEIGHT_MAX ? " — critical" : ""}
+                    </SelectItem>
+                  )
+                )}
+              </SelectContent>
+            </Select>
+            <p className="text-muted-foreground text-[11px]">
+              How much this task matters relative to the assignee&apos;s other work. A weight-10 task counts twice as
+              much as a weight-5 one. Weights do not need to add up to anything.
             </p>
           </div>
 

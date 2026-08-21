@@ -60,9 +60,13 @@ export async function POST(request: Request, props: { params: Promise<{ id: stri
 
     const allDone = Boolean(assignmentCount && completionCount && assignmentCount === completionCount)
     if (allDone) {
+      // Everyone has marked their part done, but the task still needs a rater
+      // to approve and score it. Sending it straight to "completed" here would
+      // produce a completed task with no rating, which the KPI calculation
+      // would then have to treat as a zero.
       await supabase
         .from("tasks")
-        .update({ status: "completed", completed_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+        .update({ status: "submitted_for_review", updated_at: new Date().toISOString() })
         .eq("id", params.id)
     }
 
