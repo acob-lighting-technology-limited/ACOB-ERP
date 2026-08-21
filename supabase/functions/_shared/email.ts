@@ -196,6 +196,41 @@ export async function sendBatchEmails(
   }
   if (items.length === 0) return []
 
+  const hasAttachments = items.some((item) => item.attachments && item.attachments.length > 0)
+  if (hasAttachments) {
+    // Resend's batch endpoint (/emails/batch) does NOT support attachments and silently drops them.
+    // When attachments are present, fan out using individual sendEmail calls in concurrent batches of 2.
+    const results: BatchDeliveryResult[] = []
+    const concurrency = 2
+
+    for (let i = 0; i < items.length; i += concurrency) {
+      const chunk = items.slice(i, i + concurrency)
+      const chunkResults = await Promise.all(
+        chunk.map(async (item, idx): Promise<BatchDeliveryResult> => {
+          try {
+            const data = await sendEmail({
+              from: item.from || DEFAULT_FROM,
+              to: item.to,
+              subject: item.subject,
+              html: item.html,
+              replyTo: item.replyTo,
+              listId: item.listId,
+              attachments: item.attachments,
+              traceLabel: `batch-email:${i + idx + 1}/${items.length}:${item.to}`,
+            })
+            return { to: item.to, success: true, emailId: data.id }
+          } catch (error) {
+            console.error(`[email][batch-individual] Failed to send to ${item.to}:`, error)
+            return { to: item.to, success: false, error }
+          }
+        })
+      )
+      results.push(...chunkResults)
+    }
+
+    return results
+  }
+
   const resend = new Resend(RESEND_API_KEY)
   const results: BatchDeliveryResult[] = []
 

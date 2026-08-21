@@ -1,6 +1,7 @@
 import type { EmploymentStatus } from "@/types/database"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Database } from "@/types/database"
+import { getDepartmentAliases, isSameDepartment, normalizeDepartmentName } from "@/shared/departments"
 
 export interface AssignableProfileLite {
   id: string
@@ -53,7 +54,7 @@ export function isAssignableProfile(
   options: AssignablePolicyOptions = {}
 ): boolean {
   if (!isAssignableEmploymentStatus(profile.employment_status, options)) return false
-  if (options.requiredDepartment && profile.department !== options.requiredDepartment) return false
+  if (options.requiredDepartment && !isSameDepartment(profile.department, options.requiredDepartment)) return false
   return true
 }
 
@@ -64,7 +65,7 @@ export function getUnassignableReason(
   if (!isAssignableEmploymentStatus(profile.employment_status, options)) {
     return "Selected assignee is not active"
   }
-  if (options.requiredDepartment && profile.department !== options.requiredDepartment) {
+  if (options.requiredDepartment && !isSameDepartment(profile.department, options.requiredDepartment)) {
     return "Selected assignee must belong to the service department"
   }
   return null
@@ -93,28 +94,36 @@ export async function buildAssignableProfilesQuery(
 
   if (options.departmentScope) {
     if (options.departmentScope.length > 0) {
+      const expandedNames = Array.from(new Set(options.departmentScope.flatMap((name) => getDepartmentAliases(name))))
+
       // Look up department IDs from names for FK filter
-      const { data: depts } = await client.from("departments").select("id").in("name", options.departmentScope)
+      const { data: depts } = await client.from("departments").select("id").in("name", expandedNames)
       const departmentIds = ((depts as DepartmentLookupRow[] | null) || []).map((department) => department.id)
 
-      query =
-        departmentIds.length > 0
-          ? query.in("department_id", departmentIds)
-          : query.in("department", options.departmentScope) // fallback to text filter
+      if (departmentIds.length > 0) {
+        query = query.or(
+          `department_id.in.(${departmentIds.join(",")}),department.in.(${expandedNames.map((n) => `"${n}"`).join(",")})`
+        )
+      } else {
+        query = query.in("department", expandedNames)
+      }
     } else {
       query = query.eq("id", "__none__")
     }
   }
 
   if (options.requiredDepartment) {
-    // Look up department ID from name for FK filter
-    const { data: dept } = await client
-      .from("departments")
-      .select("id")
-      .eq("name", options.requiredDepartment)
-      .single<DepartmentLookupRow>()
+    const expandedRequired = getDepartmentAliases(options.requiredDepartment)
+    const { data: depts } = await client.from("departments").select("id").in("name", expandedRequired)
+    const departmentIds = ((depts as DepartmentLookupRow[] | null) || []).map((d) => d.id)
 
-    query = dept?.id ? query.eq("department_id", dept.id) : query.eq("department", options.requiredDepartment) // fallback to text filter
+    if (departmentIds.length > 0) {
+      query = query.or(
+        `department_id.in.(${departmentIds.join(",")}),department.in.(${expandedRequired.map((n) => `"${n}"`).join(",")})`
+      )
+    } else {
+      query = query.in("department", expandedRequired)
+    }
   }
 
   if (options.leadOnly) {

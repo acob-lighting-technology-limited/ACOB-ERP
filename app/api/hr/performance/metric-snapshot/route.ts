@@ -8,7 +8,7 @@ import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
 import { pickCurrentCycle } from "@/lib/pms/cadence"
 import { loadDayContext } from "@/lib/hr/attendance-day-context"
 import { toLocalISODate, loadAttendancePolicy } from "@/lib/hr/attendance-utils"
-import { computeAttendanceDay, attendanceRateFrom } from "@/lib/hr/attendance-ssot"
+import { computeAttendanceDay, attendanceRateFrom, netDayHoursFor } from "@/lib/hr/attendance-ssot"
 import { deriveUnifiedAttendanceStatus } from "@/lib/hr/attendance-status"
 
 import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
@@ -346,7 +346,10 @@ export async function GET(request: NextRequest) {
               if (day === todayIso && rec?.clock_in && !rec?.clock_out) continue
 
               scorableDays++
-              if (onUnpaidLeave) continue // zero credit for the day
+              if (onUnpaidLeave) {
+                hoursLostSum += netDayHoursFor(policy)
+                continue
+              }
               const status = deriveUnifiedAttendanceStatus({ record: rec ?? undefined, recordDate: day }, policy)
               const dayResult = computeAttendanceDay({
                 status,

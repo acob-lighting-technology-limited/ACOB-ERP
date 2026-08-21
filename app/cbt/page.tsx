@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { apiFetch } from "@/lib/api-client"
 
 type CandidateOption = {
@@ -65,6 +66,7 @@ export default function CbtPage() {
   const [session, setSession] = useState<SessionData | null>(null)
   const [testStarted, setTestStarted] = useState(false)
   const [result, setResult] = useState<ResultData | null>(null)
+  const [redirectCountdown, setRedirectCountdown] = useState(10)
   const [currentIndex, setCurrentIndex] = useState(0)
   const [showPassword, setShowPassword] = useState(false)
   const [answers, setAnswers] = useState<Record<string, "A" | "B" | "C" | "D">>({})
@@ -73,6 +75,40 @@ export default function CbtPage() {
     review_cycle_id: "",
     password: "",
   })
+
+  const resetToStart = useCallback(() => {
+    setResult(null)
+    setTestStarted(false)
+    try {
+      localStorage.removeItem("acob_cbt_state")
+    } catch (e) {}
+    setForm({
+      company_email: "",
+      review_cycle_id: "",
+      password: "",
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!result) {
+      setRedirectCountdown(10)
+      return
+    }
+
+    setRedirectCountdown(10)
+    const interval = setInterval(() => {
+      setRedirectCountdown((prev) => {
+        if (prev <= 1) {
+          clearInterval(interval)
+          resetToStart()
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
+
+    return () => clearInterval(interval)
+  }, [result, resetToStart])
 
   const selectedCycleName = useMemo(() => {
     return cycles.find((c) => c.id === form.review_cycle_id)?.name || "Selected Cycle"
@@ -199,6 +235,7 @@ export default function CbtPage() {
       window.removeEventListener("beforeunload", handleBeforeUnload)
     }
   }, [session, testStarted])
+
   const submitSession = useCallback(async () => {
     if (!session) return
     setSubmitting(true)
@@ -340,35 +377,28 @@ export default function CbtPage() {
 
   if (result) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-black p-6 text-white">
-        <Card className="w-full max-w-xl border-white/10 bg-neutral-950 text-white shadow-2xl">
+      <main className="bg-background text-foreground relative flex min-h-screen items-center justify-center p-6">
+        <div className="fixed top-4 right-4 z-40">
+          <ThemeToggle />
+        </div>
+        <Card className="w-full max-w-xl shadow-2xl">
           <CardHeader className="text-center">
             <CardTitle className="text-3xl">CBT Submitted</CardTitle>
-            <CardDescription className="text-slate-300">
-              Your score has been recorded for the performance cycle.
-            </CardDescription>
+            <CardDescription>Your score has been recorded for the performance cycle.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6 text-center">
-            <div className="text-6xl font-semibold">{result.score}%</div>
-            <p className="text-slate-300">
-              You answered {result.correct_answers} out of {result.total_questions} questions correctly.
+            <div className="text-primary text-6xl font-semibold">{result.score}%</div>
+            <p className="text-muted-foreground">
+              You answered <span className="text-foreground font-semibold">{result.correct_answers}</span> out of{" "}
+              <span className="text-foreground font-semibold">{result.total_questions}</span> questions correctly.
             </p>
-            <Button
-              onClick={() => {
-                setResult(null)
-                setTestStarted(false)
-                try {
-                  localStorage.removeItem("acob_cbt_state")
-                } catch (e) {}
-                setForm({
-                  company_email: "",
-                  review_cycle_id: "",
-                  password: "",
-                })
-              }}
-            >
-              Start Another Session
-            </Button>
+            <div className="flex flex-col items-center gap-3">
+              <Button onClick={resetToStart}>Start Another Session ({redirectCountdown}s)</Button>
+              <p className="text-muted-foreground text-xs">
+                Redirecting back to start screen in{" "}
+                <span className="text-foreground font-mono font-semibold">{redirectCountdown}s</span>…
+              </p>
+            </div>
           </CardContent>
         </Card>
       </main>
@@ -377,35 +407,38 @@ export default function CbtPage() {
 
   if (session && !testStarted) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-black p-6 text-white">
-        <Card className="animate-in fade-in zoom-in w-full max-w-2xl border-white/10 bg-neutral-950 text-white shadow-2xl duration-300">
+      <main className="bg-background text-foreground relative flex min-h-screen items-center justify-center p-6">
+        <div className="fixed top-4 right-4 z-40">
+          <ThemeToggle />
+        </div>
+        <Card className="animate-in fade-in zoom-in w-full max-w-2xl shadow-2xl duration-300">
           <CardHeader className="space-y-4">
             <div className="flex items-center gap-3">
-              <div className="rounded-2xl border border-white/10 bg-neutral-900 p-3">
-                <Brain className="h-6 w-6 animate-pulse text-white" />
+              <div className="bg-muted/60 rounded-2xl border p-3">
+                <Brain className="text-primary h-6 w-6 animate-pulse" />
               </div>
               <div>
                 <CardTitle className="text-3xl">CBT Instructions</CardTitle>
-                <CardDescription className="text-slate-300">
-                  Please review the guidelines below before beginning your test.
-                </CardDescription>
+                <CardDescription>Please review the guidelines below before beginning your test.</CardDescription>
               </div>
             </div>
             {session.is_completed && (
-              <div className="flex items-start gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-slate-300">
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+              <div className="text-foreground flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-4 text-sm">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
                 <div>
-                  <p className="font-semibold text-white">Assessment Completed</p>
-                  <p className="mt-0.5">You have already completed and submitted your test for this review cycle.</p>
+                  <p className="font-semibold text-emerald-800 dark:text-emerald-300">Assessment Completed</p>
+                  <p className="text-muted-foreground mt-0.5">
+                    You have already completed and submitted your test for this review cycle.
+                  </p>
                 </div>
               </div>
             )}
             {session.is_resume && !session.is_completed && (
-              <div className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-slate-300">
-                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+              <div className="text-foreground flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm">
+                <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
                 <div>
-                  <p className="font-semibold text-white">Active Session Detected</p>
-                  <p className="mt-0.5">
+                  <p className="font-semibold text-amber-800 dark:text-amber-300">Active Session Detected</p>
+                  <p className="text-muted-foreground mt-0.5">
                     You have an active test session in progress. You can resume your test starting from where you
                     stopped.
                   </p>
@@ -414,28 +447,28 @@ export default function CbtPage() {
             )}
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="space-y-3 rounded-xl border border-white/10 bg-white/5 p-5">
-              <h3 className="text-base font-semibold text-white">Test Information</h3>
-              <div className="grid gap-3 text-sm text-slate-300">
-                <div className="flex justify-between border-b border-white/5 pb-2">
+            <div className="bg-muted/40 space-y-3 rounded-xl border p-5">
+              <h3 className="text-foreground text-base font-semibold">Test Information</h3>
+              <div className="text-muted-foreground grid gap-3 text-sm">
+                <div className="border-border/60 flex justify-between border-b pb-2">
                   <span>Candidate Name</span>
-                  <span className="font-medium text-white">{session.candidate.full_name}</span>
+                  <span className="text-foreground font-medium">{session.candidate.full_name}</span>
                 </div>
-                <div className="flex justify-between border-b border-white/5 pb-2">
+                <div className="border-border/60 flex justify-between border-b pb-2">
                   <span>Candidate Department</span>
-                  <span className="font-medium text-white">{session.candidate.department}</span>
+                  <span className="text-foreground font-medium">{session.candidate.department}</span>
                 </div>
-                <div className="flex justify-between border-b border-white/5 pb-2">
+                <div className="border-border/60 flex justify-between border-b pb-2">
                   <span>Review Cycle</span>
-                  <span className="font-medium text-white">{selectedCycleName}</span>
+                  <span className="text-foreground font-medium">{selectedCycleName}</span>
                 </div>
-                <div className="flex justify-between border-b border-white/5 pb-2">
+                <div className="border-border/60 flex justify-between border-b pb-2">
                   <span>Total Questions</span>
-                  <span className="font-medium text-white">{standardQuestionsCount}</span>
+                  <span className="text-foreground font-medium">{standardQuestionsCount}</span>
                 </div>
-                <div className="flex justify-between border-b border-white/5 pb-2">
+                <div className="border-border/60 flex justify-between border-b pb-2">
                   <span>{resumeTimeLeftSeconds !== null ? "Time Remaining" : "Total Time Allowed"}</span>
-                  <span className="font-mono font-medium text-amber-400">
+                  <span className="font-mono font-medium text-amber-600 dark:text-amber-400">
                     {resumeTimeLeftSeconds !== null
                       ? formatTimeLeft(resumeTimeLeftSeconds)
                       : `${((session.cbt_settings?.total_time_seconds ?? session.questions.length * 45) / 60)
@@ -445,37 +478,37 @@ export default function CbtPage() {
                 </div>
                 {session.is_completed ? (
                   <>
-                    <div className="flex justify-between border-b border-white/5 pb-2">
+                    <div className="border-border/60 flex justify-between border-b pb-2">
                       <span>Format</span>
-                      <span className="font-medium text-white">Single-selection objective test</span>
+                      <span className="text-foreground font-medium">Single-selection objective test</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Session Status</span>
-                      <span className="font-medium text-emerald-400">Completed</span>
+                      <span className="font-medium text-emerald-600 dark:text-emerald-400">Completed</span>
                     </div>
                   </>
                 ) : !session.is_resume ? (
                   <div className="flex justify-between">
                     <span>Format</span>
-                    <span className="font-medium text-white">Single-selection objective test</span>
+                    <span className="text-foreground font-medium">Single-selection objective test</span>
                   </div>
                 ) : (
                   <>
-                    <div className="flex justify-between border-b border-white/5 pb-2">
+                    <div className="border-border/60 flex justify-between border-b pb-2">
                       <span>Format</span>
-                      <span className="font-medium text-white">Single-selection objective test</span>
+                      <span className="text-foreground font-medium">Single-selection objective test</span>
                     </div>
-                    <div className="flex justify-between border-b border-white/5 pb-2">
+                    <div className="border-border/60 flex justify-between border-b pb-2">
                       <span>Session Status</span>
-                      <span className="font-medium text-amber-400">In Progress (Resuming)</span>
+                      <span className="font-medium text-amber-600 dark:text-amber-400">In Progress (Resuming)</span>
                     </div>
-                    <div className="flex justify-between border-b border-white/5 pb-2">
+                    <div className="border-border/60 flex justify-between border-b pb-2">
                       <span>Resume Point</span>
-                      <span className="font-medium text-white">Question {currentIndex + 1}</span>
+                      <span className="text-foreground font-medium">Question {currentIndex + 1}</span>
                     </div>
                     <div className="flex justify-between">
                       <span>Answers Saved</span>
-                      <span className="font-medium text-white">
+                      <span className="text-foreground font-medium">
                         {Math.min(answeredCount, standardQuestionsCount)} of {standardQuestionsCount}
                       </span>
                     </div>
@@ -486,8 +519,8 @@ export default function CbtPage() {
 
             {!session.is_resume && !session.is_completed && (
               <div className="space-y-3">
-                <h3 className="text-base font-semibold text-white">Guidelines</h3>
-                <ul className="list-disc space-y-2.5 pl-5 text-sm text-slate-300">
+                <h3 className="text-foreground text-base font-semibold">Guidelines</h3>
+                <ul className="text-muted-foreground list-disc space-y-2.5 pl-5 text-sm">
                   <li>Make sure you have a stable network connection before starting.</li>
                   <li>
                     You can navigate back and forth between questions using <strong>Previous</strong> and{" "}
@@ -531,36 +564,42 @@ export default function CbtPage() {
       : standardQuestions.filter((q) => Boolean(answers[q.id])).length
 
     return (
-      <main className="relative flex min-h-screen items-center justify-center bg-black p-6 text-white">
+      <main className="bg-background text-foreground relative flex min-h-screen items-center justify-center p-6">
+        <div className="fixed top-4 right-4 z-40">
+          <ThemeToggle />
+        </div>
         {submitting && (
-          <div className="animate-in fade-in absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/80 backdrop-blur-sm duration-150">
-            <div className="h-8 w-8 animate-spin rounded-full border-2 border-white/20 border-t-white" />
-            <p className="text-sm font-medium text-slate-200">Submitting your test…</p>
+          <div className="animate-in fade-in bg-background/80 absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 backdrop-blur-sm duration-150">
+            <div className="border-primary/20 border-t-primary h-8 w-8 animate-spin rounded-full border-2" />
+            <p className="text-foreground text-sm font-medium">Submitting your test…</p>
           </div>
         )}
         <div className="animate-in fade-in zoom-in w-full max-w-4xl space-y-6 duration-300">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="text-sm tracking-wider text-slate-300 uppercase">
+              <p className="text-muted-foreground text-sm tracking-wider uppercase">
                 ACOB CBT Assessment — {selectedCycleName} —{" "}
                 {selectedQuestion.is_bonus ? "Bonus" : selectedQuestion.department || "General"}
               </p>
-              <h1 className="mt-2 text-3xl font-semibold">{session.candidate.first_name}, keep going</h1>
+              <h1 className="text-foreground mt-2 text-3xl font-semibold">
+                {session.candidate.first_name}, keep going
+              </h1>
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-2 font-mono text-sm font-semibold text-amber-400">
-                <Clock className="h-4 w-4 animate-pulse text-amber-400" />
+              <div className="flex items-center gap-1.5 rounded-full border border-amber-500/30 bg-amber-500/10 px-4 py-2 font-mono text-sm font-semibold text-amber-600 dark:text-amber-400">
+                <Clock className="h-4 w-4 animate-pulse text-amber-600 dark:text-amber-400" />
                 <span>
                   {formatTimeLeft(
                     timeLeftSeconds ?? session.cbt_settings?.total_time_seconds ?? session.questions.length * 45
                   )}
                 </span>
               </div>
-              <div className="rounded-full border border-white/10 bg-neutral-900 px-4 py-2 text-sm">
-                {answeredCountToShow} / {totalQuestionsToShow} answered
+              <div className="bg-muted/60 text-muted-foreground rounded-full border px-4 py-2 text-sm">
+                <span className="text-foreground font-medium">{answeredCountToShow}</span> / {totalQuestionsToShow}{" "}
+                answered
               </div>
               {tabSwitchCount > 0 && (
-                <div className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-400">
+                <div className="flex items-center gap-1.5 rounded-full border border-red-500/30 bg-red-500/10 px-4 py-2 text-sm font-semibold text-red-600 dark:text-red-400">
                   <AlertCircle className="h-4 w-4" />
                   <span>
                     {tabSwitchCount} tab {tabSwitchCount === 1 ? "switch" : "switches"} recorded
@@ -570,12 +609,14 @@ export default function CbtPage() {
             </div>
           </div>
 
-          <Card className="border-white/10 bg-neutral-950 text-white shadow-2xl">
+          <Card className="shadow-2xl">
             <CardHeader>
               <CardTitle className="text-xl">
                 Question {currentIndex + 1} of {totalQuestionsToShow}
               </CardTitle>
-              <CardDescription className="text-slate-300">{selectedQuestion.prompt}</CardDescription>
+              <CardDescription className="text-foreground text-base leading-relaxed font-normal">
+                {selectedQuestion.prompt}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
               <div className="space-y-3">
@@ -589,19 +630,21 @@ export default function CbtPage() {
                       onClick={() => setAnswers((current) => ({ ...current, [selectedQuestion.id]: optionKey }))}
                       className={`flex w-full items-start gap-3 rounded-xl border p-4 text-left transition ${
                         isSelected
-                          ? "border-white bg-neutral-900"
-                          : "border-white/10 bg-neutral-950 hover:bg-neutral-900"
+                          ? "border-primary bg-primary/10 text-foreground ring-primary ring-1"
+                          : "border-border bg-card text-foreground hover:bg-muted/60"
                       }`}
                     >
                       <div
                         className={`mt-1 flex h-5 w-5 items-center justify-center rounded-full border text-[10px] font-semibold ${
-                          isSelected ? "border-white bg-white text-black" : "border-slate-500 text-slate-300"
+                          isSelected
+                            ? "border-primary bg-primary text-primary-foreground"
+                            : "border-muted-foreground/40 bg-muted/50 text-muted-foreground"
                         }`}
                       >
                         {optionKey}
                       </div>
                       <div className="mt-0.5 flex-1">
-                        <p className="text-sm text-slate-100">{selectedQuestion.options[optionKey]}</p>
+                        <p className="text-sm">{selectedQuestion.options[optionKey]}</p>
                       </div>
                     </button>
                   )
@@ -645,17 +688,20 @@ export default function CbtPage() {
   const isFormValid = Boolean(form.company_email && form.review_cycle_id && form.password)
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-black p-6 text-white">
-      <Card className="w-full max-w-2xl border-white/10 bg-neutral-950 text-white shadow-2xl">
+    <main className="bg-background text-foreground relative flex min-h-screen items-center justify-center p-6">
+      <div className="fixed top-4 right-4 z-40">
+        <ThemeToggle />
+      </div>
+      <Card className="w-full max-w-2xl shadow-2xl">
         <CardHeader className="space-y-4">
           <div className="flex items-center gap-3">
-            <div className="rounded-2xl border border-white/10 bg-neutral-900 p-3">
-              <Brain className="h-6 w-6 text-white" />
+            <div className="bg-muted/60 rounded-2xl border p-3">
+              <Brain className="text-primary h-6 w-6" />
             </div>
             <div>
               <CardTitle className="text-3xl">CBT Login Verification</CardTitle>
-              <CardDescription className="text-slate-300">
-                Select your review cycle, email address, and enter your password to start the assessment.
+              <CardDescription>
+                Select your review cycle, email address, and enter your password to proceed to the instructions.
               </CardDescription>
             </div>
           </div>
@@ -667,7 +713,7 @@ export default function CbtPage() {
               value={form.review_cycle_id}
               onValueChange={(value) => setForm((current) => ({ ...current, review_cycle_id: value }))}
             >
-              <SelectTrigger id="review_cycle_id" className="border-white/10 bg-white/5 text-white">
+              <SelectTrigger id="review_cycle_id">
                 <SelectValue placeholder={loadingOptions ? "Loading cycles..." : "Select review cycle"} />
               </SelectTrigger>
               <SelectContent>
@@ -688,7 +734,7 @@ export default function CbtPage() {
                 value={form.company_email}
                 onValueChange={(value) => setForm((current) => ({ ...current, company_email: value }))}
               >
-                <SelectTrigger id="company_email" className="border-white/10 bg-white/5 text-white">
+                <SelectTrigger id="company_email">
                   <SelectValue placeholder={loadingOptions ? "Loading emails..." : "Select your email"} />
                 </SelectTrigger>
                 <SelectContent>
@@ -709,13 +755,13 @@ export default function CbtPage() {
                   type={showPassword ? "text" : "password"}
                   value={form.password}
                   onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-                  className="h-10 border-white/10 bg-white/5 pr-10 text-white"
+                  className="h-10 pr-10"
                   placeholder="Enter your password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
-                  className="absolute top-1/2 right-3 -translate-y-1/2 text-slate-400 transition hover:text-white"
+                  className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 transition"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
@@ -730,11 +776,11 @@ export default function CbtPage() {
             onClick={() => void startSession()}
             loading={starting}
           >
-            Start CBT
+            Continue to Instructions
           </Button>
 
-          <p className="text-center text-sm text-slate-400">
-            The CBT runs one question at a time and your final submission updates your CBT score automatically.
+          <p className="text-muted-foreground text-center text-xs">
+            Your exam timer will not start until you review the instructions on the next screen and click Start Test.
           </p>
         </CardContent>
       </Card>

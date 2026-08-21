@@ -371,7 +371,7 @@ export function EmployeeViewModal({
                         </div>
                       </div>
                       <div>
-                        <span className="text-muted-foreground block text-[11px]">Office Location</span>
+                        <span className="text-muted-foreground block text-[11px]">Office / Room</span>
                         <span className="text-foreground mt-0.5 block truncate text-xs font-medium">
                           {viewEmployeeProfile.office_location || "—"}
                         </span>
@@ -607,7 +607,7 @@ export function EmployeeViewModal({
 
                     <div>
                       <Label htmlFor="edit_office" className="text-xs">
-                        Office Location
+                        Office / Room
                       </Label>
                       <div className="mt-1">
                         <SearchableSelect

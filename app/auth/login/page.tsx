@@ -533,7 +533,7 @@ export default function LoginPage() {
                   Choose password or one-time code based on your access setup.
                 </p>
                 <p className="border-primary/70 border-l-2 pl-3">
-                  Contact Admin & HR if your account has not been provisioned.
+                  Contact Admin and HR if your account has not been provisioned.
                 </p>
               </div>
             </div>

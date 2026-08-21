@@ -2,7 +2,7 @@
 
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,16 +43,22 @@ interface NavbarProps {
     user_metadata?: {
       first_name?: string
       last_name?: string
+      avatar_url?: string
+      picture?: string
     }
   }
+  avatarUrl?: string | null
   canAccessAdmin?: boolean
   isAdminMode?: boolean
 }
 
-export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: NavbarProps) {
+export function Navbar({ user, avatarUrl, canAccessAdmin = false, isAdminMode = false }: NavbarProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(
+    avatarUrl || user?.user_metadata?.avatar_url || user?.user_metadata?.picture || null
+  )
   const navRef = useRef<HTMLElement>(null)
   const router = useRouter()
   const pathname = usePathname()
@@ -74,6 +80,26 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
 
   useEffect(() => {
     setMounted(true)
+  }, [])
+
+  useEffect(() => {
+    if (avatarUrl !== undefined) {
+      setCurrentAvatarUrl(avatarUrl)
+    } else if (user?.user_metadata?.avatar_url || user?.user_metadata?.picture) {
+      setCurrentAvatarUrl(user.user_metadata.avatar_url || user.user_metadata.picture || null)
+    }
+  }, [avatarUrl, user?.user_metadata?.avatar_url, user?.user_metadata?.picture])
+
+  // Listen for real-time avatar updates from profile photo upload/delete
+  useEffect(() => {
+    const handleAvatarChange = (e: Event) => {
+      const customEvent = e as CustomEvent<{ avatarUrl?: string | null }>
+      setCurrentAvatarUrl(customEvent.detail?.avatarUrl ?? null)
+    }
+    window.addEventListener("profile-avatar-changed", handleAvatarChange)
+    return () => {
+      window.removeEventListener("profile-avatar-changed", handleAvatarChange)
+    }
   }, [])
 
   // Navbar sits outside .admin-shell, so mirror scope tokens for scoped parts
@@ -144,6 +170,13 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0 lg:h-11 lg:w-11">
           <Avatar className="h-10 w-10 lg:h-11 lg:w-11">
+            {currentAvatarUrl && (
+              <AvatarImage
+                src={currentAvatarUrl}
+                alt={user?.user_metadata?.first_name || user?.email || "User avatar"}
+                className="object-cover"
+              />
+            )}
             <AvatarFallback
               className={cn(
                 "text-sm font-semibold lg:text-base",
@@ -327,6 +360,13 @@ export function Navbar({ user, canAccessAdmin = false, isAdminMode = false }: Na
         >
           <div className={`flex items-center px-4 py-2 mb-2${isCollapsed ? "" : "gap-3"}`}>
             <Avatar className="h-10 w-10">
+              {currentAvatarUrl && (
+                <AvatarImage
+                  src={currentAvatarUrl}
+                  alt={user?.user_metadata?.first_name || user?.email || "User avatar"}
+                  className="object-cover"
+                />
+              )}
               <AvatarFallback
                 className={cn(
                   "font-semibold",

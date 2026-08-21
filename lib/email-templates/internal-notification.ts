@@ -19,9 +19,9 @@ export function renderInternalNotificationEmail({ pendingUser, preparedBy }: Int
   const officeLocation = pendingUser.office_location ? escapeHtml(pendingUser.office_location) : "N/A"
   const phoneNumber = pendingUser.phone_number ? escapeHtml(pendingUser.phone_number) : "N/A"
   const address = pendingUser.residential_address ? escapeHtml(pendingUser.residential_address) : "N/A"
-  const preparedByName = escapeHtml((preparedBy?.name || "Admin & HR Lead").trim())
+  const preparedByName = escapeHtml((preparedBy?.name || "Admin and HR Lead").trim())
   const preparedByDesignation = escapeHtml((preparedBy?.designation || "").trim())
-  const preparedByDepartment = escapeHtml((preparedBy?.department || "Admin & HR").trim())
+  const preparedByDepartment = escapeHtml((preparedBy?.department || "Admin and HR").trim())
   return `
 <!DOCTYPE html>
 <html lang="en">
@@ -57,7 +57,7 @@ export function renderInternalNotificationEmail({ pendingUser, preparedBy }: Int
                     <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">${dept}</td>
                 </tr>
                 <tr>
-                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">Office Location</td>
+                    <td style="width: 35%; color: #64748b; font-weight: 500; border-right: 1px solid #e5e7eb; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">Office / Room</td>
                     <td style="color: #0f172a; font-weight: 600; padding: 12px 18px; font-size: 13px; border-bottom: 1px solid #e5e7eb;">${officeLocation}</td>
                 </tr>
                 <tr>

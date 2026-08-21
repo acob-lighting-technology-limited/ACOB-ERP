@@ -259,7 +259,8 @@ function getHourBreakdown(
   status?: string,
   lateResumptionTime?: string | null,
   earlyClosureTime?: string | null,
-  policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY
+  policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY,
+  recordDate?: string
 ) {
   const covered =
     status === "waiver" ||
@@ -276,14 +277,19 @@ function getHourBreakdown(
     return { total, work: null, overtime: null, missed: null }
   }
   if (!record || (!record.clock_in && !record.clock_out)) {
-    // An absent day costs the net shift (8.5h), not the gross 9h — lunch is never worked.
-    if (status === "absent") return { total: null, work: 0, overtime: null, missed: netDayHoursFor(policy) }
+    // An absent day or LWOP day costs the net shift (8.5h), not the gross 9h — lunch is never worked.
+    if (status === "absent" || status === "lwop" || status === "leave_without_pay") {
+      return { total: null, work: 0, overtime: null, missed: netDayHoursFor(policy) }
+    }
     return { total: null, work: null, overtime: null, missed: null }
   }
   // One punch only — surface what the day actually costs (the recorded side's
   // bracket plus the incomplete penalty) instead of a dash. Work stays blank
   // because the missing half of the day is unverifiable.
+  // If the day is still in progress suppress the incomplete penalty.
   if (Boolean(record.clock_in) !== Boolean(record.clock_out)) {
+    const today = toLocalISODate()
+    const isInProgress = Boolean(recordDate && recordDate >= today) && Boolean(record.clock_in) && !record.clock_out
     const { hoursLost } = computeAttendanceDay({
       status: record.status ?? "incomplete",
       clockIn: record.clock_in,
@@ -291,6 +297,7 @@ function getHourBreakdown(
       policy,
       earlyCloseTime: earlyClosureTime ?? null,
       lateResumptionTime: lateResumptionTime ?? null,
+      inProgress: isInProgress,
     })
     return { total: null, work: null, overtime: null, missed: hoursLost }
   }
@@ -526,7 +533,14 @@ function EmployeeExpandPanel({ report, yearMonth, policy, onRecordChanged }: Emp
           <span></span>
         </div>
         {visibleDays.map((day) => {
-          const hours = getHourBreakdown(day.record, day.status, day.lateResumptionTime, day.earlyClosureTime, policy)
+          const hours = getHourBreakdown(
+            day.record,
+            day.status,
+            day.lateResumptionTime,
+            day.earlyClosureTime,
+            policy,
+            day.date
+          )
           return (
             <div
               key={day.date}
@@ -539,6 +553,7 @@ function EmployeeExpandPanel({ report, yearMonth, policy, onRecordChanged }: Emp
                   waived={day.record?.waived}
                   record={day.record}
                   earlyClosure={day.earlyClosureTime ? { closeTime: day.earlyClosureTime } : null}
+                  recordDate={day.date}
                 />
               </div>
               <span className="text-muted-foreground flex items-center gap-1.5 text-xs">

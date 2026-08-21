@@ -347,7 +347,7 @@ export function RequisitionPdfDocument({
                 stageCode: "pending_reviewed_by",
                 signedAt: requisition.reviewed_at,
                 signedName: requisition.reviewer_profile?.full_name,
-                fallbackName: "Admin & HR Lead",
+                fallbackName: "Admin and HR Lead",
                 signedLabel: "Reviewed",
                 pendingLabel: "Pending Review",
                 comments: requisition.reviewed_comments,

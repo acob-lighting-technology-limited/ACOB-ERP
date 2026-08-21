@@ -148,6 +148,7 @@ export function normalizeStoredAttendanceStatus(status: string | null | undefine
 }
 
 export type AttendanceLike = {
+  date?: string | null
   clock_in?: string | null
   clock_out?: string | null
   status?: string | null

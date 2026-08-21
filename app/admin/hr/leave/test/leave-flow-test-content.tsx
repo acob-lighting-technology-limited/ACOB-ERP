@@ -50,7 +50,7 @@ const FIX_HINTS: Record<string, string> = {
   md: 'Set someone\'s profile: is_department_lead = true AND department = "Executive Management" (or add "Executive Management" to their lead_departments array)',
   hcs: 'Set someone\'s profile: is_department_lead = true AND department = "Corporate Services" (or add it to lead_departments)',
   admin_hr_lead:
-    'Set someone\'s profile: is_department_lead = true AND department = "Admin & HR" (or add it to lead_departments)',
+    'Set someone\'s profile: is_department_lead = true AND department = "Admin and HR" (or add it to lead_departments)',
   department_lead:
     "Dynamic — the requester's department needs someone with is_department_lead = true, or a department_head_id set in the departments table",
   reliever: "Dynamic per request — no fix needed",

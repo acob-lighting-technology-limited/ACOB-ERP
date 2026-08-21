@@ -36,7 +36,7 @@ export async function POST(request: NextRequest) {
       metadata: { ...(metadata || {}), event: action },
       context: {
         actorId: scope.userId,
-        department: scope.department || "Admin & HR",
+        department: scope.department || "Admin and HR",
         source: "api",
         route: "/admin/reports/weekly-summary",
       },

@@ -111,10 +111,10 @@ export function HRAdminDashboard({
           description="Configured departments"
         />
         <StatCard
-          title="Office Locations"
+          title="Rooms & Offices"
           value={stats.totalOfficeLocations}
           icon={MapPin}
-          description="Active office locations"
+          description="Active rooms and offices"
         />
       </div>
 
@@ -201,7 +201,7 @@ export function HRAdminDashboard({
             </div>
           </Link>
 
-          {/* Office Locations */}
+          {/* Rooms & Offices */}
           <Link href={`${basePath}/office-location`} className="group block">
             <div className="bg-card border-border flex h-full flex-col justify-between rounded-xl border p-4.5 shadow-md transition-all duration-200 hover:-translate-y-0.5 hover:border-teal-500/60 hover:shadow-xl dark:hover:border-teal-400/60">
               <div className="space-y-2.5">
@@ -214,20 +214,20 @@ export function HRAdminDashboard({
                       iconClassName="h-5 w-5"
                     />
                     <h3 className="text-foreground text-base font-semibold transition-colors group-hover:text-teal-500">
-                      Office Locations
+                      Rooms & Offices
                     </h3>
                   </div>
                   <Badge
                     variant="outline"
                     className="shrink-0 rounded-full border-teal-500/20 bg-teal-500/10 px-2.5 py-0.5 text-xs font-bold text-teal-600 dark:text-teal-400"
                   >
-                    {stats.totalOfficeLocations} Locations
+                    {stats.totalOfficeLocations} Rooms
                   </Badge>
                 </div>
-                <p className="text-muted-foreground text-xs leading-relaxed">View locations and assigned employees</p>
+                <p className="text-muted-foreground text-xs leading-relaxed">View rooms and assigned employees</p>
               </div>
               <div className="border-border/40 mt-4 flex items-center justify-between border-t pt-2.5">
-                <span className="text-muted-foreground text-[11px] font-medium">Physical Offices</span>
+                <span className="text-muted-foreground text-[11px] font-medium">Rooms & Offices</span>
                 <IconFill
                   icon={ChevronRight}
                   fillColor="bg-teal-500"

@@ -1,7 +1,14 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { logger } from "@/lib/logger"
 import { getAvatarSignedUrls } from "@/lib/profile-photos"
-import type { LunchMenu, LunchMenuGroup, LunchMenuOption, LunchMenuStatus, LunchVoteRecord } from "./lunch-voting"
+import type {
+  LunchMenu,
+  LunchMenuGroup,
+  LunchMenuOption,
+  LunchMenuStatus,
+  LunchVoteRecord,
+  LunchMenuViewRecord,
+} from "./lunch-voting"
 
 const log = logger("lunch-menu-server")
 
@@ -326,4 +333,71 @@ export async function notifyStaffOfMenu(client: SupabaseClient, menuId: string, 
   } catch (err) {
     log.error({ err: String(err) }, "lunch menu publish notification failed")
   }
+}
+
+/**
+ * Loads distinct view records for a list of menus, hydrated with profiles and avatars.
+ */
+export async function loadViewsForMenus(
+  client: SupabaseClient,
+  menuIds: string[]
+): Promise<Map<string, LunchMenuViewRecord[]>> {
+  const result = new Map<string, LunchMenuViewRecord[]>()
+  for (const id of menuIds) result.set(id, [])
+  if (menuIds.length === 0) return result
+
+  const { data: viewRows } = await client
+    .from("lunch_menu_views")
+    .select("menu_id, user_id, first_viewed_at, last_viewed_at, view_count")
+    .in("menu_id", menuIds)
+
+  const views = (viewRows || []) as {
+    menu_id: string
+    user_id: string
+    first_viewed_at: string
+    last_viewed_at: string
+    view_count: number
+  }[]
+  if (views.length === 0) return result
+
+  const userIds = Array.from(new Set(views.map((v) => v.user_id)))
+  const { data: profileRows } = await client
+    .from("profiles")
+    .select("id, full_name, department, avatar_path")
+    .in("id", userIds)
+
+  const profiles = (profileRows || []) as {
+    id: string
+    full_name: string | null
+    department: string | null
+    avatar_path: string | null
+  }[]
+  const profileById = new Map(profiles.map((p) => [p.id, p]))
+
+  const signedUrls = await getAvatarSignedUrls(
+    client,
+    profiles.map((p) => p.avatar_path).filter((path): path is string => Boolean(path))
+  )
+
+  for (const view of views) {
+    const profile = profileById.get(view.user_id)
+    const list = result.get(view.menu_id) || []
+    list.push({
+      user_id: view.user_id,
+      full_name: profile?.full_name || "Unknown",
+      department: profile?.department || null,
+      avatar_url: profile?.avatar_path ? (signedUrls.get(profile.avatar_path) ?? null) : null,
+      first_viewed_at: view.first_viewed_at,
+      last_viewed_at: view.last_viewed_at,
+      view_count: view.view_count || 1,
+    })
+    result.set(view.menu_id, list)
+  }
+
+  // Sort each menu's viewers by first_viewed_at descending (latest viewers first)
+  for (const list of result.values()) {
+    list.sort((a, b) => b.first_viewed_at.localeCompare(a.first_viewed_at))
+  }
+
+  return result
 }

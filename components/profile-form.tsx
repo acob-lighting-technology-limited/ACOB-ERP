@@ -244,17 +244,17 @@ export function ProfileForm({ user, profile, hideBackButton = false, onSaved }: 
               </div>
             </div>
 
-            {/* Office Location */}
+            {/* Office / Room */}
             <div className="space-y-4 border-t pt-6">
-              <h3 className="font-semibold">Office Location</h3>
+              <h3 className="font-semibold">Office / Room</h3>
               <div className="space-y-2">
-                <Label htmlFor="officeLocation">Office Location</Label>
+                <Label htmlFor="officeLocation">Assigned Office / Room</Label>
                 <Select
                   value={form.watch("officeLocation")}
                   onValueChange={(value) => form.setValue("officeLocation", value)}
                 >
                   <SelectTrigger id="officeLocation">
-                    <SelectValue placeholder="Select location" />
+                    <SelectValue placeholder="Select office or room" />
                   </SelectTrigger>
                   <SelectContent>
                     {officeLocations.map((loc) => (

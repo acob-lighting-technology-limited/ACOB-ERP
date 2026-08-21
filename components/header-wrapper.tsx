@@ -8,12 +8,16 @@ interface HeaderWrapperProps {
     email?: string
     user_metadata?: {
       first_name?: string
+      last_name?: string
+      avatar_url?: string
+      picture?: string
     }
   }
   canAccessAdmin?: boolean
+  avatarUrl?: string | null
 }
 
-export function HeaderWrapper({ user, canAccessAdmin = false }: HeaderWrapperProps) {
+export function HeaderWrapper({ user, canAccessAdmin = false, avatarUrl }: HeaderWrapperProps) {
   const pathname = usePathname()
 
   // Don't show header on root page (shutdown page)
@@ -52,5 +56,5 @@ export function HeaderWrapper({ user, canAccessAdmin = false }: HeaderWrapperPro
 
   const isAdminMode = pathname?.startsWith("/admin")
 
-  return <Navbar user={user} canAccessAdmin={canAccessAdmin} isAdminMode={isAdminMode} />
+  return <Navbar user={user} canAccessAdmin={canAccessAdmin} isAdminMode={isAdminMode} avatarUrl={avatarUrl} />
 }

@@ -22,6 +22,7 @@ import { getRequestScope } from "@/lib/admin/api-scope"
 import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getCbtSettings, canAccessCbt } from "@/lib/cbt-config"
+import { CycleSelector } from "@/app/(app)/pms/_components/cycle-selector"
 
 const adminPmsLinks = [
   {
@@ -151,12 +152,12 @@ function formatPercent(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? `${value}%` : "-"
 }
 
-export async function AdminPmsPage({ basePath }: { basePath?: string } = {}) {
+export async function AdminPmsPage({ basePath, cycleId }: { basePath?: string; cycleId?: string } = {}) {
   const base = basePath ?? "/admin"
   const supabase = await createClient()
   const db = getServiceRoleClientOrFallback(supabase)
-  const [{ summary }, scope, cbtSettings] = await Promise.all([
-    getAdminPmsData(),
+  const [{ summary, cycles, activeCycleId }, scope, cbtSettings] = await Promise.all([
+    getAdminPmsData(cycleId),
     getRequestScope(),
     getCbtSettings(db),
   ])
@@ -172,6 +173,7 @@ export async function AdminPmsPage({ basePath }: { basePath?: string } = {}) {
         description="Monitor live KPI, goals, attendance, CBT, behaviour, and reviews from one HR performance area."
         icon={Award}
         backLink={{ href: `${base}/hr`, label: "Back to HR" }}
+        actions={<CycleSelector cycles={cycles} activeCycleId={activeCycleId} />}
       />
 
       <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-5">

@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
+import { formatWATDate, formatWATTimeDate } from "@/lib/utils/date"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { toast } from "sonner"
@@ -748,7 +748,7 @@ export function KssRosterTable({
         accessor: (row) => row.created_at,
         resizable: true,
         initialWidth: 220,
-        render: (row) => formatWATDateTime(row.created_at, { day: "2-digit", month: "short", year: "numeric" }),
+        render: (row) => formatWATTimeDate(row.created_at),
       },
     ],
     [docByWeekYear, employeeNameById, getPresenterName]
@@ -881,7 +881,7 @@ export function KssRosterTable({
         )
       }
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             title="KSS Rows"
             value={stats.total}

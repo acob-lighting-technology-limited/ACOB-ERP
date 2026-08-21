@@ -26,7 +26,7 @@ import type { AttendanceRecord } from "./page"
 import { logger } from "@/lib/logger"
 import { RemoteCheckinModal } from "@/components/attendance/remote-checkin-modal"
 import { toLocalISODate, toLocalYearMonth } from "@/lib/hr/attendance-utils"
-import { computeAttendanceDay, attendanceRateFrom } from "@/lib/hr/attendance-ssot"
+import { computeAttendanceDay, attendanceRateFrom, NET_DAY_HOURS } from "@/lib/hr/attendance-ssot"
 import {
   ATTENDANCE_STATUS_COLORS,
   ATTENDANCE_STATUS_LABELS,
@@ -86,11 +86,28 @@ function calculateHourBreakdown(
   clockIn: string | null | undefined,
   clockOut: string | null | undefined,
   lateResumptionTime?: string | null,
-  earlyClosureTime?: string | null
+  earlyClosureTime?: string | null,
+  status?: string | null,
+  inProgress?: boolean
 ) {
   const inMinutes = parseClockToMinutes(clockIn)
   const outMinutes = parseClockToMinutes(clockOut)
   if (inMinutes === null || outMinutes === null || outMinutes <= inMinutes) {
+    if (status === "lwop" || status === "leave_without_pay") {
+      return { total: null, work: 0, missed: NET_DAY_HOURS }
+    }
+    // Day in progress — show only the late bracket cost (no penalty yet)
+    if (inProgress && clockIn && !clockOut) {
+      const { hoursLost, hoursWorked } = computeAttendanceDay({
+        status: status || "late",
+        clockIn,
+        clockOut,
+        earlyCloseTime: earlyClosureTime ?? null,
+        lateResumptionTime: lateResumptionTime ?? null,
+        inProgress: true,
+      })
+      return { total: null, work: hoursWorked, missed: hoursLost }
+    }
     return { total: null, work: null, missed: null }
   }
 
@@ -98,7 +115,7 @@ function calculateHourBreakdown(
   // scale, so they always add up to the net day. Only "total" reflects raw clock
   // minutes — it is time in the office, not hours credited.
   const { hoursLost, hoursWorked } = computeAttendanceDay({
-    status: "present",
+    status: status || "present",
     clockIn,
     clockOut,
     earlyCloseTime: earlyClosureTime ?? null,
@@ -260,6 +277,7 @@ export function AttendanceContent({
 
         if (!existing) {
           const normalizedStatus = (unified.status as AttendanceRow["normalizedStatus"]) || "absent"
+          const isLwop = normalizedStatus === "lwop" || (normalizedStatus as string) === "leave_without_pay"
           return {
             id: `missing-${workday}`,
             date: workday,
@@ -272,21 +290,24 @@ export function AttendanceContent({
             periodLabel: "-",
             monthLabel,
             calculatedTotalHours: null,
-            workHours: null,
-            missedHoursValue: null,
+            workHours: isLwop ? 0 : null,
+            missedHoursValue: isLwop ? NET_DAY_HOURS : null,
             normalizedStatus,
           } as AttendanceRow
         }
 
         const normalizedStatus =
           (unified.status as AttendanceRow["normalizedStatus"]) || normalizeStatus(existing, workday)
+        const isInProgress = workday === toLocalISODate() && Boolean(existing.clock_in) && !existing.clock_out
         const breakdown = isCoveredStatus(normalizedStatus)
           ? { total: null, work: null, missed: null }
           : calculateHourBreakdown(
               existing.clock_in,
               existing.clock_out,
               (unified as any).late_resumption_time,
-              (unified as any).early_closure_time
+              (unified as any).early_closure_time,
+              normalizedStatus,
+              isInProgress
             )
 
         return {

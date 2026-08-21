@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 export default function CommunicationsMeetingsPage() {
   const cards = [
     {
-      title: "Meeting Mailings",
+      title: "Reports",
       description: "Send meeting packs with weekly reports and Action Points one-time or recurring.",
       href: "/admin/communications/meetings/mail",
       icon: Mail,
@@ -19,7 +19,7 @@ export default function CommunicationsMeetingsPage() {
       hoverText: "group-hover:text-indigo-500",
     },
     {
-      title: "Meeting Reminders",
+      title: "Reminders",
       description: "Send meeting and knowledge-sharing reminders with scheduling controls.",
       href: "/admin/communications/meetings/reminders",
       icon: Megaphone,
@@ -33,8 +33,8 @@ export default function CommunicationsMeetingsPage() {
   return (
     <PageWrapper maxWidth="full" background="gradient">
       <PageHeader
-        title="Communications: Meetings"
-        description="Meeting-specific communication workflows."
+        title="Communications: General Meeting"
+        description="General meeting communication workflows (reports and reminders)."
         icon={CalendarDays}
         backLink={{ href: "/admin/communications", label: "Back to Communications" }}
       />

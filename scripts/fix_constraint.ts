@@ -9,7 +9,7 @@ const sqlQuery = `
   ALTER TABLE public.assets ADD CONSTRAINT assets_department_check CHECK (
     department IS NULL OR department = ANY (ARRAY[
       'Accounts',
-      'Admin & HR',
+      'Admin and HR',
       'Business, Growth and Innovation',
       'Corporate Services',
       'Executive Management',

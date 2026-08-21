@@ -46,7 +46,7 @@ import { QUERY_KEYS } from "@/lib/query-keys"
 import { toLocalISODate } from "@/lib/utils/date"
 import { useDepartments } from "@/hooks/use-departments"
 import { getRoleDisplayName } from "@/lib/permissions"
-import { OFFICE_LOCATIONS } from "@/lib/office-locations"
+import { OFFICE_LOCATIONS } from "@/lib/rooms-and-offices"
 import { getAssignableRolesForActor } from "@/lib/role-management"
 import { formValidation } from "@/lib/validation"
 import { logger } from "@/lib/logger"
@@ -776,13 +776,13 @@ export function ManageUsersDialog({
                   </div>
 
                   <div>
-                    <Label htmlFor="cu_office_location">Office Location (Optional)</Label>
+                    <Label htmlFor="cu_office_location">Office / Room (Optional)</Label>
                     <Select
                       value={watch("officeLocation")}
                       onValueChange={(value) => setValue("officeLocation", value)}
                     >
                       <SelectTrigger id="cu_office_location" className="mt-1.5">
-                        <SelectValue placeholder="Select Office Location" />
+                        <SelectValue placeholder="Select Office / Room" />
                       </SelectTrigger>
                       <SelectContent>
                         {OFFICE_LOCATIONS.map((loc) => (

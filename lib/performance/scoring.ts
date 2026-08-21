@@ -3,7 +3,7 @@ import { toLocalISODate } from "@/lib/utils/date"
 import { deriveUnifiedAttendanceStatus, normalizeStoredAttendanceStatus } from "@/lib/hr/attendance-status"
 import { AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import { computeAttendanceDay, netDayHoursFor } from "@/lib/hr/attendance-ssot"
-import { pickCurrentCycle } from "@/lib/pms/cadence"
+import { pickCurrentCycle, getCoveredQuarterlyCycles, isQuarterlyCycle, rollupQuarterlyScores } from "@/lib/pms/cadence"
 
 type GoalScoreBreakdown = {
   goal_id: string
@@ -43,6 +43,7 @@ type ReviewCycleRow = {
   start_date: string
   end_date: string
   status?: string | null
+  review_type?: string | null
 }
 
 type PerformanceReviewScoreRow = {
@@ -466,10 +467,64 @@ export async function computeIndividualPerformanceScore(
   const { data: latestReviewRows } = await latestReviewQuery.returns<PerformanceReviewScoreRow[]>()
   const latestReview = latestReviewRows?.[0] || null
 
-  let cbtScore: number | null =
-    latestReview && typeof latestReview.cbt_score === "number" ? roundScore(Number(latestReview.cbt_score) || 0) : null
+  let cbtScore: number | null = null
 
-  if (!latestReview || latestReview.cbt_score === null) {
+  // Check if target cycle is a multi-quarter rollup (Biannual / Annual)
+  const isMultiQuarter = Boolean(cycle && !isQuarterlyCycle(cycle.review_type, cycle.name))
+
+  if (isMultiQuarter && cycle?.start_date && cycle?.end_date) {
+    const { data: quarterlyCycleRows } = await supabase
+      .from("review_cycles")
+      .select("id, name, start_date, end_date, review_type")
+      .order("start_date", { ascending: true })
+
+    const coveredQuarters = getCoveredQuarterlyCycles(cycle, quarterlyCycleRows || [])
+    const targetQuarterIds = coveredQuarters.map((q) => q.id)
+
+    if (targetQuarterIds.length > 0) {
+      const [{ data: quarterlyReviews }, { data: quarterlyAttempts }] = await Promise.all([
+        supabase
+          .from("performance_reviews")
+          .select("review_cycle_id, cbt_score")
+          .eq("user_id", params.userId)
+          .in("review_cycle_id", targetQuarterIds)
+          .not("cbt_score", "is", null),
+        supabase
+          .from("cbt_attempts")
+          .select("review_cycle_id, score")
+          .eq("profile_id", params.userId)
+          .eq("status", "submitted")
+          .in("review_cycle_id", targetQuarterIds),
+      ])
+
+      const scoreByQuarter = new Map<string, number>()
+      for (const row of quarterlyReviews || []) {
+        if (typeof row.cbt_score === "number" && Number.isFinite(row.cbt_score)) {
+          scoreByQuarter.set(row.review_cycle_id, Number(row.cbt_score))
+        }
+      }
+      for (const row of quarterlyAttempts || []) {
+        if (
+          row.review_cycle_id &&
+          !scoreByQuarter.has(row.review_cycle_id) &&
+          typeof row.score === "number" &&
+          Number.isFinite(row.score)
+        ) {
+          scoreByQuarter.set(row.review_cycle_id, Number(row.score))
+        }
+      }
+
+      const quarterlyValues = targetQuarterIds.map((qid) => scoreByQuarter.get(qid))
+      cbtScore = rollupQuarterlyScores(quarterlyValues)
+    }
+  }
+
+  // Fallback to single cycle lookup if quarterly or if direct review exists
+  if (cbtScore === null && latestReview && typeof latestReview.cbt_score === "number") {
+    cbtScore = roundScore(Number(latestReview.cbt_score) || 0)
+  }
+
+  if (cbtScore === null) {
     let cbtQuery = supabase
       .from("performance_reviews")
       .select("cbt_score")

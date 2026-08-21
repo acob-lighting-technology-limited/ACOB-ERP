@@ -141,7 +141,7 @@ describe("combined late and early penalties stack", () => {
 })
 
 describe("covered days never reach the bracket maths", () => {
-  for (const status of ["on_leave", "holiday", "exempted", "awp", "lwop", "early_closure", "late_resumption"]) {
+  for (const status of ["on_leave", "holiday", "exempted", "awp", "early_closure", "late_resumption"]) {
     it(`${status} costs 0 hours even with a terrible clock-in`, () => {
       const result = computeAttendanceDay({ status, clockIn: "15:00", clockOut: "15:30" })
       assert.equal(result.hoursLost, 0)
@@ -151,11 +151,18 @@ describe("covered days never reach the bracket maths", () => {
   }
 })
 
-describe("absence and incomplete days", () => {
+describe("absence, lwop and incomplete days", () => {
   it("absent costs the full net day", () => {
     const result = computeAttendanceDay({ status: "absent" })
     assert.equal(result.hoursLost, NET_DAY_HOURS)
     assert.equal(result.isAbsent, true)
+  })
+
+  it("lwop costs the full net day", () => {
+    const result = computeAttendanceDay({ status: "lwop" })
+    assert.equal(result.hoursLost, NET_DAY_HOURS)
+    assert.equal(result.isAbsent, true)
+    assert.equal(result.hoursWorked, 0)
   })
 
   it("a missing clock-out charges the late side plus the incomplete penalty", () => {

@@ -480,10 +480,7 @@ export function PmsMetricTabsPage({
     return !loaded || matchesCadenceFor(cycleType, loaded.review_type)
   }, [data, cycleId, cycleType])
 
-  const rawRows = useMemo(
-    () => (loadedCycleInCadence ? data?.rows[tab] || [] : []),
-    [data, tab, loadedCycleInCadence]
-  )
+  const rawRows = useMemo(() => (loadedCycleInCadence ? data?.rows[tab] || [] : []), [data, tab, loadedCycleInCadence])
 
   // Column keys used for both DataTable headings and export
   const columnKeys = useMemo(() => {
@@ -700,7 +697,7 @@ export function PmsMetricTabsPage({
   const pageTabs: DataTableTab[] = [
     { key: "individual", label: "Individual" },
     { key: "department", label: "Department" },
-    { key: "cycle", label: "Cycle" },
+    { key: "cycle", label: "Cadence" },
   ]
 
   return (

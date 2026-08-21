@@ -119,6 +119,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
   // answer, seeded from whatever this person already voted.
   const [draft, setDraft] = useState<Record<string, string>>(() => myVote?.selections || {})
   const [draftEating, setDraftEating] = useState<boolean>(() => myVote?.is_eating ?? true)
+
   useEffect(() => {
     setDraft(myVote?.selections || {})
     setDraftEating(myVote?.is_eating ?? true)
@@ -140,6 +141,18 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
     const id = setInterval(() => setNow(Date.now()), 30000)
     return () => clearInterval(id)
   }, [])
+
+  // Record that the user viewed this published menu
+  useEffect(() => {
+    if (!menu?.id) return
+    void apiFetch("/api/hr/lunch/view", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ menuId: menu.id }),
+    }).catch(() => {
+      // Best-effort view tracking
+    })
+  }, [menu?.id])
 
   const deadlinePassed = data.deadline ? new Date(data.deadline).getTime() <= now : false
   const votingOpen = data.votingOpen && !deadlinePassed
@@ -262,8 +275,42 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
     [menu]
   )
 
+  const withdrawVote = useCallback(async () => {
+    if (!menu) return
+    setSubmitting(true)
+    try {
+      const res = await apiFetch(`/api/hr/lunch/vote?menuId=${menu.id}`, {
+        method: "DELETE",
+      })
+      const payload = await res.json()
+      if (!res.ok) throw new Error(payload.error || "Failed to withdraw your vote")
+
+      setData((prev) => ({ ...prev, votes: (payload.votes || []) as LunchVoteRecord[] }))
+      setDraft({})
+      setDraftEating(true)
+      toast.success("Vote withdrawn")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to withdraw your vote")
+    } finally {
+      setSubmitting(false)
+    }
+  }, [menu])
+
   function pickOption(groupId: string, optionId: string) {
     if (!menu) return
+
+    // If this option is already selected in draft and eating is active, uncheck it.
+    if (draftEating && draft[groupId] === optionId) {
+      const next = { ...draft }
+      delete next[groupId]
+      setDraft(next)
+
+      if (myVote) {
+        void withdrawVote()
+      }
+      return
+    }
+
     const next = { ...draft, [groupId]: optionId }
     setDraftEating(true)
     setDraft(next)
@@ -273,6 +320,16 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
   }
 
   function pickNotEating() {
+    // If "NO" is already selected, clicking it again unchecks it (withdraws the vote).
+    if (!draftEating) {
+      setDraftEating(true)
+      setDraft({})
+      if (myVote) {
+        void withdrawVote()
+      }
+      return
+    }
+
     setDraftEating(false)
     setDraft({})
     void saveVote(false, {})
@@ -504,7 +561,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
               description={
                 upcomingDays.length > 0
                   ? `Nothing published for this day. Menus are up for ${upcomingDays.map((d) => formatWATDate(d.date, { weekday: "short", day: "numeric", month: "short" })).join(", ")}.`
-                  : `Nothing published for this day. Lunch normally runs on ${data.eatingDays.join(", ")} — Admin & HR usually put the menu up a day or two ahead, and you'll get a notification when they do.`
+                  : `Nothing published for this day. Lunch normally runs on ${data.eatingDays.join(", ")} — Admin and HR usually put the menu up a day or two ahead, and you'll get a notification when they do.`
               }
               action={
                 upcomingDays.length > 0 ? (
@@ -539,16 +596,33 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
                       )}
                     </p>
                   </div>
-                  <Badge
-                    className={cn(
-                      "border-0",
-                      votingOpen
-                        ? "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
-                        : "bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                  <div className="flex items-center gap-2">
+                    {votingOpen && (myVote || Object.keys(draft).length > 0 || !draftEating) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={submitting}
+                        onClick={() => {
+                          setDraft({})
+                          setDraftEating(true)
+                          if (myVote) void withdrawVote()
+                        }}
+                        className="text-muted-foreground hover:text-foreground h-7 px-2 text-xs"
+                      >
+                        Clear choice
+                      </Button>
                     )}
-                  >
-                    {votingOpen ? "Open for voting" : "Closed"}
-                  </Badge>
+                    <Badge
+                      className={cn(
+                        "border-0",
+                        votingOpen
+                          ? "bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20"
+                          : "bg-red-500/10 text-red-500 hover:bg-red-500/20"
+                      )}
+                    >
+                      {votingOpen ? "Open for voting" : "Closed"}
+                    </Badge>
+                  </div>
                 </div>
               </CardHeader>
 

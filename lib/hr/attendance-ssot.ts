@@ -84,8 +84,6 @@ const COVERED_STATUSES = new Set([
   "iwp",
   "early_closure",
   "late_resumption",
-  "leave_without_pay",
-  "lwop",
   "early",
 ])
 
@@ -105,6 +103,13 @@ export interface AttendanceDayInput {
   earlyOutApproved?: boolean
   /** IWP / explicit approval — forgives the missing punch penalty only. */
   incompleteApproved?: boolean
+  /**
+   * True when the record belongs to today and the shift has not yet ended
+   * (clock_in present, clock_out not yet recorded).  When set, the
+   * incomplete penalty is suppressed — only the late bracket is charged as
+   * a provisional cost.  Never set this for historical days.
+   */
+  inProgress?: boolean
 }
 
 export interface AttendanceDayResult {
@@ -225,7 +230,12 @@ export function computeAttendanceDay(input: AttendanceDayInput): AttendanceDayRe
     return build(0, "Covered day — no hours lost", { covered: true })
   }
 
-  // 2. No punches at all.
+  // 2. Unpaid leave (LWOP) costs the full net shift.
+  if (status === "lwop" || status === "leave_without_pay") {
+    return build(netDay, `Leave Without Pay — full day (${netDay}h) lost`)
+  }
+
+  // 3. No punches at all.
   if (status === "absent" || (!clockIn && !clockOut)) {
     return build(netDay, `Absent — full day (${netDay}h) lost`)
   }
@@ -242,8 +252,22 @@ export function computeAttendanceDay(input: AttendanceDayInput): AttendanceDayRe
   const earlyBracket = forgiveEarlyOut ? 0 : earlyBracketFor(clockOut, effectiveEnd, policy.startTime)
 
   // 3. One punch missing — charge the side we know (unless forgiven), plus the incomplete penalty (unless forgiven).
+  //    Exception: if the day is still in progress (clock_in present, clock_out not yet recorded because
+  //    the shift hasn't ended) we suppress the incomplete penalty entirely.  Only the late bracket is
+  //    returned as a provisional figure.  The caller is responsible for setting inProgress correctly.
   if (!clockIn || !clockOut) {
     const knownSide = clockIn ? lateBracket : earlyBracket
+    if (input.inProgress && clockIn && !clockOut) {
+      // Day still running — charge only the late bracket, no penalty yet.
+      return build(
+        knownSide,
+        `In progress: late bracket ${lateBracket} = -${lateBracket} (no penalty until shift ends)`,
+        {
+          lateBracket,
+          earlyBracket: 0,
+        }
+      )
+    }
     const penalty = forgiveIncomplete ? 0 : (policy.incompletePenalty ?? 1)
     const parts = [
       clockIn ? `late bracket ${lateBracket} = -${lateBracket}` : `early bracket ${earlyBracket} = -${earlyBracket}`,

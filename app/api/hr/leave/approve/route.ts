@@ -116,7 +116,7 @@ function humanStage(stageCode: string) {
     case "pending_department_lead":
       return "Department Lead"
     case "pending_admin_hr_lead":
-      return "Admin & HR Lead"
+      return "Admin and HR Lead"
     case "pending_hcs":
       return "HCS"
     case "pending_md":

@@ -82,7 +82,7 @@ const typeLabels: Record<SearchType, string> = {
   correspondence: "Correspondence",
   payment: "Payment",
   department: "Department",
-  office_location: "Office Location",
+  office_location: "Room / Office",
 }
 
 async function performSearch(q: string, deptId?: string): Promise<SearchResult[]> {

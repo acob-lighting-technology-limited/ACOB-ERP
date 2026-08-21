@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
 import { canAccessAdminSection, resolveAdminScope } from "@/lib/admin/rbac"
 import type { Database } from "@/types/database"
-import { normalizeDepartmentName } from "@/shared/departments"
+import { normalizeDepartmentName, DEPT_ADMIN_HR } from "@/shared/departments"
 
 export const FLEET_BLOCKING_STATUSES = ["pending", "approved"] as const
 export const FLEET_ALLOWED_MIME_TYPES = new Set([
@@ -86,5 +86,5 @@ export async function canManageFleet(supabase: SupabaseClient<Database>, userId:
   if (!scope.isDepartmentLead) return false
   const managed = (scope.managedDepartments || []).map((dept) => normalizeDepartmentName(String(dept || "")))
   const primary = normalizeDepartmentName(String(scope.department || ""))
-  return managed.includes(normalizeDepartmentName("Admin & HR")) || primary === normalizeDepartmentName("Admin & HR")
+  return managed.includes(DEPT_ADMIN_HR) || primary === DEPT_ADMIN_HR
 }

@@ -217,7 +217,7 @@ export default function PurchaseOrdersPage() {
         </Button>
       }
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             title="Total Orders"
             value={stats.total}

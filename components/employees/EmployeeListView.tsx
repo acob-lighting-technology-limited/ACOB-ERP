@@ -306,7 +306,7 @@ export function EmployeeListView({
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between gap-3">
-                                  <span className="text-muted-foreground">Office Location</span>
+                                  <span className="text-muted-foreground">Office / Room</span>
                                   <span className="text-foreground text-right font-medium">
                                     {member.office_location || "-"}
                                   </span>
@@ -353,7 +353,7 @@ export function EmployeeListView({
                                 <div className="flex items-center gap-2">
                                   <MapPin className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
                                   <span className="text-foreground font-medium">
-                                    {member.office_location || "No office location"}
+                                    {member.office_location || "No assigned room/office"}
                                   </span>
                                 </div>
                                 <div className="flex items-center justify-between gap-3 pt-1">

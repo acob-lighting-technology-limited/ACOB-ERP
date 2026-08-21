@@ -128,7 +128,26 @@ export function LeaveRequestFormDialog({
 
   const isBlackoutDate = (date: Date) => blackoutMonthSet.has(date.getMonth() + 1)
   const isPastDate = (date: Date) => toIsoLocalDate(date) < todayIso
-  const hasDepartmentBooking = (date: Date) => bookedMap.has(toIsoLocalDate(date))
+  const getBookingForDate = (date: Date) => bookedMap.get(toIsoLocalDate(date))
+  const hasApprovedDepartmentBooking = (date: Date) => {
+    const booking = getBookingForDate(date)
+    if (!booking) return false
+    return (
+      booking.status === "approved" ||
+      booking.status === "both" ||
+      Boolean(booking.approved_employees && booking.approved_employees.length > 0)
+    )
+  }
+  const hasPendingDepartmentBooking = (date: Date) => {
+    const booking = getBookingForDate(date)
+    if (!booking) return false
+    if (hasApprovedDepartmentBooking(date)) return false
+    return (
+      booking.status === "pending" ||
+      Boolean(booking.pending_employees && booking.pending_employees.length > 0) ||
+      !booking.status
+    )
+  }
   const exceedsLeaveTypeMax = (date: Date) => {
     if (!pendingRangeStartIso || !maxDaysAllowed) return false
     const clickedIso = toIsoLocalDate(date)
@@ -294,37 +313,73 @@ export function LeaveRequestFormDialog({
                     disabled={(date) => !formData.leave_type_id || disableDay(date)}
                     modifiers={{
                       blackout: (date) => isBlackoutDate(date),
-                      department_busy: (date) => hasDepartmentBooking(date),
+                      department_approved: (date) => hasApprovedDepartmentBooking(date),
+                      department_pending: (date) => hasPendingDepartmentBooking(date),
                       selected_range: selectedRange || undefined,
                     }}
                     modifiersClassNames={{
                       blackout: "line-through opacity-40",
-                      department_busy: "bg-amber-100 text-amber-900 font-medium",
-                      selected_range: "bg-blue-100 text-blue-900",
+                      department_approved: "bg-red-100 text-red-900 font-medium dark:bg-red-950/60 dark:text-red-300",
+                      department_pending:
+                        "bg-amber-100 text-amber-900 font-medium dark:bg-amber-950/60 dark:text-amber-300",
+                      selected_range: "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-300",
                     }}
                     className="mx-auto"
                   />
-                  <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-4 text-xs">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="h-3 w-3 rounded bg-amber-100" />
-                      Department already booked
+                  <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded border border-red-300 bg-red-100 dark:border-red-800 dark:bg-red-950/60" />
+                      Booked (Approved)
                     </span>
-                    <span className="inline-flex items-center gap-2">
-                      <span className="bg-muted h-3 w-3 rounded" />
-                      Dec/Jan blocked (unless emergency)
-                      <Switch
-                        id="calendar-emergency-override"
-                        checked={formData.emergency_override}
-                        onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, emergency_override: checked }))}
-                        aria-label="Emergency leave override"
-                      />
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded border border-amber-300 bg-amber-100 dark:border-amber-800 dark:bg-amber-950/60" />
+                      Booked (Pending)
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="border-border bg-muted h-3 w-3 rounded border opacity-60" />
+                      Dec/Jan blocked
                     </span>
                   </div>
+
+                  <div className="bg-muted/40 mt-3 flex items-center justify-between rounded-md border px-3 py-2">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="calendar-emergency-override" className="cursor-pointer text-xs font-medium">
+                        Emergency leave override
+                      </Label>
+                      <p className="text-muted-foreground text-[11px]">
+                        Allow selecting dates during the Dec/Jan blocked period
+                      </p>
+                    </div>
+                    <Switch
+                      id="calendar-emergency-override"
+                      checked={formData.emergency_override}
+                      onCheckedChange={(checked) => setFormData((prev) => ({ ...prev, emergency_override: checked }))}
+                      aria-label="Emergency leave override"
+                    />
+                  </div>
+
                   {selectedDateBooking ? (
-                    <p className="mt-2 text-xs text-amber-700">
-                      {selectedDateBooking.count} teammate(s) already booked this date:{" "}
-                      {selectedDateBooking.employees.join(", ")}
-                    </p>
+                    <div className="bg-muted/30 mt-2.5 space-y-0.5 rounded-md border p-2 text-xs">
+                      {selectedDateBooking.approved_employees && selectedDateBooking.approved_employees.length > 0 ? (
+                        <p className="text-red-700 dark:text-red-400">
+                          <span className="font-semibold">Approved leave:</span>{" "}
+                          {selectedDateBooking.approved_employees.join(", ")}
+                        </p>
+                      ) : null}
+                      {selectedDateBooking.pending_employees && selectedDateBooking.pending_employees.length > 0 ? (
+                        <p className="text-amber-700 dark:text-amber-400">
+                          <span className="font-semibold">Pending review:</span>{" "}
+                          {selectedDateBooking.pending_employees.join(", ")}
+                        </p>
+                      ) : null}
+                      {!selectedDateBooking.approved_employees?.length &&
+                      !selectedDateBooking.pending_employees?.length ? (
+                        <p className="text-amber-700 dark:text-amber-400">
+                          {selectedDateBooking.count} teammate(s) already booked this date:{" "}
+                          {selectedDateBooking.employees.join(", ")}
+                        </p>
+                      ) : null}
+                    </div>
                   ) : null}
                 </div>
               </div>

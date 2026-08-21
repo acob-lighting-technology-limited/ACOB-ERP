@@ -71,6 +71,25 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ data: { avatarUrl: signedUrl } })
 }
 
+export async function GET() {
+  const supabase = await createClient()
+  const {
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser()
+
+  if (userError || !user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  }
+
+  const dataClient = getServiceRoleClientOrFallback(supabase)
+  const { data: profile } = await dataClient.from("profiles").select("avatar_path").eq("id", user.id).maybeSingle()
+
+  const signedUrl = profile?.avatar_path ? await getAvatarSignedUrl(dataClient, profile.avatar_path) : null
+
+  return NextResponse.json({ data: { avatarUrl: signedUrl } })
+}
+
 export async function DELETE() {
   const supabase = await createClient()
   const {

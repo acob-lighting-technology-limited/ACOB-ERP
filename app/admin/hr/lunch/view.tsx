@@ -51,6 +51,7 @@ import {
   ArrowDown,
   ArrowUpDown,
   Star,
+  Eye,
 } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-client"
@@ -58,6 +59,7 @@ import { cn } from "@/lib/utils"
 import { LunchMenuBuilderDialog } from "./_components/lunch-menu-builder-dialog"
 import { LunchDeadlineDialog } from "./_components/lunch-deadline-dialog"
 import { LunchVoteOverrideDialog } from "./_components/lunch-vote-override-dialog"
+import { LunchMenuViewersDialog } from "./_components/lunch-menu-viewers-dialog"
 import {
   DEFAULT_LUNCH_SETTINGS,
   groupHeading,
@@ -66,6 +68,7 @@ import {
   type LunchMenu,
   type LunchOptionTally,
   type LunchVoteRecord,
+  type LunchMenuViewRecord,
 } from "@/lib/hr/lunch-voting"
 import { formatWATDate, formatWATTime } from "@/lib/utils/date"
 
@@ -94,6 +97,8 @@ export interface AdminLunchMenu extends LunchMenu {
   review_count?: number
   average_rating?: number | null
   reviews?: { id: string; rating: number; comment: string | null; created_at: string }[]
+  viewers?: LunchMenuViewRecord[]
+  view_count?: number
 }
 
 export interface LunchSummaryRow {
@@ -233,7 +238,13 @@ export function LunchRegisterPage({
   const [deletingMenu, setDeletingMenu] = useState<AdminLunchMenu | null>(null)
   const [archivingMenu, setArchivingMenu] = useState<AdminLunchMenu | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [overrideMenu, setOverrideMenu] = useState<AdminLunchMenu | null>(null)
+  const [overrideMenu, setOverrideMenu] = useState<AdminLunchMenu | (LunchMenu & { votes: LunchVoteRecord[] }) | null>(
+    null
+  )
+  const [overrideUserId, setOverrideUserId] = useState<string | null>(null)
+  const [viewersMenu, setViewersMenu] = useState<AdminLunchMenu | null>(null)
+  const [dailyMenu, setDailyMenu] = useState<(LunchMenu & { votes: LunchVoteRecord[] }) | null>(null)
+  const [dailyVotes, setDailyVotes] = useState<LunchVoteRecord[]>([])
 
   // Export states
   const [openExport, setOpenExport] = useState(false)
@@ -258,37 +269,36 @@ export function LunchRegisterPage({
   const yearOptions = ["2026", "2025"]
 
   // Fetch daily lunch logs when the selected date changes
+  const loadDateLogs = useCallback(async (date: string) => {
+    setFetchingLogs(true)
+    try {
+      const res = await fetch(`/api/admin/hr/lunch?date=${date}`)
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to load logs")
+
+      setAteUserIds(data.ateUserIds || [])
+      setDailyMenu(data.menu ? { ...data.menu, votes: data.votes || [] } : null)
+      setDailyVotes(data.votes || [])
+      if (data.settings) {
+        setSettings(data.settings)
+        setSettingsForm({
+          cost: data.settings.cost,
+          subsidy_percent: data.settings.subsidy_percent,
+          eating_days: data.settings.eating_days || ["Monday", "Wednesday", "Friday"],
+          voting_deadline: data.settings.voting_deadline || DEFAULT_LUNCH_SETTINGS.voting_deadline,
+        })
+      }
+    } catch (err) {
+      toast.error("Failed to load lunch register for selected date")
+    } finally {
+      setFetchingLogs(false)
+    }
+  }, [])
+
   useEffect(() => {
     if (activeTab !== "daily") return
-    if (selectedDate === todayDate && initialAteUserIds === ateUserIds) return
-
-    async function loadDateLogs() {
-      setFetchingLogs(true)
-      try {
-        const res = await fetch(`/api/admin/hr/lunch?date=${selectedDate}`)
-        const data = await res.json()
-        if (!res.ok) throw new Error(data.error || "Failed to load logs")
-
-        setAteUserIds(data.ateUserIds || [])
-        if (data.settings) {
-          setSettings(data.settings)
-          setSettingsForm({
-            cost: data.settings.cost,
-            subsidy_percent: data.settings.subsidy_percent,
-            eating_days: data.settings.eating_days || ["Monday", "Wednesday", "Friday"],
-            voting_deadline: data.settings.voting_deadline || DEFAULT_LUNCH_SETTINGS.voting_deadline,
-          })
-        }
-      } catch (err) {
-        toast.error("Failed to load lunch register for selected date")
-      } finally {
-        setFetchingLogs(false)
-      }
-    }
-
-    void loadDateLogs()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedDate, activeTab])
+    void loadDateLogs(selectedDate)
+  }, [selectedDate, activeTab, loadDateLogs])
 
   // Fetch monthly summary logs (and raw logs) when month or tab changes
   useEffect(() => {
@@ -680,14 +690,12 @@ export function LunchRegisterPage({
       label: "Employee Name",
       accessor: (row) => row.employee.full_name,
       sortable: true,
-      render: (row) => <span className="text-foreground font-semibold">{row.employee.full_name}</span>,
-    },
-    {
-      key: "department",
-      label: "Department",
-      accessor: (row) => row.employee.department || "General",
-      sortable: true,
-      render: (row) => <span className="text-muted-foreground text-sm">{row.employee.department || "General"}</span>,
+      render: (row) => (
+        <div>
+          <span className="text-foreground block font-semibold">{row.employee.full_name}</span>
+          <span className="text-muted-foreground text-xs">{row.employee.department || "General"}</span>
+        </div>
+      ),
     },
     {
       key: "employee_number",
@@ -696,17 +704,45 @@ export function LunchRegisterPage({
       render: (row) => <span className="font-mono text-xs">{row.employee.employee_number}</span>,
     },
     {
-      key: "checkbox",
-      label: "Checked",
-      render: (row) => (
-        <Checkbox
-          checked={ateUserIds.includes(row.employee.id)}
-          onCheckedChange={(checked) => {
-            void toggleEmployeeLunch(row.employee.id, !!checked)
-          }}
-          className="h-5 w-5 border-2"
-        />
-      ),
+      key: "meal_choice",
+      label: "Meal Choice / Vote",
+      render: (row) => {
+        const vote = dailyVotes.find((v) => v.user_id === row.employee.id)
+        if (!vote) {
+          return <span className="text-muted-foreground text-xs italic">No vote</span>
+        }
+        if (!vote.is_eating) {
+          return (
+            <Badge variant="outline" className="border-rose-500/30 bg-rose-500/10 text-xs font-medium text-rose-600">
+              NO — Not eating
+            </Badge>
+          )
+        }
+        const dishNames = dailyMenu?.groups
+          ? dailyMenu.groups
+              .map((g) => g.options.find((o) => o.id === vote.selections[g.id])?.name)
+              .filter(Boolean)
+              .join(" + ")
+          : "Eating"
+        return (
+          <Badge className="border-0 bg-emerald-500/10 text-xs font-medium text-emerald-600">
+            {dishNames || "Eating"}
+          </Badge>
+        )
+      },
+    },
+    {
+      key: "deduction",
+      label: "Deduction",
+      render: (row) => {
+        const hasEaten = ateUserIds.includes(row.employee.id)
+        if (!hasEaten) return <span className="text-muted-foreground text-xs">—</span>
+        return (
+          <span className="font-mono text-xs font-bold text-red-600">
+            ₦{employeeSurcharge.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+          </span>
+        )
+      },
     },
     {
       key: "status",
@@ -723,6 +759,37 @@ export function LunchRegisterPage({
           >
             {hasEaten ? "Eaten" : "Skipped"}
           </Badge>
+        )
+      },
+    },
+    {
+      key: "actions",
+      label: "Action",
+      render: (row) => {
+        if (!dailyMenu) {
+          return (
+            <Checkbox
+              checked={ateUserIds.includes(row.employee.id)}
+              onCheckedChange={(checked) => {
+                void toggleEmployeeLunch(row.employee.id, !!checked)
+              }}
+              className="h-5 w-5 border-2"
+              title="Toggle payroll lunch status"
+            />
+          )
+        }
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 text-xs font-medium"
+            onClick={() => {
+              setOverrideUserId(row.employee.id)
+              setOverrideMenu(dailyMenu)
+            }}
+          >
+            Change Choice
+          </Button>
         )
       },
     },
@@ -837,6 +904,27 @@ export function LunchRegisterPage({
                 ? "Voting open"
                 : "Deadline passed"
         return <Badge className={tone}>{label}</Badge>
+      },
+    },
+    {
+      key: "views",
+      label: "Views",
+      sortable: true,
+      accessor: (row) => row.viewers?.length ?? 0,
+      render: (row) => {
+        const count = row.viewers?.length ?? 0
+        return (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 gap-1.5 px-2 text-xs font-semibold text-blue-600 hover:bg-blue-500/10 hover:text-blue-700"
+            onClick={() => setViewersMenu(row)}
+            title="Click to view list of staff who viewed this menu"
+          >
+            <Eye className="h-3.5 w-3.5" />
+            {count}
+          </Button>
+        )
       },
     },
   ]
@@ -1976,10 +2064,30 @@ export function LunchRegisterPage({
 
       <LunchVoteOverrideDialog
         open={overrideMenu !== null}
-        onOpenChange={(open) => !open && setOverrideMenu(null)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setOverrideMenu(null)
+            setOverrideUserId(null)
+          }
+        }}
         menu={overrideMenu}
+        defaultUserId={overrideUserId}
         employees={employees.map((e) => ({ id: e.id, full_name: e.full_name }))}
-        onSaved={() => void loadMenus()}
+        onSaved={() => {
+          void loadMenus()
+          void loadDateLogs(selectedDate)
+        }}
+      />
+
+      <LunchMenuViewersDialog
+        open={viewersMenu !== null}
+        onOpenChange={(open) => !open && setViewersMenu(null)}
+        menu={viewersMenu}
+        employees={employees}
+        onOverrideVote={(employeeId) => {
+          setOverrideUserId(employeeId)
+          setOverrideMenu(viewersMenu)
+        }}
       />
 
       <LunchMenuBuilderDialog
@@ -2137,7 +2245,7 @@ function FeedbackExpandPanel({ entry }: { entry: LunchReviewSummary }) {
  * plus anyone who has not voted yet on a menu that is still open.
  */
 /**
- * What the kitchen and Admin & HR actually need off a menu: how many portions
+ * What the kitchen and Admin and HR actually need off a menu: how many portions
  * of each dish to prepare, and who gets what. Deliberately not a copy of the
  * staff poll — percentages and progress bars answer "what is winning", which
  * is not a question anybody has once voting is done.
@@ -2275,7 +2383,7 @@ function MenuVotesPanel({ menu, totalStaff }: { menu: AdminLunchMenu; totalStaff
   return (
     <div className="space-y-4">
       {/* 0 ── quick stats, mirroring the attendance expanded-row layout */}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <div>
           <p className="text-muted-foreground text-xs uppercase">Eating</p>
           <p className="font-semibold text-emerald-600">{menu.eatingCount}</p>
@@ -2289,8 +2397,17 @@ function MenuVotesPanel({ menu, totalStaff }: { menu: AdminLunchMenu; totalStaff
           <p className="font-semibold text-amber-500">{noAnswer}</p>
         </div>
         <div>
+          <p className="text-muted-foreground text-xs uppercase">Views</p>
+          <p className="font-semibold text-blue-600">
+            {menu.viewers?.length ?? 0}
+            <span className="text-muted-foreground ml-1 text-xs">
+              ({totalStaff > 0 ? Math.round(((menu.viewers?.length ?? 0) / totalStaff) * 100) : 0}%)
+            </span>
+          </p>
+        </div>
+        <div>
           <p className="text-muted-foreground text-xs uppercase">Total Staff</p>
-          <p className="font-semibold text-blue-600">{totalStaff}</p>
+          <p className="text-foreground font-semibold">{totalStaff}</p>
         </div>
       </div>
 

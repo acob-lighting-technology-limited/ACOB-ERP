@@ -39,6 +39,7 @@ import { getAssignableRolesForActor } from "@/lib/role-management"
 import { logger } from "@/lib/logger"
 import { ManageUsersDialog } from "@/components/hr/manage-users-dialog"
 import { ManageContractCategoriesDialog } from "@/components/hr/manage-contract-categories-dialog"
+import { normalizeDepartmentName } from "@/shared/departments"
 import {
   EmployeeViewModal,
   type EditForm,
@@ -133,7 +134,8 @@ interface AdminEmployeeContentProps {
 }
 
 function deriveLeadDepartments(department: string, isDepartmentLead: boolean): string[] {
-  return isDepartmentLead && department ? [department] : []
+  const canonical = normalizeDepartmentName(department)
+  return isDepartmentLead && canonical ? [canonical] : []
 }
 
 const roleList: UserRole[] = ["visitor", "employee", "admin", "super_admin", "developer"]
@@ -556,14 +558,15 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       }
 
       // 4. Update general profile fields
-      const leadDepartments = deriveLeadDepartments(editForm.department, editForm.is_department_lead)
+      const canonicalDepartment = normalizeDepartmentName(editForm.department)
+      const leadDepartments = deriveLeadDepartments(canonicalDepartment, editForm.is_department_lead)
 
       let departmentId: string | null = null
-      if (editForm.department) {
+      if (canonicalDepartment) {
         const { data: deptRow } = await supabase
           .from("departments")
           .select("id")
-          .eq("name", editForm.department)
+          .eq("name", canonicalDepartment)
           .maybeSingle()
         departmentId = deptRow?.id || null
       }
@@ -571,7 +574,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       const updateData: Database["public"]["Tables"]["profiles"]["Update"] = {
         role: editForm.role,
         admin_routes: editForm.role === "admin" ? editForm.admin_routes : null,
-        department: editForm.department,
+        department: canonicalDepartment || null,
         department_id: departmentId,
         office_location: editForm.office_location || null,
         designation: editForm.designation || null,
@@ -772,16 +775,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         label: "Role",
         sortable: true,
         accessor: (r) => r.role,
-        render: (r) => (
-          <div className="flex flex-wrap gap-1.5">
-            <Badge className={getRoleBadgeColor(r.role)}>{getRoleDisplayName(r.role)}</Badge>
-            {r.is_department_lead && (
-              <Badge variant="outline" className="border-amber-200 text-amber-600">
-                Lead
-              </Badge>
-            )}
-          </div>
-        ),
+        render: (r) => <Badge className={getRoleBadgeColor(r.role)}>{getRoleDisplayName(r.role)}</Badge>,
       },
       {
         key: "employment_type",
@@ -1113,17 +1107,18 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
                     {formatName(r.first_name)} {formatName(r.last_name)}
                   </p>
                   <p className="text-muted-foreground truncate text-xs">{r.designation || r.department}</p>
+                  {r.is_department_lead && (
+                    <div className="mt-1 flex items-center gap-1 text-xs text-amber-600">
+                      <Shield className="h-3 w-3" />
+                      <span>Dept Lead</span>
+                    </div>
+                  )}
                 </div>
                 <EmployeeStatusBadge status={r.employment_status || "active"} size="sm" />
               </div>
 
               <div className="flex flex-wrap gap-1.5">
                 <Badge className={getRoleBadgeColor(r.role)}>{getRoleDisplayName(r.role)}</Badge>
-                {r.is_department_lead && (
-                  <Badge variant="outline" className="border-amber-200 text-amber-600">
-                    Lead
-                  </Badge>
-                )}
               </div>
 
               <div className="text-muted-foreground space-y-1.5 pt-2 text-xs">

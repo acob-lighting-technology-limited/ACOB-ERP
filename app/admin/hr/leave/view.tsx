@@ -132,12 +132,12 @@ export type PersonNameRef = {
 export const STAGE_LABELS: Record<string, string> = {
   pending_reliever: "Waiting Reliever",
   pending_department_lead: "Waiting Department Lead",
-  pending_admin_hr_lead: "Waiting Admin & HR Lead",
+  pending_admin_hr_lead: "Waiting Admin and HR Lead",
   pending_md: "Waiting MD",
   pending_hcs: "Waiting HCS",
   reliever_pending: "Waiting Reliever",
   supervisor_pending: "Waiting Department Lead",
-  hr_pending: "Waiting Admin & HR Lead",
+  hr_pending: "Waiting Admin and HR Lead",
   completed: "Completed",
   rejected: "Rejected",
   cancelled: "Cancelled",
@@ -155,8 +155,8 @@ export function expectedApproverLabel(item: LeaveItem) {
     reliever_pending: "Assigned Reliever",
     pending_department_lead: "Department Lead",
     supervisor_pending: "Department Lead",
-    pending_admin_hr_lead: "Admin & HR Lead",
-    hr_pending: "Admin & HR Lead",
+    pending_admin_hr_lead: "Admin and HR Lead",
+    hr_pending: "Admin and HR Lead",
     pending_md: "Managing Director (MD)",
     pending_hcs: "Head, Corporate Services (HCS)",
   }
@@ -208,7 +208,7 @@ export function approvalStageLabel(code?: string | null) {
   const value = String(code || "").toLowerCase()
   if (value.includes("reliever")) return "Reliever"
   if (value.includes("department_lead")) return "Department Lead"
-  if (value.includes("admin_hr_lead")) return "Admin & HR Lead"
+  if (value.includes("admin_hr_lead")) return "Admin and HR Lead"
   if (value.includes("hcs")) return "HCS"
   if (value.includes("md")) return "MD"
   return formatName(code || "Stage")
@@ -764,7 +764,7 @@ export function LeaveApprovePage({
                 const stageName: Record<string, string> = {
                   reliever: "Reliever",
                   department_lead: "Department Lead",
-                  admin_hr_lead: "Admin & HR Lead",
+                  admin_hr_lead: "Admin and HR Lead",
                   hcs: "HCS",
                   md: "MD",
                 }
@@ -885,7 +885,7 @@ export function LeaveApprovePage({
                                 : stageKey === "department_lead"
                                   ? resolvePersonName(r.supervisor) || "Department Lead"
                                   : stageKey === "admin_hr_lead"
-                                    ? resolvePersonName(r.approved_by_profile) || "Admin & HR Lead"
+                                    ? resolvePersonName(r.approved_by_profile) || "Admin and HR Lead"
                                     : stageName[stageKey]
 
                             return (

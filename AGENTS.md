@@ -9,8 +9,10 @@ Do not treat a task as complete until all required checks pass:
 - `npx eslint . --ext .ts,.tsx`
 - `npx tsc --noEmit`
 - **Database Migration Execution**: If any new `.sql` migrations were created or modified under `supabase/migrations/`:
-  - Check live migration sync status: `npx supabase migration list`
-  - Push pending migrations: `npx supabase db push --include-all --yes`
+  - **Always run `npx supabase migration list` to determine actual deployment status.** This is the sole source of truth — not `git status`.
+  - A migration file that is untracked or unstaged in git is **not** automatically pending. Check the output of `migration list`: if the `remote` column is populated for that version, it has already been applied. Only flag a migration as pending if its `remote` field is empty.
+  - Do **not** infer migration status from `git status` alone. Untracked files may already be live.
+  - If any migration has an empty `remote` field, push it: `npx supabase db push --include-all --yes`
   - If a migration cannot be pushed automatically or is intentionally held back, **always explicitly state and remind the user that the SQL migration is pending and has not been pushed to the live database**.
 <!-- - `npm run build` -->
 
@@ -24,6 +26,30 @@ If a change cannot satisfy all checks or if migrations remain unapplied without 
 - Pre-commit must pass `lint-staged` including ESLint and Prettier.
 - Pre-push must pass `npm run build`.
 - Confirm the build passes locally before pushing.
+
+## Commit Grouping Strategy — Mandatory Before Any Commit
+
+**Never commit all uncommitted changes in a single `git add -A && git commit`.** When the user asks you to commit (or when committing as part of completing a task), you MUST follow this workflow:
+
+### Step 1 — Analyse before staging
+Run `git diff --stat HEAD` and `git status --short` to get the full list of modified and untracked files. Do **not** stage anything yet.
+
+### Step 2 — Group by feature domain
+Cluster files into logical groups based on their relationships. Use the following rules to determine groupings:
+
+- Files that share a feature domain belong together (e.g. all lunch-related app pages, API routes, components, lib helpers, and migrations go in one commit).
+- A migration file belongs in the **same commit** as the feature code that required it — never commit a migration separately unless it is a hotfix with no associated application code.
+- Shared infrastructure changes (`layout.tsx`, `navbar.tsx`, `constants.ts`, `lib/utils/*`, email templates, etc.) that do not belong to a single feature should be batched into a single `chore:` or `refactor:` commit.
+- Small, isolated fixes (1–3 files, unrelated to a feature) should each be their own commit.
+- Never mix unrelated features into a single commit — a commit must be coherent and independently revertable.
+
+### Step 3 — Stage and commit in order
+Stage and commit each group one at a time using `git add <specific files>` — never `git add -A` or `git add .` for the whole working tree at once.
+
+### Hard prohibitions
+- ❌ `git add -A` or `git add .` covering unrelated files
+- ❌ Committing all changes in one shot without grouping analysis
+- ❌ Splitting a feature's migration into a separate commit from its app code
 
 ## Commit Message Standard
 
@@ -75,8 +101,8 @@ Non-negotiable rules:
 8. **Review/CI gate — reject a migration if it:** creates a table without `ENABLE ROW LEVEL SECURITY` + a policy; adds a policy with role `public`/`anon` on non-public data; or defines a `SECURITY DEFINER` function without a matching `REVOKE EXECUTE ... FROM PUBLIC`.
 9. **Verify after every RLS/grant/function change** by impersonating the anon role: `BEGIN; SET LOCAL ROLE anon; <attempt the access>; ROLLBACK;` — confirm intended access is denied. Do not assume the repo reflects production; check live state.
 10. **Governance:** MFA must be enabled on all Supabase org members; direct production DDL access must be restricted; keep public sign-up (`disable_signup`) off unless a self-service flow explicitly requires it (an open `auth.users` signup lets anyone mint a valid UUID regardless of the in-app approval workflow).
-11. **Mandatory Remote Push & Live Sync Verification**: Writing a migration file in `supabase/migrations/` is only step one. The migration MUST be applied and verified against the remote database using `npx supabase migration list` and `npx supabase db push --include-all --yes`.
-12. **Enforce Pending Migration Reminders**: Never claim or imply a task is complete if its database migration exists only locally. If a migration is not yet pushed to the database for any reason, **always explicitly remind the user and clearly state that the SQL migration is pending and has not been pushed to the live database**.
+11. **Mandatory Remote Push & Live Sync Verification**: Writing a migration file in `supabase/migrations/` is only step one. Always run `npx supabase migration list` to confirm live sync status. A migration is only considered applied if its `remote` column is populated in that output. Do **not** use `git status` or the presence/absence of a local file as a proxy for deployment status — an untracked file may already be live.
+12. **Enforce Pending Migration Reminders**: Never claim or imply a task is complete if a migration's `remote` field is empty in `npx supabase migration list`. If a migration is not yet applied to the remote database for any reason, **always explicitly remind the user and clearly state that the SQL migration is pending and has not been pushed to the live database**. Conversely, do **not** flag a migration as pending purely because it is untracked or unstaged in git — verify against the live output first.
 13. **PostgreSQL View Mutation Rule**: Never use standalone `CREATE OR REPLACE VIEW` when modifying existing views if columns, column order, or data types change (PostgreSQL will reject this with `cannot drop columns from view (SQLSTATE 42P16)`). Always prefix with `DROP VIEW IF EXISTS <view_name> CASCADE;` followed by `CREATE VIEW <view_name> AS ...` and explicit grants (`GRANT SELECT ON <view_name> TO authenticated, service_role;`).
 
 ## Query Construction Rules

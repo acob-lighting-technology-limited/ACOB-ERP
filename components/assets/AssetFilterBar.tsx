@@ -230,7 +230,7 @@ export function AssetFilterBar({
               placeholder="All Years"
             />
             <SearchableMultiSelect
-              label="Office Locations"
+              label="Rooms & Offices"
               icon={<Building className="h-4 w-4" />}
               values={officeLocationFilter}
               options={officeLocations.map((location) => ({
@@ -239,7 +239,7 @@ export function AssetFilterBar({
                 icon: <Building className="h-3 w-3" />,
               }))}
               onChange={setOfficeLocationFilter}
-              placeholder="All Locations"
+              placeholder="All Rooms & Offices"
             />
             <SearchableMultiSelect
               label="Issue Status"

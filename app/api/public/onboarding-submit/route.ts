@@ -125,7 +125,7 @@ export async function POST(req: Request) {
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
-    // Notify admin & HR lead of the updated submission in the background
+    // Notify Admin and HR lead of the updated submission in the background
     void notifyAdminsOfSubmission(supabase, parsed, personalEmail)
     return NextResponse.json({ success: true, reused: true })
   }
@@ -140,7 +140,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: insertError.message }, { status: 500 })
   }
 
-  // Notify admin & HR lead of the new submission in the background
+  // Notify Admin and HR lead of the new submission in the background
   void notifyAdminsOfSubmission(supabase, parsed, personalEmail)
   return NextResponse.json({ success: true, reused: false })
 }

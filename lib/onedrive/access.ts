@@ -11,6 +11,7 @@ interface OneDriveProfile {
 
 const explicitDepartmentMappings: Record<string, string> = {
   accounts: "accounts",
+  "admin and hr": "admin-hr",
   "admin & hr": "admin-hr",
   "business, growth and innovation": "business-growth-innovation",
   "corporate services": "corporate-services",

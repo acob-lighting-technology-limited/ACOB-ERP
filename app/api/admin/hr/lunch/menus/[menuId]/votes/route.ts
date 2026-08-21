@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic"
 type RouteContext = { params: Promise<{ menuId: string }> }
 
 /**
- * Sets or clears a staff member's answer on behalf of Admin & HR.
+ * Sets or clears a staff member's answer on behalf of Admin and HR.
  *
  * Unlike the staff route this deliberately ignores the voting deadline: the
  * whole point is to fix up a day after the cut-off — somebody travelled,

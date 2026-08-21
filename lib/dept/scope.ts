@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js"
-import { normalizeDepartmentName } from "@/shared/departments"
+import { normalizeDepartmentName, normalizeDepartmentList, isSameDepartment } from "@/shared/departments"
 
 export interface DeptScope {
   userId: string
@@ -60,11 +60,11 @@ export async function resolveDeptScope(
 
   const normalizedDeptName = normalizeDepartmentName(dept.name)
 
-  // Verify ownership — either via lead_departments name match or department_id match
+  // Verify ownership — via lead_departments / primary department or department_id match
   const leadDepts: string[] = Array.isArray(profile.lead_departments) ? profile.lead_departments : []
-  const normalizedLeadDepts = leadDepts.map((d) => normalizeDepartmentName(d))
+  const normalizedLeadDepts = normalizeDepartmentList([profile.department, ...leadDepts])
 
-  const leadsByName = normalizedLeadDepts.includes(normalizedDeptName)
+  const leadsByName = normalizedLeadDepts.some((d) => isSameDepartment(d, normalizedDeptName))
   const leadsByDeptId = profile.department_id === deptId
 
   if (!leadsByName && !leadsByDeptId) return null

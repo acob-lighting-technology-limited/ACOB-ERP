@@ -102,27 +102,50 @@ export async function GET() {
       })
     )
 
-    const bookedByDate = new Map<string, Set<string>>()
+    type BookedDetail = {
+      approvedEmployees: Set<string>
+      pendingEmployees: Set<string>
+    }
+    const bookedByDate = new Map<string, BookedDetail>()
     for (const row of (leaveRows || []) as LeaveRangeRow[]) {
       const fromDate = parseIsoDate(row.start_date)
       const toDate = parseIsoDate(row.end_date)
+      const isApproved = row.status === "approved"
       for (let cursor = new Date(fromDate); cursor <= toDate; cursor.setDate(cursor.getDate() + 1)) {
         const iso = toIsoLocalDate(cursor)
         if (iso < startIso || iso > endIso) continue
-        const current = bookedByDate.get(iso) || new Set<string>()
+        const current = bookedByDate.get(iso) || {
+          approvedEmployees: new Set<string>(),
+          pendingEmployees: new Set<string>(),
+        }
         const name = nameByUserId.get(row.user_id) || row.user_id
-        current.add(name)
+        if (isApproved) {
+          current.approvedEmployees.add(name)
+        } else {
+          current.pendingEmployees.add(name)
+        }
         bookedByDate.set(iso, current)
       }
     }
 
     const departmentBookedDates = Array.from(bookedByDate.entries())
       .sort((left, right) => left[0].localeCompare(right[0]))
-      .map(([date, employees]) => ({
-        date,
-        count: employees.size,
-        employees: Array.from(employees).sort((a, b) => a.localeCompare(b)),
-      }))
+      .map(([date, detail]) => {
+        const approved = Array.from(detail.approvedEmployees).sort((a, b) => a.localeCompare(b))
+        const pending = Array.from(detail.pendingEmployees).sort((a, b) => a.localeCompare(b))
+        const allEmployees = Array.from(new Set([...approved, ...pending])).sort((a, b) => a.localeCompare(b))
+        const status: "approved" | "pending" | "both" =
+          approved.length > 0 && pending.length > 0 ? "both" : approved.length > 0 ? "approved" : "pending"
+
+        return {
+          date,
+          status,
+          count: allEmployees.length,
+          employees: allEmployees,
+          approved_employees: approved,
+          pending_employees: pending,
+        }
+      })
 
     return NextResponse.json({
       data: {

@@ -27,7 +27,7 @@ import { cn, formatName } from "@/lib/utils"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { toLocalISODate } from "@/lib/utils/date"
 import { useDepartments } from "@/hooks/use-departments"
-import { OFFICE_LOCATIONS } from "@/lib/office-locations"
+import { OFFICE_LOCATIONS } from "@/lib/rooms-and-offices"
 
 import { logger } from "@/lib/logger"
 import { apiFetch } from "@/lib/api-client"
@@ -534,11 +534,11 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                             }
                           />
                           <DetailRow
-                            label="Office Location"
+                            label="Office / Room"
                             value={
                               <Select value={officeLocation} onValueChange={setOfficeLocation}>
                                 <SelectTrigger className="h-8 w-full border-0 bg-transparent text-left font-medium shadow-none focus:ring-0">
-                                  <SelectValue placeholder="Select Location" />
+                                  <SelectValue placeholder="Select Office / Room" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   {OFFICE_LOCATIONS.map((loc: string) => (

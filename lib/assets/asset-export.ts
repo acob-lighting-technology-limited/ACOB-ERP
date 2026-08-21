@@ -1,7 +1,7 @@
 import { toast } from "sonner"
 import { formatName } from "@/lib/utils"
 import { ASSET_TYPE_MAP } from "@/lib/asset-types"
-import { getDepartmentForOffice } from "@/lib/office-locations"
+import { getDepartmentForOffice } from "@/lib/rooms-and-offices"
 import { logger } from "@/lib/logger"
 import { toLocalISODate, formatWATDate } from "@/lib/utils/date"
 

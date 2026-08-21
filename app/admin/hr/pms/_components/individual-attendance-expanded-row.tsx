@@ -146,7 +146,7 @@ export function IndividualAttendanceExpandedRow({
                   <td className="px-4 py-2">{formatTime(rec?.clock_in)}</td>
                   <td className="px-4 py-2">{formatTime(rec?.clock_out)}</td>
                   <td className="px-4 py-2">
-                    <StatusBadge status={day.status} waived={rec?.waived} />
+                    <StatusBadge status={day.status} waived={rec?.waived} record={rec} recordDate={day.date} />
                   </td>
                   <td className="text-muted-foreground px-4 py-2 text-xs">{labelSource(rec)}</td>
                 </tr>

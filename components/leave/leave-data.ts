@@ -1,13 +1,18 @@
 import type { LeaveBalance, LeaveRequest, LeaveType } from "@/app/(app)/leave/page"
 import { toLocalISODate } from "@/lib/utils/date"
 
+export type LeaveDepartmentBookedDate = {
+  date: string
+  status?: "approved" | "pending" | "both"
+  count: number
+  employees: string[]
+  approved_employees?: string[]
+  pending_employees?: string[]
+}
+
 export type LeaveCalendarData = {
   blackout_months: number[]
-  department_booked_dates: Array<{
-    date: string
-    count: number
-    employees: string[]
-  }>
+  department_booked_dates: LeaveDepartmentBookedDate[]
 }
 
 export type LeaveRelieverDebug = {

@@ -180,3 +180,15 @@ export function formatWATRelative(date: string | Date): string {
   }
   return d.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: WAT })
 }
+
+/**
+ * Format a timestamp as "HH:mm, DD MMM YYYY" in WAT (e.g., "08:58, 20 Aug 2026").
+ */
+export function formatWATTimeDate(date: string | Date | null | undefined): string {
+  if (!date) return "-"
+  const d = new Date(date)
+  if (Number.isNaN(d.getTime())) return "-"
+  const time = d.toLocaleTimeString("en-GB", { timeZone: WAT, hour: "2-digit", minute: "2-digit", hour12: false })
+  const dateStr = d.toLocaleDateString("en-GB", { timeZone: WAT, day: "numeric", month: "short", year: "numeric" })
+  return `${time}, ${dateStr}`
+}

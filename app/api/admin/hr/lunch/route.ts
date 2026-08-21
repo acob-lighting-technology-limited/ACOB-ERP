@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getRequestScope } from "@/lib/admin/api-scope"
+import { loadMenuForDate, loadVotesForMenu } from "@/lib/hr/lunch-menu-server"
 import { logger } from "@/lib/logger"
 
 const log = logger("api-admin-hr-lunch")
@@ -83,8 +84,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Missing date or month parameter" }, { status: 400 })
     }
 
-    // Fetch lunch settings, logs for the date, and active employees
-    const [settingsRes, logsRes, employeesRes] = await Promise.all([
+    // Fetch lunch settings, logs for the date, active employees, and menu with votes
+    const [settingsRes, logsRes, employeesRes, menu] = await Promise.all([
       dataClient.from("system_settings").select("value").eq("key", "lunch_settings").maybeSingle(),
       dataClient.from("attendance_lunch_log").select("user_id").eq("date", date),
       dataClient
@@ -92,16 +93,20 @@ export async function GET(request: NextRequest) {
         .select("id, full_name, employee_number, department")
         .eq("employment_status", "active")
         .order("full_name"),
+      loadMenuForDate(dataClient, date, { includeDrafts: true }),
     ])
 
     const settings = settingsRes.data?.value || { cost: 2200, subsidy_percent: 50 }
     const ateUserIds = logsRes.data?.map((log) => log.user_id) || []
     const employees = employeesRes.data || []
+    const votes = menu ? await loadVotesForMenu(dataClient, menu.id) : []
 
     return NextResponse.json({
       settings,
       ateUserIds,
       employees,
+      menu,
+      votes,
     })
   } catch (error) {
     log.error({ err: String(error) }, "Error in GET /api/admin/hr/lunch")

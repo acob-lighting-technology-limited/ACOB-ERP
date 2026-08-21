@@ -7,6 +7,7 @@ import { writeAuditLog } from "@/lib/audit/write-audit"
 import { enforceRouteAccessV2, requireAccessContextV2 } from "@/lib/admin/api-guard-v2"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { toLocalISODate } from "@/lib/utils/date"
+import { getCoveredQuarterlyCycles, isQuarterlyCycle, rollupQuarterlyScores } from "@/lib/pms/cadence"
 
 const log = logger("hr-performance-cbt")
 
@@ -182,6 +183,49 @@ export async function GET(request: NextRequest) {
         ...score,
         tab_switch_count: tabSwitchByKey.get(`${score.user_id}:${score.review_cycle_id}`) ?? 0,
       }))
+
+      // Compute multi-quarter rollups (H1, H2, FY) from quarterly scores
+      const allCycles = cycles || []
+      const multiQuarterCycles = allCycles.filter((c) => !isQuarterlyCycle(c.review_type, c.name))
+      const quarterlyScoreByUserAndCycle = new Map<string, CbtReviewRow>()
+      for (const score of cbtScores) {
+        quarterlyScoreByUserAndCycle.set(`${score.user_id}:${score.review_cycle_id}`, score)
+      }
+
+      const rolledUpScores: CbtReviewRow[] = []
+      for (const parentCycle of multiQuarterCycles) {
+        const covered = getCoveredQuarterlyCycles(parentCycle, allCycles)
+        const coveredIds = covered.map((q) => q.id)
+        if (coveredIds.length === 0) continue
+
+        for (const u of scopedUsers) {
+          const userQuarterlyRows: CbtReviewRow[] = []
+          for (const qid of coveredIds) {
+            const row = quarterlyScoreByUserAndCycle.get(`${u.id}:${qid}`)
+            if (row && typeof row.cbt_score === "number") {
+              userQuarterlyRows.push(row)
+            }
+          }
+
+          const quarterlyValues = userQuarterlyRows.map((r) => r.cbt_score)
+          const rolledUpScore = rollupQuarterlyScores(quarterlyValues)
+
+          if (rolledUpScore !== null) {
+            const totalTabSwitches = userQuarterlyRows.reduce((sum, r) => sum + (r.tab_switch_count ?? 0), 0)
+            rolledUpScores.push({
+              id: `rollup-${u.id}-${parentCycle.id}`,
+              user_id: u.id,
+              review_cycle_id: parentCycle.id,
+              cbt_score: rolledUpScore,
+              tab_switch_count: totalTabSwitches,
+              created_at: new Date().toISOString(),
+              status: "completed",
+            })
+          }
+        }
+      }
+
+      cbtScores = [...cbtScores, ...rolledUpScores]
 
       const reviewerIds = Array.from(
         new Set(cbtScores.map((review) => review.reviewer_id).filter((value): value is string => Boolean(value)))

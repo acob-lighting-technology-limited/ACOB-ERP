@@ -339,17 +339,23 @@ export async function POST(request: NextRequest) {
     }
 
     if (existingAttempt) {
-      isResume = true
-      sessionAttemptId = existingAttempt.id
-      sessionQuestions = await loadAttemptQuestions(existingAttempt.question_ids)
+      sessionQuestions = await loadAttemptQuestions(existingAttempt.question_ids || [])
 
-      if (sessionQuestions.length === 0) {
-        return NextResponse.json(
-          { error: "Failed to load assigned questions for your existing session." },
-          { status: 500 }
+      if (sessionQuestions.length > 0) {
+        isResume = true
+        sessionAttemptId = existingAttempt.id
+      } else {
+        // Questions were deleted, replaced, or migrated since this attempt started.
+        // Clean up the orphaned attempt so the candidate can start fresh without error.
+        log.warn(
+          { attemptId: existingAttempt.id, profileId: profile.id, reviewCycleId: review_cycle_id },
+          "Existing in_progress CBT attempt had orphaned question IDs; cleaning up stale attempt"
         )
+        await supabase.from("cbt_attempts").delete().eq("id", existingAttempt.id)
       }
-    } else {
+    }
+
+    if (sessionQuestions.length === 0) {
       // 2. Fetch all active standard questions for the review cycle
       const { data: allQuestions, error: questionsError } = await supabase
         .from("cbt_questions")

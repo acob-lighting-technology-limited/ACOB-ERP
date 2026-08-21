@@ -176,8 +176,7 @@ export function OfficeLocationsPage({
           body: JSON.stringify(payload),
         })
         if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to update office location")
-
-        toast.success("Office location updated successfully")
+        toast.success("Room / Office updated successfully")
         await cascadeRename("office_location", oldName, newName)
       } else {
         const res = await apiFetch("/api/admin/hr/office-locations", {
@@ -186,7 +185,7 @@ export function OfficeLocationsPage({
           body: JSON.stringify(payload),
         })
         if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || "Failed to create office location")
-        toast.success("Office location created successfully")
+        toast.success("Room / Office created successfully")
       }
 
       setIsDialogOpen(false)
@@ -195,14 +194,14 @@ export function OfficeLocationsPage({
       void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminOfficeLocations() })
     } catch (err: unknown) {
       log.error("Error saving office location:", err)
-      const message = err instanceof Error ? err.message : "Failed to save office location"
+      const message = err instanceof Error ? err.message : "Failed to save room / office"
       toast.error(message)
     }
   }
 
   function openEditDialog(location: OfficeLocation) {
     if (!canManageLocations) {
-      toast.error("You can view office locations but cannot edit them")
+      toast.error("You can view rooms & offices but cannot edit them")
       return
     }
     setEditingLocation(location)
@@ -218,7 +217,7 @@ export function OfficeLocationsPage({
 
   function openCreateDialog() {
     if (!canManageLocations) {
-      toast.error("You can view office locations but cannot create them")
+      toast.error("You can view rooms & offices but cannot create them")
       return
     }
     setEditingLocation(null)
@@ -315,8 +314,8 @@ export function OfficeLocationsPage({
 
   return (
     <DataTablePage
-      title="Office Locations"
-      description="Manage office locations and the employees assigned to each location."
+      title="Rooms & Offices"
+      description="Manage company rooms, office spaces, and employee seat allocations."
       icon={MapPin}
       backLink={{ href: backLinkHref ?? "/admin/hr", label: "Back to HR" }}
       actions={
@@ -325,22 +324,22 @@ export function OfficeLocationsPage({
             <DialogTrigger asChild>
               <Button onClick={openCreateDialog} size="sm" className="gap-2">
                 <Plus className="h-4 w-4" />
-                Add Location
+                Add Room / Office
               </Button>
             </DialogTrigger>
             <DialogContent className="max-h-[90vh] w-[95vw] max-w-lg overflow-y-auto">
               <form onSubmit={handleSubmit}>
                 <DialogHeader>
-                  <DialogTitle>{editingLocation ? "Edit Office Location" : "Add Office Location"}</DialogTitle>
+                  <DialogTitle>{editingLocation ? "Edit Room / Office" : "Add Room / Office"}</DialogTitle>
                   <DialogDescription>
                     {editingLocation
-                      ? "Update the office location details below."
-                      : "Add a new office location to the system."}
+                      ? "Update the room or office space details below."
+                      : "Add a new room or office space to the system."}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="name">Location Name</Label>
+                    <Label htmlFor="name">Room / Office Name</Label>
                     <Input
                       id="name"
                       value={formData.name}
@@ -350,7 +349,7 @@ export function OfficeLocationsPage({
                     />
                   </div>
                   <div className="grid gap-2">
-                    <Label htmlFor="type">Location Type</Label>
+                    <Label htmlFor="type">Space Type</Label>
                     <Select value={formData.type} onValueChange={(value) => setFormData({ ...formData, type: value })}>
                       <SelectTrigger id="type">
                         <SelectValue placeholder="Select type" />
@@ -391,7 +390,7 @@ export function OfficeLocationsPage({
                       id="description"
                       value={formData.description}
                       onChange={(event) => setFormData({ ...formData, description: event.target.value })}
-                      placeholder="Brief description of this location..."
+                      placeholder="Brief description of this room or office..."
                       rows={3}
                     />
                   </div>
@@ -418,7 +417,7 @@ export function OfficeLocationsPage({
       stats={
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard
-            title="Total Locations"
+            title="Total Spaces"
             value={locations.length}
             icon={MapPin}
             iconBgColor="bg-blue-500/10"
@@ -454,7 +453,7 @@ export function OfficeLocationsPage({
         filters={filters}
         getRowId={(location) => location.id}
         pagination={{ pageSize: 20 }}
-        searchPlaceholder="Search location name, type, department, or description..."
+        searchPlaceholder="Search room/office name, type, department, or description..."
         searchFn={(location, query) =>
           [
             location.name,
@@ -474,7 +473,7 @@ export function OfficeLocationsPage({
           render: (location) => {
             const members = locationEmployees[location.name] || []
             return members.length === 0 ? (
-              <p className="text-muted-foreground text-sm">No employees assigned to this location.</p>
+              <p className="text-muted-foreground text-sm">No employees assigned to this room/office.</p>
             ) : (
               <div className="space-y-3">
                 <p className="text-sm font-medium">{members.length} assigned employees</p>
@@ -521,8 +520,8 @@ export function OfficeLocationsPage({
         }}
         viewToggle
         cardRenderer={(location) => <LocationCard location={location} onEdit={openEditDialog} />}
-        emptyTitle="No office locations yet"
-        emptyDescription="Create your first office location to start organizing workplace assignments."
+        emptyTitle="No rooms or offices yet"
+        emptyDescription="Create your first room or office to start organizing workplace assignments."
         emptyIcon={MapPin}
         skeletonRows={5}
       />

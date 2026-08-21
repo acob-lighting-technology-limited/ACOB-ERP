@@ -71,14 +71,15 @@ export const SLA_LOW_DAYS = 7
 // Special departments used in routing / escalation logic
 // ---------------------------------------------------------------------------
 
-/**
- * Department that houses the Managing Director (MD).
- * Referenced in leave-approval routing and asset-notification escalation.
- */
-export const DEPT_EXECUTIVE_MANAGEMENT = "Executive Management"
-
-/**
- * Department that houses the Head of Corporate Services (HCS).
- * Referenced in leave-approval routing and asset-notification escalation.
- */
-export const DEPT_CORPORATE_SERVICES = "Corporate Services"
+export {
+  DEPT_ACCOUNTS,
+  DEPT_ADMIN_HR,
+  DEPT_BGI,
+  DEPT_CORPORATE_SERVICES,
+  DEPT_EXECUTIVE_MANAGEMENT,
+  DEPT_ITC,
+  DEPT_OPM,
+  DEPT_PROJECT,
+  DEPT_REGULATORY,
+  DEPT_TECHNICAL,
+} from "@/shared/departments"

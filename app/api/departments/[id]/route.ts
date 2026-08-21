@@ -8,6 +8,7 @@ import { writeAuditLog } from "@/lib/audit/write-audit"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { isAssignableEmploymentStatus } from "@/lib/workforce/assignment-policy"
+import { DEPT_ADMIN_HR, isSameDepartment } from "@/shared/departments"
 
 const log = logger("departments")
 
@@ -116,7 +117,8 @@ export async function PUT(request: Request, props: { params: Promise<{ id: strin
 
     const scope = await resolveAdminScope(supabase as DepartmentsClient, user.id)
     const managedDepartments = scope?.managedDepartments || []
-    const canManageDepartments = !!scope && (scope.isAdminLike || managedDepartments.includes("Admin & HR"))
+    const canManageDepartments =
+      !!scope && (scope.isAdminLike || managedDepartments.some((dept) => isSameDepartment(dept, DEPT_ADMIN_HR)))
     if (!canManageDepartments) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
@@ -195,7 +197,8 @@ export async function DELETE(request: Request, props: { params: Promise<{ id: st
 
     const scope = await resolveAdminScope(supabase as DepartmentsClient, user.id)
     const managedDepartments = scope?.managedDepartments || []
-    const canManageDepartments = !!scope && (scope.isAdminLike || managedDepartments.includes("Admin & HR"))
+    const canManageDepartments =
+      !!scope && (scope.isAdminLike || managedDepartments.some((dept) => isSameDepartment(dept, DEPT_ADMIN_HR)))
     if (!canManageDepartments) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
