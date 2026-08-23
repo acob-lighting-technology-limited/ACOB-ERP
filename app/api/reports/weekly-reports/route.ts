@@ -76,7 +76,7 @@ async function canMutateWeek(supabase: ReportsClient, week: number, year: number
 function parseTasksNewWeekLines(tasksNewWeek: string): string[] {
   return tasksNewWeek
     .split(/\r?\n/)
-    .map((line) => line.replace(/^\s*(?:\d+[.)]\s*|[-*]\s*)/, "").trim())
+    .map((line) => line.replace(/^(?:\s*(?:\d+[.)]\s*|[-*]\s*))+/, "").trim())
     .filter(Boolean)
 }
 
@@ -95,25 +95,29 @@ export async function PATCH(request: Request) {
 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
-    // Department leads and admins get full RBAC-scoped access. Plain employees
-    // (not leads, not admin-like) aren't covered by the admin-scope machinery
-    // at all, but they may still submit their own department's weekly report —
-    // resolve that narrowly here rather than widening the shared admin scope.
+    // Department leads and admins granted the Weekly Reports admin route get
+    // full RBAC-scoped access. Everyone else — plain employees, and admins who
+    // simply weren't granted this particular route — still gets the baseline
+    // capability every staff member has: submitting their own department's
+    // weekly report. Not having the admin route only removes the cross-
+    // department admin view; it must not block someone from reporting on
+    // their own department like anyone else on the regular dashboard.
     const contextResult = await requireAccessContextV2()
     let accessContext: AccessContextV2 | null = null
     let employeeOwnDepartment: string | null = null
 
     if (contextResult.ok) {
       const routeAccess = enforceRouteAccessV2(contextResult.context, "reports.weekly")
-      if (!routeAccess.ok) {
-        return routeAccess.response
+      if (routeAccess.ok) {
+        accessContext = contextResult.context
       }
-      accessContext = contextResult.context
-    } else {
+    }
+
+    if (!accessContext) {
       const { data: profile } = await supabase.from("profiles").select("department").eq("id", user.id).maybeSingle()
       employeeOwnDepartment = profile?.department ? normalizeDepartmentName(profile.department) : null
       if (!employeeOwnDepartment) {
-        return contextResult.response
+        return NextResponse.json({ error: "You cannot manage reports for this department" }, { status: 403 })
       }
     }
 

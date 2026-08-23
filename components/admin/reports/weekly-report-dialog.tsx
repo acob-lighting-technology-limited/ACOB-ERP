@@ -50,7 +50,7 @@ const autoNumberReportText = (text: string): string => {
     .split("\n")
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
-    .map((line) => line.replace(/^\s*(?:\d+[.)]\s*|[-*]\s+)/, "").trim())
+    .map((line) => line.replace(/^(?:\s*(?:\d+[.)]\s*|[-*]\s+))+/, "").trim())
     .filter((line) => line.length > 0)
 
   if (lines.length === 0) return ""
@@ -426,13 +426,18 @@ export function WeeklyReportAdminDialog({
 
           {REPORT_TEXT_FIELDS.map((f) => (
             <div key={f} className="space-y-2">
-              <Label className="capitalize">{f.replace(/_/g, " ")}</Label>
+              <Label className="capitalize">
+                {f.replace(/_/g, " ")}
+                {f === "challenges" && (
+                  <span className="text-muted-foreground ml-1 font-normal normal-case">(leave blank if none)</span>
+                )}
+              </Label>
               <Textarea
                 value={formData[f]}
                 onChange={(e) => handleTextChange(f, e.target.value)}
                 onPaste={(e) => handleTextPaste(e, f)}
                 onKeyDown={(e) => handleKey(e, f)}
-                placeholder={`1. ...`}
+                placeholder={f === "challenges" ? "Leave blank if there are no challenges" : `1. ...`}
                 rows={4}
                 disabled={f === "tasks_new_week" && isNextWeekActive}
               />

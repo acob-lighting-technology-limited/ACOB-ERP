@@ -43,7 +43,7 @@ function getNewestIsoTimestamp(rows: TimestampedRow[]): string | null {
 function parseTasksNewWeekLines(tasksNewWeek: string): string[] {
   return tasksNewWeek
     .split(/\r?\n/)
-    .map((line) => line.replace(/^\s*(?:\d+[.)]\s*|[-*]\s*)/, "").trim())
+    .map((line) => line.replace(/^(?:\s*(?:\d+[.)]\s*|[-*]\s*))+/, "").trim())
     .filter(Boolean)
 }
 
