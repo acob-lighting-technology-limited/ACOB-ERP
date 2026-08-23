@@ -219,7 +219,7 @@ export const autoNumberLines = (text: string): string => {
     .filter((l) => l.trim().length > 0)
     .map((line) =>
       sanitizeLine(line)
-        .replace(/^\d+[.)]\s*/, "")
+        .replace(/^(?:\s*\d+[.)]\s*)+/, "")
         .trim()
     )
     .filter((line) => line.length > 0)
@@ -1697,7 +1697,7 @@ export const exportToXLSX = async (report: WeeklyReport, meetingDate?: string) =
       Year: report.year,
       Section: section,
       "Item #": index + 1,
-      Item: line.replace(/^\d+[.)]\s*/, "").trim(),
+      Item: line.replace(/^(?:\s*\d+[.)]\s*)+/, "").trim(),
     }))
   }
 
@@ -1754,7 +1754,7 @@ export const exportAllToXLSX = async (reports: WeeklyReport[], week: number, yea
       Year: report.year,
       Section: section,
       "Item #": index + 1,
-      Item: line.replace(/^\d+[.)]\s*/, "").trim(),
+      Item: line.replace(/^(?:\s*\d+[.)]\s*)+/, "").trim(),
     }))
   }
 
