@@ -513,6 +513,7 @@ export function PmsMetricTabsPage({
       render: (values, onChange) => (
         <Select
           value={values[0] || cycleType}
+          disabled={isRefreshing}
           onValueChange={(value) => {
             const next = value as PmsCadence
             onChange([next])
@@ -556,6 +557,7 @@ export function PmsMetricTabsPage({
         return (
           <Select
             value={currentValue}
+            disabled={isRefreshing}
             onValueChange={(id) => {
               onChange([id])
               setCycleId(id)
@@ -595,7 +597,7 @@ export function PmsMetricTabsPage({
       })
     }
     return result
-  }, [tab, data, cycleId, cycleType, setCycleType])
+  }, [tab, data, cycleId, cycleType, setCycleType, isRefreshing])
 
   const tableRowActions = useMemo<RowAction<Record<string, unknown>>[] | undefined>(() => {
     if (tab === "individual" && (metric === "attendance" || metric === "behaviour")) {
@@ -722,7 +724,7 @@ export function PmsMetricTabsPage({
         filters={tableFilters}
         getRowId={(row) => String(row.user_id || row.department || row.cycle || JSON.stringify(row).slice(0, 40))}
         pagination={{ pageSize: 50 }}
-        isLoading={isInitialLoading}
+        isLoading={isInitialLoading || isRefreshing}
         skeletonRows={6}
         rowActions={tableRowActions}
         forceRowActionsDropdown={true}
