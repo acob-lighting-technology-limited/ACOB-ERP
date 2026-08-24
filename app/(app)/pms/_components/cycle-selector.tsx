@@ -1,6 +1,7 @@
 "use client"
 
-import { useMemo } from "react"
+import { useMemo, useTransition } from "react"
+import { Loader2 } from "lucide-react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { CADENCE_OPTIONS, cycleOptionLabel, matchesCadence, pickCurrentCycle, type PmsCadence } from "@/lib/pms/cadence"
@@ -25,6 +26,7 @@ export function CycleSelector({ cycles, activeCycleId, showLabel = false }: Cycl
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const [cadence, setCadence] = usePmsCadence()
+  const [isPending, startTransition] = useTransition()
 
   const visibleCycles = useMemo(
     () => cycles.filter((cycle) => matchesCadence(cadence, cycle.reviewType, cycle.name)),
@@ -52,7 +54,13 @@ export function CycleSelector({ cycles, activeCycleId, showLabel = false }: Cycl
   function handleSelect(newCycleId: string) {
     const params = new URLSearchParams(searchParams.toString())
     params.set("cycle_id", newCycleId)
-    router.push(`${pathname}?${params.toString()}`)
+    // Wrapping in startTransition is what makes the route's loading.tsx
+    // (a skeleton) actually engage for this navigation. Without it, Next
+    // re-fetches the server component silently and the page just sits on
+    // stale data with zero visual sign that anything is happening.
+    startTransition(() => {
+      router.push(`${pathname}?${params.toString()}`)
+    })
   }
 
   function handleCadence(value: string) {
@@ -69,7 +77,7 @@ export function CycleSelector({ cycles, activeCycleId, showLabel = false }: Cycl
   return (
     <div className="flex w-full items-center gap-2">
       {showLabel && <span className="text-muted-foreground hidden text-xs font-medium sm:inline">Review Cycle:</span>}
-      <Select value={cadence} onValueChange={handleCadence}>
+      <Select value={cadence} onValueChange={handleCadence} disabled={isPending}>
         <SelectTrigger className="border-border bg-card hover:bg-accent/50 h-9 w-[130px] shrink-0 text-xs shadow-xs transition-colors">
           <SelectValue placeholder="Cadence" />
         </SelectTrigger>
@@ -81,7 +89,7 @@ export function CycleSelector({ cycles, activeCycleId, showLabel = false }: Cycl
           ))}
         </SelectContent>
       </Select>
-      <Select value={selectedValue} onValueChange={handleSelect}>
+      <Select value={selectedValue} onValueChange={handleSelect} disabled={isPending}>
         <SelectTrigger className="border-border bg-card hover:bg-accent/50 h-9 w-full text-xs shadow-xs transition-colors sm:w-[220px]">
           <SelectValue placeholder={visibleCycles.length === 0 ? "No cycles for this cadence" : "Select Cycle"} />
         </SelectTrigger>
@@ -100,6 +108,7 @@ export function CycleSelector({ cycles, activeCycleId, showLabel = false }: Cycl
           ))}
         </SelectContent>
       </Select>
+      {isPending && <Loader2 className="text-muted-foreground h-4 w-4 shrink-0 animate-spin" />}
     </div>
   )
 }

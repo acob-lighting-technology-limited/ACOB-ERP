@@ -10,6 +10,7 @@ import { StatCard } from "@/components/ui/stat-card"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { apiFetch } from "@/lib/api-client"
+import { useCycleFilters, type CycleFilterCycle } from "@/components/pms/use-cycle-filters"
 
 type PlanAction = {
   id: string
@@ -31,6 +32,7 @@ type DevelopmentPlan = {
   progress_pct: number | null
   completed_at: string | null
   created_at: string
+  review_cycle_id: string | null
   actions?: PlanAction[]
 }
 
@@ -70,6 +72,7 @@ function planProgress(plan: DevelopmentPlan) {
 
 export default function DevelopmentPlansPage() {
   const [plans, setPlans] = useState<DevelopmentPlan[]>([])
+  const [cycles, setCycles] = useState<CycleFilterCycle[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -77,10 +80,15 @@ export default function DevelopmentPlansPage() {
     setIsLoading(true)
     setError(null)
     try {
-      const res = await apiFetch("/api/hr/performance/development-plans")
-      const data = (await res.json().catch(() => ({}))) as { data?: DevelopmentPlan[]; error?: string }
-      if (!res.ok) throw new Error(data.error || "Failed to load plans")
+      const [plansRes, cyclesRes] = await Promise.all([
+        apiFetch("/api/hr/performance/development-plans"),
+        apiFetch("/api/hr/performance/cycles"),
+      ])
+      const data = (await plansRes.json().catch(() => ({}))) as { data?: DevelopmentPlan[]; error?: string }
+      const cyclesData = (await cyclesRes.json().catch(() => ({}))) as { data?: CycleFilterCycle[] }
+      if (!plansRes.ok) throw new Error(data.error || "Failed to load plans")
       setPlans(data.data || [])
+      setCycles(cyclesData.data || [])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load")
     } finally {
@@ -91,6 +99,13 @@ export default function DevelopmentPlansPage() {
   useEffect(() => {
     void loadPlans()
   }, [loadPlans])
+
+  const { filters: cycleFilters } = useCycleFilters<DevelopmentPlan>({
+    cycles,
+    getRowCycleId: (plan) => plan.review_cycle_id,
+    cycleKey: "review_cycle",
+    cycleLabel: "Quarter",
+  })
 
   async function markActionDone(planId: string, actionId: string) {
     try {
@@ -195,6 +210,7 @@ export default function DevelopmentPlansPage() {
 
   const filters = useMemo<DataTableFilter<DevelopmentPlan>[]>(
     () => [
+      ...cycleFilters,
       {
         key: "status",
         label: "Status",
@@ -215,7 +231,7 @@ export default function DevelopmentPlansPage() {
         ],
       },
     ],
-    []
+    [cycleFilters]
   )
 
   return (

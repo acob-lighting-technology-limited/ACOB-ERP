@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { useCycleFilters, type CycleFilterCycle } from "@/components/pms/use-cycle-filters"
 
 type Profile = {
   id: string
@@ -29,11 +30,7 @@ type Profile = {
   department: string | null
 }
 
-type Cycle = {
-  id: string
-  name: string
-  status: string | null
-}
+type Cycle = CycleFilterCycle
 
 type PeerFeedbackRow = {
   id: string
@@ -168,6 +165,13 @@ export default function PeerFeedbackPage() {
       ? Math.round((receivedFeedback.reduce((sum, f) => sum + f.score, 0) / receivedFeedback.length) * 100) / 100
       : null
 
+  const { filters: cycleFilters } = useCycleFilters<PeerFeedbackRow>({
+    cycles,
+    getRowCycleId: (f) => f.review_cycle_id,
+    cycleKey: "review_cycle",
+    cycleLabel: "Quarter",
+  })
+
   const givenColumns = useMemo<DataTableColumn<PeerFeedbackRow>[]>(
     () => [
       {
@@ -276,6 +280,7 @@ export default function PeerFeedbackPage() {
         <DataTable<PeerFeedbackRow>
           data={rows}
           columns={givenColumns}
+          filters={cycleFilters}
           getRowId={(f) => f.id}
           searchPlaceholder="Search colleague name..."
           searchFn={(f, query) => formatName(f.subject).toLowerCase().includes(query.toLowerCase())}
@@ -293,6 +298,7 @@ export default function PeerFeedbackPage() {
         <DataTable<PeerFeedbackRow>
           data={rows}
           columns={receivedColumns}
+          filters={cycleFilters}
           getRowId={(f) => f.id}
           searchPlaceholder="Search feedback..."
           searchFn={() => true}
