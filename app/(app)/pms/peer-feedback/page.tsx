@@ -3,14 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { CheckCircle2, Loader2, MessageSquare, Send, Users } from "lucide-react"
 import { toast } from "sonner"
-import { PageHeader, PageWrapper } from "@/components/layout"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
+import { StatCard } from "@/components/ui/stat-card"
+import { DataTable, DataTablePage } from "@/components/ui/data-table"
+import type { DataTableColumn } from "@/components/ui/data-table"
 import { apiFetch } from "@/lib/api-client"
 import {
   Dialog,
@@ -63,6 +64,7 @@ export default function PeerFeedbackPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [activeTab, setActiveTab] = useState<"received" | "given">("received")
 
   // Form state
   const [selectedColleague, setSelectedColleague] = useState("")
@@ -166,121 +168,154 @@ export default function PeerFeedbackPage() {
       ? Math.round((receivedFeedback.reduce((sum, f) => sum + f.score, 0) / receivedFeedback.length) * 100) / 100
       : null
 
+  const givenColumns = useMemo<DataTableColumn<PeerFeedbackRow>[]>(
+    () => [
+      {
+        key: "subject",
+        label: "Colleague",
+        sortable: true,
+        accessor: (f) => formatName(f.subject),
+        render: (f) => <span className="font-medium">{formatName(f.subject)}</span>,
+      },
+      {
+        key: "score",
+        label: "Overall Score",
+        sortable: true,
+        accessor: (f) => f.score,
+        render: (f) => <Badge variant="secondary">{f.score}%</Badge>,
+      },
+      {
+        key: "created_at",
+        label: "Submitted",
+        sortable: true,
+        accessor: (f) => f.created_at,
+        render: (f) => (
+          <span className="text-muted-foreground text-xs">{new Date(f.created_at).toLocaleDateString()}</span>
+        ),
+        hideOnMobile: true,
+      },
+    ],
+    []
+  )
+
+  const receivedColumns = useMemo<DataTableColumn<PeerFeedbackRow>[]>(
+    () => [
+      {
+        key: "score",
+        label: "Overall Score",
+        sortable: true,
+        accessor: (f) => f.score,
+        render: (f) => (
+          <div className="flex items-center gap-2">
+            <span className="text-muted-foreground text-sm">Anonymous Peer</span>
+            <Badge variant="secondary">{f.score}%</Badge>
+          </div>
+        ),
+      },
+      {
+        key: "collaboration",
+        label: "Collaboration",
+        accessor: (f) => f.collaboration ?? -1,
+        render: (f) => <span className="text-xs">{f.collaboration !== null ? `${f.collaboration}%` : "-"}</span>,
+        hideOnMobile: true,
+      },
+      {
+        key: "teamwork",
+        label: "Teamwork",
+        accessor: (f) => f.teamwork ?? -1,
+        render: (f) => <span className="text-xs">{f.teamwork !== null ? `${f.teamwork}%` : "-"}</span>,
+        hideOnMobile: true,
+      },
+      {
+        key: "created_at",
+        label: "Received",
+        sortable: true,
+        accessor: (f) => f.created_at,
+        render: (f) => (
+          <span className="text-muted-foreground text-xs">{new Date(f.created_at).toLocaleDateString()}</span>
+        ),
+        hideOnMobile: true,
+      },
+    ],
+    []
+  )
+
+  const rows = activeTab === "given" ? myFeedback : receivedFeedback
+
   return (
-    <PageWrapper maxWidth="full" background="gradient">
-      <PageHeader
-        title="Peer Feedback"
-        description="Give feedback to colleagues and view feedback you've received this cycle."
-        icon={MessageSquare}
-        backLink={{ href: "/pms", label: "Back to PMS" }}
-        actions={
-          <Button onClick={() => setIsDialogOpen(true)} className="gap-2" size="sm">
-            <Send className="h-4 w-4" />
-            Give Feedback
-          </Button>
-        }
-      />
-
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-muted-foreground text-sm">Given by You</p>
-            <p className="text-2xl font-semibold">{myFeedback.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-muted-foreground text-sm">Received</p>
-            <p className="text-2xl font-semibold">{receivedFeedback.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-muted-foreground text-sm">Avg Received Score</p>
-            <p className="text-2xl font-semibold">{avgReceived !== null ? `${avgReceived}%` : "-"}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      {isLoading ? (
-        <div className="text-muted-foreground flex items-center justify-center gap-2 py-16">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          Loading…
+    <DataTablePage
+      title="Peer Feedback"
+      description="Give feedback to colleagues and view feedback you've received this cycle."
+      icon={MessageSquare}
+      backLink={{ href: "/pms", label: "Back to PMS" }}
+      tabs={[
+        { key: "received", label: "Feedback Received", icon: Users },
+        { key: "given", label: "Feedback Given", icon: Send },
+      ]}
+      activeTab={activeTab}
+      onTabChange={(tab) => setActiveTab(tab as "received" | "given")}
+      actions={
+        <Button onClick={() => setIsDialogOpen(true)} className="gap-2" size="sm">
+          <Send className="h-4 w-4" />
+          Give Feedback
+        </Button>
+      }
+      stats={
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <StatCard title="Given by You" value={myFeedback.length} icon={Send} />
+          <StatCard title="Received" value={receivedFeedback.length} icon={Users} />
+          <StatCard
+            title="Avg Received Score"
+            value={avgReceived !== null ? `${avgReceived}%` : "-"}
+            icon={MessageSquare}
+          />
         </div>
+      }
+    >
+      {activeTab === "given" ? (
+        <DataTable<PeerFeedbackRow>
+          data={rows}
+          columns={givenColumns}
+          getRowId={(f) => f.id}
+          searchPlaceholder="Search colleague name..."
+          searchFn={(f, query) => formatName(f.subject).toLowerCase().includes(query.toLowerCase())}
+          isLoading={isLoading}
+          onRetry={() => void loadData()}
+          emptyTitle="No Feedback Given Yet"
+          emptyDescription={'No peer feedback submitted yet. Use the "Give Feedback" button to start.'}
+          emptyIcon={Send}
+          expandable={{
+            render: (f) => <p className="text-muted-foreground text-sm">{f.comments || "No comments left."}</p>,
+          }}
+          urlSync
+        />
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {/* Feedback I've given */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Send className="h-4 w-4" />
-                Feedback Given
-              </CardTitle>
-              <CardDescription>Peer feedback you have submitted this period.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {myFeedback.length === 0 ? (
-                <p className="text-muted-foreground py-4 text-center text-sm">
-                  No peer feedback submitted yet. Use the &quot;Give Feedback&quot; button to start.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {myFeedback.map((f) => (
-                    <div key={f.id} className="rounded-lg border p-3">
-                      <div className="flex items-center justify-between">
-                        <p className="font-medium">{formatName(f.subject)}</p>
-                        <Badge variant="secondary">{f.score}%</Badge>
-                      </div>
-                      {f.comments && <p className="text-muted-foreground mt-1 line-clamp-2 text-sm">{f.comments}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          {/* Feedback I've received */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Feedback Received
-              </CardTitle>
-              <CardDescription>Anonymised scores from peers about your performance.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {receivedFeedback.length === 0 ? (
-                <p className="text-muted-foreground py-4 text-center text-sm">
-                  No peer feedback received yet for the current cycle.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {receivedFeedback.map((f) => (
-                    <div key={f.id} className="rounded-lg border p-3">
-                      <div className="flex items-center justify-between">
-                        <p className="text-muted-foreground text-sm font-medium">Anonymous Peer</p>
-                        <Badge variant="secondary">{f.score}%</Badge>
-                      </div>
-                      <div className="mt-2 grid grid-cols-2 gap-1 text-xs">
-                        {f.collaboration !== null && (
-                          <span className="text-muted-foreground">Collaboration: {f.collaboration}%</span>
-                        )}
-                        {f.communication !== null && (
-                          <span className="text-muted-foreground">Communication: {f.communication}%</span>
-                        )}
-                        {f.teamwork !== null && <span className="text-muted-foreground">Teamwork: {f.teamwork}%</span>}
-                        {f.professionalism !== null && (
-                          <span className="text-muted-foreground">Professionalism: {f.professionalism}%</span>
-                        )}
-                      </div>
-                      {f.comments && <p className="text-muted-foreground mt-2 text-sm">{f.comments}</p>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
+        <DataTable<PeerFeedbackRow>
+          data={rows}
+          columns={receivedColumns}
+          getRowId={(f) => f.id}
+          searchPlaceholder="Search feedback..."
+          searchFn={() => true}
+          isLoading={isLoading}
+          onRetry={() => void loadData()}
+          emptyTitle="No Feedback Received Yet"
+          emptyDescription="No peer feedback received yet for the current cycle."
+          emptyIcon={Users}
+          expandable={{
+            render: (f) => (
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                {f.communication !== null && (
+                  <span className="text-muted-foreground">Communication: {f.communication}%</span>
+                )}
+                {f.professionalism !== null && (
+                  <span className="text-muted-foreground">Professionalism: {f.professionalism}%</span>
+                )}
+                {f.comments && <p className="text-muted-foreground col-span-2 mt-1">{f.comments}</p>}
+              </div>
+            ),
+          }}
+          urlSync
+        />
       )}
 
       {/* Give Feedback Dialog */}
@@ -408,6 +443,6 @@ export default function PeerFeedbackPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </PageWrapper>
+    </DataTablePage>
   )
 }
