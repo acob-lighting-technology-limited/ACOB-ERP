@@ -29,6 +29,7 @@ import {
   Building2,
   FolderKanban,
   Layers,
+  Target,
   TrendingUp,
 } from "lucide-react"
 import { useState, useEffect, useMemo } from "react"
@@ -297,6 +298,18 @@ const adminNavigation: NavItem[] = [
       { name: "Competencies", href: "/admin/hr/pms/competencies" },
       { name: "CBT", href: "/admin/hr/pms/cbt" },
       { name: "Attendance", href: "/admin/hr/pms/attendance" },
+    ],
+  },
+  {
+    section: "management",
+    name: "Corporate Scorecard",
+    href: "/admin/corporate-scorecard",
+    icon: Target,
+    roles: ["developer", "super_admin", "admin"],
+    children: [
+      { name: "Register", href: "/admin/corporate-scorecard" },
+      { name: "Department Cascade", href: "/admin/corporate-scorecard/departments" },
+      { name: "Summary", href: "/admin/corporate-scorecard/summary" },
     ],
   },
   {

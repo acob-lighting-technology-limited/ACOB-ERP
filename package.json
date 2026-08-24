@@ -19,6 +19,7 @@
     "test:attendance": "tsx --test lib/hr/__tests__/*.test.ts",
     "test:task-scoring": "tsx --test lib/tasks/__tests__/*.test.ts",
     "test:project-health": "tsx --test lib/projects/__tests__/*.test.ts",
+    "test:scorecard": "tsx --test lib/corporate-scorecard/__tests__/*.test.ts",
     "test:campaign": "tsx scripts/test-campaign/run.ts",
     "test:campaign:inventory": "tsx scripts/test-campaign/run.ts --inventory-only",
     "test:e2e": "playwright test",
