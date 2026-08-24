@@ -4,20 +4,20 @@ import { computeProjectProgress, computeWeightedTaskScore, isTaskInCycle, isTask
 
 test("a task earns its weight scaled by its rating", () => {
   const { score, earnedPoints, availablePoints } = computeWeightedTaskScore([
-    { status: "completed", weight: 10, rating: 4 },
+    { status: "completed", weight: 5, rating: 4 },
   ])
-  assert.equal(earnedPoints, 8)
-  assert.equal(availablePoints, 10)
+  assert.equal(earnedPoints, 4)
+  assert.equal(availablePoints, 5)
   assert.equal(score, 80)
 })
 
 test("weights decide how much each task moves the score", () => {
   // Heavy task rated poorly, light task rated perfectly: the heavy one dominates.
   const { score } = computeWeightedTaskScore([
-    { status: "completed", weight: 10, rating: 1 },
-    { status: "completed", weight: 2, rating: 5 },
+    { status: "completed", weight: 5, rating: 1 },
+    { status: "completed", weight: 1, rating: 5 },
   ])
-  // (10*0.2 + 2*1) / 12 = 4/12
+  // (5*0.2 + 1*1) / 6 = 2/6
   assert.equal(score, 33.33)
 })
 
@@ -34,13 +34,13 @@ test("unfinished work scores zero at full weight, so skipping tasks cannot raise
 })
 
 test("reassigned and cancelled work is neutral", () => {
-  assert.equal(isTaskScorable({ status: "reassigned", weight: 10, rating: null }), false)
-  assert.equal(isTaskScorable({ status: "cancelled", weight: 10, rating: null }), false)
+  assert.equal(isTaskScorable({ status: "reassigned", weight: 5, rating: null }), false)
+  assert.equal(isTaskScorable({ status: "cancelled", weight: 5, rating: null }), false)
 
   const { score, taskCount } = computeWeightedTaskScore([
     { status: "completed", weight: 5, rating: 5 },
-    { status: "reassigned", weight: 10, rating: null },
-    { status: "cancelled", weight: 10, rating: null },
+    { status: "reassigned", weight: 5, rating: null },
+    { status: "cancelled", weight: 5, rating: null },
   ])
   assert.equal(taskCount, 1)
   assert.equal(score, 100)
@@ -49,7 +49,7 @@ test("reassigned and cancelled work is neutral", () => {
 test("delivered work awaiting a rating is held out rather than scored zero", () => {
   const { score, awaitingRatingCount, taskCount } = computeWeightedTaskScore([
     { status: "completed", weight: 5, rating: 4 },
-    { status: "submitted_for_review", weight: 10, rating: null },
+    { status: "submitted_for_review", weight: 5, rating: null },
   ])
   assert.equal(awaitingRatingCount, 1)
   assert.equal(taskCount, 1)
@@ -68,8 +68,8 @@ test("no assigned work is null, not zero", () => {
 test("project delivery and quality are separate numbers", () => {
   // Everything delivered, but rated badly: delivery is full, quality is not.
   const progress = computeProjectProgress([
-    { status: "completed", weight: 10, rating: 2 },
-    { status: "completed", weight: 10, rating: 2 },
+    { status: "completed", weight: 5, rating: 2 },
+    { status: "completed", weight: 5, rating: 2 },
   ])
   assert.equal(progress.deliveryPct, 100)
   assert.equal(progress.qualityPct, 40)
@@ -80,7 +80,7 @@ test("out-of-range weights are clamped rather than trusted", () => {
     { status: "completed", weight: 999, rating: 5 },
     { status: "completed", weight: 0, rating: 5 },
   ])
-  assert.equal(availablePoints, 11) // 10 + 1
+  assert.equal(availablePoints, 6) // 5 + 1
 })
 
 test("a task belongs to the cycle its deadline falls in, not the one it was finished in", () => {
@@ -97,4 +97,15 @@ test("a task belongs to the cycle its deadline falls in, not the one it was fini
 
   // Nothing to anchor on cannot be placed in any cycle.
   assert.equal(isTaskInCycle({}, q1.start, q1.end), false)
+})
+
+test("legacy completed work with no rating is held back, not scored zero", () => {
+  // A rating is mandatory to complete a task now, so an unrated completed row
+  // predates that rule. Scoring it zero would punish finished work.
+  const { score, awaitingRatingCount } = computeWeightedTaskScore([
+    { status: "completed", weight: 4, rating: 4 },
+    { status: "completed", weight: 5, rating: null },
+  ])
+  assert.equal(awaitingRatingCount, 1)
+  assert.equal(score, 80)
 })

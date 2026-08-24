@@ -37,6 +37,7 @@ import {
   ClipboardList,
 } from "lucide-react"
 import type { Task } from "@/types/task"
+import { TaskStatusControl } from "@/components/tasks/TaskStatusControl"
 import { formatWATDateTime, formatWATDate } from "@/lib/utils/date"
 import { formatFullName, cn } from "@/lib/utils"
 import { TASK_STATUS_CONFIG, type TaskStatus } from "@/lib/tasks/constants"
@@ -57,12 +58,21 @@ interface UserTaskDetailsDialogProps {
   onOpenChange: (open: boolean) => void
   selectedTask: Task | null
   taskUpdates: TaskUpdate[]
-  newStatus: string
-  isSaving: boolean
-  onUpdateStatus: (status: string, reason?: string) => Promise<void>
+  /** True when this user may approve, rate, reject or reassign the task. */
+  canReview?: boolean
+  /** Called after a status change so the list behind the dialog refreshes. */
+  onChanged?: () => void | Promise<void>
+  /**
+   * Posts a comment and refreshes taskUpdates. Comments used to have their
+   * own separate dialog reachable only from a different row action, with no
+   * way to comment from inside Details at all — two disconnected entry
+   * points for the same thing. This is now the only one.
+   */
+  onAddComment?: (content: string) => Promise<void>
+  isPostingComment?: boolean
 }
 
-type TaskTab = "overview" | "actions" | "activity"
+type TaskTab = "overview" | "activity"
 
 function getInitials(firstName?: string | null, lastName?: string | null): string {
   const f = (firstName || "").trim()[0] || ""
@@ -75,15 +85,14 @@ export function UserTaskDetailsDialog({
   onOpenChange,
   selectedTask,
   taskUpdates,
-  isSaving,
-  onUpdateStatus,
+  canReview = false,
+  onChanged,
+  onAddComment,
+  isPostingComment = false,
 }: UserTaskDetailsDialogProps) {
   const [activeTab, setActiveTab] = useState<TaskTab>("overview")
-  const [showUnableDialog, setShowUnableDialog] = useState(false)
-  const [unableReason, setUnableReason] = useState("")
-  const [submitComment, setSubmitComment] = useState("")
-  const [showSubmitDialog, setShowSubmitDialog] = useState(false)
   const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [commentDraft, setCommentDraft] = useState("")
 
   const handleCopy = useCallback((text: string, fieldName: string) => {
     if (!text) return
@@ -101,31 +110,13 @@ export function UserTaskDetailsDialog({
     new Date(selectedTask.due_date).getTime() < new Date().setHours(0, 0, 0, 0) &&
     !["completed", "reassigned", "cancelled"].includes(selectedTask.status)
 
-  const handleStartTask = () => {
-    void onUpdateStatus("in_progress")
-  }
-
-  const handleConfirmSubmitForReview = async () => {
-    await onUpdateStatus("submitted_for_review", submitComment)
-    setShowSubmitDialog(false)
-    setSubmitComment("")
-  }
-
-  const handleConfirmUnableToComplete = async () => {
-    if (!unableReason.trim()) return
-    await onUpdateStatus("unable_to_complete", unableReason)
-    setShowUnableDialog(false)
-    setUnableReason("")
-  }
-
   const assignedByName = selectedTask.assigned_by_user
     ? formatFullName(selectedTask.assigned_by_user.first_name, selectedTask.assigned_by_user.last_name)
     : "System"
 
   const tabs: Array<{ id: TaskTab; label: string; icon: typeof CalendarCheck2; count?: number }> = [
-    { id: "overview", label: "Overview & Specs", icon: CalendarCheck2 },
-    { id: "actions", label: "My Actions", icon: Play },
-    { id: "activity", label: "Activity History", icon: MessageSquare, count: taskUpdates.length },
+    { id: "overview", label: "Details", icon: CalendarCheck2 },
+    { id: "activity", label: "Activity", icon: MessageSquare, count: taskUpdates.length },
   ]
 
   return (
@@ -226,9 +217,23 @@ export function UserTaskDetailsDialog({
         <div className="min-h-0 flex-1 overflow-hidden">
           <ScrollArea className="h-full">
             <div className="space-y-4 p-5 sm:p-6">
-              {/* TAB 1: OVERVIEW & SPECS */}
+              {/* TAB 1: DETAILS */}
               {activeTab === "overview" && (
                 <div className="space-y-4">
+                  {/* Status is changed here, in place. The dialog stays open so
+                      a task can be moved through several states in one visit. */}
+                  <div className="bg-card flex flex-wrap items-center justify-between gap-3 rounded-lg border p-3.5 shadow-xs">
+                    <div>
+                      <p className="text-muted-foreground text-[11px] font-semibold tracking-wider uppercase">Status</p>
+                      <p className="text-muted-foreground mt-0.5 text-xs">
+                        Choose where this task should move to next.
+                      </p>
+                    </div>
+                    <div className="w-full sm:w-56">
+                      <TaskStatusControl task={selectedTask} canReview={canReview} onChanged={() => onChanged?.()} />
+                    </div>
+                  </div>
+
                   {/* Hero Stat Cards */}
                   <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
                     <div className="bg-card rounded-lg border p-3 shadow-xs">
@@ -416,198 +421,37 @@ export function UserTaskDetailsDialog({
                 </div>
               )}
 
-              {/* TAB 2: MY ACTIONS */}
-              {activeTab === "actions" && (
-                <div className="space-y-4">
-                  {/* Action Cards based on State */}
-                  <div className="bg-card space-y-3.5 rounded-lg border p-4 shadow-xs">
-                    <div className="flex items-center justify-between border-b pb-2">
-                      <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase">
-                        <Play className="text-primary h-3.5 w-3.5" /> Available Task Actions
-                      </span>
-                      <Badge variant="outline" className={cn("text-[10px] capitalize", statusCfg.color)}>
-                        Current: {statusCfg.label}
-                      </Badge>
-                    </div>
-
-                    {selectedTask.status === "pending" && (
-                      <div className="space-y-3 pt-1">
-                        <div className="bg-muted/20 text-muted-foreground rounded-lg border p-3 text-xs">
-                          This task is currently pending. Start working on it to mark it in progress, or report an
-                          impediment if you cannot complete it.
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            size="sm"
-                            onClick={handleStartTask}
-                            disabled={isSaving}
-                            className="h-8 gap-1.5 text-xs"
-                          >
-                            <Play className="h-3.5 w-3.5" />
-                            Start Working on Task
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowUnableDialog(true)}
-                            disabled={isSaving}
-                            className="h-8 border-amber-500/30 text-xs text-amber-600 hover:bg-amber-500/10"
-                          >
-                            Cannot Complete / Flag Blocked
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {selectedTask.status === "in_progress" && (
-                      <div className="space-y-3 pt-1">
-                        <div className="rounded-lg border bg-blue-50/40 p-3 text-xs text-blue-800 dark:bg-blue-950/20 dark:text-blue-300">
-                          Task is in progress. When you have finished the deliverables, submit it for review by your
-                          lead or administrator.
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => setShowSubmitDialog(true)}
-                            disabled={isSaving}
-                            className="h-8 gap-1.5 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
-                          >
-                            <Send className="h-3.5 w-3.5" />
-                            Submit Task for Review
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setShowUnableDialog(true)}
-                            disabled={isSaving}
-                            className="h-8 border-amber-500/30 text-xs text-amber-600 hover:bg-amber-500/10"
-                          >
-                            Unable to Complete
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {selectedTask.status === "submitted_for_review" && (
-                      <div className="space-y-3 pt-1">
-                        <div className="flex items-center justify-between rounded-lg border border-purple-500/30 bg-purple-500/10 p-3.5 text-xs text-purple-800 dark:text-purple-300">
-                          <span>Task submitted for review. Waiting for department lead / admin approval.</span>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-purple-700 hover:bg-purple-500/20"
-                            onClick={() => void onUpdateStatus("in_progress")}
-                          >
-                            Revert to In Progress
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {selectedTask.status === "completed" && (
-                      <div className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-800 dark:text-emerald-300">
-                        <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" />
-                        <div>
-                          <p className="font-semibold">Task Completed & Approved</p>
-                          <p className="mt-0.5 text-[11px] opacity-90">
-                            This task has been verified and KPI points recorded toward performance metrics.
-                          </p>
-                        </div>
-                      </div>
-                    )}
-
-                    {selectedTask.status === "unable_to_complete" && (
-                      <div className="space-y-3 pt-1">
-                        <div className="flex items-center justify-between rounded-lg border border-orange-500/30 bg-orange-500/10 p-3.5 text-xs text-orange-800 dark:text-orange-300">
-                          <div>
-                            <p className="font-semibold">Issue Reported</p>
-                            <p className="mt-0.5 text-[11px] opacity-90">
-                              Lead / administrator will review the reported blocker, reassign, or extend deadline.
-                            </p>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-7 text-xs text-orange-700 hover:bg-orange-500/20"
-                            onClick={() => void onUpdateStatus("in_progress")}
-                          >
-                            Resume Task
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Inline Form: Submit for Review */}
-                    {showSubmitDialog && (
-                      <div className="bg-muted/30 mt-3 space-y-2.5 rounded-lg border p-3.5">
-                        <Label className="text-xs font-semibold">Completion Note / Deliverables (Optional)</Label>
-                        <Textarea
-                          value={submitComment}
-                          onChange={(e) => setSubmitComment(e.target.value)}
-                          placeholder="Add links, completion notes, or comments for the lead..."
-                          className="bg-background min-h-[70px] text-xs"
-                        />
-                        <div className="flex justify-end gap-2 pt-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setShowSubmitDialog(false)}
-                            className="h-8 text-xs"
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={handleConfirmSubmitForReview}
-                            disabled={isSaving}
-                            className="h-8 bg-emerald-600 text-xs text-white hover:bg-emerald-700"
-                          >
-                            Confirm Submission
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Inline Form: Unable to Complete */}
-                    {showUnableDialog && (
-                      <div className="mt-3 space-y-2.5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs">
-                        <Label className="text-xs font-semibold text-amber-900 dark:text-amber-200">
-                          Reason for being unable to complete *
-                        </Label>
-                        <Textarea
-                          value={unableReason}
-                          onChange={(e) => setUnableReason(e.target.value)}
-                          placeholder="Explain the blocker, missing dependencies, or issue..."
-                          className="bg-background min-h-[70px] text-xs"
-                        />
-                        <div className="flex justify-end gap-2 pt-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => setShowUnableDialog(false)}
-                            className="h-8 text-xs"
-                          >
-                            Cancel
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={handleConfirmUnableToComplete}
-                            disabled={isSaving || !unableReason.trim()}
-                            className="h-8 text-xs"
-                          >
-                            Submit Issue Report
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* TAB 3: ACTIVITY HISTORY */}
+              {/* TAB 2: ACTIVITY */}
               {activeTab === "activity" && (
                 <div className="space-y-4">
+                  {onAddComment && (
+                    <div className="bg-card space-y-2 rounded-lg border p-4 shadow-xs">
+                      <Label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                        Add a comment
+                      </Label>
+                      <Textarea
+                        value={commentDraft}
+                        onChange={(event) => setCommentDraft(event.target.value)}
+                        placeholder="Post a progress note or update..."
+                        className="min-h-[70px] text-xs"
+                      />
+                      <div className="flex justify-end">
+                        <Button
+                          size="sm"
+                          className="h-8 gap-1.5 text-xs"
+                          disabled={isPostingComment || !commentDraft.trim()}
+                          onClick={async () => {
+                            await onAddComment(commentDraft.trim())
+                            setCommentDraft("")
+                          }}
+                        >
+                          <Send className="h-3.5 w-3.5" />
+                          {isPostingComment ? "Posting..." : "Post comment"}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="bg-card space-y-3 rounded-lg border p-4 shadow-xs">
                     <div className="flex items-center justify-between border-b pb-2">
                       <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase">

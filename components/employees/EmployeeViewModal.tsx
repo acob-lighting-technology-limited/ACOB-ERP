@@ -921,6 +921,21 @@ export function EmployeeViewModal({
                     </div>
 
                     <div>
+                      <Label htmlFor="edit_additional_email" className="text-xs">
+                        Additional Email
+                      </Label>
+                      <Input
+                        id="edit_additional_email"
+                        type="email"
+                        value={editForm.additional_email}
+                        onChange={(e) => setEditForm({ ...editForm, additional_email: e.target.value })}
+                        placeholder="secondary@acoblighting.com"
+                        className="mt-1 h-8 font-mono text-xs"
+                      />
+                      <p className="text-muted-foreground mt-1 text-[10px]">Secondary work/contact email.</p>
+                    </div>
+
+                    <div>
                       <Label htmlFor="edit_personal_email" className="text-xs">
                         Personal Email
                       </Label>

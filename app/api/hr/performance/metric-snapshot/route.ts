@@ -408,32 +408,42 @@ export async function GET(request: NextRequest) {
               )
             : []
 
+        // The live score is the value shown. A saved review still wins when one
+        // exists — a signed-off number is authoritative — but its absence no
+        // longer blanks the row. Previously the live score was computed for
+        // every employee and then discarded except for a goal count, so these
+        // pages rendered empty for any cycle without saved reviews (which is
+        // every current cycle, since reviews are written at cycle end).
         individualRows = individualScores
           .map(({ user: entry, score }) => {
             const latestReviewMetric = latestReviewMetricByUser.get(entry.id)
-            const submittedMetricValue =
+            const savedValue =
               metric === "kpi" ? (latestReviewMetric?.kpi_score ?? null) : (latestReviewMetric?.behaviour_score ?? null)
+            const liveValue = metric === "kpi" ? score.kpi_score : score.behaviour_score
+            const effectiveValue = typeof savedValue === "number" ? savedValue : liveValue
+
             return {
               user_id: entry.id,
               employee: fullName(entry),
               department: entry.department || "Unassigned",
               cycle: selectedCycle?.name || "Current",
-              metric_value:
-                typeof submittedMetricValue === "number" && submittedMetricValue > 0 ? submittedMetricValue : null,
+              metric_value: effectiveValue,
               kpi_score:
-                typeof latestReviewMetric?.kpi_score === "number" && latestReviewMetric.kpi_score > 0
-                  ? latestReviewMetric.kpi_score
-                  : null,
+                typeof latestReviewMetric?.kpi_score === "number" ? latestReviewMetric.kpi_score : score.kpi_score,
               behaviour_score:
-                typeof latestReviewMetric?.behaviour_score === "number" && latestReviewMetric.behaviour_score > 0
+                typeof latestReviewMetric?.behaviour_score === "number"
                   ? latestReviewMetric.behaviour_score
-                  : null,
+                  : score.behaviour_score,
+              // Whether the number is a signed-off review or a live figure, so
+              // the table can say which it is instead of implying both are final.
+              is_submitted: typeof savedValue === "number",
               _goal_count: score.breakdown.goals.length,
             }
           })
           .filter((row) => {
-            if (metric === "kpi") return hasMetric(row.kpi_score) || Number(row._goal_count || 0) > 0
-            return hasMetric(row.behaviour_score)
+            // A genuine zero is a result, not a missing value.
+            if (metric === "kpi") return row.kpi_score !== null || Number(row._goal_count || 0) > 0
+            return row.behaviour_score !== null
           })
           .map(({ _goal_count, ...row }) => row)
       }

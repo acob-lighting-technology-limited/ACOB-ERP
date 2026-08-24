@@ -204,8 +204,9 @@ export function DirectoryContent() {
         accessor: (r) => r.phone_number || "",
         hideOnMobile: true,
         render: (r) => (
-          <div className="group">
+          <div className="group space-y-0.5">
             <CopyValue value={r.phone_number} />
+            {r.additional_phone && <CopyValue value={r.additional_phone} className="text-xs" muted />}
           </div>
         ),
       },
@@ -350,48 +351,6 @@ export function DirectoryContent() {
         onRetry={() => {
           void refetch()
         }}
-        expandable={{
-          render: (r) => (
-            <div className="grid gap-4 md:grid-cols-3">
-              <div className="group rounded-lg border p-4">
-                <p className="text-muted-foreground text-xs tracking-wide uppercase">Email</p>
-                <div className="mt-2 text-sm">
-                  <CopyValue value={r.company_email} />
-                </div>
-                {r.additional_email && (
-                  <div className="mt-1 text-sm">
-                    <CopyValue value={r.additional_email} muted />
-                  </div>
-                )}
-              </div>
-              <div className="group rounded-lg border p-4">
-                <p className="text-muted-foreground text-xs tracking-wide uppercase">Phone</p>
-                <div className="mt-2 text-sm">
-                  <CopyValue value={r.phone_number} />
-                </div>
-                {r.additional_phone && (
-                  <div className="mt-1 text-sm">
-                    <CopyValue value={r.additional_phone} muted />
-                  </div>
-                )}
-              </div>
-              <div className="group rounded-lg border p-4">
-                <p className="text-muted-foreground text-xs tracking-wide uppercase">Department &amp; Office</p>
-                <div className="mt-2 text-sm">
-                  <CopyValue value={r.department} />
-                </div>
-                <div className="mt-1 text-sm">
-                  <CopyValue value={r.office_location} muted />
-                </div>
-                {r.is_department_lead && (r.lead_departments?.length ?? 0) > 0 && (
-                  <p className="mt-1 text-xs text-emerald-600 dark:text-emerald-400">
-                    Leads: {r.lead_departments?.join(", ")}
-                  </p>
-                )}
-              </div>
-            </div>
-          ),
-        }}
         viewToggle
         cardRenderer={(r) => (
           <div className="group space-y-3 rounded-xl border p-4">
@@ -409,11 +368,17 @@ export function DirectoryContent() {
             <div className="grid gap-1 text-sm">
               <div className="flex items-center gap-2">
                 <Mail className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
-                <CopyValue value={r.company_email} />
+                <div className="space-y-0.5">
+                  <CopyValue value={r.company_email} />
+                  {r.additional_email && <CopyValue value={r.additional_email} className="text-xs" muted />}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Phone className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
-                <CopyValue value={r.phone_number} />
+                <div className="space-y-0.5">
+                  <CopyValue value={r.phone_number} />
+                  {r.additional_phone && <CopyValue value={r.additional_phone} className="text-xs" muted />}
+                </div>
               </div>
               <div className="flex items-center gap-2">
                 <Building2 className="text-muted-foreground h-3.5 w-3.5 shrink-0" />

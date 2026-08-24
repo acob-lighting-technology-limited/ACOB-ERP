@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -76,9 +77,20 @@ interface UserHelpDeskTicketDetailsDialogProps {
   isSaving: boolean
   canChangeStatus: boolean
   showDepartmentRestriction: boolean
+  /**
+   * Posting a comment used to require a separate dialog, reached only by a
+   * different row action than "View Details" — two disconnected entry points
+   * for the same ticket. This is now the only one.
+   */
+  newComment?: string
+  setNewComment?: (value: string) => void
+  onAddComment?: () => Promise<void>
+  isPostingComment?: boolean
+  /** Attachments panel, rendered above the comment box. */
+  attachmentsSlot?: React.ReactNode
 }
 
-type TicketTab = "overview" | "workflow" | "activity"
+type TicketTab = "overview" | "activity"
 
 export function UserHelpDeskTicketDetailsDialog({
   open,
@@ -92,6 +104,11 @@ export function UserHelpDeskTicketDetailsDialog({
   isSaving,
   canChangeStatus,
   showDepartmentRestriction,
+  newComment = "",
+  setNewComment,
+  onAddComment,
+  isPostingComment = false,
+  attachmentsSlot,
 }: UserHelpDeskTicketDetailsDialogProps) {
   const [activeTab, setActiveTab] = useState<TicketTab>("overview")
   const [copiedField, setCopiedField] = useState<string | null>(null)
@@ -116,9 +133,8 @@ export function UserHelpDeskTicketDetailsDialog({
   const totalActivityCount = events.length + comments.length
 
   const tabs: Array<{ id: TicketTab; label: string; icon: typeof LifeBuoy; count?: number }> = [
-    { id: "overview", label: "Overview & Issue", icon: LifeBuoy },
-    { id: "workflow", label: "Status & Workflow", icon: ShieldCheck },
-    { id: "activity", label: "Activity & History", icon: MessageSquare, count: totalActivityCount },
+    { id: "overview", label: "Details", icon: LifeBuoy },
+    { id: "activity", label: "Activity", icon: MessageSquare, count: totalActivityCount },
   ]
 
   return (
@@ -225,9 +241,46 @@ export function UserHelpDeskTicketDetailsDialog({
                 />
               ) : (
                 <>
-                  {/* TAB 1: OVERVIEW & DETAILS */}
+                  {/* TAB 1: DETAILS */}
                   {activeTab === "overview" && (
                     <div className="space-y-4">
+                      {/* Status: moved here from its own tab, same as the task
+                          detail dialog — a whole tab for one dropdown was an
+                          extra click for no reason. */}
+                      <div className="bg-card space-y-3 rounded-lg border p-4 shadow-xs">
+                        <div className="flex items-center justify-between border-b pb-2">
+                          <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase">
+                            <ShieldCheck className="text-primary h-3.5 w-3.5" /> Status
+                          </span>
+                          <Badge variant="outline" className="text-[10px] capitalize">
+                            Current: {formatLabel(ticket.status)}
+                          </Badge>
+                        </div>
+                        <div className="space-y-1.5">
+                          <Select
+                            value={selectedStatus}
+                            onValueChange={(value) => void onStatusChange(value)}
+                            disabled={isSaving || !canChangeStatus}
+                          >
+                            <SelectTrigger className="h-9 text-xs">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {nextStatuses.map((status) => (
+                                <SelectItem key={status} value={status}>
+                                  {formatLabel(status)}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <p className="text-muted-foreground text-[11px]">
+                            {canChangeStatus
+                              ? "Selecting a status will trigger state transitions and automatically notify relevant team members."
+                              : "Status changes are restricted based on your role or current department ticket workflow."}
+                          </p>
+                        </div>
+                      </div>
+
                       {/* Hero Stat Cards */}
                       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
                         <div className="bg-card rounded-lg border p-3 shadow-xs">
@@ -321,53 +374,36 @@ export function UserHelpDeskTicketDetailsDialog({
                     </div>
                   )}
 
-                  {/* TAB 2: STATUS & WORKFLOW */}
-                  {activeTab === "workflow" && (
-                    <div className="space-y-4">
-                      <div className="bg-card space-y-4 rounded-lg border p-4 shadow-xs">
-                        <div className="flex items-center justify-between border-b pb-2">
-                          <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase">
-                            <ShieldCheck className="text-primary h-3.5 w-3.5" /> Change Ticket Status
-                          </span>
-                          <Badge variant="outline" className="text-[10px] capitalize">
-                            Current: {formatLabel(ticket.status)}
-                          </Badge>
-                        </div>
-
-                        <div className="space-y-3">
-                          <div className="space-y-1.5">
-                            <label className="text-foreground text-xs font-medium">Select New Status</label>
-                            <Select
-                              value={selectedStatus}
-                              onValueChange={(value) => void onStatusChange(value)}
-                              disabled={isSaving || !canChangeStatus}
-                            >
-                              <SelectTrigger className="h-9 text-xs">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {nextStatuses.map((status) => (
-                                  <SelectItem key={status} value={status}>
-                                    {formatLabel(status)}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-
-                          <p className="text-muted-foreground text-[11px]">
-                            {canChangeStatus
-                              ? "Selecting a status will trigger state transitions and automatically notify relevant team members."
-                              : "Status changes are restricted based on your role or current department ticket workflow."}
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* TAB 3: ACTIVITY & COMMENTS */}
+                  {/* TAB 2: ACTIVITY & COMMENTS */}
                   {activeTab === "activity" && (
                     <div className="space-y-4">
+                      {attachmentsSlot}
+
+                      {onAddComment && setNewComment && (
+                        <div className="bg-card space-y-2 rounded-lg border p-4 shadow-xs">
+                          <label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
+                            Add a comment
+                          </label>
+                          <Textarea
+                            value={newComment}
+                            onChange={(event) => setNewComment(event.target.value)}
+                            placeholder="Post a comment or progress note..."
+                            className="min-h-[70px] text-xs"
+                          />
+                          <div className="flex justify-end">
+                            <Button
+                              size="sm"
+                              className="h-8 gap-1.5 text-xs"
+                              disabled={isPostingComment || !newComment.trim()}
+                              onClick={() => void onAddComment()}
+                            >
+                              <Send className="h-3.5 w-3.5" />
+                              {isPostingComment ? "Posting..." : "Post comment"}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+
                       <div className="bg-card space-y-3 rounded-lg border p-4 shadow-xs">
                         <div className="flex items-center justify-between border-b pb-2">
                           <span className="text-muted-foreground flex items-center gap-1.5 text-xs font-semibold tracking-wider uppercase">

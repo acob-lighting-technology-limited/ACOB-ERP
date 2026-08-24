@@ -96,6 +96,7 @@ const INITIAL_TASK_FORM: TaskFormState = {
   project_id: "",
   plan_id: "",
   goal_id: "",
+  kpi_id: "",
   weight: TASK_WEIGHT_DEFAULT,
   task_start_date: "",
   task_end_date: "",
@@ -209,6 +210,7 @@ export function AdminTasksContent({
         project_id: task.project_id || "",
         plan_id: task.plan_id || "",
         goal_id: task.goal_id || "",
+        kpi_id: task.kpi_id || "",
         weight: task.weight ?? TASK_WEIGHT_DEFAULT,
         task_start_date: task.task_start_date ? task.task_start_date.split("T")[0] : "",
         task_end_date: task.task_end_date ? task.task_end_date.split("T")[0] : "",
@@ -244,11 +246,15 @@ export function AdminTasksContent({
         return
       }
 
-      const taskData = {
+      // Shared by create and update, except status: a new task always starts
+      // pending, but an existing one can only change status through
+      // TaskStatusControl, which enforces the mandatory rating. The general
+      // update route ignores a status field entirely now — sending one here
+      // would just be a dead value implying a control that no longer exists.
+      const baseTaskData = {
         title: activeTaskForm.title,
         description: activeTaskForm.description || null,
         priority: activeTaskForm.priority,
-        status: activeTaskForm.status,
         due_date: activeTaskForm.due_date || null,
         department: activeTaskForm.department || null,
         assignment_type: activeTaskForm.assignment_type,
@@ -256,6 +262,7 @@ export function AdminTasksContent({
         assigned_users: activeTaskForm.assigned_users || [],
         assigned_by: userId,
         goal_id: activeTaskForm.goal_id || null,
+        kpi_id: activeTaskForm.kpi_id || null,
         project_id: activeTaskForm.project_id || null,
         plan_id: activeTaskForm.plan_id || null,
         weight: activeTaskForm.weight,
@@ -268,7 +275,7 @@ export function AdminTasksContent({
         const response = await apiFetch(`/api/tasks/${selectedTask.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(taskData),
+          body: JSON.stringify(baseTaskData),
         })
         const payload = (await response.json().catch(() => null)) as { error?: string } | null
         if (!response.ok) throw new Error(payload?.error || "Failed to update task")
@@ -278,7 +285,7 @@ export function AdminTasksContent({
         const response = await apiFetch("/api/tasks", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(taskData),
+          body: JSON.stringify({ ...baseTaskData, status: "pending" }),
         })
         const payload = (await response.json().catch(() => null)) as {
           error?: string

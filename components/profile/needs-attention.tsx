@@ -9,10 +9,11 @@ import { countOverdueTasks, isOpenCorrespondence, isOpenTicket, isPendingPayment
 
 interface NeedsAttentionProps {
   tasks: Task[]
-  leave: LeaveItem[]
+  leave?: LeaveItem[]
   helpDesk: HelpDeskItem[]
   correspondence: CorrespondenceItem[]
   payments: PaymentItem[]
+  annualLeaveRemaining?: number
 }
 
 function AttentionTile({ href, hint, children }: { href: string; hint: string; children: React.ReactNode }) {
@@ -26,11 +27,16 @@ function AttentionTile({ href, hint, children }: { href: string; hint: string; c
   )
 }
 
-export function NeedsAttention({ tasks, leave, helpDesk, correspondence, payments }: NeedsAttentionProps) {
+export function NeedsAttention({
+  tasks,
+  helpDesk,
+  correspondence,
+  payments,
+  annualLeaveRemaining = 0,
+}: NeedsAttentionProps) {
   const now = new Date()
 
   const overdueTasks = countOverdueTasks(tasks, now)
-  const pendingLeave = leave.filter((item) => item.status === "pending").length
   const openTickets = helpDesk.filter(isOpenTicket).length
   const openCorrespondence = correspondence.filter(isOpenCorrespondence).length
   const duePayments = payments.filter(isPendingPayment).length
@@ -47,14 +53,14 @@ export function NeedsAttention({ tasks, leave, helpDesk, correspondence, payment
           description={overdueTasks > 0 ? "Needs immediate action" : "All caught up"}
         />
       </AttentionTile>
-      <AttentionTile href="/leave" hint="Your leave requests still awaiting a decision">
+      <AttentionTile href="/leave" hint="Your annual leave days remaining for this year">
         <StatCard
-          title="Pending Leave"
-          value={pendingLeave}
+          title="Annual Leave Left"
+          value={`${annualLeaveRemaining}d`}
           icon={CalendarClock}
-          iconBgColor={pendingLeave > 0 ? "bg-blue-500/10" : "bg-muted"}
-          iconColor={pendingLeave > 0 ? "text-blue-600" : "text-muted-foreground"}
-          description={pendingLeave > 0 ? "Awaiting approval" : "None pending"}
+          iconBgColor={annualLeaveRemaining > 0 ? "bg-blue-500/10" : "bg-muted"}
+          iconColor={annualLeaveRemaining > 0 ? "text-blue-600" : "text-muted-foreground"}
+          description={annualLeaveRemaining > 0 ? `${annualLeaveRemaining} days remaining` : "None left"}
         />
       </AttentionTile>
       <AttentionTile href="/payments" hint="Payments with status Due or Overdue">

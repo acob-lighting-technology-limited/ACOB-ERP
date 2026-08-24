@@ -26,6 +26,14 @@ const CreateDepartmentSchema = z.object({
     .max(10, "Code must be at most 10 characters")
     .optional()
     .nullable(),
+  email: z
+    .string()
+    .trim()
+    .toLowerCase()
+    .email("Invalid department email address")
+    .or(z.literal(""))
+    .optional()
+    .nullable(),
   is_executive_dept: z.boolean().optional(),
   is_active: z.boolean().optional(),
 })
@@ -120,7 +128,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: parsed.error.issues[0]?.message ?? "Invalid request body" }, { status: 400 })
     }
 
-    const { name, description, department_head_id, department_code, is_executive_dept, is_active } = parsed.data
+    const { name, description, department_head_id, department_code, email, is_executive_dept, is_active } = parsed.data
+    const normalizedEmail = email?.trim() ? email.trim().toLowerCase() : null
 
     const { data: department, error } = await supabase
       .from("departments")
@@ -129,6 +138,7 @@ export async function POST(request: Request) {
         description,
         department_head_id,
         department_code: department_code ?? null,
+        email: normalizedEmail,
         is_executive_dept: is_executive_dept ?? false,
         ...(is_active !== undefined ? { is_active } : {}),
       })
@@ -143,7 +153,15 @@ export async function POST(request: Request) {
         action: "create",
         entityType: "department",
         entityId: department.id,
-        newValues: { name, description, department_head_id, department_code, is_executive_dept, is_active },
+        newValues: {
+          name,
+          description,
+          department_head_id,
+          department_code,
+          email: normalizedEmail,
+          is_executive_dept,
+          is_active,
+        },
         context: { actorId: user.id, source: "api", route: "/api/departments" },
       },
       { failOpen: true }

@@ -9,20 +9,26 @@ import { apiError, ApiErrorCode } from "@/lib/api/errors"
 import { getRequestScope, type AdminScope } from "@/lib/admin/api-scope"
 import { canAssignToDepartment, canAssignToProfile } from "@/lib/tasks/assignment-scope"
 import { TASK_WEIGHT_MAX, TASK_WEIGHT_MIN } from "@/lib/tasks/scoring"
-import { TASK_STATUSES, TASK_ASSIGNMENT_TYPES } from "@/lib/tasks/constants"
+import { TASK_ASSIGNMENT_TYPES } from "@/lib/tasks/constants"
 
 const log = logger("task-detail-route")
 
+// status is deliberately absent: this route used to accept it and spread it
+// straight into the update with no rating check and no reviewer-role check,
+// which meant the edit form's status dropdown could send a task to
+// "completed" with no rating at all — silently reopening the exact hole the
+// mandatory-rating rule exists to close. Every status change now goes through
+// /api/tasks/[id]/status, which enforces both.
 const UpdateTaskSchema = z.object({
   title: z.string().trim().min(1).optional(),
   description: z.string().optional().nullable(),
   priority: z.string().trim().min(1).optional(),
-  status: z.enum(TASK_STATUSES).optional(),
   due_date: z.string().optional().nullable(),
   department: z.string().optional().nullable(),
   assignment_type: z.enum(TASK_ASSIGNMENT_TYPES).optional(),
   assigned_to: z.string().uuid().optional().nullable(),
   goal_id: z.string().uuid().optional().nullable(),
+  kpi_id: z.string().uuid().optional().nullable(),
   project_id: z.string().uuid().optional().nullable(),
   plan_id: z.string().uuid().optional().nullable(),
   weight: z.number().int().min(TASK_WEIGHT_MIN).max(TASK_WEIGHT_MAX).optional(),
@@ -237,21 +243,33 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
     }
 
     const now = new Date().toISOString()
-    // Soft delete / archive to protect audit trails
-    const { data: archivedTask, error } = await supabase
+
+    // Deleting one row of a multi-assign fan-out used to leave its siblings on
+    // everyone else's list, because the lead created what they thought was one
+    // task and the system made several. Archive the whole group.
+    const { data: target } = await supabase
       .from("tasks")
-      .update({
-        is_archived: true,
-        archived_by: user.id,
-        archived_at: now,
-        updated_by: user.id,
-        updated_at: now,
-      })
+      .select("id, group_id")
       .eq("id", params.id)
-      .select()
-      .single()
+      .maybeSingle<{ id: string; group_id: string | null }>()
+
+    const archivePayload = {
+      is_archived: true,
+      archived_by: user.id,
+      archived_at: now,
+      updated_by: user.id,
+      updated_at: now,
+    }
+
+    const archiveQuery = target?.group_id
+      ? supabase.from("tasks").update(archivePayload).eq("group_id", target.group_id)
+      : supabase.from("tasks").update(archivePayload).eq("id", params.id)
+
+    const { data: archivedRows, error } = await archiveQuery.select()
 
     if (error) return apiError(error.message, ApiErrorCode.DATABASE_ERROR, 500)
+
+    const archivedTask = (archivedRows || []).find((row) => row.id === params.id) ?? archivedRows?.[0] ?? null
 
     await writeAuditLog(
       supabase,
@@ -260,13 +278,23 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
         entityType: "task",
         entityId: params.id,
         oldValues: { is_archived: false },
-        newValues: { is_archived: true, archived_by: user.id, archived_at: now },
+        newValues: {
+          is_archived: true,
+          archived_by: user.id,
+          archived_at: now,
+          group_id: target?.group_id ?? null,
+          archived_count: archivedRows?.length ?? 1,
+        },
         context: { actorId: user.id, source: "api", route: "/api/tasks/[id]" },
       },
       { failOpen: true }
     )
 
-    return NextResponse.json({ success: true, data: archivedTask })
+    return NextResponse.json({
+      success: true,
+      data: archivedTask,
+      archived_count: archivedRows?.length ?? 1,
+    })
   } catch (error) {
     log.error({ err: String(error) }, "Unhandled error in task DELETE")
     return apiError("Failed to archive task", ApiErrorCode.INTERNAL_ERROR, 500)
