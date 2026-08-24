@@ -162,80 +162,38 @@ export function MyTasksCard({ tasks }: { tasks: Task[] }) {
   )
 }
 
-/* ----------------------------- Open Items ----------------------------- */
+/* -------------------------------- Tickets -------------------------------- */
 
-type OpenItem = {
-  id: string
-  icon: React.ElementType
-  href: string
-  title: string
-  reference: string | null
-  status: string
-  createdAt: string
-}
-
-function looksLikeUuid(value: string): boolean {
-  return /^[0-9a-f]{8}-[0-9a-f]{4}/i.test(value)
-}
-
-export function OpenItemsCard({
+export function TicketsCard({
   helpDesk,
-  correspondence,
-  leave,
+  tickets,
 }: {
-  helpDesk: HelpDeskItem[]
-  correspondence: CorrespondenceItem[]
-  leave: LeaveItem[]
+  helpDesk?: HelpDeskItem[]
+  tickets?: HelpDeskItem[]
+  correspondence?: CorrespondenceItem[]
+  leave?: LeaveItem[]
 }) {
-  const items: OpenItem[] = [
-    ...helpDesk.filter(isOpenTicket).map((ticket) => ({
-      id: `ticket-${ticket.id}`,
-      icon: Ticket,
-      href: "/help-desk",
-      title: ticket.title,
-      reference: ticket.ticket_number || null,
-      status: ticket.status,
-      createdAt: ticket.created_at,
-    })),
-    ...correspondence.filter(isOpenCorrespondence).map((record) => ({
-      id: `corr-${record.id}`,
-      icon: FileCode2,
-      href: "/correspondence",
-      title: record.subject,
-      reference: record.reference_number || null,
-      status: record.status,
-      createdAt: record.created_at,
-    })),
-    ...leave
-      .filter((request) => request.status === "pending")
-      .map((request) => ({
-        id: `leave-${request.id}`,
-        icon: CalendarClock,
-        href: "/leave",
-        title: looksLikeUuid(request.leave_type) ? "Leave Request" : `${request.leave_type} Leave`,
-        reference: `${shortDate(request.start_date)} – ${shortDate(request.end_date)} · ${request.days_requested}d`,
-        status: request.status,
-        createdAt: request.created_at,
-      })),
-  ]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, MAX_OPEN_ITEMS)
+  const ticketList = helpDesk || tickets || []
+  const openTickets = ticketList.filter(isOpenTicket)
+  const visible = openTickets.slice(0, MAX_OPEN_ITEMS)
 
   return (
-    <ListCard title="Open Items" icon={Inbox} count={items.length} viewAllHref="/help-desk" viewAllLabel="Help desk">
-      {items.length > 0 ? (
+    <ListCard title="Ticket" icon={Ticket} count={openTickets.length} viewAllHref="/help-desk" viewAllLabel="Help desk">
+      {visible.length > 0 ? (
         <ul className="divide-y border-t">
-          {items.map((item) => (
-            <Row key={item.id} href={item.href}>
+          {visible.map((ticket) => (
+            <Row key={ticket.id} href="/help-desk">
               <div className="flex items-center gap-2">
-                <item.icon className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
-                <p className="truncate text-sm font-medium">{item.title}</p>
+                <Ticket className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
+                <p className="truncate text-sm font-medium">{ticket.title}</p>
               </div>
               <div className="mt-0.5 flex items-center gap-1.5 pl-[22px]">
-                <Badge className={cn("px-1.5 py-0 text-[10px] capitalize", statusBadgeClass(item.status))}>
-                  {humanizeStatus(item.status)}
+                <Badge className={cn("px-1.5 py-0 text-[10px] capitalize", statusBadgeClass(ticket.status))}>
+                  {humanizeStatus(ticket.status)}
                 </Badge>
-                {item.reference && <span className="text-muted-foreground truncate text-[10px]">{item.reference}</span>}
+                {ticket.ticket_number && (
+                  <span className="text-muted-foreground truncate text-[10px]">{ticket.ticket_number}</span>
+                )}
               </div>
             </Row>
           ))}
@@ -243,8 +201,8 @@ export function OpenItemsCard({
       ) : (
         <div className="border-t px-6 py-8">
           <EmptyState
-            title="Nothing waiting on you"
-            description="Open tickets, correspondence, and pending leave will show here."
+            title="No open tickets"
+            description="Open help desk tickets will appear here."
             icon={CheckCircle2}
             className="border-0 py-2"
           />
@@ -253,6 +211,8 @@ export function OpenItemsCard({
     </ListCard>
   )
 }
+
+export const OpenItemsCard = TicketsCard
 
 /* ------------------------------ My Assets ----------------------------- */
 

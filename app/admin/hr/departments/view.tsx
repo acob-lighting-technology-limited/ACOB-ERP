@@ -73,6 +73,7 @@ export interface Department {
   name: string
   description: string | null
   department_code: string | null
+  email: string | null
   is_executive_dept: boolean
   is_active: boolean
   created_at: string
@@ -131,6 +132,14 @@ function DepartmentCard({
         </div>
         <DepartmentStatusBadge isActive={department.is_active} />
       </div>
+      {department.email && (
+        <div className="text-muted-foreground flex items-center gap-1.5 font-mono text-xs">
+          <Mail className="h-3.5 w-3.5 shrink-0" />
+          <a href={`mailto:${department.email}`} className="hover:text-foreground truncate hover:underline">
+            {department.email}
+          </a>
+        </div>
+      )}
       <p className="text-muted-foreground text-sm">{department.description || "No description added"}</p>
       <div className="flex items-center gap-2">
         <Button size="sm" variant="outline" onClick={() => onEdit(department)}>
@@ -166,6 +175,7 @@ export function DepartmentsPage({
     name: "",
     description: "",
     department_code: "",
+    email: "",
     is_executive_dept: false,
     is_active: true,
   })
@@ -258,6 +268,7 @@ export function DepartmentsPage({
             name: newName,
             description: formData.description.trim(),
             department_code: formData.department_code.trim().toUpperCase() || null,
+            email: formData.email.trim().toLowerCase() || null,
             is_executive_dept: formData.is_executive_dept,
             is_active: formData.is_active,
           }),
@@ -279,6 +290,7 @@ export function DepartmentsPage({
             name: formData.name.trim(),
             description: formData.description.trim(),
             department_code: formData.department_code.trim().toUpperCase() || null,
+            email: formData.email.trim().toLowerCase() || null,
             is_executive_dept: formData.is_executive_dept,
             is_active: formData.is_active,
           }),
@@ -289,7 +301,14 @@ export function DepartmentsPage({
 
       setIsDialogOpen(false)
       setEditingDepartment(null)
-      setFormData({ name: "", description: "", department_code: "", is_executive_dept: false, is_active: true })
+      setFormData({
+        name: "",
+        description: "",
+        department_code: "",
+        email: "",
+        is_executive_dept: false,
+        is_active: true,
+      })
       void queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminDepartmentsPage() })
     } catch (err: unknown) {
       log.error("Error saving department:", err)
@@ -312,6 +331,7 @@ export function DepartmentsPage({
       name: department.name,
       description: department.description || "",
       department_code: code || "",
+      email: department.email || "",
       is_executive_dept: department.is_executive_dept,
       is_active: department.is_active,
     })
@@ -335,7 +355,14 @@ export function DepartmentsPage({
     setEditingDepartment(null)
     setOriginalCode(null)
     setExistingReferenceCount(0)
-    setFormData({ name: "", description: "", department_code: "", is_executive_dept: false, is_active: true })
+    setFormData({
+      name: "",
+      description: "",
+      department_code: "",
+      email: "",
+      is_executive_dept: false,
+      is_active: true,
+    })
     setIsDialogOpen(true)
   }
 
@@ -363,6 +390,26 @@ export function DepartmentsPage({
           <span className="text-muted-foreground text-xs">—</span>
         ),
       initialWidth: 100,
+    },
+    {
+      key: "email",
+      label: "Official Email",
+      accessor: (department) => department.email || "",
+      hideOnMobile: true,
+      render: (department) =>
+        department.email ? (
+          <a
+            href={`mailto:${department.email}`}
+            className="hover:text-primary font-mono text-xs transition-colors hover:underline"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {department.email}
+          </a>
+        ) : (
+          <span className="text-muted-foreground text-xs">—</span>
+        ),
+      resizable: true,
+      initialWidth: 200,
     },
     {
       key: "description",
@@ -532,6 +579,17 @@ export function DepartmentsPage({
                       )}
                   </div>
                   <div className="grid gap-2">
+                    <Label htmlFor="department_email">Official Department Email</Label>
+                    <Input
+                      id="department_email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(event) => setFormData({ ...formData, email: event.target.value })}
+                      placeholder="e.g. ict@acoblighting.com"
+                    />
+                    <p className="text-muted-foreground text-xs">Official inbox/contact address for this department.</p>
+                  </div>
+                  <div className="grid gap-2">
                     <Label htmlFor="description">
                       Description <span className="text-destructive">*</span>
                     </Label>
@@ -620,9 +678,9 @@ export function DepartmentsPage({
         filters={filters}
         getRowId={(department) => department.id}
         pagination={{ pageSize: 20 }}
-        searchPlaceholder="Search department name or description..."
+        searchPlaceholder="Search department name, email or description..."
         searchFn={(department, query) =>
-          [department.name, department.description || "", department.department_code || ""]
+          [department.name, department.email || "", department.description || "", department.department_code || ""]
             .join(" ")
             .toLowerCase()
             .includes(query)

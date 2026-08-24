@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import { ProfileHero } from "@/components/profile/profile-hero"
 import { ProfileEditDialog } from "@/components/profile/profile-edit-dialog"
 import { NeedsAttention } from "@/components/profile/needs-attention"
-import { MyTasksCard, OpenItemsCard, AssetsCard, LunchHistoryCard } from "@/components/profile/work-lists"
+import { MyTasksCard, TicketsCard, AssetsCard, LunchHistoryCard } from "@/components/profile/work-lists"
 import {
   PersonalRecentActivityFeed,
   type PersonalRecentActivityItem,
@@ -34,6 +34,7 @@ interface ProfileContentProps {
   helpDesk: HelpDeskItem[]
   payments: PaymentItem[]
   leave: LeaveItem[]
+  annualLeaveRemaining?: number
   attendance: AttendanceItem[]
   lunchLogs: LunchLogItem[]
   recentActivity: PersonalRecentActivityItem[]
@@ -49,6 +50,7 @@ export function ProfileContent({
   helpDesk,
   payments,
   leave,
+  annualLeaveRemaining = 0,
   attendance,
   lunchLogs,
   recentActivity,
@@ -91,13 +93,14 @@ export function ProfileContent({
         helpDesk={helpDesk}
         correspondence={correspondence}
         payments={payments}
+        annualLeaveRemaining={annualLeaveRemaining}
       />
 
       {/* Work first (2/3), secondary context in the rail (1/3) */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <MyTasksCard tasks={tasks} />
-          <OpenItemsCard helpDesk={helpDesk} correspondence={correspondence} leave={leave} />
+          <TicketsCard helpDesk={helpDesk} />
         </div>
 
         <div className="space-y-6">

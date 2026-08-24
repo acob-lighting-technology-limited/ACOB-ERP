@@ -17,17 +17,17 @@ test("delivery and quality diverge when work lands but lands badly", () => {
     endDate: YEAR.end,
     today: "2026-08-21",
     tasks: [
-      { status: "completed", weight: 5, rating: 4 },
-      { status: "completed", weight: 8, rating: 5 },
-      { status: "completed", weight: 10, rating: 2 },
-      { status: "in_progress", weight: 10, rating: null, task_end_date: "2026-07-01" },
-      { status: "pending", weight: 7, rating: null, task_end_date: "2026-11-01" },
+      { status: "completed", weight: 2, rating: 4 },
+      { status: "completed", weight: 4, rating: 5 },
+      { status: "completed", weight: 5, rating: 2 },
+      { status: "in_progress", weight: 5, rating: null, task_end_date: "2026-07-01" },
+      { status: "pending", weight: 4, rating: null, task_end_date: "2026-11-01" },
     ],
   })
 
-  // 23 of 40 weight delivered; earned (4 + 8 + 4) of 40.
-  assert.equal(health.deliveryPct, 57.5)
-  assert.equal(health.qualityPct, 40)
+  // 11 of 20 weight delivered; earned (1.6 + 4 + 2) of 20.
+  assert.equal(health.deliveryPct, 55)
+  assert.equal(health.qualityPct, 38)
   assert.equal(health.overdueCount, 1)
   assert.equal(health.status, "at_risk")
 })
@@ -38,8 +38,8 @@ test("an overdue task alone is enough to flag a project", () => {
     endDate: YEAR.end,
     today: "2026-08-21",
     tasks: [
-      { status: "completed", weight: 10, rating: 5 },
-      { status: "completed", weight: 10, rating: 5 },
+      { status: "completed", weight: 5, rating: 5 },
+      { status: "completed", weight: 5, rating: 5 },
       { status: "in_progress", weight: 1, rating: null, due_date: "2026-08-01" },
     ],
   })
@@ -54,7 +54,7 @@ test("a fully delivered project reads as completed, whatever the calendar says",
     startDate: YEAR.start,
     endDate: YEAR.end,
     today: "2026-03-01",
-    tasks: [{ status: "completed", weight: 10, rating: 4 }],
+    tasks: [{ status: "completed", weight: 5, rating: 4 }],
   })
   assert.equal(health.deliveryPct, 100)
   assert.equal(health.status, "completed")
@@ -66,8 +66,8 @@ test("far behind schedule is distinguished from merely at risk", () => {
     endDate: YEAR.end,
     today: "2026-10-01",
     tasks: [
-      { status: "completed", weight: 2, rating: 5 },
-      { status: "pending", weight: 10, rating: null, task_end_date: "2026-12-01" },
+      { status: "completed", weight: 1, rating: 5 },
+      { status: "pending", weight: 5, rating: null, task_end_date: "2026-12-01" },
     ],
   })
   assert.equal(health.status, "behind_schedule")
@@ -90,7 +90,7 @@ test("portfolio delivery is weighted, so a big project cannot be masked by small
     startDate: YEAR.start,
     endDate: YEAR.end,
     today: "2026-08-21",
-    tasks: Array.from({ length: 10 }, () => ({ status: "pending", weight: 10, rating: null })),
+    tasks: Array.from({ length: 10 }, () => ({ status: "pending", weight: 5, rating: null })),
   })
   const small = computeProjectHealth({
     startDate: YEAR.start,
@@ -101,6 +101,6 @@ test("portfolio delivery is weighted, so a big project cannot be masked by small
 
   const rollup = computePortfolioHealth([big, small])
   assert.equal(rollup.projectCount, 2)
-  // 1 of 101 weight delivered — not the 50% a mean of percentages would give.
-  assert.equal(rollup.deliveryPct, 0.99)
+  // 1 of 51 weight delivered — not the 50% a mean of percentages would give.
+  assert.equal(rollup.deliveryPct, 1.96)
 })

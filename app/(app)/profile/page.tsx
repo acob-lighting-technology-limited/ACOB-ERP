@@ -5,6 +5,7 @@ import { ProfileContent } from "./profile-content"
 import { buildRecentActivity, normalizeToken } from "@/components/admin/dashboard-helpers"
 import type { PersonalRecentActivityItem } from "@/components/profile/personal-recent-activity-feed"
 import { getAvatarSignedUrl } from "@/lib/profile-photos"
+import { getLeaveEntitlements } from "@/lib/hr/leave-entitlement"
 
 export interface UserProfile {
   id: string
@@ -222,6 +223,7 @@ async function getProfileData() {
       helpDesk: [],
       payments: [],
       leave: [],
+      annualLeaveRemaining: 0,
       attendance: [],
       recentActivity: [],
     }
@@ -403,6 +405,19 @@ async function getProfileData() {
     }
   }
 
+  let annualLeaveRemaining = 0
+  try {
+    const entitlements = await getLeaveEntitlements(dataClient, userId)
+    const annual = entitlements.find(
+      (e) => e.code?.toLowerCase() === "annual" || e.name.toLowerCase().includes("annual")
+    )
+    if (annual) {
+      annualLeaveRemaining = annual.remainingDays
+    }
+  } catch {
+    // Fail-safe fallback if leave entitlements computation fails
+  }
+
   const { data: attendanceData, error: attendanceError } = await dataClient
     .from("attendance_records")
     .select("id, date, status, clock_in, clock_out, created_at")
@@ -465,6 +480,7 @@ async function getProfileData() {
     helpDesk: helpDeskData || [],
     payments: paymentsData || [],
     leave: leaveData,
+    annualLeaveRemaining,
     attendance: attendanceData || [],
     lunchLogs: lunchLogsData || [],
     recentActivity,
@@ -492,6 +508,7 @@ export default async function ProfilePage() {
       helpDesk={profileData.helpDesk}
       payments={profileData.payments}
       leave={profileData.leave}
+      annualLeaveRemaining={profileData.annualLeaveRemaining}
       attendance={profileData.attendance}
       lunchLogs={profileData.lunchLogs || []}
       recentActivity={profileData.recentActivity}

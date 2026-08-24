@@ -29,10 +29,19 @@ function resolveActionItemDueDate(actionItem?: ActionItemDueDateRow | null) {
   return toLocalDueDateString(sunday)
 }
 
+/**
+ * Every task one person should see, from one place.
+ *
+ * This is the single loader for the task list. The `/tasks` page used to run
+ * its own near-copy of these queries without the `is_archived` filter, so a
+ * deleted task stayed on screen through the server render and only disappeared
+ * on the next client refresh — which is exactly how "I deleted it and they can
+ * still see it" gets reported.
+ */
 export async function loadUserTasks(
   supabase: ReturnType<typeof createClient>,
   userId: string,
-  _userProfile: TaskUserProfile | null
+  userProfile: TaskUserProfile | null
 ): Promise<Task[]> {
   // 1. Fetch direct tasks assigned to user or created by user
   const { data: directTasks } = await supabase
@@ -52,7 +61,20 @@ export async function loadUserTasks(
       ? await supabase.from("tasks").select("*").in("id", multiTaskIds).eq("is_archived", false)
       : { data: [] }
 
-  const allTasks = [...(directTasks || []), ...(multiTasks || [])].filter(
+  // 3. Work assigned to the whole department. Help-desk tickets are excluded:
+  //    they have their own queue and would otherwise appear twice.
+  const { data: departmentTasks } = userProfile?.department
+    ? await supabase
+        .from("tasks")
+        .select("*")
+        .eq("is_archived", false)
+        .eq("department", userProfile.department)
+        .eq("assignment_type", "department")
+        .neq("source_type", "help_desk")
+        .neq("category", "weekly_action")
+    : { data: [] }
+
+  const allTasks = [...(directTasks || []), ...(multiTasks || []), ...(departmentTasks || [])].filter(
     (task) => String(task.source_type || "") !== "action_item"
   )
   const uniqueTasks = Array.from(new Map(allTasks.map((task) => [task.id, task])).values()) as Task[]

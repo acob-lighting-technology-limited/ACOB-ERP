@@ -32,15 +32,23 @@ interface ReviewCycle {
 interface PerformanceCreateData {
   users: User[]
   cycles: ReviewCycle[]
+  competencies: CompetencyFramework[]
 }
 
-interface BehaviourCompetencies {
-  collaboration: number
-  accountability: number
-  communication: number
-  teamwork: number
-  loyalty: number
-  professional_conduct: number
+/**
+ * Whatever the admin Competencies page has configured, not a fixed set. This
+ * form used to hard-code six keys — collaboration, accountability,
+ * communication, teamwork, loyalty, professional_conduct — so a competency
+ * added or renamed on the admin page never appeared here at all.
+ */
+type BehaviourCompetencies = Record<string, number>
+
+type CompetencyFramework = {
+  key: string
+  label: string
+  category: string
+  is_active: boolean
+  sort_order: number
 }
 
 type ExistingReview = {
@@ -82,15 +90,17 @@ interface CreateReviewDialogProps {
  * Uses server-side scoped API routes — leads only see their dept's employees.
  */
 async function fetchPerformanceCreateData(): Promise<PerformanceCreateData> {
-  const [employeesRes, cyclesRes] = await Promise.all([
+  const [employeesRes, cyclesRes, competenciesRes] = await Promise.all([
     apiFetch("/api/hr/performance/employees", { cache: "no-store" }),
     apiFetch("/api/hr/performance/cycles", { cache: "no-store" }),
+    apiFetch("/api/hr/performance/competencies", { cache: "no-store" }),
   ])
 
   if (!employeesRes.ok) throw new Error("Failed to load employees")
 
   const employeesData = (await employeesRes.json()) as { data?: User[]; error?: string }
   const cyclesData = (await cyclesRes.json()) as { data?: ReviewCycle[]; cycles?: ReviewCycle[] }
+  const competenciesData = (await competenciesRes.json()) as { data?: CompetencyFramework[] }
 
   const cycles = Array.isArray(cyclesData.data)
     ? cyclesData.data
@@ -98,7 +108,14 @@ async function fetchPerformanceCreateData(): Promise<PerformanceCreateData> {
       ? cyclesData.cycles
       : []
 
-  return { users: employeesData.data || [], cycles }
+  // "Behaviour" here means the behaviour competencies specifically — leadership
+  // and core competencies (if the admin page ever grows those categories) rate
+  // through a different part of the review, not this card.
+  const competencies = (competenciesData.data || [])
+    .filter((entry) => entry.is_active && entry.category === "behaviour")
+    .sort((a, b) => a.sort_order - b.sort_order)
+
+  return { users: employeesData.data || [], cycles, competencies }
 }
 
 function clampScore(value: number) {
@@ -107,23 +124,21 @@ function clampScore(value: number) {
 }
 
 function buildCompetencies(
+  keys: string[],
   payload: Record<string, unknown> | null | undefined,
   fallback: number
 ): BehaviourCompetencies {
-  const read = (key: keyof BehaviourCompetencies) => {
+  const result: BehaviourCompetencies = {}
+  for (const key of keys) {
     const raw = payload?.[key]
     const parsed = typeof raw === "number" ? raw : Number(raw)
-    return clampScore(Number.isFinite(parsed) ? parsed : fallback)
+    result[key] = clampScore(Number.isFinite(parsed) ? parsed : fallback)
   }
+  return result
+}
 
-  return {
-    collaboration: read("collaboration"),
-    accountability: read("accountability"),
-    communication: read("communication"),
-    teamwork: read("teamwork"),
-    loyalty: read("loyalty"),
-    professional_conduct: read("professional_conduct"),
-  }
+function emptyCompetencies(keys: string[]): BehaviourCompetencies {
+  return Object.fromEntries(keys.map((key) => [key, 0]))
 }
 
 export function CreateReviewDialog({
@@ -152,14 +167,7 @@ export function CreateReviewDialog({
     attendance_score: 0,
     status: "draft" as "draft" | "submitted" | "completed",
   })
-  const [competencies, setCompetencies] = useState<BehaviourCompetencies>({
-    collaboration: 0,
-    accountability: 0,
-    communication: 0,
-    teamwork: 0,
-    loyalty: 0,
-    professional_conduct: 0,
-  })
+  const [competencies, setCompetencies] = useState<BehaviourCompetencies>({})
 
   const { data, isLoading } = useQuery({
     queryKey: QUERY_KEYS.performanceCreateData(),
@@ -169,6 +177,24 @@ export function CreateReviewDialog({
 
   const users = useMemo(() => data?.users ?? [], [data?.users])
   const cycles = useMemo(() => data?.cycles ?? [], [data?.cycles])
+  const competencyFrameworks = useMemo(() => data?.competencies ?? [], [data?.competencies])
+  const competencyKeys = useMemo(() => competencyFrameworks.map((entry) => entry.key), [competencyFrameworks])
+  const competencyLabelByKey = useMemo(
+    () => new Map(competencyFrameworks.map((entry) => [entry.key, entry.label])),
+    [competencyFrameworks]
+  )
+
+  // Once the framework list arrives, seed any competency it defines that the
+  // current state doesn't have yet — covers the case where the list loads
+  // after the dialog is already open.
+  useEffect(() => {
+    if (competencyKeys.length === 0) return
+    setCompetencies((prev) => {
+      const missing = competencyKeys.filter((key) => !(key in prev))
+      if (missing.length === 0) return prev
+      return { ...prev, ...emptyCompetencies(missing) }
+    })
+  }, [competencyKeys])
   const departments = useMemo(
     () =>
       Array.from(new Set(users.map((user) => user.department).filter(Boolean) as string[])).sort((a, b) =>
@@ -186,47 +212,54 @@ export function CreateReviewDialog({
   const selectedKey = isSelectionComplete ? `${formData.user_id}:${formData.review_cycle_id}` : ""
   const isSelectionDataReady = isSelectionComplete && loadedSelectionKey === selectedKey && !loadingScore
 
-  const behaviourAvg = Math.round(
-    Object.values(competencies).reduce((sum, value) => sum + value, 0) / Object.keys(competencies).length
-  )
+  // competencies starts empty until the framework list loads, which would
+  // otherwise divide by zero for the moment before that happens.
+  const competencyValues = Object.values(competencies)
+  const behaviourAvg =
+    competencyValues.length > 0
+      ? Math.round(competencyValues.reduce((sum, value) => sum + value, 0) / competencyValues.length)
+      : 0
   const finalScore = Math.round(
     formData.kpi_score * 0.7 + formData.cbt_score * 0.1 + formData.attendance_score * 0.1 + behaviourAvg * 0.1
   )
 
-  const loadScoresForSelection = useCallback(async (userId: string, cycleId: string) => {
-    if (!userId || !cycleId) return
-    setLoadingScore(true)
-    setLoadedSelectionKey("")
-    const requestKey = `${userId}:${cycleId}`
-    try {
-      const res = await apiFetch(`/api/hr/performance/score?user_id=${userId}&cycle_id=${cycleId}`, {
-        cache: "no-store",
-      })
-      const json = (await res.json()) as ScoreResponse
-      if (!res.ok) throw new Error(json.error || "Failed to load performance data")
-      const scoreData = json.data
-      const existingReview = scoreData?.existing_review
+  const loadScoresForSelection = useCallback(
+    async (userId: string, cycleId: string) => {
+      if (!userId || !cycleId) return
+      setLoadingScore(true)
+      setLoadedSelectionKey("")
+      const requestKey = `${userId}:${cycleId}`
+      try {
+        const res = await apiFetch(`/api/hr/performance/score?user_id=${userId}&cycle_id=${cycleId}`, {
+          cache: "no-store",
+        })
+        const json = (await res.json()) as ScoreResponse
+        if (!res.ok) throw new Error(json.error || "Failed to load performance data")
+        const scoreData = json.data
+        const existingReview = scoreData?.existing_review
 
-      const fallbackBehaviour = clampScore(Number(scoreData?.behaviour_score ?? existingReview?.behaviour_score ?? 0))
+        const fallbackBehaviour = clampScore(Number(scoreData?.behaviour_score ?? existingReview?.behaviour_score ?? 0))
 
-      setFormData((prev) => ({
-        ...prev,
-        kpi_score: clampScore(Number(scoreData?.kpi_score ?? 0)),
-        cbt_score: clampScore(Number(scoreData?.cbt_score ?? 0)),
-        attendance_score: clampScore(Number(scoreData?.attendance_score ?? 0)),
-        strengths: String(existingReview?.strengths || ""),
-        areas_for_improvement: String(existingReview?.areas_for_improvement || ""),
-        manager_comments: String(existingReview?.manager_comments || ""),
-      }))
+        setFormData((prev) => ({
+          ...prev,
+          kpi_score: clampScore(Number(scoreData?.kpi_score ?? 0)),
+          cbt_score: clampScore(Number(scoreData?.cbt_score ?? 0)),
+          attendance_score: clampScore(Number(scoreData?.attendance_score ?? 0)),
+          strengths: String(existingReview?.strengths || ""),
+          areas_for_improvement: String(existingReview?.areas_for_improvement || ""),
+          manager_comments: String(existingReview?.manager_comments || ""),
+        }))
 
-      setCompetencies(buildCompetencies(existingReview?.behaviour_competencies, fallbackBehaviour))
-    } catch {
-      toast.error("Failed to load selected employee data for this quarter")
-    } finally {
-      setLoadedSelectionKey(requestKey)
-      setLoadingScore(false)
-    }
-  }, [])
+        setCompetencies(buildCompetencies(competencyKeys, existingReview?.behaviour_competencies, fallbackBehaviour))
+      } catch {
+        toast.error("Failed to load selected employee data for this quarter")
+      } finally {
+        setLoadedSelectionKey(requestKey)
+        setLoadingScore(false)
+      }
+    },
+    [competencyKeys]
+  )
 
   useEffect(() => {
     if (!open) return
@@ -243,15 +276,8 @@ export function CreateReviewDialog({
       attendance_score: 0,
       status: initialStatus,
     })
-    setCompetencies({
-      collaboration: 0,
-      accountability: 0,
-      communication: 0,
-      teamwork: 0,
-      loyalty: 0,
-      professional_conduct: 0,
-    })
-  }, [open, initialDepartment, initialUserId, initialCycleId, initialStatus])
+    setCompetencies(emptyCompetencies(competencyKeys))
+  }, [open, initialDepartment, initialUserId, initialCycleId, initialStatus, competencyKeys])
 
   useEffect(() => {
     if (!open || !formData.user_id || !formData.review_cycle_id) return
@@ -482,28 +508,27 @@ export function CreateReviewDialog({
 
                   <div className="space-y-4 rounded-lg border p-4">
                     <h3 className="font-semibold">Behaviour</h3>
-                    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                      {Object.entries(competencies).map(([key, value]) => (
-                        <FormFieldGroup
-                          key={key}
-                          label={key
-                            .replace("_", " ")
-                            .split(" ")
-                            .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-                            .join(" ")}
-                        >
-                          <Input
-                            type="number"
-                            min="0"
-                            max="100"
-                            value={value}
-                            onChange={(e) =>
-                              setCompetencies((prev) => ({ ...prev, [key]: clampScore(Number(e.target.value)) }))
-                            }
-                          />
-                        </FormFieldGroup>
-                      ))}
-                    </div>
+                    {competencyKeys.length === 0 ? (
+                      <p className="text-muted-foreground text-sm">
+                        No active behaviour competencies are configured. Add some on the Competencies admin page.
+                      </p>
+                    ) : (
+                      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                        {competencyKeys.map((key) => (
+                          <FormFieldGroup key={key} label={competencyLabelByKey.get(key) ?? key}>
+                            <Input
+                              type="number"
+                              min="0"
+                              max="100"
+                              value={competencies[key] ?? 0}
+                              onChange={(e) =>
+                                setCompetencies((prev) => ({ ...prev, [key]: clampScore(Number(e.target.value)) }))
+                              }
+                            />
+                          </FormFieldGroup>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">

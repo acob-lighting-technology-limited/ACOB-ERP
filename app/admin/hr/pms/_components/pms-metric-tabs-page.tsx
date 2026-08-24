@@ -98,14 +98,10 @@ function MetricAddDialog({
   const [strengths, setStrengths] = useState("")
   const [areasForImprovement, setAreasForImprovement] = useState("")
   const [managerComments, setManagerComments] = useState("")
-  const [competencies, setCompetencies] = useState({
-    collaboration: "",
-    accountability: "",
-    communication: "",
-    teamwork: "",
-    loyalty: "",
-    professional_conduct: "",
-  })
+  // Whatever the admin Competencies page has configured, not a fixed set of
+  // six keys — a competency added or renamed there used to never appear here.
+  const [competencies, setCompetencies] = useState<Record<string, string>>({})
+  const [competencyFrameworks, setCompetencyFrameworks] = useState<Array<{ key: string; label: string }>>([])
 
   const addableCycles = useMemo(() => {
     return cycles.filter((c) => matchesCadenceFor("quarterly", c.review_type, c.name))
@@ -119,15 +115,32 @@ function MetricAddDialog({
     setStrengths("")
     setAreasForImprovement("")
     setManagerComments("")
-    setCompetencies({
-      collaboration: "",
-      accountability: "",
-      communication: "",
-      teamwork: "",
-      loyalty: "",
-      professional_conduct: "",
-    })
+    setCompetencies({})
   }, [open, users, cycles, addableCycles, initialUserId, initialCycleId])
+
+  useEffect(() => {
+    if (!open || metric !== "behaviour") return
+    let active = true
+    void (async () => {
+      const response = await apiFetch("/api/hr/performance/competencies", { cache: "no-store" })
+      const payload = (await response.json().catch(() => null)) as {
+        data?: Array<{ key: string; label: string; category: string; is_active: boolean }>
+      } | null
+      if (!active) return
+      const activeCompetencies = (payload?.data || []).filter(
+        (entry) => entry.is_active && entry.category === "behaviour"
+      )
+      setCompetencyFrameworks(activeCompetencies.map((entry) => ({ key: entry.key, label: entry.label })))
+      setCompetencies((prev) => {
+        const next = { ...prev }
+        for (const entry of activeCompetencies) if (!(entry.key in next)) next[entry.key] = ""
+        return next
+      })
+    })()
+    return () => {
+      active = false
+    }
+  }, [open, metric])
 
   useEffect(() => {
     if (!open || !userId || !cycleId) return
@@ -167,19 +180,14 @@ function MetricAddDialog({
           } | null
           const entry = payload?.data?.existing_review?.behaviour_competencies || {}
           if (!active) return
-          setCompetencies({
-            collaboration:
-              entry.collaboration !== undefined && entry.collaboration !== null ? asString(entry.collaboration) : "",
-            accountability:
-              entry.accountability !== undefined && entry.accountability !== null ? asString(entry.accountability) : "",
-            communication:
-              entry.communication !== undefined && entry.communication !== null ? asString(entry.communication) : "",
-            teamwork: entry.teamwork !== undefined && entry.teamwork !== null ? asString(entry.teamwork) : "",
-            loyalty: entry.loyalty !== undefined && entry.loyalty !== null ? asString(entry.loyalty) : "",
-            professional_conduct:
-              entry.professional_conduct !== undefined && entry.professional_conduct !== null
-                ? asString(entry.professional_conduct)
-                : "",
+          setCompetencies((prev) => {
+            const keys = competencyFrameworks.length > 0 ? competencyFrameworks.map((f) => f.key) : Object.keys(prev)
+            const next: Record<string, string> = {}
+            for (const key of keys) {
+              const raw = entry[key]
+              next[key] = raw !== undefined && raw !== null ? asString(raw) : ""
+            }
+            return next
           })
           setStrengths(String(payload?.data?.existing_review?.strengths || ""))
           setAreasForImprovement(String(payload?.data?.existing_review?.areas_for_improvement || ""))
@@ -193,7 +201,7 @@ function MetricAddDialog({
     return () => {
       active = false
     }
-  }, [open, metric, userId, cycleId, users])
+  }, [open, metric, userId, cycleId, users, competencyFrameworks])
 
   async function handleSave() {
     setSaving(true)
@@ -297,7 +305,7 @@ function MetricAddDialog({
             <div className="grid gap-3 sm:grid-cols-2">
               {Object.entries(competencies).map(([key, value]) => (
                 <div key={key} className="space-y-2">
-                  <Label>{key.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase())}</Label>
+                  <Label>{competencyFrameworks.find((f) => f.key === key)?.label ?? key}</Label>
                   <Input
                     type="number"
                     min="1"
@@ -505,6 +513,7 @@ export function PmsMetricTabsPage({
       render: (values, onChange) => (
         <Select
           value={values[0] || cycleType}
+          disabled={isRefreshing}
           onValueChange={(value) => {
             const next = value as PmsCadence
             onChange([next])
@@ -548,6 +557,7 @@ export function PmsMetricTabsPage({
         return (
           <Select
             value={currentValue}
+            disabled={isRefreshing}
             onValueChange={(id) => {
               onChange([id])
               setCycleId(id)
@@ -587,7 +597,7 @@ export function PmsMetricTabsPage({
       })
     }
     return result
-  }, [tab, data, cycleId, cycleType, setCycleType])
+  }, [tab, data, cycleId, cycleType, setCycleType, isRefreshing])
 
   const tableRowActions = useMemo<RowAction<Record<string, unknown>>[] | undefined>(() => {
     if (tab === "individual" && (metric === "attendance" || metric === "behaviour")) {
@@ -714,7 +724,7 @@ export function PmsMetricTabsPage({
         filters={tableFilters}
         getRowId={(row) => String(row.user_id || row.department || row.cycle || JSON.stringify(row).slice(0, 40))}
         pagination={{ pageSize: 50 }}
-        isLoading={isInitialLoading}
+        isLoading={isInitialLoading || isRefreshing}
         skeletonRows={6}
         rowActions={tableRowActions}
         forceRowActionsDropdown={true}

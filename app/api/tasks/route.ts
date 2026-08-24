@@ -25,6 +25,7 @@ const TaskBodySchema = z.object({
   assigned_to: z.string().uuid().optional().nullable(),
   assigned_users: z.array(z.string().uuid()).optional().default([]),
   goal_id: z.string().uuid().optional().nullable(),
+  kpi_id: z.string().uuid().optional().nullable(),
   project_id: z.string().uuid().optional().nullable(),
   plan_id: z.string().uuid().optional().nullable(),
   // Compulsory: task weight is the denominator of the employee's KPI score.
@@ -82,8 +83,10 @@ export async function GET(request: NextRequest) {
         assigned_at,
         department,
         goal_id,
+        kpi_id,
         project_id,
         plan_id,
+        group_id,
         weight,
         rating,
         rated_by,
@@ -144,6 +147,7 @@ export async function GET(request: NextRequest) {
     // Collect all profile IDs to batch fetch
     const profileIds = new Set<string>()
     const goalIds = new Set<string>()
+    const kpiIds = new Set<string>()
     const multipleTaskIds: string[] = []
 
     tasks.forEach((t) => {
@@ -154,15 +158,19 @@ export async function GET(request: NextRequest) {
       if (t.reviewed_by) profileIds.add(t.reviewed_by)
       if (t.reassigned_to) profileIds.add(t.reassigned_to)
       if (t.goal_id) goalIds.add(t.goal_id)
+      if (t.kpi_id) kpiIds.add(t.kpi_id)
       if (t.assignment_type === "multiple") multipleTaskIds.push(t.id)
     })
 
-    const [profilesRes, goalsRes, assignmentsRes] = await Promise.all([
+    const [profilesRes, goalsRes, kpisRes, assignmentsRes] = await Promise.all([
       profileIds.size > 0
         ? supabase.from("profiles").select("id, first_name, last_name, department").in("id", Array.from(profileIds))
         : { data: [] },
       goalIds.size > 0
         ? supabase.from("goals_objectives").select("id, title").in("id", Array.from(goalIds))
+        : { data: [] },
+      kpiIds.size > 0
+        ? supabase.from("corporate_kpis").select("id, measure").in("id", Array.from(kpiIds))
         : { data: [] },
       multipleTaskIds.length > 0
         ? supabase.from("task_assignments").select("task_id, user_id").in("task_id", multipleTaskIds)
@@ -174,6 +182,9 @@ export async function GET(request: NextRequest) {
     )
     const goalMap = new Map<string, string>(
       ((goalsRes.data || []) as Array<{ id: string; title: string }>).map((g) => [g.id, g.title])
+    )
+    const kpiMap = new Map<string, string>(
+      ((kpisRes.data || []) as Array<{ id: string; measure: string }>).map((k) => [k.id, k.measure])
     )
 
     // Check if assignments referenced additional users
@@ -207,6 +218,7 @@ export async function GET(request: NextRequest) {
       if (t.reviewed_by) copy.reviewed_by_user = profileMap.get(t.reviewed_by)
       if (t.reassigned_to) copy.reassigned_to_user = profileMap.get(t.reassigned_to)
       if (t.goal_id) copy.goal_title = goalMap.get(t.goal_id) || null
+      if (t.kpi_id) copy.kpi_measure = kpiMap.get(t.kpi_id) || null
       if (t.assignment_type === "multiple") {
         copy.assigned_users = assignmentsByTaskId.get(t.id) || []
       }
@@ -279,6 +291,22 @@ export async function POST(request: NextRequest) {
       })
     }
 
+    // Work with nobody responsible for it is not a task. Department-wide
+    // assignment is the one shape that legitimately has no named person; every
+    // other kind needs at least one. Five such rows already exist in the data,
+    // and they belong to nobody's list and nobody's score.
+    if (payload.assignment_type !== "department" && targetUserIds.length === 0) {
+      return apiError("A task must be assigned to at least one person", ApiErrorCode.MISSING_REQUIRED_FIELD, 400)
+    }
+
+    if (payload.assignment_type === "department" && !resolvedDepartment) {
+      return apiError(
+        "A department-wide task must specify the department it belongs to",
+        ApiErrorCode.MISSING_REQUIRED_FIELD,
+        400
+      )
+    }
+
     // Validate scope if assigner is a department lead
     if (!isAdmin && isLead) {
       if (resolvedDepartment && !canAssignToDepartment(profile, resolvedDepartment)) {
@@ -307,7 +335,13 @@ export async function POST(request: NextRequest) {
 
     // ── Fan-Out Logic: If multiple assignees, create 1 task row per assignee ──
     if (targetUserIds.length > 1) {
+      // One piece of work assigned to several people is one thing to the lead
+      // who created it. The shared group id keeps that true, so archiving or
+      // editing the set does not leave orphaned copies on other people's lists.
+      const fanOutGroupId = targetUserIds.length > 1 ? crypto.randomUUID() : null
+
       const insertPayloads = targetUserIds.map((targetId) => ({
+        group_id: fanOutGroupId,
         title: payload.title,
         description: payload.description || null,
         priority: payload.priority,
@@ -321,6 +355,7 @@ export async function POST(request: NextRequest) {
         created_by: user.id,
         updated_by: user.id,
         goal_id: payload.goal_id || null,
+        kpi_id: payload.kpi_id || null,
         project_id: payload.project_id || null,
         plan_id: payload.plan_id || null,
         weight: payload.weight,
@@ -399,6 +434,7 @@ export async function POST(request: NextRequest) {
       created_by: user.id,
       updated_by: user.id,
       goal_id: payload.goal_id || null,
+      kpi_id: payload.kpi_id || null,
       project_id: payload.project_id || null,
       plan_id: payload.plan_id || null,
       weight: payload.weight,

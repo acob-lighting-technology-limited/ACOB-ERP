@@ -16,7 +16,6 @@ import { CreateTicketDialog, type CreateTicketForm } from "@/components/help-des
 import type { HelpDeskTicket, HelpDeskContentProps } from "@/components/help-desk/help-desk-types"
 import type { HelpDeskTicketDetailResponse } from "@/components/help-desk/help-desk-types"
 import { UserHelpDeskTicketDetailsDialog } from "@/components/help-desk/user-ticket-details-dialog"
-import { UserHelpDeskTicketCommentDialog } from "@/components/help-desk/user-ticket-comment-dialog"
 import { PriorityBadge, TicketStatusBadge } from "@/components/dashboard/help-desk/ticket-badges"
 import { formatName } from "@/lib/utils"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
@@ -101,12 +100,9 @@ export function HelpDeskContent({
   const [selectedTicketStatus, setSelectedTicketStatus] = useState("")
   const [selectedTicketDetail, setSelectedTicketDetail] = useState<HelpDeskTicketDetailResponse | null>(null)
   const [detailsOpen, setDetailsOpen] = useState(false)
-  const [commentOpen, setCommentOpen] = useState(false)
   const [detailsLoading, setDetailsLoading] = useState(false)
   const [detailsError, setDetailsError] = useState<string | null>(null)
   const [detailComment, setDetailComment] = useState("")
-  const [commentFeedback, setCommentFeedback] = useState<string | null>(null)
-  const [commentFeedbackTone, setCommentFeedbackTone] = useState<"success" | "error" | null>(null)
   const [form, setForm] = useState<CreateTicketForm>({
     title: "",
     description: "",
@@ -266,7 +262,7 @@ export function HelpDeskContent({
             className="inline-flex"
             onClick={(event) => {
               event.stopPropagation()
-              void openTicketCommentDialog(ticket.id)
+              void openTicketDetails(ticket.id)
             }}
             title="View comments"
           >
@@ -457,18 +453,6 @@ export function HelpDeskContent({
     [loadTicketDetails]
   )
 
-  const openTicketCommentDialog = useCallback(
-    async (ticketId: string) => {
-      setSelectedTicketId(ticketId)
-      setCommentOpen(true)
-      setDetailComment("")
-      setCommentFeedback(null)
-      setCommentFeedbackTone(null)
-      await loadTicketDetails(ticketId)
-    },
-    [loadTicketDetails]
-  )
-
   async function updateTicketStatusFromModal(status: string) {
     if (!selectedTicketId) return
 
@@ -502,8 +486,6 @@ export function HelpDeskContent({
   async function addTicketCommentFromModal() {
     if (!selectedTicketId || !detailComment.trim()) return
     setIsDetailSaving(true)
-    setCommentFeedback(null)
-    setCommentFeedbackTone(null)
     try {
       const res = await apiFetch(`/api/help-desk/tickets/${selectedTicketId}/comments`, {
         method: "POST",
@@ -515,8 +497,6 @@ export function HelpDeskContent({
       const created = payload?.data || null
       toast.success("Comment added")
       setDetailComment("")
-      setCommentFeedback("Comment posted.")
-      setCommentFeedbackTone("success")
       if (created) {
         setSelectedTicketDetail((previous) => {
           if (!previous || previous.ticket.id !== selectedTicketId) return previous
@@ -532,10 +512,7 @@ export function HelpDeskContent({
         )
       )
     } catch (error: unknown) {
-      const message = getErrorMessage(error, "Failed to add comment")
-      toast.error(message)
-      setCommentFeedback(message)
-      setCommentFeedbackTone("error")
+      toast.error(getErrorMessage(error, "Failed to add comment"))
     } finally {
       setIsDetailSaving(false)
     }
@@ -643,7 +620,6 @@ export function HelpDeskContent({
         }
         rowActions={[
           { label: "View Details", icon: Eye, onClick: (ticket) => void openTicketDetails(ticket.id) },
-          { label: "Add Comment", icon: MessageSquare, onClick: (ticket) => void openTicketCommentDialog(ticket.id) },
           {
             label: "Start",
             icon: Play,
@@ -772,29 +748,10 @@ export function HelpDeskContent({
               !canUserChangeTicketStatus(selectedTicketDetail.ticket, userId)
             : false
         }
-      />
-      <UserHelpDeskTicketCommentDialog
-        open={commentOpen}
-        onOpenChange={setCommentOpen}
-        detail={selectedTicketDetail}
-        isLoading={detailsLoading}
-        loadError={detailsError}
-        onRetry={async () => {
-          if (!selectedTicketId) return
-          await loadTicketDetails(selectedTicketId)
-        }}
         newComment={detailComment}
-        setNewComment={(value) => {
-          setDetailComment(value)
-          if (commentFeedback) {
-            setCommentFeedback(null)
-            setCommentFeedbackTone(null)
-          }
-        }}
+        setNewComment={setDetailComment}
         onAddComment={addTicketCommentFromModal}
-        isSaving={isDetailSaving}
-        feedbackMessage={commentFeedback}
-        feedbackTone={commentFeedbackTone}
+        isPostingComment={isDetailSaving}
         attachmentsSlot={<TicketAttachmentsPanel ticketId={selectedTicketId} currentUserId={userId} />}
       />
     </DataTablePage>

@@ -5,7 +5,7 @@
  * (1-5) from its rater. A task is therefore worth `weight` points and earns
  * `weight * rating/5` of them:
  *
- *   weight 10, rating 4/5  →  8 of a possible 10
+ *   weight 5, rating 4/5  →  4 of a possible 5
  *
  * The employee's KPI percentage — 70% of the half-year appraisal — is the sum
  * of what they earned over the sum of what was available. Weight is relative,
@@ -17,8 +17,8 @@
  */
 
 export const TASK_WEIGHT_MIN = 1
-export const TASK_WEIGHT_MAX = 10
-export const TASK_WEIGHT_DEFAULT = 5
+export const TASK_WEIGHT_MAX = 5
+export const TASK_WEIGHT_DEFAULT = 3
 
 export const TASK_RATING_MIN = 1
 export const TASK_RATING_MAX = 5
@@ -26,6 +26,15 @@ export const TASK_RATING_MAX = 5
 /** Neutral for scoring: the work moved elsewhere or was called off, so it is
  *  neither credit nor failure for this employee. */
 const EXCLUDED_STATUSES = new Set(["reassigned", "cancelled"])
+
+/** Plain names for the weight scale, so a lead is not guessing what "3" means. */
+export const TASK_WEIGHT_LABELS: Record<number, string> = {
+  1: "minor",
+  2: "small",
+  3: "normal",
+  4: "significant",
+  5: "critical",
+}
 
 export const TASK_RATING_LABELS: Record<number, string> = {
   1: "Poor",
@@ -91,8 +100,21 @@ export function isTaskScorable(task: ScorableTask): boolean {
   if (task.is_archived) return false
   const status = String(task.status || "").toLowerCase()
   if (EXCLUDED_STATUSES.has(status)) return false
-  if (status === "submitted_for_review" && task.rating == null) return false
+  if (isAwaitingRating(task)) return false
   return true
+}
+
+/**
+ * Delivered but not yet judged.
+ *
+ * Submitted work obviously qualifies. So does a completed task with no rating:
+ * a rating is mandatory to complete one now, so any such row predates that rule
+ * — scoring it zero would punish an employee for work they actually finished.
+ */
+export function isAwaitingRating(task: ScorableTask): boolean {
+  const status = String(task.status || "").toLowerCase()
+  if (task.rating != null) return false
+  return status === "submitted_for_review" || status === "completed"
 }
 
 /** Points earned by one task: weight * rating/5. Unrated work earns nothing. */
@@ -130,8 +152,7 @@ export function computeWeightedTaskScore(tasks: ScorableTask[]): WeightedTaskSco
   for (const task of tasks) {
     if (task.is_archived) continue
 
-    const status = String(task.status || "").toLowerCase()
-    if (status === "submitted_for_review" && task.rating == null) {
+    if (isAwaitingRating(task)) {
       awaitingRatingCount++
       continue
     }
@@ -161,7 +182,7 @@ export function computeProjectProgress(tasks: ScorableTask[]) {
 
   for (const task of tasks) {
     if (task.is_archived) continue
-    if (!isTaskScorable(task) && String(task.status || "").toLowerCase() !== "submitted_for_review") continue
+    if (!isTaskScorable(task) && !isAwaitingRating(task)) continue
     const weight = clampWeight(task.weight)
     totalWeight += weight
     if (String(task.status || "").toLowerCase() === "completed") completedWeight += weight

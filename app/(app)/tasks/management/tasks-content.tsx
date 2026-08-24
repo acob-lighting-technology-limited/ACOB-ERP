@@ -7,8 +7,10 @@ import { logger } from "@/lib/logger"
 import { ClipboardList, Clock, CheckCircle2, MessageSquare, Send, AlertTriangle } from "lucide-react"
 
 import { UserTaskDetailsDialog } from "@/components/tasks/UserTaskDetailsDialog"
-import { UserTaskCommentDialog } from "@/components/tasks/UserTaskCommentDialog"
 import { loadUserTasks } from "@/components/tasks/user-tasks-data"
+import { Button } from "@/components/ui/button"
+import { TaskStatusControl } from "@/components/tasks/TaskStatusControl"
+import { TASK_RATING_LABELS, TASK_WEIGHT_DEFAULT, TASK_WEIGHT_LABELS } from "@/lib/tasks/scoring"
 import type { Task, TaskUserProfile } from "@/types/task"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
@@ -17,7 +19,6 @@ import { Badge } from "@/components/ui/badge"
 import { formatName, formatFullName } from "@/lib/utils"
 import { formatWATDate } from "@/lib/utils/date"
 import { apiFetch } from "@/lib/api-client"
-import { TASK_STATUS_CONFIG, type TaskStatus } from "@/lib/tasks/constants"
 
 export type { Task, TaskUserProfile } from "@/types/task"
 
@@ -50,11 +51,19 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
   const [taskUpdates, setTaskUpdates] = useState<TaskUpdate[]>([])
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
-  const [isCommentOpen, setIsCommentOpen] = useState(false)
-  const [newComment, setNewComment] = useState("")
-  const [isSaving, setIsSaving] = useState(false)
-  const [newStatus, setNewStatus] = useState("")
+  const [isPostingComment, setIsPostingComment] = useState(false)
   const supabase = createClient()
+
+  // Whether this user may approve, rate, reject or reassign a given task. The
+  // control offers those decisions inline, so it needs to know per row.
+  const canReviewTask = (task: Task) => {
+    const role = String(userProfile?.role || "").toLowerCase()
+    if (["admin", "super_admin", "developer"].includes(role)) return true
+    if (!userProfile?.is_department_lead) return false
+    const leadDepartments = Array.isArray(userProfile.lead_departments) ? userProfile.lead_departments : []
+    const scope = [userProfile.department, ...leadDepartments].filter(Boolean) as string[]
+    return Boolean(task.department && scope.includes(task.department))
+  }
 
   const stats = useMemo(
     () => ({
@@ -118,62 +127,32 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
 
   const openTaskDetails = async (task: Task) => {
     setSelectedTask(task)
-    setNewStatus(task.status)
-    setNewComment("")
     await loadTaskUpdates(task.id)
     setIsDetailsOpen(true)
   }
 
-  const openTaskCommentDialog = async (task: Task) => {
-    setSelectedTask(task)
-    setNewComment("")
-    await loadTaskUpdates(task.id)
-    setIsCommentOpen(true)
-  }
+  // Status changes go through TaskStatusControl directly against the API now
+  // — this used to be a second path (updateTaskStatus/handleUpdateStatus) that
+  // existed only to serve the old "My Actions" tab, which no longer exists.
 
-  const updateTaskStatus = async (
-    task: Task,
-    status: string,
-    reasonOrNote?: string,
-    options?: { closeDialog?: boolean }
-  ) => {
-    if (!task?.id) return
-    setIsSaving(true)
+  const postComment = async (content: string) => {
+    if (!selectedTask || !content.trim()) return
+    setIsPostingComment(true)
     try {
-      const endpoint = `/api/tasks/${task.id}/status`
-      const body = {
-        status,
-        comment: status === "submitted_for_review" ? reasonOrNote : undefined,
-        reason: status === "unable_to_complete" ? reasonOrNote : undefined,
-      }
-
-      const response = await apiFetch(endpoint, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+      await supabase.from("task_updates").insert({
+        task_id: selectedTask.id,
+        user_id: userId,
+        update_type: "comment",
+        content: content.trim(),
       })
-
-      if (!response.ok) {
-        const payload = await response.json().catch(() => null)
-        throw new Error(payload?.error || "Failed to update task")
-      }
-
-      toast.success("Task updated successfully")
+      toast.success("Comment added")
+      await loadTaskUpdates(selectedTask.id)
       await loadTasks()
-      setSelectedTask((prev) => (prev && prev.id === task.id ? { ...prev, status } : prev))
-      if (options?.closeDialog) {
-        setIsDetailsOpen(false)
-      }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Failed to update status")
+    } catch {
+      toast.error("Failed to add comment")
     } finally {
-      setIsSaving(false)
+      setIsPostingComment(false)
     }
-  }
-
-  const handleUpdateStatus = async (status: string, reason?: string) => {
-    if (!selectedTask) return
-    await updateTaskStatus(selectedTask, status, reason || newComment.trim(), { closeDialog: true })
   }
 
   const columns: DataTableColumn<Task>[] = [
@@ -187,15 +166,15 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
     },
     {
       key: "title",
-      label: "Title & Department",
+      label: "Task",
       sortable: true,
       resizable: true,
-      initialWidth: 280,
+      initialWidth: 300,
       accessor: (t) => t.title,
       render: (t) => (
         <div className="flex flex-col">
           <span className="line-clamp-1 font-medium">{t.title}</span>
-          <span className="text-muted-foreground text-[10px] uppercase">{t.department || "General"}</span>
+          {t.goal_title && <span className="text-muted-foreground line-clamp-1 text-[10px]">{t.goal_title}</span>}
         </div>
       ),
     },
@@ -231,14 +210,13 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
       label: "Status",
       sortable: true,
       accessor: (t) => t.status,
-      render: (t) => {
-        const cfg = TASK_STATUS_CONFIG[t.status as TaskStatus] || TASK_STATUS_CONFIG.pending
-        return (
-          <Badge variant={cfg.badgeVariant} className={`text-[11px] capitalize ${cfg.color}`}>
-            {cfg.label}
-          </Badge>
-        )
-      },
+      // Changed straight from the row: opening a modal to move a task through
+      // three states was the slowest part of the whole workflow.
+      render: (t) => (
+        <div onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}>
+          <TaskStatusControl task={t} canReview={canReviewTask(t)} onChanged={() => void loadTasks()} size="sm" />
+        </div>
+      ),
     },
     {
       key: "due_date",
@@ -276,6 +254,8 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
       label: "Comments",
       sortable: true,
       accessor: (t) => t.comment_count || 0,
+      // Comments live in Details → Activity now, not a second dialog reached
+      // from a different button. This is one click through to that tab.
       render: (t) =>
         (t.comment_count || 0) > 0 ? (
           <button
@@ -283,7 +263,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
             className="inline-flex"
             onClick={(event) => {
               event.stopPropagation()
-              void openTaskCommentDialog(t)
+              void openTaskDetails(t)
             }}
             title="View comments"
           >
@@ -388,11 +368,66 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
             label: "Open Details",
             onClick: (task) => void openTaskDetails(task),
           },
-          {
-            label: "Add Comment",
-            onClick: (task) => void openTaskCommentDialog(task),
-          },
         ]}
+        expandable={{
+          render: (task) => (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Description</p>
+                <p className="mt-1 text-sm">{task.description || "No description provided."}</p>
+                <div className="text-muted-foreground mt-3 space-y-1 text-xs">
+                  <p>
+                    Assigned to{" "}
+                    {task.assigned_to_user
+                      ? formatFullName(task.assigned_to_user.first_name, task.assigned_to_user.last_name)
+                      : task.assignment_type === "department"
+                        ? `${task.department || "the department"} (whole department)`
+                        : "nobody"}
+                  </p>
+                  <p>
+                    Starts {task.task_start_date ? formatWATDate(task.task_start_date) : "-"} · Due{" "}
+                    {task.task_end_date || task.due_date
+                      ? formatWATDate((task.task_end_date || task.due_date) as string)
+                      : "no deadline"}
+                  </p>
+                  {task.group_id && <p>Part of a task assigned to several people.</p>}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between rounded-md border p-2 text-xs">
+                  <span className="text-muted-foreground">Weight</span>
+                  <span className="font-medium">
+                    {task.weight ?? TASK_WEIGHT_DEFAULT} — {TASK_WEIGHT_LABELS[task.weight ?? TASK_WEIGHT_DEFAULT]}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between rounded-md border p-2 text-xs">
+                  <span className="text-muted-foreground">Rating</span>
+                  <span className="font-medium">
+                    {task.rating ? `${task.rating}/5 — ${TASK_RATING_LABELS[task.rating]}` : "Not yet rated"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between rounded-md border p-2 text-xs">
+                  <span className="text-muted-foreground">Goal</span>
+                  <span className="max-w-[65%] truncate font-medium">{task.goal_title || "Not linked"}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-md border p-2 text-xs">
+                  <span className="text-muted-foreground">Corporate KPI</span>
+                  <span className="max-w-[65%] truncate font-medium">{task.kpi_measure || "Not linked"}</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 w-full text-xs"
+                  onClick={() => void openTaskDetails(task)}
+                >
+                  <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                  Comments &amp; activity
+                  {(task.comment_count || 0) > 0 ? ` (${task.comment_count})` : ""}
+                </Button>
+              </div>
+            </div>
+          ),
+        }}
       />
 
       <UserTaskDetailsDialog
@@ -400,39 +435,15 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
         onOpenChange={setIsDetailsOpen}
         selectedTask={selectedTask}
         taskUpdates={taskUpdates}
-        newStatus={newStatus}
-        isSaving={isSaving}
-        onUpdateStatus={handleUpdateStatus}
-      />
-
-      <UserTaskCommentDialog
-        open={isCommentOpen}
-        onOpenChange={setIsCommentOpen}
-        selectedTask={selectedTask}
-        taskUpdates={taskUpdates}
-        newComment={newComment}
-        setNewComment={setNewComment}
-        isSaving={isSaving}
-        onAddComment={async () => {
-          if (!selectedTask || !newComment.trim()) return
-          setIsSaving(true)
-          try {
-            await supabase.from("task_updates").insert({
-              task_id: selectedTask.id,
-              user_id: userId,
-              update_type: "comment",
-              content: newComment.trim(),
-            })
-            toast.success("Comment added")
-            setNewComment("")
-            await loadTaskUpdates(selectedTask.id)
-            await loadTasks()
-          } catch (e) {
-            toast.error("Failed to add comment")
-          } finally {
-            setIsSaving(false)
+        canReview={selectedTask ? canReviewTask(selectedTask) : false}
+        onChanged={async () => {
+          const loaded = await loadTasks()
+          if (loaded && selectedTask) {
+            setSelectedTask(loaded.find((entry) => entry.id === selectedTask.id) ?? null)
           }
         }}
+        onAddComment={postComment}
+        isPostingComment={isPostingComment}
       />
     </DataTablePage>
   )

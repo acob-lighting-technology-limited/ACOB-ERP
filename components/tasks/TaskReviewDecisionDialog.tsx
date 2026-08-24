@@ -36,6 +36,64 @@ interface TaskReviewDecisionDialogProps {
   onSuccess: () => void
 }
 
+type DecisionId = "approve" | "rework" | "reassign" | "fail" | "extend"
+
+const DECISIONS: Array<{
+  id: DecisionId
+  label: string
+  description: string
+  unavailableReason: string
+  icon: typeof CheckCircle2
+  className: string
+  available: (task: Task) => boolean
+}> = [
+  {
+    id: "approve",
+    label: "Approve & Complete",
+    description: "Accept the work and rate it — this is what turns its weight into a score.",
+    unavailableReason: "Only work that has been submitted can be approved.",
+    icon: CheckCircle2,
+    className: "border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400",
+    available: (task) => task.status === "submitted_for_review",
+  },
+  {
+    id: "rework",
+    label: "Return for Changes",
+    description: "Send it back to the assignee with instructions. Still open, not yet scored.",
+    unavailableReason: "There is nothing to return until the work is submitted or reported blocked.",
+    icon: RotateCcw,
+    className: "border-purple-500/30 text-purple-700 hover:bg-purple-500/10 dark:text-purple-400",
+    available: (task) => ["submitted_for_review", "unable_to_complete", "in_progress"].includes(task.status),
+  },
+  {
+    id: "reassign",
+    label: "Reassign",
+    description: "Move the work to someone else. Neutral for the original assignee's score.",
+    unavailableReason: "This task is already closed.",
+    icon: UserCheck,
+    className: "border-sky-500/30 text-sky-700 hover:bg-sky-500/10 dark:text-sky-400",
+    available: (task) => !["completed", "reassigned", "cancelled"].includes(task.status),
+  },
+  {
+    id: "extend",
+    label: "Extend Deadline",
+    description: "Give more time, with a reason kept on the task.",
+    unavailableReason: "This task is already closed.",
+    icon: Calendar,
+    className: "border-blue-500/30 text-blue-700 hover:bg-blue-500/10 dark:text-blue-400",
+    available: (task) => !["completed", "reassigned", "cancelled"].includes(task.status),
+  },
+  {
+    id: "fail",
+    label: "Reject",
+    description: "Terminal. The task scores zero at its full weight.",
+    unavailableReason: "This task is already closed.",
+    icon: XCircle,
+    className: "border-rose-500/30 text-rose-700 hover:bg-rose-500/10 dark:text-rose-400",
+    available: (task) => !["completed", "reassigned", "cancelled"].includes(task.status),
+  },
+]
+
 export function TaskReviewDecisionDialog({
   open,
   onOpenChange,
@@ -43,7 +101,7 @@ export function TaskReviewDecisionDialog({
   assignableEmployees,
   onSuccess,
 }: TaskReviewDecisionDialogProps) {
-  const [actionType, setActionType] = useState<"approve" | "rework" | "reassign" | "fail" | "extend" | null>(null)
+  const [actionType, setActionType] = useState<DecisionId | null>(null)
   const [comment, setComment] = useState("")
   const [newAssignee, setNewAssignee] = useState("")
   const [newDueDate, setNewDueDate] = useState("")
@@ -52,7 +110,6 @@ export function TaskReviewDecisionDialog({
 
   if (!task) return null
 
-  const isSubmitted = task.status === "submitted_for_review"
   const isUnableToComplete = task.status === "unable_to_complete"
 
   const employeeOptions = assignableEmployees
@@ -93,7 +150,7 @@ export function TaskReviewDecisionDialog({
       } else if (actionType === "rework") {
         payload = {
           status: "in_progress",
-          comment: comment || "Returned to in progress for rework",
+          comment: comment || "Returned to the assignee for changes",
         }
       } else if (actionType === "reassign") {
         if (!newAssignee) {
@@ -110,7 +167,7 @@ export function TaskReviewDecisionDialog({
       } else if (actionType === "fail") {
         payload = {
           status: "failed",
-          reason: comment || "Marked as failed/incomplete by lead/admin",
+          reason: comment || "Rejected by lead/admin",
         }
       } else if (actionType === "extend") {
         if (!newDueDate) {
@@ -200,63 +257,38 @@ export function TaskReviewDecisionDialog({
           )}
         </div>
 
-        {/* Action Selection Buttons */}
+        {/* Decision list — every decision is always shown. Hiding the ones
+            that do not currently apply made the workflow look arbitrary: a
+            lead could not see why "Reassign" had disappeared, and neither
+            reassign nor reject was reachable from a submitted task at all. */}
         {!actionType && (
           <div className="space-y-2">
             <Label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-              Select Decision / Action
+              Select a decision
             </Label>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              {isSubmitted && (
-                <>
+            <div className="grid grid-cols-1 gap-2">
+              {DECISIONS.map((decision) => {
+                const blockedReason = decision.available(task) ? null : decision.unavailableReason
+                const Icon = decision.icon
+                return (
                   <Button
+                    key={decision.id}
                     variant="outline"
-                    className="justify-start gap-2 border-emerald-500/30 text-emerald-700 hover:bg-emerald-500/10 dark:text-emerald-400"
-                    onClick={() => setActionType("approve")}
+                    disabled={Boolean(blockedReason)}
+                    title={blockedReason ?? undefined}
+                    className={`h-auto justify-start gap-2 py-2.5 text-left ${decision.className}`}
+                    onClick={() => setActionType(decision.id)}
                   >
-                    <CheckCircle2 className="h-4 w-4" />
-                    Approve & Complete
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span className="flex flex-col items-start">
+                      <span className="text-sm font-medium">{decision.label}</span>
+                      <span className="text-[11px] font-normal opacity-75">
+                        {blockedReason ?? decision.description}
+                      </span>
+                    </span>
                   </Button>
-                  <Button
-                    variant="outline"
-                    className="justify-start gap-2 border-purple-500/30 text-purple-700 hover:bg-purple-500/10 dark:text-purple-400"
-                    onClick={() => setActionType("rework")}
-                  >
-                    <RotateCcw className="h-4 w-4" />
-                    Request Rework
-                  </Button>
-                </>
-              )}
-
-              {isUnableToComplete && (
-                <>
-                  <Button
-                    variant="outline"
-                    className="justify-start gap-2 border-sky-500/30 text-sky-700 hover:bg-sky-500/10 dark:text-sky-400"
-                    onClick={() => setActionType("reassign")}
-                  >
-                    <UserCheck className="h-4 w-4" />
-                    Reassign (Neutral for KPI)
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="justify-start gap-2 border-rose-500/30 text-rose-700 hover:bg-rose-500/10 dark:text-rose-400"
-                    onClick={() => setActionType("fail")}
-                  >
-                    <XCircle className="h-4 w-4" />
-                    Mark as Failed (Hurts KPI)
-                  </Button>
-                </>
-              )}
-
-              <Button
-                variant="outline"
-                className="justify-start gap-2 border-blue-500/30 text-blue-700 hover:bg-blue-500/10 sm:col-span-2 dark:text-blue-400"
-                onClick={() => setActionType("extend")}
-              >
-                <Calendar className="h-4 w-4" />
-                Grant Time Extension
-              </Button>
+                )
+              })}
             </div>
           </div>
         )}
@@ -266,7 +298,7 @@ export function TaskReviewDecisionDialog({
           <div className="space-y-3 rounded-lg border p-3.5">
             <div className="flex items-center justify-between">
               <span className="text-foreground text-xs font-semibold capitalize">
-                Action: {actionType === "extend" ? "Grant Time Extension" : actionType}
+                {DECISIONS.find((decision) => decision.id === actionType)?.label ?? actionType}
               </span>
               <Button variant="ghost" size="sm" onClick={() => setActionType(null)} className="h-7 text-xs">
                 Change Action
@@ -334,7 +366,7 @@ export function TaskReviewDecisionDialog({
                   : actionType === "rework"
                     ? "Rework Instructions *"
                     : actionType === "fail"
-                      ? "Failure Reason *"
+                      ? "Reason for rejection *"
                       : actionType === "extend"
                         ? "Extension Reason *"
                         : "Reassignment Note"}

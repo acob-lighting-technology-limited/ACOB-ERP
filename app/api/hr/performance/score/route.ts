@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
 import { computeIndividualPerformanceScore } from "@/lib/performance/scoring"
-import { getRequestScope } from "@/lib/admin/api-scope"
+import { getRequestScope, getScopedDepartments } from "@/lib/admin/api-scope"
 
 const log = logger("hr-performance-score")
 
@@ -23,16 +23,31 @@ export async function GET(request: NextRequest) {
     const cycleId = searchParams.get("cycle_id")
 
     if (targetUserId !== user.id) {
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("role, is_department_lead")
-        .eq("id", user.id)
-        .single()
-
       const scoreScope = await getRequestScope()
       const isGlobalAdmin = scoreScope?.isAdminLike === true && scoreScope.scopeMode !== "lead"
-      if (!profile || (!isGlobalAdmin && !profile.is_department_lead)) {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+
+      if (!isGlobalAdmin) {
+        // A lead may read their own department's people, and only those. The
+        // previous check accepted the bare is_department_lead flag without
+        // comparing departments, so any lead could read anyone's scores,
+        // behaviour competencies and manager comments company-wide.
+        if (!scoreScope) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+        }
+        const scopedDepartments = getScopedDepartments(scoreScope)
+        if (scopedDepartments === null || scopedDepartments.length === 0) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+        }
+
+        const { data: targetProfile } = await supabase
+          .from("profiles")
+          .select("department")
+          .eq("id", targetUserId)
+          .maybeSingle<{ department: string | null }>()
+
+        if (!targetProfile?.department || !scopedDepartments.includes(targetProfile.department)) {
+          return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+        }
       }
     }
 

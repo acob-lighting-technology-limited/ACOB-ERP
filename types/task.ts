@@ -31,9 +31,14 @@ export interface Task {
   department?: string | null
   goal_id?: string | null
   goal_title?: string | null
+  /** The corporate KPI this task's work serves. Reporting label only — does not affect scoring. */
+  kpi_id?: string | null
+  kpi_measure?: string | null
   project_id?: string | null
   project_name?: string | null
   plan_id?: string | null
+  /** Shared by every row of one multi-assign fan-out. */
+  group_id?: string | null
   weight: number
   rating?: number | null
   rated_by?: string | null
