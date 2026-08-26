@@ -11,6 +11,7 @@ import { SearchableSelect } from "@/components/ui/searchable-select"
 import { ResponsiveModal } from "@/components/ui/patterns/responsive-modal"
 import { Badge } from "@/components/ui/badge"
 import type { Task } from "@/types/task"
+import { apiFetch } from "@/lib/api-client"
 import { formatFullName } from "@/lib/utils"
 import { formatWATDate } from "@/lib/utils/date"
 import {
@@ -182,7 +183,7 @@ export function TaskReviewDecisionDialog({
         }
       }
 
-      const res = await fetch(`/api/tasks/${task.id}/status`, {
+      const res = await apiFetch(`/api/tasks/${task.id}/status`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -340,20 +341,21 @@ export function TaskReviewDecisionDialog({
                         type="button"
                         variant={rating === value ? "default" : "outline"}
                         size="sm"
-                        className="h-auto flex-col gap-0.5 py-2"
+                        className="h-auto w-full min-w-0 flex-col gap-0.5 whitespace-normal px-1 py-2 text-center"
                         onClick={() => setRating(value)}
                       >
                         <span className="text-sm font-semibold">{value}</span>
-                        <span className="text-[10px] leading-tight opacity-80">{TASK_RATING_LABELS[value]}</span>
+                        <span className="w-full text-[10px] leading-tight text-balance opacity-80">
+                          {TASK_RATING_LABELS[value]}
+                        </span>
                       </Button>
                     )
                   )}
                 </div>
-                <p className="text-muted-foreground text-[11px]">
-                  This task carries a weight of {task.weight ?? TASK_WEIGHT_DEFAULT}, so it is worth up to{" "}
-                  {task.weight ?? TASK_WEIGHT_DEFAULT} points toward the assignee&apos;s KPI score
+                <p className="text-muted-foreground text-[11px] leading-relaxed">
+                  {`Worth up to ${task.weight ?? TASK_WEIGHT_DEFAULT} points toward the assignee's KPI score (task weight ${task.weight ?? TASK_WEIGHT_DEFAULT})`}
                   {rating
-                    ? ` — this rating earns ${Math.round((((task.weight ?? TASK_WEIGHT_DEFAULT) * rating) / TASK_RATING_MAX) * 100) / 100} of them.`
+                    ? ` — this rating earns ${Math.round((((task.weight ?? TASK_WEIGHT_DEFAULT) * rating) / TASK_RATING_MAX) * 100) / 100}.`
                     : "."}
                 </p>
               </div>
