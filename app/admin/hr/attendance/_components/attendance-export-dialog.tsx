@@ -161,7 +161,9 @@ export function AttendanceExportDialog({ open, onOpenChange, department, monthOp
         URL.revokeObjectURL(url)
       } else if (format === "xlsx") {
         const XLSX = await import("@e965/xlsx")
-        const { saveAs } = await import("file-saver")
+        // file-saver's CJS export *is* the function, so it arrives on `default` —
+        // destructuring `saveAs` off the namespace yields undefined at runtime.
+        const { default: saveAs } = await import("file-saver")
         const workbook = XLSX.utils.book_new()
         XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([HEADERS, ...rows]), "Attendance")
 
