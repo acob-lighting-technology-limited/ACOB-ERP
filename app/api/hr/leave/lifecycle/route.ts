@@ -106,8 +106,7 @@ export async function PATCH(request: NextRequest) {
       await syncAttendanceForApprovedLeave(
         supabase,
         leaveRequest.user_id,
-        leaveRequest.start_date,
-        leaveRequest.end_date,
+        [{ start_date: leaveRequest.start_date, end_date: leaveRequest.end_date }],
         "clear"
       )
 
@@ -221,7 +220,12 @@ export async function PATCH(request: NextRequest) {
         // Shortening days_count above is what returns the unused days — the remaining figure
         // is summed from the request itself.
         const clearFrom = toISODate(addDays(earlyDate, 1))
-        await syncAttendanceForApprovedLeave(supabase, leaveRequest.user_id, clearFrom, leaveRequest.end_date, "clear")
+        await syncAttendanceForApprovedLeave(
+          supabase,
+          leaveRequest.user_id,
+          [{ start_date: clearFrom, end_date: leaveRequest.end_date }],
+          "clear"
+        )
       }
 
       await writeAuditLog(

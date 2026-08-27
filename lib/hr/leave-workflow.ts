@@ -4,6 +4,12 @@ import { logger } from "@/lib/logger"
 import type { SupabaseClient } from "@supabase/supabase-js"
 import type { Json } from "@/types/database"
 import { toLocalISODate } from "@/lib/utils/date"
+import {
+  countLeaveDays,
+  isWorkingDay,
+  NO_HOLIDAYS,
+  type HolidaySet,
+} from "@/lib/hr/leave-days"
 
 const log = logger("leave-workflow")
 
@@ -103,9 +109,13 @@ export function diffMonths(fromDate: Date, toDate: Date) {
   return years * 12 + months
 }
 
-function isWeekend(date: Date) {
-  const day = date.getUTCDay()
-  return day === 0 || day === 6
+/**
+ * Inclusive working-day count between two ISO dates. Weekends never count, and
+ * neither do the public holidays in `holidays` — pass the set from
+ * `getHolidaySet` so the number matches what the employee was shown.
+ */
+export function countWeekdays(startIso: string, endIso: string, holidays: HolidaySet = NO_HOLIDAYS): number {
+  return countLeaveDays(startIso, endIso, holidays)
 }
 
 function toStringArray(value: unknown): string[] {
@@ -136,16 +146,29 @@ async function hasLifeEvent(
   return Boolean(data && data.length)
 }
 
+/**
+ * Locations that mean "applies to the whole company". Holidays are entered
+ * through the attendance admin, which writes `location = 'all'`; older leave
+ * code asked for `'global'` and so silently matched nothing. Both spellings are
+ * accepted here, plus any site-specific location the caller asks for.
+ */
+const COMPANY_WIDE_LOCATIONS = ["all", "global"] as const
+
+export const DEFAULT_HOLIDAY_LOCATION = "all"
+
 export async function getHolidaySet(
   supabase: LeaveWorkflowClient,
-  location: string,
+  location: string | null | undefined,
   startDate: string,
   endDate: string
-) {
+): Promise<HolidaySet> {
+  const requested = (location || DEFAULT_HOLIDAY_LOCATION).trim() || DEFAULT_HOLIDAY_LOCATION
+  const locations = Array.from(new Set<string>([requested, ...COMPANY_WIDE_LOCATIONS]))
+
   const { data, error } = await supabase
     .from("holiday_calendar")
     .select("holiday_date, is_business_day")
-    .eq("location", location)
+    .in("location", locations)
     .gte("holiday_date", startDate)
     .lte("holiday_date", endDate)
 
@@ -163,9 +186,8 @@ export async function getHolidaySet(
   return holidaySet
 }
 
-function isBusinessDay(date: Date, holidaySet: Set<string>) {
-  if (isWeekend(date)) return false
-  return !holidaySet.has(toISODate(date))
+function isBusinessDay(date: Date, holidaySet: HolidaySet) {
+  return isWorkingDay(toISODate(date), holidaySet)
 }
 
 export async function computeLeaveDates(params: {
@@ -194,7 +216,7 @@ export async function computeLeaveDates(params: {
   const searchEnd = addDays(start, Math.max(120, params.daysCount * 4))
   const holidaySet = await getHolidaySet(
     params.supabase,
-    params.location || "global",
+    params.location,
     toISODate(start),
     toISODate(searchEnd)
   )
@@ -220,6 +242,21 @@ export async function computeLeaveDates(params: {
     endDate: toISODate(end),
     resumeDate: toISODate(resume),
   }
+}
+
+/** Next business day (skips weekends and inactive holiday_calendar dates) after a given ISO date. */
+export async function getNextBusinessDate(
+  supabase: LeaveWorkflowClient,
+  afterIso: string,
+  location?: string | null
+): Promise<string> {
+  let current = addDays(parseISODate(afterIso), 1)
+  const searchEnd = addDays(current, 30)
+  const holidaySet = await getHolidaySet(supabase, location, toISODate(current), toISODate(searchEnd))
+  while (!isBusinessDay(current, holidaySet)) {
+    current = addDays(current, 1)
+  }
+  return toISODate(current)
 }
 
 export async function resolveProfileByIdentifier(
@@ -845,28 +882,72 @@ export async function createApprovalRecord(
   })
 }
 
+/**
+ * Segments for a leave request, falling back to the request's own aggregate
+ * start/end when it has no leave_request_segments rows (single-range legacy
+ * requests, or requests created before segments existed).
+ */
+export async function getLeaveRequestSegments(
+  supabase: SupabaseClient,
+  leaveRequestId: string,
+  fallbackStartDate: string,
+  fallbackEndDate: string
+): Promise<{ start_date: string; end_date: string }[]> {
+  const { data, error } = await supabase
+    .from("leave_request_segments")
+    .select("start_date, end_date")
+    .eq("leave_request_id", leaveRequestId)
+    .order("segment_order", { ascending: true })
+
+  if (error || !data?.length) {
+    return [{ start_date: fallbackStartDate, end_date: fallbackEndDate }]
+  }
+
+  return data as { start_date: string; end_date: string }[]
+}
+
 export async function syncAttendanceForApprovedLeave(
   supabase: SupabaseClient,
   userId: string,
-  startDate: string,
-  endDate: string,
+  segments: { start_date: string; end_date: string }[],
   mode: "set" | "clear"
 ) {
-  const start = parseISODate(startDate)
-  const end = parseISODate(endDate)
+  if (!segments.length) return
 
   if (mode === "set") {
     const rows = []
-    let current = new Date(start)
 
-    while (current <= end) {
-      rows.push({
-        user_id: userId,
-        date: toISODate(current),
-        status: "on_leave",
-        notes: "Auto-generated from approved leave",
-      })
-      current = addDays(current, 1)
+    // A public holiday inside approved leave is not a leave day — it is not
+    // deducted from the balance, so no on_leave row is written for it either.
+    // Every read path already derives "holiday" ahead of "on_leave", so this
+    // only stops the ledger itself from disagreeing with what is displayed.
+    const spanStart = segments.reduce((min, s) => (s.start_date < min ? s.start_date : min), segments[0].start_date)
+    const spanEnd = segments.reduce((max, s) => (s.end_date > max ? s.end_date : max), segments[0].end_date)
+    let holidaySet: HolidaySet = NO_HOLIDAYS
+    try {
+      holidaySet = await getHolidaySet(supabase, null, spanStart, spanEnd)
+    } catch (holidayError) {
+      // A calendar read failure must not block the leave itself; the derived
+      // status stays correct either way.
+      log.error({ err: String(holidayError), userId }, "Holiday lookup failed during leave attendance sync")
+    }
+
+    for (const segment of segments) {
+      const start = parseISODate(segment.start_date)
+      const end = parseISODate(segment.end_date)
+      let current = new Date(start)
+
+      while (current <= end) {
+        if (isBusinessDay(current, holidaySet)) {
+          rows.push({
+            user_id: userId,
+            date: toISODate(current),
+            status: "on_leave",
+            notes: "Auto-generated from approved leave",
+          })
+        }
+        current = addDays(current, 1)
+      }
     }
 
     if (rows.length) {
@@ -875,6 +956,9 @@ export async function syncAttendanceForApprovedLeave(
 
     return
   }
+
+  const startDate = segments.reduce((min, s) => (s.start_date < min ? s.start_date : min), segments[0].start_date)
+  const endDate = segments.reduce((max, s) => (s.end_date > max ? s.end_date : max), segments[0].end_date)
 
   await supabase
     .from("attendance_records")

@@ -13,8 +13,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { FormFieldGroup } from "@/components/ui/patterns"
-import { toLocalISODate } from "@/lib/utils/date"
 import { apiFetch } from "@/lib/api-client"
+import { endDateForWeekdaySpan, holidaySetFrom } from "@/components/leave/leave-data"
+import type { LeaveCalendarData } from "@/components/leave/leave-data"
+import { nextWorkingDayAfter } from "@/lib/hr/leave-days"
 
 type LeaveTypeOption = {
   id: string
@@ -29,6 +31,13 @@ async function fetchLeaveTypes(): Promise<LeaveTypeOption[]> {
   const payload = await response.json()
   if (!response.ok) throw new Error(payload.error || "Failed to load leave types")
   return payload.data || []
+}
+
+async function fetchLeaveCalendar(): Promise<LeaveCalendarData> {
+  const response = await apiFetch("/api/hr/leave/calendar")
+  const payload = await response.json()
+  if (!response.ok) throw new Error(payload.error || "Failed to load leave calendar")
+  return (payload.data || { blackout_months: [12, 1], department_booked_dates: [], holidays: [] }) as LeaveCalendarData
 }
 
 async function fetchRelievers(): Promise<{ value: string; label: string }[]> {
@@ -54,7 +63,6 @@ export default function LeaveRequestPage() {
     days_count: 1,
     reliever_identifier: "",
     reason: "",
-    handover_note: "",
     handover_file: null as File | null,
   })
 
@@ -68,32 +76,34 @@ export default function LeaveRequestPage() {
     queryFn: fetchRelievers,
   })
 
+  const { data: leaveCalendar } = useQuery({
+    queryKey: ["leave-calendar"],
+    queryFn: fetchLeaveCalendar,
+  })
+
+  // Holidays inside the requested span push the end date out, so asking for
+  // five days always yields five deductible days off.
+  const holidaySet = useMemo(
+    () => holidaySetFrom(leaveCalendar || { blackout_months: [], department_booked_dates: [], holidays: [] }),
+    [leaveCalendar]
+  )
+
   const selectedLeaveType = useMemo(
     () => leaveTypes.find((leaveType) => leaveType.id === formData.leave_type_id),
     [leaveTypes, formData.leave_type_id]
   )
   const allowedDays = selectedLeaveType?.max_days || undefined
 
-  const previewEnd = (() => {
-    if (!formData.start_date || !formData.days_count) return ""
-    const end = new Date(`${formData.start_date}T00:00:00.000Z`)
-    end.setUTCDate(end.getUTCDate() + Number(formData.days_count) - 1)
-    return toLocalISODate(end)
-  })()
+  const previewEnd = endDateForWeekdaySpan(formData.start_date, Number(formData.days_count), holidaySet)
 
-  const previewResume = (() => {
-    if (!previewEnd) return ""
-    const resume = new Date(`${previewEnd}T00:00:00.000Z`)
-    resume.setUTCDate(resume.getUTCDate() + 1)
-    return toLocalISODate(resume)
-  })()
+  const previewResume = previewEnd ? nextWorkingDayAfter(previewEnd, holidaySet) : ""
 
   const canSubmit =
     Boolean(formData.leave_type_id) &&
     Boolean(formData.start_date) &&
     formData.reliever_identifier.trim().length > 0 &&
     formData.reason.trim().length > 0 &&
-    (Boolean(formData.handover_file) || formData.handover_note.trim().length > 0)
+    Boolean(formData.handover_file)
 
   const { mutate: submitRequest, isPending: loading } = useMutation({
     mutationFn: async (body: typeof formData) => {
@@ -114,14 +124,12 @@ export default function LeaveRequestPage() {
         handoverChecklistUrl = String(uploadJson.data.file_url)
       }
 
+      const segmentEnd = endDateForWeekdaySpan(body.start_date, Number(body.days_count), holidaySet)
       const payload = {
         leave_type_id: body.leave_type_id,
-        start_date: body.start_date,
-        days_count: body.days_count,
+        segments: [{ start_date: body.start_date, end_date: segmentEnd || body.start_date }],
         reliever_identifier: body.reliever_identifier,
         reason: body.reason,
-        handover_note:
-          body.handover_note.trim() || (body.handover_file ? `Attached: ${body.handover_file.name}` : null),
         handover_checklist_url: handoverChecklistUrl,
       }
 
@@ -267,18 +275,6 @@ export default function LeaveRequestPage() {
                   KB)
                 </p>
               )}
-            </FormFieldGroup>
-
-            <FormFieldGroup
-              label="Handover Notes (Optional)"
-              description="Additional handover details or instructions for your reliever (optional)."
-            >
-              <Textarea
-                value={formData.handover_note}
-                onChange={(e) => setFormData((prev) => ({ ...prev, handover_note: e.target.value }))}
-                rows={2}
-                placeholder="Additional notes (optional)..."
-              />
             </FormFieldGroup>
 
             <Button type="submit" disabled={loading || loadingTypes || !canSubmit}>
