@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
+import { getHolidaySet } from "@/lib/hr/leave-workflow"
 
 const log = logger("hr-leave-calendar")
 const BLACKOUT_MONTHS = [12, 1]
@@ -11,6 +12,11 @@ type PeerProfileRow = {
   full_name?: string | null
   first_name?: string | null
   last_name?: string | null
+}
+
+type HolidayRow = {
+  holiday_date: string
+  name?: string | null
 }
 
 type LeaveRangeRow = {
@@ -31,6 +37,32 @@ function parseIsoDate(value: string) {
   return new Date(`${value}T00:00:00`)
 }
 
+/**
+ * Public holidays in the booking window, so the request dialog can grey them
+ * out and explain why a Mon-Fri selection only costs four days. Named rows are
+ * returned so the UI can say *which* holiday it was.
+ */
+async function loadHolidayWindow(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  startIso: string,
+  endIso: string
+): Promise<{ date: string; name: string }[]> {
+  const holidaySet = await getHolidaySet(supabase, null, startIso, endIso)
+  if (holidaySet.size === 0) return []
+
+  const { data } = await supabase
+    .from("holiday_calendar")
+    .select("holiday_date, name")
+    .gte("holiday_date", startIso)
+    .lte("holiday_date", endIso)
+
+  const nameByDate = new Map((((data || []) as HolidayRow[]).map((row) => [row.holiday_date, row.name || "Public holiday"] as const)))
+
+  return Array.from(holidaySet)
+    .sort()
+    .map((date) => ({ date, name: nameByDate.get(date) || "Public holiday" }))
+}
+
 export async function GET() {
   try {
     const supabase = await createClient()
@@ -39,6 +71,14 @@ export async function GET() {
     } = await supabase.auth.getUser()
 
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const today = new Date()
+    const startIso = toIsoLocalDate(today)
+    const endLimit = new Date(today)
+    endLimit.setDate(endLimit.getDate() + LOOKAHEAD_DAYS)
+    const endIso = toIsoLocalDate(endLimit)
+
+    const holidays = await loadHolidayWindow(supabase, startIso, endIso)
 
     const { data: requesterProfile } = await supabase
       .from("profiles")
@@ -52,6 +92,7 @@ export async function GET() {
         data: {
           blackout_months: BLACKOUT_MONTHS,
           department_booked_dates: [],
+          holidays,
         },
       })
     }
@@ -73,15 +114,10 @@ export async function GET() {
         data: {
           blackout_months: BLACKOUT_MONTHS,
           department_booked_dates: [],
+          holidays,
         },
       })
     }
-
-    const today = new Date()
-    const startIso = toIsoLocalDate(today)
-    const endLimit = new Date(today)
-    endLimit.setDate(endLimit.getDate() + LOOKAHEAD_DAYS)
-    const endIso = toIsoLocalDate(endLimit)
 
     const { data: leaveRows, error: leaveError } = await supabase
       .from("leave_requests")
@@ -151,6 +187,7 @@ export async function GET() {
       data: {
         blackout_months: BLACKOUT_MONTHS,
         department_booked_dates: departmentBookedDates,
+        holidays,
       },
     })
   } catch (error) {

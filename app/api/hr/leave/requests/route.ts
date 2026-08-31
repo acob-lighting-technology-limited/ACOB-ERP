@@ -1,4 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
+import {
+  addIsoDays,
+  countLeaveDays,
+  trimRangeToWorkingDays,
+  NO_HOLIDAYS,
+  type HolidaySet,
+} from "@/lib/hr/leave-days"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
 import { logger } from "@/lib/logger"
@@ -10,10 +17,12 @@ import {
   areRequiredDocumentsVerified,
   assertNoOverlap,
   assertRelieverAvailability,
-  computeLeaveDates,
   evaluateLeaveEligibility,
   formatLeaveReference,
+  getHolidaySet,
   getLeavePolicy,
+  getLeaveRequestSegments,
+  getNextBusinessDate,
   notifyUsers,
   parseISODate,
   resolveProfileByIdentifier,
@@ -33,38 +42,105 @@ import { toLocalISODate } from "@/lib/utils/date"
 
 const log = logger("leave-requests")
 const BLACKOUT_MONTHS = new Set([12, 1])
+
+const LeaveSegmentSchema = z.object({
+  start_date: z.string().trim().min(1, "Segment start date is required"),
+  end_date: z.string().trim().min(1, "Segment end date is required"),
+})
+
 const CreateLeaveRequestSchema = z
   .object({
     leave_type_id: z.string().trim().min(1, "Missing required fields"),
-    start_date: z.string().trim().min(1, "Missing required fields"),
-    days_count: z.unknown().optional(),
+    segments: z.array(LeaveSegmentSchema).min(1, "At least one date range is required"),
     emergency_override: z.boolean().optional(),
-    end_date: z.string().optional().nullable(),
     reason: z.string().trim().min(1, "Missing required fields"),
     reliever_identifier: z.string().trim().min(1, "Missing required fields"),
     handover_note: z.string().trim().optional().nullable(),
     handover_checklist_url: z.string().trim().optional().nullable(),
   })
-  .refine(
-    (data) => Boolean(data.handover_checklist_url || (data.handover_note && data.handover_note.trim().length > 0)),
-    {
-      message: "Handover document or handover note is required",
-      path: ["handover_checklist_url"],
-    }
-  )
+  .refine((data) => Boolean(data.handover_checklist_url), {
+    message: "Handover document is required",
+    path: ["handover_checklist_url"],
+  })
 
 const UpdateLeaveRequestSchema = z.object({
   id: z.string().trim().min(1, "Leave request ID is required"),
   leave_type_id: z.string().optional(),
-  start_date: z.string().optional(),
-  days_count: z.unknown().optional(),
+  segments: z.array(LeaveSegmentSchema).min(1).optional(),
   emergency_override: z.boolean().optional(),
-  end_date: z.string().optional().nullable(),
   reason: z.string().optional(),
   reliever_identifier: z.string().optional(),
   handover_note: z.string().optional().nullable(),
   handover_checklist_url: z.string().optional().nullable(),
 })
+
+/**
+ * Sorts segments, rejects inverted or overlapping ranges, trims each range down
+ * to the working days it actually covers, and totals the days to deduct.
+ *
+ * Trimming is what stops a Mon-Sun selection from being stored as ending on a
+ * Sunday: the stored range becomes Mon-Fri, so the resumption date the employee
+ * is shown is the following Monday without them having to pad the selection.
+ */
+function resolveSegments(segments: { start_date: string; end_date: string }[], holidays: HolidaySet = NO_HOLIDAYS) {
+  const sorted = [...segments].sort((a, b) => a.start_date.localeCompare(b.start_date))
+  for (const segment of sorted) {
+    if (segment.end_date < segment.start_date) {
+      throw new Error("Each date range's end date must be on or after its start date")
+    }
+  }
+  for (let i = 1; i < sorted.length; i++) {
+    if (sorted[i].start_date <= sorted[i - 1].end_date) {
+      throw new Error("Date ranges cannot overlap each other")
+    }
+  }
+
+  const trimmed = sorted
+    .map((segment) => trimRangeToWorkingDays(segment.start_date, segment.end_date, holidays))
+    .filter((segment): segment is { start_date: string; end_date: string } => segment !== null)
+
+  if (trimmed.length === 0) {
+    throw new Error(
+      "Select at least one working day — weekends and public holidays are not deducted from your leave balance"
+    )
+  }
+
+  const resolvedSegments = trimmed.map((segment, index) => ({
+    start_date: segment.start_date,
+    end_date: segment.end_date,
+    days_count: countLeaveDays(segment.start_date, segment.end_date, holidays),
+    segment_order: index + 1,
+  }))
+
+  const totalDays = resolvedSegments.reduce((sum, segment) => sum + segment.days_count, 0)
+
+  return {
+    segments: resolvedSegments,
+    startDate: resolvedSegments[0].start_date,
+    endDate: resolvedSegments[resolvedSegments.length - 1].end_date,
+    totalDays,
+  }
+}
+
+/**
+ * Loads the holiday calendar covering the requested ranges, then resolves them.
+ * The lookahead past the last date covers the resumption-date walk.
+ */
+async function resolveSegmentsWithHolidays(
+  client: SupabaseServerClient,
+  segments: { start_date: string; end_date: string }[],
+  location?: string | null
+) {
+  const dates = segments.flatMap((segment) => [segment.start_date, segment.end_date]).filter(Boolean).sort()
+  const spanStart = dates[0]
+  const spanEnd = dates[dates.length - 1]
+  if (!spanStart || !spanEnd) throw new Error("At least one date range is required")
+
+  const lookaheadEnd = addIsoDays(spanEnd, 30)
+
+  const holidays = await getHolidaySet(client, location, spanStart, lookaheadEnd)
+  return { resolved: resolveSegments(segments, holidays), holidays }
+}
 
 type SupabaseServerClient = Awaited<ReturnType<typeof createClient>>
 
@@ -362,6 +438,9 @@ export async function GET(request: NextRequest) {
         ),
         approvals:leave_approvals (
           id, approver_id, status, stage_code, approved_at, comments
+        ),
+        leave_request_segments (
+          start_date, end_date, days_count, segment_order
         )
       `,
         { count: "exact" }
@@ -685,28 +764,26 @@ export async function POST(request: NextRequest) {
     }
     const {
       leave_type_id,
-      start_date,
-      days_count,
+      segments: rawSegments,
       emergency_override,
-      end_date,
       reason,
       reliever_identifier,
       handover_note,
       handover_checklist_url,
     } = parsed.data
 
-    const parsedDays = Number(days_count)
-    const fallbackDays = end_date
-      ? Math.ceil(
-          (new Date(`${end_date}T00:00:00.000Z`).getTime() - new Date(`${start_date}T00:00:00.000Z`).getTime()) /
-            (1000 * 60 * 60 * 24)
-        ) + 1
-      : 0
-
-    const effectiveDays = Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : fallbackDays
-    if (!effectiveDays || effectiveDays <= 0) {
-      return NextResponse.json({ error: "Number of days must be greater than zero" }, { status: 400 })
+    let resolved: ReturnType<typeof resolveSegments>
+    try {
+      // Company-wide holidays apply to every requester; site-specific holidays
+      // would need the profile, which is loaded below.
+      resolved = (await resolveSegmentsWithHolidays(validationClient, rawSegments)).resolved
+    } catch (segmentError) {
+      return NextResponse.json(
+        { error: segmentError instanceof Error ? segmentError.message : "Invalid date ranges" },
+        { status: 400 }
+      )
     }
+    const { segments, startDate: start_date, endDate: aggregateEndDate, totalDays: effectiveDays } = resolved
 
     const { data: requester, error: requesterError } = await supabase
       .from("profiles")
@@ -746,13 +823,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { endDate, resumeDate } = await computeLeaveDates({
-      supabase,
-      startDate: start_date,
-      daysCount: effectiveDays,
-      accrualMode: (policy.accrual_mode as "calendar_days" | "business_days") || "calendar_days",
-      location: requester.work_location || "global",
-    })
+    const endDate = aggregateEndDate
+    const resumeDate = await getNextBusinessDate(supabase, endDate, requester.work_location || "global")
     assertBlackoutWindowAllowed({
       startDate: start_date,
       endDate,
@@ -875,6 +947,19 @@ export async function POST(request: NextRequest) {
         ? `Failed to create leave request: ${error.message}`
         : "Failed to create leave request"
       return NextResponse.json({ error: dbMessage }, { status: 500 })
+    }
+
+    const { error: segmentsError } = await validationClient.from("leave_request_segments").insert(
+      segments.map((segment) => ({
+        leave_request_id: newRequest.id,
+        start_date: segment.start_date,
+        end_date: segment.end_date,
+        days_count: segment.days_count,
+        segment_order: segment.segment_order,
+      }))
+    )
+    if (segmentsError) {
+      log.error({ err: segmentsError, leaveRequestId: newRequest.id }, "Failed to write leave request segments")
     }
 
     await writeAuditLog(
@@ -1040,10 +1125,8 @@ export async function PATCH(request: NextRequest) {
     const {
       id,
       leave_type_id,
-      start_date,
-      days_count,
+      segments: rawSegments,
       emergency_override,
-      end_date,
       reason,
       reliever_identifier,
       handover_note,
@@ -1179,17 +1262,21 @@ export async function PATCH(request: NextRequest) {
     }
 
     const targetLeaveTypeId = leave_type_id || existingRequest.leave_type_id
-    const targetStartDate = start_date || existingRequest.start_date
 
-    const parsedDays = Number(days_count)
-    const fallbackDays = end_date
-      ? Math.ceil(
-          (new Date(`${end_date}T00:00:00.000Z`).getTime() - new Date(`${targetStartDate}T00:00:00.000Z`).getTime()) /
-            (1000 * 60 * 60 * 24)
-        ) + 1
-      : existingRequest.days_count
-
-    const targetDays = Number.isFinite(parsedDays) && parsedDays > 0 ? parsedDays : fallbackDays
+    let targetSegments: ReturnType<typeof resolveSegments>
+    try {
+      const segmentsToResolve =
+        rawSegments ||
+        (await getLeaveRequestSegments(validationClient, id, existingRequest.start_date, existingRequest.end_date))
+      targetSegments = (await resolveSegmentsWithHolidays(validationClient, segmentsToResolve)).resolved
+    } catch (segmentError) {
+      return NextResponse.json(
+        { error: segmentError instanceof Error ? segmentError.message : "Invalid date ranges" },
+        { status: 400 }
+      )
+    }
+    const targetStartDate = targetSegments.startDate
+    const targetDays = targetSegments.totalDays
 
     const { data: requester } = await supabase
       .from("profiles")
@@ -1230,13 +1317,8 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    const { endDate, resumeDate } = await computeLeaveDates({
-      supabase,
-      startDate: targetStartDate,
-      daysCount: targetDays,
-      accrualMode: (policy.accrual_mode as "calendar_days" | "business_days") || "calendar_days",
-      location: requester.work_location || "global",
-    })
+    const endDate = targetSegments.endDate
+    const resumeDate = await getNextBusinessDate(supabase, endDate, requester.work_location || "global")
     assertBlackoutWindowAllowed({
       startDate: targetStartDate,
       endDate,
@@ -1333,6 +1415,22 @@ export async function PATCH(request: NextRequest) {
       .single()
 
     if (error) return NextResponse.json({ error: "Failed to update leave request" }, { status: 500 })
+
+    if (rawSegments) {
+      await validationClient.from("leave_request_segments").delete().eq("leave_request_id", id)
+      const { error: segmentsError } = await validationClient.from("leave_request_segments").insert(
+        targetSegments.segments.map((segment) => ({
+          leave_request_id: id,
+          start_date: segment.start_date,
+          end_date: segment.end_date,
+          days_count: segment.days_count,
+          segment_order: segment.segment_order,
+        }))
+      )
+      if (segmentsError) {
+        log.error({ err: segmentsError, leaveRequestId: id }, "Failed to update leave request segments")
+      }
+    }
 
     await writeAuditLog(
       supabase,

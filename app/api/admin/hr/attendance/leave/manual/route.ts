@@ -7,7 +7,8 @@ import { rateLimit, getClientId } from "@/lib/rate-limit"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { recordAttendanceEvent } from "@/lib/hr/attendance-events"
 import { requireApiAdminScope, getScopedDepartments } from "@/lib/admin/api-scope"
-import { parseISODate, addDays, toISODate, formatLeaveReference, notifyUsers } from "@/lib/hr/leave-workflow"
+import { formatLeaveReference, getHolidaySet, notifyUsers } from "@/lib/hr/leave-workflow"
+import { addIsoDays, countLeaveDays, nextWorkingDayAfter, trimRangeToWorkingDays } from "@/lib/hr/leave-days"
 
 const log = logger("admin-hr-attendance-leave-manual")
 export const dynamic = "force-dynamic"
@@ -19,12 +20,6 @@ const ManualLeaveSchema = z.object({
   end_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   reason: z.string().trim().min(3, "A reason of at least 3 characters is required").max(500),
 })
-
-/** Inclusive calendar-day span — mirrors the leave request route's days_count fallback. */
-function calendarDays(start: string, end: string): number {
-  const ms = new Date(`${end}T00:00:00.000Z`).getTime() - new Date(`${start}T00:00:00.000Z`).getTime()
-  return Math.floor(ms / (1000 * 60 * 60 * 24)) + 1
-}
 
 async function assertInScope(
   dataClient: SupabaseClient,
@@ -65,8 +60,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Employee is not within your scope" }, { status: 403 })
     }
 
-    const days_count = calendarDays(start_date, end_date)
-    const resume_date = toISODate(addDays(parseISODate(end_date), 1))
+    // Same working-day rules as an employee-submitted request: weekends and
+    // public holidays are neither charged nor allowed to be the end date, and
+    // the resumption date is the next real working day.
+    const holidays = await getHolidaySet(dataClient, null, start_date, addIsoDays(end_date, 30))
+    const workingRange = trimRangeToWorkingDays(start_date, end_date, holidays)
+    if (!workingRange) {
+      return NextResponse.json(
+        { error: "That range contains no working days — weekends and public holidays are not leave days" },
+        { status: 400 }
+      )
+    }
+
+    const effectiveStartDate = workingRange.start_date
+    const effectiveEndDate = workingRange.end_date
+    const days_count = countLeaveDays(effectiveStartDate, effectiveEndDate, holidays)
+    const resume_date = nextWorkingDayAfter(effectiveEndDate, holidays)
     const now = new Date().toISOString()
 
     const { data: created, error } = await dataClient
@@ -74,8 +83,8 @@ export async function POST(request: NextRequest) {
       .insert({
         user_id,
         leave_type_id,
-        start_date,
-        end_date,
+        start_date: effectiveStartDate,
+        end_date: effectiveEndDate,
         resume_date,
         days_count,
         reason,
@@ -105,13 +114,19 @@ export async function POST(request: NextRequest) {
 
     await recordAttendanceEvent(dataClient, {
       userId: user_id,
-      eventDate: start_date,
+      eventDate: effectiveStartDate,
       eventType: "leave_granted",
       toStatus: "on_leave",
       source: "manual",
       comment: reason,
       actorId: scope.userId,
-      metadata: { leave_request_id: created.id, leave_type_id, start_date, end_date, days_count },
+      metadata: {
+        leave_request_id: created.id,
+        leave_type_id,
+        start_date: effectiveStartDate,
+        end_date: effectiveEndDate,
+        days_count,
+      },
     })
 
     await writeAuditLog(
@@ -120,7 +135,15 @@ export async function POST(request: NextRequest) {
         action: "create",
         entityType: "leave_request",
         entityId: created.id,
-        newValues: { user_id, leave_type_id, start_date, end_date, days_count, status: "approved", admin_manual: true },
+        newValues: {
+          user_id,
+          leave_type_id,
+          start_date: effectiveStartDate,
+          end_date: effectiveEndDate,
+          days_count,
+          status: "approved",
+          admin_manual: true,
+        },
         context: { actorId: scope.userId, source: "api", route: "/api/admin/hr/attendance/leave/manual" },
       },
       { failOpen: true }
@@ -142,7 +165,7 @@ export async function POST(request: NextRequest) {
       await notifyUsers(dataClient, {
         userIds: [user_id],
         title: "Leave recorded on your behalf",
-        message: `Approved leave for ${leaveTypeName} was recorded on your behalf by ${adminName} for ${start_date} to ${end_date} (${days_count} day(s)).`,
+        message: `Approved leave for ${leaveTypeName} was recorded on your behalf by ${adminName} for ${effectiveStartDate} to ${effectiveEndDate} (${days_count} day(s)).`,
         actorId: scope.userId,
         linkUrl: "/leave",
         entityId: created.id,
@@ -155,8 +178,8 @@ export async function POST(request: NextRequest) {
         details: [
           { label: "Leave Type", value: leaveTypeName },
           { label: "Duration", value: `${days_count} day(s)` },
-          { label: "Start Date", value: start_date },
-          { label: "End Date", value: end_date },
+          { label: "Start Date", value: effectiveStartDate },
+          { label: "End Date", value: effectiveEndDate },
           { label: "Resumption Date", value: resume_date },
           { label: "Recorded By", value: adminName },
           { label: "Reason / Notes", value: reason },

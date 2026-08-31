@@ -1,5 +1,15 @@
 import type { LeaveBalance, LeaveRequest, LeaveType } from "@/app/(app)/leave/page"
 import { toLocalISODate } from "@/lib/utils/date"
+import {
+  countLeaveDays,
+  describeSegments,
+  nextWorkingDayAfter,
+  firstWorkingDayOnOrAfter,
+  segmentsWorkingDays,
+  NO_HOLIDAYS,
+  type HolidaySet,
+  type LeaveRangeBreakdown,
+} from "@/lib/hr/leave-days"
 
 export type LeaveDepartmentBookedDate = {
   date: string
@@ -10,9 +20,25 @@ export type LeaveDepartmentBookedDate = {
   pending_employees?: string[]
 }
 
+export type LeaveHoliday = {
+  date: string
+  name: string
+}
+
 export type LeaveCalendarData = {
   blackout_months: number[]
   department_booked_dates: LeaveDepartmentBookedDate[]
+  /** Public holidays in the booking window — never deducted from the balance. */
+  holidays: LeaveHoliday[]
+}
+
+/** Date -> holiday name, for greying out calendar cells and naming them. */
+export function holidayNameMap(calendar: LeaveCalendarData): Map<string, string> {
+  return new Map((calendar.holidays || []).map((holiday) => [holiday.date, holiday.name] as const))
+}
+
+export function holidaySetFrom(calendar: LeaveCalendarData): HolidaySet {
+  return new Set((calendar.holidays || []).map((holiday) => holiday.date))
 }
 
 export type LeaveRelieverDebug = {
@@ -109,7 +135,7 @@ export async function fetchLeaveData(currentUserId: string) {
         : null) as LeaveRelieverDebug | null,
     leaveCalendar: (calendarRes?.ok && calendarPayload.data
       ? calendarPayload.data
-      : { blackout_months: [12, 1], department_booked_dates: [] }) as LeaveCalendarData,
+      : { blackout_months: [12, 1], department_booked_dates: [], holidays: [] }) as LeaveCalendarData,
   }
 }
 
@@ -125,6 +151,48 @@ export function addDays(startDate: string, days: number) {
     endDate: toLocalISODate(end),
     resumeDate: toLocalISODate(resume),
   }
+}
+
+export type LeaveSegment = { start_date: string; end_date: string }
+
+/**
+ * Inclusive working-day count between two ISO dates. Weekends never count, and
+ * neither do public holidays — pass the set from `holidaySetFrom` so the number
+ * shown matches what the server will deduct.
+ */
+export function countWeekdays(startIso: string, endIso: string, holidays: HolidaySet = NO_HOLIDAYS): number {
+  if (!startIso || !endIso) return 0
+  return countLeaveDays(startIso, endIso, holidays)
+}
+
+/** End date such that startIso..end contains exactly `workingDayCount` working days. */
+export function endDateForWeekdaySpan(
+  startIso: string,
+  workingDayCount: number,
+  holidays: HolidaySet = NO_HOLIDAYS
+): string {
+  if (!startIso || workingDayCount <= 0) return ""
+  let cursor = firstWorkingDayOnOrAfter(startIso, holidays)
+  for (let counted = 1; counted < workingDayCount; counted++) {
+    cursor = nextWorkingDayAfter(cursor, holidays)
+  }
+  return cursor
+}
+
+export function segmentsTotalDays(segments: LeaveSegment[], holidays: HolidaySet = NO_HOLIDAYS): number {
+  return segmentsWorkingDays(segments, holidays)
+}
+
+/** Working days, weekend days and named holidays across the whole request. */
+export function segmentsBreakdown(segments: LeaveSegment[], holidays: HolidaySet = NO_HOLIDAYS): LeaveRangeBreakdown {
+  return describeSegments(segments, holidays)
+}
+
+/** Client-side estimate of end/resume date across all committed segments (server is authoritative). */
+export function segmentsPreview(segments: LeaveSegment[], holidays: HolidaySet = NO_HOLIDAYS) {
+  if (!segments.length) return { endDate: "", resumeDate: "" }
+  const endDate = segments.reduce((latest, segment) => (segment.end_date > latest ? segment.end_date : latest), segments[0].end_date)
+  return { endDate, resumeDate: nextWorkingDayAfter(endDate, holidays) }
 }
 
 export function getTodayLocalIsoDate() {

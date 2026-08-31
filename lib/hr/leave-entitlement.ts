@@ -47,8 +47,21 @@ export type LeaveEntitlement = {
   needsEvidence: boolean
 }
 
-type LeaveTypeRow = { id: string; name: string; code: string | null; max_days: number | null }
+type LeaveTypeRow = { id: string; name: string; code: string | null; max_days: number | null; lead_max_days: number | null }
 type RequestRow = { leave_type_id: string; days_count: number | null; status: string }
+
+/** Leads get a higher entitlement on types with a lead_max_days override (e.g. Annual Leave). */
+function resolveEntitlementDays(
+  leaveType: { max_days: number | null; lead_max_days?: number | null },
+  isLead: boolean
+): number {
+  if (isLead && leaveType.lead_max_days != null) return Number(leaveType.lead_max_days)
+  return Number(leaveType.max_days ?? 0)
+}
+
+function isLeadProfile(profile: { is_department_lead?: boolean | null; lead_departments?: string[] | null } | null) {
+  return Boolean(profile?.is_department_lead) || Boolean(profile?.lead_departments?.length)
+}
 
 function yearBounds(year: number) {
   return { from: `${year}-01-01`, to: `${year}-12-31` }
@@ -117,10 +130,12 @@ export async function getLeaveEntitlements(
   const [{ data: profile }, { data: leaveTypes }, { data: activePolicies }, committed] = await Promise.all([
     client
       .from("profiles")
-      .select("id, gender, employment_date, employment_type, marital_status, has_children, pregnancy_status")
+      .select(
+        "id, gender, employment_date, employment_type, marital_status, has_children, pregnancy_status, is_department_lead, lead_departments"
+      )
       .eq("id", userId)
       .maybeSingle(),
-    client.from("leave_types").select("id, name, code, max_days").eq("is_active", true).order("name"),
+    client.from("leave_types").select("id, name, code, max_days, lead_max_days").eq("is_active", true).order("name"),
     client.from("leave_policies").select("leave_type_id").eq("is_active", true),
     getCommittedDays(client, userId, year, { excludeRequestId: options?.excludeRequestId }),
   ])
@@ -138,6 +153,7 @@ export async function getLeaveEntitlements(
   const allocatable = new Set((activePolicies ?? []).map((p) => p.leave_type_id as string))
   const today = toLocalISODate()
   const entitlements: LeaveEntitlement[] = []
+  const isLead = isLeadProfile(requesterProfile as { is_department_lead?: boolean; lead_departments?: string[] })
 
   for (const lt of (leaveTypes ?? []) as LeaveTypeRow[]) {
     const uncapped = !allocatable.has(lt.id)
@@ -161,7 +177,7 @@ export async function getLeaveEntitlements(
     }
 
     const totals = committed.get(lt.id) ?? { used: 0, pending: 0 }
-    const entitlementDays = Number(lt.max_days ?? 0)
+    const entitlementDays = resolveEntitlementDays(lt, isLead)
 
     entitlements.push({
       leaveTypeId: lt.id,
@@ -188,18 +204,27 @@ export async function getRemainingDays(
 ): Promise<number> {
   const year = options?.year ?? new Date().getUTCFullYear()
 
-  const [{ data: leaveType }, { data: policy }, committed] = await Promise.all([
-    client.from("leave_types").select("max_days").eq("id", leaveTypeId).maybeSingle<{ max_days: number | null }>(),
+  const [{ data: leaveType }, { data: policy }, { data: profile }, committed] = await Promise.all([
+    client
+      .from("leave_types")
+      .select("max_days, lead_max_days")
+      .eq("id", leaveTypeId)
+      .maybeSingle<{ max_days: number | null; lead_max_days: number | null }>(),
     client
       .from("leave_policies")
       .select("leave_type_id")
       .eq("leave_type_id", leaveTypeId)
       .eq("is_active", true)
       .maybeSingle(),
+    client
+      .from("profiles")
+      .select("is_department_lead, lead_departments")
+      .eq("id", userId)
+      .maybeSingle<{ is_department_lead: boolean | null; lead_departments: string[] | null }>(),
     getCommittedDays(client, userId, year, { excludeRequestId: options?.excludeRequestId }),
   ])
 
-  const maxDays = Number(leaveType?.max_days ?? 0)
+  const maxDays = leaveType ? resolveEntitlementDays(leaveType, isLeadProfile(profile)) : 0
   // Uncapped types (LWOP) have no yearly allowance to exhaust — only the type's own per-request
   // ceiling applies, so the request check must not reject on days already taken.
   if (!policy) return maxDays

@@ -48,6 +48,7 @@ export interface LeaveRequest {
   current_stage_order?: number
   current_approver_user_id?: string
   requester_route_kind?: string
+  leave_request_segments?: { start_date: string; end_date: string; days_count: number; segment_order: number }[]
   lead_reconfirm_required?: boolean
   reliever_revision?: number
   created_at: string
@@ -152,7 +153,8 @@ async function getLeaveData() {
         *,
         leave_type:leave_types(name),
         reliever:profiles!leave_requests_reliever_id_fkey(id, full_name, company_email),
-        supervisor:profiles!leave_requests_supervisor_id_fkey(id, full_name, company_email)
+        supervisor:profiles!leave_requests_supervisor_id_fkey(id, full_name, company_email),
+        leave_request_segments(start_date, end_date, days_count, segment_order)
       `
         )
         .eq("user_id", user.id)

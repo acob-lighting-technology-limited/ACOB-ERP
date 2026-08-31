@@ -17,7 +17,7 @@ import {
   LeaveRejectPromptDialog,
   LeaveEvidencePromptDialog,
 } from "@/components/leave/leave-prompt-dialogs"
-import { fetchLeaveData, addDays } from "@/components/leave/leave-data"
+import { fetchLeaveData, holidaySetFrom, segmentsPreview, segmentsTotalDays } from "@/components/leave/leave-data"
 import type { LeaveCalendarData, LeaveRelieverDebug, LeaveReviewHistoryItem } from "@/components/leave/leave-data"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab, RowAction } from "@/components/ui/data-table"
@@ -79,12 +79,10 @@ type PersonNameRef = {
 
 const EMPTY_REQUEST_FORM: LeaveRequestFormData = {
   leave_type_id: "",
-  start_date: "",
-  days_count: 1,
+  segments: [],
   emergency_override: false,
   reason: "",
   reliever_identifier: "",
-  handover_note: "",
   handover_file: null,
   handover_checklist_url: null,
   attachment: null,
@@ -121,6 +119,7 @@ export function LeaveContent({
       leaveCalendar: {
         blackout_months: [12, 1],
         department_booked_dates: [],
+        holidays: [],
       },
     },
   })
@@ -135,6 +134,8 @@ export function LeaveContent({
     relieverDebug,
     leaveCalendar,
   } = leaveData
+
+  const holidaySet = useMemo(() => holidaySetFrom(leaveCalendar), [leaveCalendar])
 
   const [open, setOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -352,14 +353,18 @@ export function LeaveContent({
 
   function openEditDialog(request: LeaveRequest) {
     setEditingRequestId(request.id)
+    const existingSegments =
+      request.leave_request_segments && request.leave_request_segments.length > 0
+        ? [...request.leave_request_segments]
+            .sort((a, b) => a.segment_order - b.segment_order)
+            .map((segment) => ({ start_date: segment.start_date, end_date: segment.end_date }))
+        : [{ start_date: request.start_date, end_date: request.end_date }]
     setFormData({
       leave_type_id: request.leave_type_id,
-      start_date: request.start_date,
-      days_count: Number(request.days_count) || 1,
+      segments: existingSegments,
       emergency_override: false,
       reason: request.reason || "",
       reliever_identifier: request.reliever_id || "",
-      handover_note: request.handover_note || "",
       handover_file: null,
       handover_checklist_url: request.handover_checklist_url || null,
       attachment: null,
@@ -380,7 +385,7 @@ export function LeaveContent({
       const isEditing = !!editingRequestId
       const { attachment, handover_file, ...requestPayload } = formData
 
-      if (!isEditing && !handover_file && !formData.handover_checklist_url && !formData.handover_note) {
+      if (!isEditing && !handover_file && !formData.handover_checklist_url) {
         throw new Error("Handover document is required")
       }
       if (!isEditing && requiresAttachmentOnCreate && !attachment) {
@@ -406,9 +411,6 @@ export function LeaveContent({
       const finalPayload = {
         ...requestPayload,
         handover_checklist_url: handoverChecklistUrl || null,
-        handover_note:
-          formData.handover_note?.trim() ||
-          (handover_file ? `Attached: ${handover_file.name}` : formData.handover_note || null),
       }
 
       const response = await apiFetch("/api/hr/leave/requests", {
@@ -771,6 +773,21 @@ export function LeaveContent({
                           {approvalStageLabel(row.current_stage_code || row.approval_stage)}
                         </span>
                       </p>
+                      {row.leave_request_segments && row.leave_request_segments.length > 1 && (
+                        <p className="text-xs">
+                          <span className="text-muted-foreground">Date Ranges:</span>{" "}
+                          <span className="text-foreground">
+                            {[...row.leave_request_segments]
+                              .sort((a, b) => a.segment_order - b.segment_order)
+                              .map((segment) =>
+                                segment.start_date === segment.end_date
+                                  ? segment.start_date
+                                  : `${segment.start_date} to ${segment.end_date}`
+                              )
+                              .join(", ")}
+                          </span>
+                        </p>
+                      )}
                       {row.handover_checklist_url && (
                         <p className="flex items-center gap-1.5 pt-1 text-xs">
                           <span className="text-muted-foreground">Handover Doc:</span>
@@ -1082,18 +1099,16 @@ export function LeaveContent({
         availableDays={selectedAvailableDays}
         availableDaysByType={availableDaysByType}
         approvalRouteStages={leaveRoutePreview?.stages || []}
-        preview={addDays(formData.start_date, Number(formData.days_count))}
+        preview={segmentsPreview(formData.segments, holidaySet)}
         leaveCalendar={leaveCalendar}
         canSubmit={
           !!formData.leave_type_id &&
-          !!formData.start_date &&
+          formData.segments.length > 0 &&
           !!formData.reason &&
           !!formData.reliever_identifier &&
-          (Boolean(formData.handover_file) ||
-            Boolean(formData.handover_checklist_url) ||
-            Boolean(editingRequestId && formData.handover_note)) &&
-          Number(formData.days_count) > 0 &&
-          Number(formData.days_count) <= selectedAvailableDays &&
+          (Boolean(formData.handover_file) || Boolean(formData.handover_checklist_url)) &&
+          segmentsTotalDays(formData.segments, holidaySet) > 0 &&
+          segmentsTotalDays(formData.segments, holidaySet) <= selectedAvailableDays &&
           (!requiresAttachmentOnCreate || Boolean(formData.attachment))
         }
         submitting={submitting}
