@@ -179,7 +179,6 @@ export function TaskStatusControl({
         <SelectContent align="start">
           <SelectItem value={current} disabled>
             <span className={cn("font-medium", config?.color)}>{statusLabel(current)}</span>
-            <span className="text-muted-foreground ml-1.5 text-[10px]">current</span>
           </SelectItem>
           {options.map((option) => (
             <SelectItem

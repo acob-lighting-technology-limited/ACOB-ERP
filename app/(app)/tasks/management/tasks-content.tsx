@@ -4,13 +4,21 @@ import { useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
-import { ClipboardList, Clock, CheckCircle2, MessageSquare, Send, AlertTriangle } from "lucide-react"
+import {
+  ClipboardList,
+  Clock,
+  CheckCircle2,
+  MessageSquare,
+  Send,
+  AlertTriangle,
+  CalendarDays,
+  Target,
+} from "lucide-react"
 
 import { UserTaskDetailsDialog } from "@/components/tasks/UserTaskDetailsDialog"
 import { loadUserTasks } from "@/components/tasks/user-tasks-data"
 import { Button } from "@/components/ui/button"
 import { TaskStatusControl } from "@/components/tasks/TaskStatusControl"
-import { TASK_RATING_LABELS, TASK_WEIGHT_DEFAULT, TASK_WEIGHT_LABELS } from "@/lib/tasks/scoring"
 import type { Task, TaskUserProfile } from "@/types/task"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
@@ -46,6 +54,33 @@ interface TasksContentProps {
   userProfile: TaskUserProfile | null
 }
 
+/** Read-only status pill for the row list and cards, where the whole row is
+ * already the tap target and an inline control inside it would fight for taps.
+ * The editable `TaskStatusControl` lives in the table cell and the detail sheet. */
+function TaskStatusPill({ status }: { status: string }) {
+  return (
+    <Badge
+      variant={
+        status === "completed"
+          ? "default"
+          : ["failed", "cancelled", "unable_to_complete"].includes(status)
+            ? "destructive"
+            : "outline"
+      }
+      className="text-[10px] whitespace-nowrap capitalize"
+    >
+      {formatName(status)}
+    </Badge>
+  )
+}
+
+/** Past its deadline and still actionable - a cancelled task is not overdue. */
+function isTaskOverdue(task: Task): boolean {
+  if (!task.due_date) return false
+  if (["completed", "reassigned", "cancelled"].includes(task.status)) return false
+  return new Date(task.due_date).getTime() < new Date().setHours(0, 0, 0, 0)
+}
+
 export function TasksContent({ initialTasks, userId, userProfile }: TasksContentProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [selectedTask, setSelectedTask] = useState<Task | null>(null)
@@ -72,6 +107,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
       inProgress: tasks.filter((t) => t.status === "in_progress").length,
       submitted: tasks.filter((t) => t.status === "submitted_for_review").length,
       completed: tasks.filter((t) => t.status === "completed").length,
+      overdue: tasks.filter(isTaskOverdue).length,
     }),
     [tasks]
   )
@@ -224,10 +260,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
       sortable: true,
       accessor: (t) => t.due_date || "",
       render: (t) => {
-        const isOverdue =
-          t.due_date &&
-          new Date(t.due_date).getTime() < new Date().setHours(0, 0, 0, 0) &&
-          !["completed", "reassigned", "cancelled"].includes(t.status)
+        const isOverdue = isTaskOverdue(t)
         return (
           <div className="flex items-center gap-1.5 text-xs">
             <span className={isOverdue ? "text-destructive font-semibold" : "text-muted-foreground"}>
@@ -311,9 +344,12 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
       title="My Tasks"
       description="Manage your operational tasks, track deadlines, and submit completed work for review."
       icon={ClipboardList}
+      backLink={{ href: "/profile", label: "Back to Home" }}
+      spacing="tight"
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-6">
           <StatCard
+            variant="compact"
             title="Total Tasks"
             value={stats.total}
             icon={ClipboardList}
@@ -321,6 +357,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Pending"
             value={stats.pending}
             icon={Clock}
@@ -328,6 +365,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="In Progress"
             value={stats.inProgress}
             icon={Clock}
@@ -335,6 +373,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
             iconColor="text-sky-500"
           />
           <StatCard
+            variant="compact"
             title="Submitted"
             value={stats.submitted}
             icon={Send}
@@ -342,12 +381,25 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
             iconColor="text-purple-500"
           />
           <StatCard
+            variant="compact"
             title="Completed"
             value={stats.completed}
             icon={CheckCircle2}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
           />
+          {/* Only when there is something to answer for — a permanent "Overdue 0"
+              is noise, and the card is the page's one alarm. */}
+          {stats.overdue > 0 && (
+            <StatCard
+              variant="compact"
+              title="Overdue"
+              value={stats.overdue}
+              icon={AlertTriangle}
+              iconBgColor="bg-rose-500/10"
+              iconColor="text-rose-500"
+            />
+          )}
         </div>
       }
     >
@@ -356,78 +408,73 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
         columns={columns}
         getRowId={(t) => t.id}
         searchPlaceholder="Search task title, description, ID..."
+        // `q` is already trimmed and lowercased by DataTable.
         searchFn={(task, q) =>
-          task.title.toLowerCase().includes(q.toLowerCase()) ||
-          (task.description || "").toLowerCase().includes(q.toLowerCase()) ||
-          (task.work_item_number || "").toLowerCase().includes(q.toLowerCase()) ||
-          (task.goal_title || "").toLowerCase().includes(q.toLowerCase())
+          `${task.title} ${task.description || ""} ${task.work_item_number || ""} ${task.goal_title || ""}`
+            .toLowerCase()
+            .includes(q)
         }
         filters={filters}
-        rowActions={[
-          {
-            label: "Open Details",
-            onClick: (task) => void openTaskDetails(task),
-          },
-        ]}
-        expandable={{
-          render: (task) => (
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              <div>
-                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Description</p>
-                <p className="mt-1 text-sm">{task.description || "No description provided."}</p>
-                <div className="text-muted-foreground mt-3 space-y-1 text-xs">
-                  <p>
-                    Assigned to{" "}
-                    {task.assigned_to_user
-                      ? formatFullName(task.assigned_to_user.first_name, task.assigned_to_user.last_name)
-                      : task.assignment_type === "department"
-                        ? `${task.department || "the department"} (whole department)`
-                        : "nobody"}
-                  </p>
-                  <p>
-                    Starts {task.task_start_date ? formatWATDate(task.task_start_date) : "-"} · Due{" "}
-                    {task.task_end_date || task.due_date
-                      ? formatWATDate((task.task_end_date || task.due_date) as string)
-                      : "no deadline"}
-                  </p>
-                  {task.group_id && <p>Part of a task assigned to several people.</p>}
-                </div>
+        pagination={{ pageSize: 25 }}
+        stickyToolbar
+        viewToggle
+        contactsView
+        // Eight columns are worth a table where they fit and unreadable where they
+        // do not, so the opening view follows the width.
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          // Overdue outranks priority: a late task needs answering whatever its
+          // priority was when it was set.
+          accentClass: (t) =>
+            isTaskOverdue(t) ? "bg-rose-500" : ["high", "urgent"].includes(t.priority) ? "bg-amber-500" : undefined,
+          title: (t) => t.title,
+          subtitle: (t) =>
+            [
+              t.work_item_number || null,
+              t.due_date ? `Due ${formatWATDate(t.due_date)}` : "No deadline",
+              (t.comment_count || 0) > 0 ? `${t.comment_count} comment${t.comment_count === 1 ? "" : "s"}` : null,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          trailing: (t) => <TaskStatusPill status={t.status} />,
+          // One detail surface for a task, reached the same way from every view:
+          // the row opens the details dialog. A sheet that repeated two thirds of
+          // that dialog and then offered a button to open it made you tap twice to
+          // arrive where you were already going.
+          onSelect: (t) => void openTaskDetails(t),
+        }}
+        cardRenderer={(t) => (
+          <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <span className="text-foreground line-clamp-2 text-sm font-semibold">{t.title}</span>
+                <span className="text-muted-foreground block font-mono text-xs">{t.work_item_number || "---"}</span>
               </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between rounded-md border p-2 text-xs">
-                  <span className="text-muted-foreground">Weight</span>
-                  <span className="font-medium">
-                    {task.weight ?? TASK_WEIGHT_DEFAULT} — {TASK_WEIGHT_LABELS[task.weight ?? TASK_WEIGHT_DEFAULT]}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between rounded-md border p-2 text-xs">
-                  <span className="text-muted-foreground">Rating</span>
-                  <span className="font-medium">
-                    {task.rating ? `${task.rating}/5 — ${TASK_RATING_LABELS[task.rating]}` : "Not yet rated"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between rounded-md border p-2 text-xs">
-                  <span className="text-muted-foreground">Goal</span>
-                  <span className="max-w-[65%] truncate font-medium">{task.goal_title || "Not linked"}</span>
-                </div>
-                <div className="flex items-center justify-between rounded-md border p-2 text-xs">
-                  <span className="text-muted-foreground">Corporate KPI</span>
-                  <span className="max-w-[65%] truncate font-medium">{task.kpi_measure || "Not linked"}</span>
-                </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="h-8 w-full text-xs"
-                  onClick={() => void openTaskDetails(task)}
-                >
-                  <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
-                  Comments &amp; activity
-                  {(task.comment_count || 0) > 0 ? ` (${task.comment_count})` : ""}
-                </Button>
+              <TaskStatusPill status={t.status} />
+            </div>
+            <div className="text-muted-foreground grid gap-1 text-xs">
+              <div className="flex items-center gap-1.5">
+                <CalendarDays className="h-3.5 w-3.5 shrink-0" />
+                <span className={isTaskOverdue(t) ? "text-destructive font-semibold" : undefined}>
+                  {t.due_date ? formatWATDate(t.due_date) : "No deadline"}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Target className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">{t.goal_title || "Ad-Hoc / Operational"}</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                <span className="capitalize">{t.priority} priority</span>
               </div>
             </div>
-          ),
-        }}
+          </div>
+        )}
+        emptyTitle="No tasks"
+        emptyDescription="Tasks assigned to you will appear here."
+        emptyIcon={ClipboardList}
+        skeletonRows={6}
+        urlSync
       />
 
       <UserTaskDetailsDialog
