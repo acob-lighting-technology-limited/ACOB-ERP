@@ -334,7 +334,7 @@ export function Navbar({ user, avatarUrl, canAccessAdmin = false, isAdminMode = 
 
           {/* Mobile menu button */}
           <button
-            className="md:hidden"
+            className="lg:hidden"
             onClick={() => {
               // If sidebar context exists, toggle the sidebar instead of navbar menu
               if (sidebarContext) {
@@ -354,7 +354,7 @@ export function Navbar({ user, avatarUrl, canAccessAdmin = false, isAdminMode = 
       {isOpen && !sidebarContext && (
         <div
           className={cn(
-            "space-y-2 border-t py-4 md:hidden",
+            "space-y-2 border-t py-4 lg:hidden",
             isAdminMode ? "border-[var(--navbar-admin-sidebar-border,var(--admin-sidebar-border))]" : "border-border"
           )}
         >

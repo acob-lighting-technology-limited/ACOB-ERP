@@ -6,7 +6,7 @@ import { useIsMobile } from "@/hooks/use-mobile"
 
 export function SidebarContent({ children }: { children: React.ReactNode }) {
   const { isCollapsed } = useSidebar()
-  const isMobile = useIsMobile()
+  const isMobile = useIsMobile(1024)
 
   return (
     <motion.main
