@@ -18,9 +18,9 @@ Do **not** run `npm run build` to check your work. It takes ~3 minutes, and the
 dev server is usually running — the build competes with it for `.next/` and
 disrupts what the user is doing.
 
-The pre-push hook already runs `lint:strict`, `type-check` and `build`, so a
-build happens exactly once, at the point it matters. That is the only time it
-should run.
+The pre-push hook (`.husky/pre-push`) runs `lint:strict` and `type-check` only —
+**not** `build` (removed in `2c38430b`). Nothing builds locally or in CI; Vercel
+is the only place `next build` runs. Do not claim a push will build the project.
 
 To verify a change, use the fast checks:
 
