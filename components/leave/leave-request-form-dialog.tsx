@@ -10,11 +10,19 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { SearchableSelect } from "@/components/ui/searchable-select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { CalendarDays } from "lucide-react"
+import { CalendarDays, Plus, X } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
 import type { LeaveType, LeaveBalance } from "@/app/(app)/leave/page"
-import { getTodayLocalIsoDate } from "@/components/leave/leave-data"
-import type { LeaveCalendarData, LeaveRelieverDebug } from "@/components/leave/leave-data"
+import {
+  countWeekdays,
+  getTodayLocalIsoDate,
+  holidayNameMap,
+  holidaySetFrom,
+  segmentsBreakdown,
+  segmentsTotalDays,
+} from "@/components/leave/leave-data"
+import type { LeaveCalendarData, LeaveRelieverDebug, LeaveSegment } from "@/components/leave/leave-data"
+import { isWeekend as isWeekendIso, trimRangeToWorkingDays, type HolidaySet } from "@/lib/hr/leave-days"
 
 function prettyEligibility(status: string) {
   if (status === "eligible") return "Eligible"
@@ -28,12 +36,10 @@ function prettyDocName(name: string) {
 
 export interface LeaveRequestFormData {
   leave_type_id: string
-  start_date: string
-  days_count: number
+  segments: LeaveSegment[]
   emergency_override: boolean
   reason: string
   reliever_identifier: string
-  handover_note: string
   handover_file: File | null
   handover_checklist_url: string | null
   attachment: File | null
@@ -76,10 +82,10 @@ function parseIsoLocalDate(value: string) {
   return new Date(`${value}T00:00:00`)
 }
 
-function daysInclusive(fromIso: string, toIso: string) {
-  const from = parseIsoLocalDate(fromIso).getTime()
-  const to = parseIsoLocalDate(toIso).getTime()
-  return Math.floor((to - from) / (1000 * 60 * 60 * 24)) + 1
+function formatSegmentLabel(segment: LeaveSegment, holidays: HolidaySet) {
+  const days = countWeekdays(segment.start_date, segment.end_date, holidays)
+  const range = segment.start_date === segment.end_date ? segment.start_date : `${segment.start_date} to ${segment.end_date}`
+  return `${range} (${days} day${days === 1 ? "" : "s"} deducted)`
 }
 
 export function LeaveRequestFormDialog({
@@ -104,30 +110,47 @@ export function LeaveRequestFormDialog({
   onSubmit,
 }: LeaveRequestFormDialogProps) {
   const [pendingRangeStartIso, setPendingRangeStartIso] = useState<string | null>(null)
-  const [lastClickedIso, setLastClickedIso] = useState<string | null>(null)
+  const [pendingRangeEndIso, setPendingRangeEndIso] = useState<string | null>(null)
   const todayIso = getTodayLocalIsoDate()
+  const holidaySet = useMemo(() => holidaySetFrom(leaveCalendar), [leaveCalendar])
+  const holidayNames = useMemo(() => holidayNameMap(leaveCalendar), [leaveCalendar])
   const blackoutMonthSet = new Set((leaveCalendar.blackout_months || [12, 1]).map((month) => Number(month)))
   const bookedMap = new Map((leaveCalendar.department_booked_dates || []).map((entry) => [entry.date, entry] as const))
   const policyMaxDays = Number(selectedLeaveType?.max_days || 0)
   const currentAvailableDays = Math.max(0, Number(availableDays || 0))
   const maxDaysAllowed =
     policyMaxDays > 0 ? Math.max(0, Math.min(policyMaxDays, currentAvailableDays)) : currentAvailableDays
-  const selectedRange = useMemo(() => {
-    if (pendingRangeStartIso) {
-      return {
-        from: parseIsoLocalDate(pendingRangeStartIso),
-        to: undefined,
+  const committedDays = segmentsTotalDays(formData.segments, holidaySet)
+  const committedBreakdown = segmentsBreakdown(formData.segments, holidaySet)
+  const remainingAllowed = Math.max(0, maxDaysAllowed - committedDays)
+
+  const committedDateSet = useMemo(() => {
+    const set = new Set<string>()
+    for (const segment of formData.segments) {
+      let current = parseIsoLocalDate(segment.start_date)
+      const end = parseIsoLocalDate(segment.end_date)
+      while (current <= end) {
+        set.add(toIsoLocalDate(current))
+        current = new Date(current.getTime() + 24 * 60 * 60 * 1000)
       }
     }
-    if (!formData.start_date || !preview.endDate) return undefined
+    return set
+  }, [formData.segments])
+
+  const selectedRange = useMemo(() => {
+    if (!pendingRangeStartIso) return undefined
     return {
-      from: parseIsoLocalDate(formData.start_date),
-      to: parseIsoLocalDate(preview.endDate),
+      from: parseIsoLocalDate(pendingRangeStartIso),
+      to: pendingRangeEndIso ? parseIsoLocalDate(pendingRangeEndIso) : undefined,
     }
-  }, [formData.start_date, pendingRangeStartIso, preview.endDate])
+  }, [pendingRangeStartIso, pendingRangeEndIso])
 
   const isBlackoutDate = (date: Date) => blackoutMonthSet.has(date.getMonth() + 1)
+  const isWeekendDate = (date: Date) => isWeekendIso(toIsoLocalDate(date))
+  const isHolidayDate = (date: Date) => holidaySet.has(toIsoLocalDate(date))
+  const holidayLabel = (date: Date) => holidayNames.get(toIsoLocalDate(date)) || null
   const isPastDate = (date: Date) => toIsoLocalDate(date) < todayIso
+  const isAlreadyCommitted = (date: Date) => committedDateSet.has(toIsoLocalDate(date))
   const getBookingForDate = (date: Date) => bookedMap.get(toIsoLocalDate(date))
   const hasApprovedDepartmentBooking = (date: Date) => {
     const booking = getBookingForDate(date)
@@ -149,18 +172,66 @@ export function LeaveRequestFormDialog({
     )
   }
   const exceedsLeaveTypeMax = (date: Date) => {
-    if (!pendingRangeStartIso || !maxDaysAllowed) return false
+    if (!pendingRangeStartIso || !remainingAllowed) return false
     const clickedIso = toIsoLocalDate(date)
     if (clickedIso <= pendingRangeStartIso) return false
-    return daysInclusive(pendingRangeStartIso, clickedIso) > maxDaysAllowed
+    return countWeekdays(pendingRangeStartIso, clickedIso, holidaySet) > remainingAllowed
   }
+  // Weekends and public holidays are not deductible, so they can never be an
+  // endpoint of a range. A range may still *span* them — react-day-picker only
+  // blocks disabled days from being clicked, not from falling inside a range.
   const disableDay = (date: Date) =>
-    maxDaysAllowed <= 0 ||
+    (remainingAllowed <= 0 && !pendingRangeStartIso) ||
+    isWeekendDate(date) ||
+    isHolidayDate(date) ||
     isPastDate(date) ||
+    isAlreadyCommitted(date) ||
     (!formData.emergency_override && isBlackoutDate(date)) ||
     exceedsLeaveTypeMax(date)
 
-  const selectedDateBooking = formData.start_date ? bookedMap.get(formData.start_date) : null
+  function commitPendingRange() {
+    if (!pendingRangeStartIso) return
+    const endIso = pendingRangeEndIso || pendingRangeStartIso
+    // Store the working-day range, not the raw selection: a Mon-Sun drag is
+    // saved as Mon-Fri so the resumption date reads as the following Monday.
+    const trimmed = trimRangeToWorkingDays(pendingRangeStartIso, endIso, holidaySet)
+    const span = trimmed ? countWeekdays(trimmed.start_date, trimmed.end_date, holidaySet) : 0
+    if (!trimmed || span <= 0 || span > remainingAllowed) {
+      setPendingRangeStartIso(null)
+      setPendingRangeEndIso(null)
+      return
+    }
+    setFormData((prev) => ({
+      ...prev,
+      segments: [...prev.segments, trimmed],
+    }))
+    setPendingRangeStartIso(null)
+    setPendingRangeEndIso(null)
+  }
+
+  function removeSegment(index: number) {
+    setFormData((prev) => ({ ...prev, segments: prev.segments.filter((_, i) => i !== index) }))
+  }
+
+  // Explains the selection before it is added: how many days it will actually
+  // cost, and which public holidays came along free.
+  const pendingSelectionSummary = (() => {
+    if (!pendingRangeStartIso) return ""
+    const endIso = pendingRangeEndIso || pendingRangeStartIso
+    const range = endIso === pendingRangeStartIso ? pendingRangeStartIso : `${pendingRangeStartIso} to ${endIso}`
+    const breakdown = segmentsBreakdown([{ start_date: pendingRangeStartIso, end_date: endIso }], holidaySet)
+    const parts = [`${breakdown.workingDays} day${breakdown.workingDays === 1 ? "" : "s"} deducted`]
+    if (breakdown.weekendDays > 0) parts.push(`${breakdown.weekendDays} weekend day${breakdown.weekendDays === 1 ? "" : "s"} free`)
+    for (const holidayIso of breakdown.holidayDates) {
+      parts.push(`${holidayNames.get(holidayIso) || "public holiday"} free`)
+    }
+    return `Selected: ${range} — ${parts.join(", ")}`
+  })()
+
+  const lastCommittedDate = formData.segments.length
+    ? [...formData.segments].sort((a, b) => a.end_date.localeCompare(b.end_date)).slice(-1)[0]?.end_date
+    : null
+  const selectedDateBooking = lastCommittedDate ? bookedMap.get(lastCommittedDate) : null
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -204,14 +275,11 @@ export function LeaveRequestFormDialog({
             <Label>Leave Type</Label>
             <Select
               value={formData.leave_type_id}
-              onValueChange={(value) =>
-                setFormData((prev) => {
-                  const selectedAvailable = Math.max(0, Number(availableDaysByType[value] ?? 0))
-                  const nextDays =
-                    selectedAvailable > 0 ? Math.min(Math.max(1, Number(prev.days_count) || 1), selectedAvailable) : 0
-                  return { ...prev, leave_type_id: value, days_count: nextDays }
-                })
-              }
+              onValueChange={(value) => {
+                setPendingRangeStartIso(null)
+                setPendingRangeEndIso(null)
+                setFormData((prev) => ({ ...prev, leave_type_id: value, segments: [] }))
+              }}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select leave type" />
@@ -243,90 +311,46 @@ export function LeaveRequestFormDialog({
           {formData.leave_type_id ? (
             <>
               <div className="space-y-2">
-                <Label>Pick Start Date (Calendar)</Label>
+                <Label>Pick Date Range(s) — weekends and public holidays don&apos;t count toward your balance</Label>
                 <div className="rounded-md border p-3">
                   <Calendar
                     mode="range"
                     selected={selectedRange}
-                    onDayClick={(day) => {
-                      const clickedIso = toIsoLocalDate(day)
-                      setLastClickedIso(clickedIso)
-                    }}
                     onSelect={(range) => {
-                      const hasCommittedRange =
-                        !pendingRangeStartIso && Boolean(formData.start_date) && Boolean(preview.endDate)
-
-                      // UX rule: once a range is already selected, next click should start a new range
-                      // from the clicked day instead of extending the old one.
-                      if (hasCommittedRange && lastClickedIso) {
-                        setPendingRangeStartIso(lastClickedIso)
-                        setFormData((prev) => ({
-                          ...prev,
-                          start_date: lastClickedIso,
-                          days_count: 1,
-                        }))
-                        setLastClickedIso(null)
-                        return
-                      }
-
                       if (!range?.from) {
                         setPendingRangeStartIso(null)
-                        setFormData((prev) => ({ ...prev, start_date: "" }))
-                        setLastClickedIso(null)
+                        setPendingRangeEndIso(null)
                         return
                       }
-
-                      const fromIso = toIsoLocalDate(range.from)
-                      if (!range.to) {
-                        if (maxDaysAllowed <= 0) {
-                          setPendingRangeStartIso(null)
-                          setFormData((prev) => ({
-                            ...prev,
-                            start_date: "",
-                            days_count: 0,
-                          }))
-                          setLastClickedIso(null)
-                          return
-                        }
-                        setPendingRangeStartIso(fromIso)
-                        setFormData((prev) => ({
-                          ...prev,
-                          start_date: fromIso,
-                          days_count: 1,
-                        }))
-                        setLastClickedIso(null)
-                        return
-                      }
-
-                      const toIso = toIsoLocalDate(range.to)
-                      const spanDays = daysInclusive(fromIso, toIso)
-                      const clampedDays = maxDaysAllowed > 0 ? Math.min(spanDays, maxDaysAllowed) : 0
-                      setPendingRangeStartIso(null)
-                      setFormData((prev) => ({
-                        ...prev,
-                        start_date: fromIso,
-                        days_count: clampedDays,
-                      }))
-                      setLastClickedIso(null)
+                      setPendingRangeStartIso(toIsoLocalDate(range.from))
+                      setPendingRangeEndIso(range.to ? toIsoLocalDate(range.to) : null)
                     }}
                     showOutsideDays
                     disabled={(date) => !formData.leave_type_id || disableDay(date)}
                     modifiers={{
                       blackout: (date) => isBlackoutDate(date),
+                      holiday: (date) => isHolidayDate(date),
                       department_approved: (date) => hasApprovedDepartmentBooking(date),
                       department_pending: (date) => hasPendingDepartmentBooking(date),
+                      committed: (date) => isAlreadyCommitted(date),
                       selected_range: selectedRange || undefined,
                     }}
                     modifiersClassNames={{
                       blackout: "line-through opacity-40",
+                      holiday: "bg-violet-100 text-violet-900 font-medium dark:bg-violet-950/60 dark:text-violet-300",
                       department_approved: "bg-red-100 text-red-900 font-medium dark:bg-red-950/60 dark:text-red-300",
                       department_pending:
                         "bg-amber-100 text-amber-900 font-medium dark:bg-amber-950/60 dark:text-amber-300",
+                      committed: "bg-emerald-100 text-emerald-900 font-medium dark:bg-emerald-950/60 dark:text-emerald-300",
                       selected_range: "bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-300",
                     }}
                     className="mx-auto"
                   />
                   <div className="text-muted-foreground mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs">
+                    <span className="inline-flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded border border-emerald-300 bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950/60" />
+                      Added to request
+                    </span>
                     <span className="inline-flex items-center gap-1.5">
                       <span className="h-3 w-3 rounded border border-red-300 bg-red-100 dark:border-red-800 dark:bg-red-950/60" />
                       Booked (Approved)
@@ -336,9 +360,29 @@ export function LeaveRequestFormDialog({
                       Booked (Pending)
                     </span>
                     <span className="inline-flex items-center gap-1.5">
+                      <span className="h-3 w-3 rounded border border-violet-300 bg-violet-100 dark:border-violet-800 dark:bg-violet-950/60" />
+                      Public holiday (free)
+                    </span>
+                    <span className="inline-flex items-center gap-1.5">
                       <span className="border-border bg-muted h-3 w-3 rounded border opacity-60" />
                       Dec/Jan blocked
                     </span>
+                  </div>
+
+                  <div className="mt-3 flex items-center justify-between gap-2">
+                    <p className="text-muted-foreground text-xs">
+                      {pendingRangeStartIso ? pendingSelectionSummary : "Click a start date, then an end date."}
+                    </p>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
+                      disabled={!pendingRangeStartIso}
+                      onClick={commitPendingRange}
+                    >
+                      <Plus className="mr-1 h-3.5 w-3.5" />
+                      Add range
+                    </Button>
                   </div>
 
                   <div className="bg-muted/40 mt-3 flex items-center justify-between rounded-md border px-3 py-2">
@@ -384,39 +428,53 @@ export function LeaveRequestFormDialog({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>Start Date</Label>
-                  <Input
-                    type="date"
-                    value={formData.start_date}
-                    onChange={(event) => {
-                      setPendingRangeStartIso(null)
-                      setFormData((prev) => ({ ...prev, start_date: event.target.value }))
-                    }}
-                    min={getTodayLocalIsoDate()}
-                    disabled={!formData.leave_type_id}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Number of Days</Label>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={maxDaysAllowed > 0 ? maxDaysAllowed : undefined}
-                    value={formData.days_count}
-                    onChange={(event) =>
-                      setFormData((prev) => {
-                        if (maxDaysAllowed <= 0) return { ...prev, days_count: 0 }
-                        const parsedValue = Number(event.target.value || 1)
-                        const normalized = Number.isFinite(parsedValue) && parsedValue > 0 ? Math.floor(parsedValue) : 1
-                        const clamped = Math.min(normalized, maxDaysAllowed)
-                        return { ...prev, days_count: Math.max(1, clamped) }
-                      })
-                    }
-                    disabled={!formData.leave_type_id || maxDaysAllowed <= 0}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label>
+                  Date Ranges Added ({committedDays} day{committedDays === 1 ? "" : "s"} deducted)
+                </Label>
+                {committedBreakdown.holidayDates.length > 0 || committedBreakdown.weekendDays > 0 ? (
+                  <p className="text-muted-foreground text-xs">
+                    {committedBreakdown.calendarDays} calendar day
+                    {committedBreakdown.calendarDays === 1 ? "" : "s"} selected.{" "}
+                    {committedBreakdown.weekendDays > 0
+                      ? `${committedBreakdown.weekendDays} weekend day${committedBreakdown.weekendDays === 1 ? "" : "s"}`
+                      : ""}
+                    {committedBreakdown.weekendDays > 0 && committedBreakdown.holidayDates.length > 0 ? " and " : ""}
+                    {committedBreakdown.holidayDates.length > 0
+                      ? `${committedBreakdown.holidayDates.length} public holiday${committedBreakdown.holidayDates.length === 1 ? "" : "s"} (${committedBreakdown.holidayDates
+                          .map((iso) => holidayNames.get(iso) || iso)
+                          .join(", ")})`
+                      : ""}{" "}
+                    not deducted.
+                  </p>
+                ) : null}
+                {formData.segments.length === 0 ? (
+                  <p className="text-muted-foreground rounded-md border border-dashed p-3 text-xs">
+                    No date ranges added yet. Pick dates on the calendar above and click &quot;Add range&quot;. Add
+                    more than one range for disjoint dates (e.g. 1st-3rd and 5th-7th).
+                  </p>
+                ) : (
+                  <ul className="space-y-1.5">
+                    {formData.segments.map((segment, index) => (
+                      <li
+                        key={`${segment.start_date}-${segment.end_date}-${index}`}
+                        className="bg-muted/40 flex items-center justify-between rounded-md border px-3 py-1.5 text-xs"
+                      >
+                        <span>{formatSegmentLabel(segment, holidaySet)}</span>
+                        <Button
+                          type="button"
+                          size="icon"
+                          variant="ghost"
+                          className="h-6 w-6"
+                          onClick={() => removeSegment(index)}
+                          aria-label="Remove date range"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
 
               <div className="bg-muted/40 rounded-md border p-3 text-sm">
@@ -461,15 +519,12 @@ export function LeaveRequestFormDialog({
 
           <div className="space-y-2">
             <Label>
-              Handover Document{" "}
-              {!editingRequestId || !formData.handover_checklist_url ? (
-                <span className="text-destructive">*</span>
-              ) : null}
+              Handover Document <span className="text-destructive">*</span>
             </Label>
             <Input
               type="file"
               accept=".pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg"
-              required={!editingRequestId && !formData.handover_checklist_url}
+              required={!formData.handover_checklist_url}
               onChange={(event) => setFormData((prev) => ({ ...prev, handover_file: event.target.files?.[0] || null }))}
             />
             <p className="text-muted-foreground text-xs">
@@ -479,16 +534,6 @@ export function LeaveRequestFormDialog({
                   ? "A handover document is already attached. Upload a new file to replace it."
                   : "Upload your formal handover document (PDF, Word, or Excel) detailing coverage."}
             </p>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Handover Notes (Optional)</Label>
-            <Textarea
-              rows={2}
-              value={formData.handover_note}
-              onChange={(event) => setFormData((prev) => ({ ...prev, handover_note: event.target.value }))}
-              placeholder="Additional handover details or instructions for your reliever (optional)..."
-            />
           </div>
 
           <div className="space-y-2">

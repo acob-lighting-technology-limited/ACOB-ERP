@@ -42,9 +42,12 @@ export type AdminRouteKeyV2 =
   | "jobdescriptions.main"
   | "notifications.main"
   | "payroll.main"
+  | "portfolios.main"
+  | "projects.main"
   | "purchasing.main"
   | "reports.weekly"
   | "reports.other"
+  | "scorecard.main"
   | "security.networkActivity"
   | "security.bypassOverride"
   | "settings.main"
@@ -71,6 +74,9 @@ export const GRANTABLE_ADMIN_ROUTES: AdminRouteKeyV2[] = [
   "inventory.main",
   "reports.weekly",
   "reports.other",
+  "scorecard.main",
+  "portfolios.main",
+  "projects.main",
   "tasks.main",
   "communications.main",
   "communications.broadcast",
@@ -172,6 +178,11 @@ export function resolveAdminRouteKeyV2(pathname: string): AdminRouteKeyV2 {
   if (pathname.startsWith("/admin/job-descriptions")) return "jobdescriptions.main"
   if (pathname.startsWith("/admin/notifications")) return "notifications.main"
   if (pathname.startsWith("/admin/purchasing")) return "purchasing.main"
+  if (pathname.startsWith("/admin/corporate-scorecard")) return "scorecard.main"
+  if (pathname.startsWith("/admin/portfolios")) return "portfolios.main"
+  // The Projects console lives at the singular /admin/project — the sidebar
+  // labels it "Projects" but the route was never pluralised.
+  if (pathname.startsWith("/admin/project")) return "projects.main"
   if (pathname.startsWith("/admin/security/bypass-override")) return "security.bypassOverride"
   if (pathname.startsWith("/admin/security/network-activity")) return "security.networkActivity"
   if (pathname.startsWith("/admin/reports")) {
@@ -249,11 +260,26 @@ export function getRoutePolicyV2(route: AdminRouteKeyV2): RoutePolicyV2 {
       return { visibility: "dept", mutations: "dept", adminOnly: false, domain: "finance" }
     case "tasks.main":
       return { visibility: "dept", mutations: "dept", adminOnly: false, domain: "tasks" }
+    case "portfolios.main":
+    case "projects.main":
+      // Company-wide registers with no dept-scoped variant — the dept console
+      // has no Portfolios/Projects surface, so these are admin-only and reached
+      // through an explicit grant.
+      return { visibility: "none", mutations: "global", adminOnly: true, domain: "projects" }
+    case "scorecard.main":
+      // The corporate scorecard is the company-wide objective register. Its
+      // department cascade is authored here by global admins; leads consume the
+      // cascade from their own console, not from /admin.
+      return { visibility: "none", mutations: "global", adminOnly: true, domain: "reports" }
     case "tools.main":
       return { visibility: "dept", mutations: "dept", adminOnly: false, domain: "communications" }
     case "unknown":
     default:
-      return { visibility: "dept", mutations: "dept", adminOnly: false, domain: null }
+      // Deny by default. A new /admin/* section with no resolver branch lands
+      // here, and an unrecognised route must never be reachable — previously
+      // this defaulted to dept-visible, which silently exposed ungated pages
+      // (Portfolios, Projects, Corporate Scorecard) to department leads.
+      return { visibility: "none", mutations: "none", adminOnly: true, domain: null }
   }
 }
 

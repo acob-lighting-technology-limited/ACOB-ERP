@@ -170,9 +170,9 @@ export function CreateReferenceDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       {!isEditMode && (
         <DialogTrigger asChild>
-          <Button>
-            <Plus className="mr-2 h-4 w-4" />
-            Create Reference
+          <Button size="sm">
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Create Reference</span>
           </Button>
         </DialogTrigger>
       )}

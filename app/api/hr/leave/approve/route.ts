@@ -7,6 +7,7 @@ import {
   areRequiredDocumentsVerified,
   formatLeaveReference,
   getLeavePolicy,
+  getLeaveRequestSegments,
   notifyUsers,
   syncAttendanceForApprovedLeave,
 } from "@/lib/hr/leave-workflow"
@@ -403,13 +404,13 @@ export async function PATCH(request: NextRequest) {
       // leave_balances table is read by nothing, and update_leave_balance was never
       // defined in any migration — this call always errored and was swallowed.
 
-      await syncAttendanceForApprovedLeave(
+      const approvedSegments = await getLeaveRequestSegments(
         supabaseAdmin,
-        typedLeaveRequest.user_id,
+        leave_request_id,
         typedLeaveRequest.start_date,
-        typedLeaveRequest.end_date,
-        "set"
+        typedLeaveRequest.end_date
       )
+      await syncAttendanceForApprovedLeave(supabaseAdmin, typedLeaveRequest.user_id, approvedSegments, "set")
 
       await notifyUsers(supabaseAdmin, {
         userIds: [typedLeaveRequest.user_id],

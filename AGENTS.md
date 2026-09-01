@@ -18,6 +18,32 @@ Do not treat a task as complete until all required checks pass:
 
 If a change cannot satisfy all checks or if migrations remain unapplied without explicit user consent, report the blocker/pending status clearly instead of claiming completion.
 
+## Technical Honesty — Do Not Default to Agreement
+
+Agreeing with a proposal you believe is wrong is a failure, not politeness. When the
+user suggests an approach — in a question, a "right?", or a direct instruction — judge
+it on the merits and say what you actually think **before** acting.
+
+- If the suggestion is not the right call, or departs from industry standard or an
+  established convention in this repo, **say so plainly and give the reason**. Cite the
+  concrete cost: the bug it invites, the a11y or contrast rule it breaks, the standard
+  in `AGENTS.md` it contradicts, the maintenance burden it adds.
+- A question phrased as "should we…?" or "…right?" is a request for your judgement, not
+  for confirmation. Answer it, don't echo it.
+- Never validate a decision you would not have made yourself. Do not soften a real
+  objection into "that could work too."
+- Be equally direct about your own work: if you overstated a claim, got a fact wrong, or
+  a check failed, correct it and report the failure rather than glossing it.
+- Concede specifically when the user is right — including when they are right about part
+  of a point you disagree with overall. Partial agreement stated precisely is more useful
+  than blanket agreement or blanket resistance.
+- Offer the better alternative, not just the objection. "No, because X — do Y instead" is
+  the useful shape.
+
+**After the objection has been made and the user reaffirms their choice, it is their
+call.** State the trade-off once, then implement what they asked, fully and well. Do not
+re-litigate it, do not quietly implement a different thing, and do not sandbag the work.
+
 ## Git and Hook Policy
 
 - Never use `git commit --no-verify`.
@@ -488,12 +514,113 @@ table or filter bar. Use `ExportOptionsDialog` from
 - ❌ Inline search or filter state in a page — all handled by `DataTable`
 - ❌ `<Loader2>` spinner for table loading — skeletons are automatic
 - ❌ Fewer than 2 filter options on any table page
-- ❌ A table page without stats cards
+- ❌ A table page with no metrics at all — supply `stats` (StatCards), `statBadges`,
+  or both. Prefer `statBadges` with `statBadgeStyle="line"` on lookup and record
+  pages: four cards fill a phone screen before any data. Pass both only when the
+  cards genuinely earn a desktop band; they then render `md`-and-up while the line
+  covers mobile.
 - ❌ A table page without `DataTablePage` as the root wrapper
+
+### The one exception to inline filter state — controlled filters
+
+`DataTable` owns search and filter state. The single sanctioned way for a page to
+hold filter values is `DataTable`'s controlled mode:
+
+```tsx
+const [filterValues, setFilterValues] = useState<Record<string, string[]>>({
+  staff_type: ["permanent"], // seed here; `defaultValues` is ignored when controlled
+})
+
+<DataTable filterValues={filterValues} onFilterValuesChange={setFilterValues} … />
+```
+
+Use it **only** when UI outside the toolbar has to drive a filter — an interactive
+stat badge that toggles its own metric, a summary tile that filters to its row. It is
+not a licence to hand-roll filtering: the toolbar still renders every control and
+still owns the interaction; the page only holds the values.
+
+Rules when controlled:
+
+- Pass **both** props. `filterValues` without `onFilterValuesChange` freezes the
+  toolbar — the user's clicks are reported nowhere and nothing changes.
+- Seed defaults in the parent's initial state. `defaultValues` on a filter definition
+  is ignored in controlled mode, and leaving it in place misstates where the default
+  comes from.
+- Never filter the `data` you pass in. `DataTable` applies the filters; pre-filtering
+  as well double-applies them and desynchronises the result count.
+- Make a stat interactive only where the metric maps to a filter one-to-one. A count
+  of *distinct* values ("12 offices") has no single value to filter to, and a badge
+  that looks pressable but is inert is worse than a plain one.
+
+If nothing outside the toolbar drives the filter, leave it uncontrolled. That is
+still the default and still what most pages should do.
+
+One caveat: `urlSync` *writes* controlled values to the URL but does not read them
+back into the parent on mount — only `DataTable`'s internal state is seeded from
+the URL. A page that must open pre-filtered from a link has to read the params
+itself when it seeds its state.
+
+### Contacts view
+
+`contactsView` + `defaultViewMode="contacts"` renders the `mobileRow` list at every
+breakpoint. Two rules follow from `groupBy`:
+
+- **With `groupBy`** the list renders whole and drops its pager — an A–Z book cut
+  across numbered pages stops being a book. Only opt in when the data is
+  lookup-sized. Sections are ordered by heading, so the book still reads A–Z after
+  the user sorts a column; headings starting with a symbol file last.
+- **Without `groupBy`** the list still paginates. There is no structure to
+  preserve, and an unbounded record set is not a page shape.
+
+Do not hand-roll `mobileRow.leading` to show a serial number — `DataTable` already
+renders a muted S/N bubble there when `showRowNumbers` is on (it is by default).
+Colour in that slot means *identity*: an avatar, or initials in `bg-primary/10` as
+its fallback. A row number is a property of the current sort, not of the record,
+and putting the brand accent on it spends the loudest thing on the row on the one
+value that carries no information — while the status badge beside it whispers.
+
+The view toggle reads **List · Cards · Table**, and all three stay distinct at
+every width: Table renders the real table on a phone too, scrolling horizontally,
+rather than quietly swapping itself for the row list. `hideOnMobile` is ignored in
+that mode — it exists to squeeze a table that is a page's *only* mobile rendering,
+and picking Table when a List mode is sitting next to it is an explicit request to
+see the columns.
+
+Pages that supply `mobileRow` **without** `contactsView` are unchanged: there is no
+separate List mode there, so the row list still stands in for the table below `md`.
+
+`defaultViewMode` takes either a mode or `{ mobile, desktop }`. Records pages with
+many columns want `{ mobile: "contacts", desktop: "list" }` — the row list where
+the columns will not fit, the table where they will. A lookup page passes a plain
+`"contacts"` and keeps its list at both. It is only the opening view: once the
+reader picks from the toggle, their choice holds across resizes. Mirror the choice
+in `loading.tsx` with `list="responsive"` (or `list="contacts"`).
+
+`{ mobile: "contacts", desktop: "list" }` is resolved in **CSS**, not JS: both
+shapes are rendered and media queries pick, so the right one is in the first paint
+(`useIsMobile` only reports after the first effect, which would flash the desktop
+table on a phone). The toggle's pressed state is resolved the same way. This
+applies only while the reader has made no choice; after that a single mode
+renders. Any other pair falls back to the JS breakpoint.
+
+`contactsView` removes the desktop table from view, and `expandable` never fires in
+it. Anything the expandable row used to show — an attachment link, a timeline, a
+"returned for correction" instruction — has to move into `detail.fields`, or it is
+simply gone. Fields that open something take `href`, not `copyable`.
+
+### Stats parity
+
+`statBadges` and `stats` are one metric set rendered twice, not two sets. A metric
+that is conditional in one must be conditional in the other, or a viewer sees a
+different page on either side of `md` — typically a "0" card for a role they do not
+hold. Same rule for icons: pick one per metric and use it in both.
 
 ### Route `loading.tsx` skeletons
 
-Loading routes must mirror the real page shape. Use the canonical skeletons from
+Loading routes must mirror the real page shape — including the new one.
+`TablePageSkeleton` takes `statBadges`, `spacing="tight"`, `inlineActions` and
+`list="contacts"` (with `groups`) so a page using those props does not visibly
+reflow on mount. Use the canonical skeletons from
 `@/components/skeletons`:
 
 - `TablePageSkeleton` for `DataTablePage` routes

@@ -12,6 +12,7 @@ type LeaveTypeSummary = {
   name?: string | null
   code?: string | null
   max_days?: number | null
+  lead_max_days?: number | null
 }
 
 export async function GET(_: NextRequest) {
@@ -30,7 +31,9 @@ export async function GET(_: NextRequest) {
       supabase.from("leave_types").select("*").order("name"),
       supabase
         .from("profiles")
-        .select("id, gender, employment_date, employment_type, marital_status, has_children, pregnancy_status")
+        .select(
+          "id, gender, employment_date, employment_type, marital_status, has_children, pregnancy_status, is_department_lead, lead_departments"
+        )
         .eq("id", user.id)
         .single(),
     ])
@@ -42,7 +45,10 @@ export async function GET(_: NextRequest) {
       marital_status: "unspecified",
       has_children: false,
       pregnancy_status: "unspecified",
+      is_department_lead: false,
+      lead_departments: [],
     }
+    const isLead = Boolean(requesterProfile.is_department_lead) || Boolean(requesterProfile.lead_departments?.length)
 
     if (error) {
       log.error({ err: String(error) }, "Error fetching leave types:")
@@ -61,8 +67,12 @@ export async function GET(_: NextRequest) {
           daysCount: 1,
         })
 
+        const effectiveMaxDays =
+          isLead && leaveType.lead_max_days != null ? leaveType.lead_max_days : leaveType.max_days
+
         return {
           ...leaveType,
+          max_days: effectiveMaxDays,
           policy,
           eligibility_status: evaluation.status,
           eligibility_reason: evaluation.reason,

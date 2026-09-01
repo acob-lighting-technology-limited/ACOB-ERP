@@ -196,11 +196,11 @@ export function EmployeeCalendarView() {
         </div>
         {!loading && monthWorkedHours !== null && (
           <div className="flex items-center gap-2 sm:gap-3">
-            <div className="min-w-[80px] rounded-lg border px-2 py-1 text-center sm:min-w-[90px] sm:px-3 sm:py-1.5">
+            <div className="bg-card text-card-foreground min-w-[80px] rounded-lg border px-2 py-1 text-center shadow-xs sm:min-w-[90px] sm:px-3 sm:py-1.5">
               <p className="text-muted-foreground mb-0.5 text-[10px] leading-none sm:mb-1 sm:text-[11px]">Work Hours</p>
               <p className="text-xs leading-none font-semibold text-emerald-600 sm:text-sm">{monthWorkedHours} hrs</p>
             </div>
-            <div className="min-w-[80px] rounded-lg border px-2 py-1 text-center sm:min-w-[90px] sm:px-3 sm:py-1.5">
+            <div className="bg-card text-card-foreground min-w-[80px] rounded-lg border px-2 py-1 text-center shadow-xs sm:min-w-[90px] sm:px-3 sm:py-1.5">
               <p className="text-muted-foreground mb-0.5 text-[10px] leading-none sm:mb-1 sm:text-[11px]">
                 Missed Hours
               </p>
@@ -213,9 +213,9 @@ export function EmployeeCalendarView() {
       {loading ? (
         <div className="text-muted-foreground py-16 text-center text-sm">Loading calendar…</div>
       ) : (
-        <div className="rounded-lg border">
+        <div className="bg-card text-card-foreground overflow-hidden rounded-lg border shadow-xs">
           {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 border-b">
+          <div className="bg-muted/40 grid grid-cols-7 border-b">
             {DAY_HEADERS.map((d) => (
               <div
                 key={d}

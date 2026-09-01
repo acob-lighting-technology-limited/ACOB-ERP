@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
-import { Headset, Eye, Play, CheckCircle2, LifeBuoy, MessageSquare } from "lucide-react"
+import { Headset, Play, CheckCircle2, LifeBuoy, MessageSquare, ShieldCheck, Star, Building2 } from "lucide-react"
 import { StatCard } from "@/components/ui/stat-card"
 import { PendingApprovalsCard } from "@/components/help-desk/pending-approvals-card"
 import { CreateTicketDialog, type CreateTicketForm } from "@/components/help-desk/create-ticket-dialog"
@@ -18,7 +18,7 @@ import type { HelpDeskTicketDetailResponse } from "@/components/help-desk/help-d
 import { UserHelpDeskTicketDetailsDialog } from "@/components/help-desk/user-ticket-details-dialog"
 import { PriorityBadge, TicketStatusBadge } from "@/components/dashboard/help-desk/ticket-badges"
 import { formatName } from "@/lib/utils"
-import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
+import { formatWATDate } from "@/lib/utils/date"
 import { apiFetch } from "@/lib/api-client"
 import { TicketAttachmentsPanel } from "@/components/help-desk/ticket-attachments-panel"
 
@@ -142,6 +142,10 @@ export function HelpDeskContent({
 
   const myOpenTickets = useMemo(
     () => filteredByTab.filter((t) => !["resolved", "closed", "cancelled"].includes(t.status)).length,
+    [filteredByTab]
+  )
+  const resolvedCount = useMemo(
+    () => filteredByTab.filter((ticket) => ticket.status === "resolved").length,
     [filteredByTab]
   )
   const pendingReviewCount = pendingApprovals.length
@@ -546,11 +550,15 @@ export function HelpDeskContent({
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={(tab) => setActiveTab(tab as TicketTab)}
+      spacing="tight"
+      actionsPlacement="inline-always"
       actions={
-        <>
+        <div className="flex items-center gap-2">
           {pendingReviewCount > 0 && (
-            <Button variant="outline" onClick={() => setPendingApprovalsOpen(true)}>
-              Pending Reviews ({pendingReviewCount})
+            <Button variant="outline" size="sm" onClick={() => setPendingApprovalsOpen(true)}>
+              <ShieldCheck className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Pending Reviews ({pendingReviewCount})</span>
+              <span className="sm:hidden">{pendingReviewCount}</span>
             </Button>
           )}
           <CreateTicketDialog
@@ -563,11 +571,19 @@ export function HelpDeskContent({
             departmentOptions={departmentOptions}
             userDepartment={userDepartment}
           />
-        </>
+        </div>
       }
+      statBadgeStyle="line"
+      statBadges={[
+        { icon: LifeBuoy, label: `${myOpenTickets} open` },
+        { icon: CheckCircle2, label: `${resolvedCount} resolved` },
+        ...(pendingReviewCount > 0 ? [{ icon: ShieldCheck, label: `${pendingReviewCount} to review` }] : []),
+        { icon: Star, label: `${avgCsat} avg CSAT` },
+      ]}
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Open Tickets"
             value={myOpenTickets}
             icon={LifeBuoy}
@@ -575,23 +591,30 @@ export function HelpDeskContent({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Resolved"
-            value={filteredByTab.filter((ticket) => ticket.status === "resolved").length}
+            value={resolvedCount}
             icon={CheckCircle2}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
           />
+          {/* Conditional in step with its badge — someone who reviews nothing should
+              not be shown a permanent "Pending Review: 0". */}
+          {pendingReviewCount > 0 && (
+            <StatCard
+              variant="compact"
+              title="Pending Review"
+              value={pendingReviewCount}
+              icon={ShieldCheck}
+              iconBgColor="bg-amber-500/10"
+              iconColor="text-amber-500"
+            />
+          )}
           <StatCard
-            title="Pending Review"
-            value={pendingReviewCount}
-            icon={Headset}
-            iconBgColor="bg-amber-500/10"
-            iconColor="text-amber-500"
-          />
-          <StatCard
+            variant="compact"
             title="Avg CSAT"
             value={avgCsat}
-            icon={Headset}
+            icon={Star}
             iconBgColor="bg-violet-500/10"
             iconColor="text-violet-500"
           />
@@ -619,7 +642,6 @@ export function HelpDeskContent({
           `${ticket.ticket_number} ${ticket.title} ${ticket.service_department}`.toLowerCase().includes(query)
         }
         rowActions={[
-          { label: "View Details", icon: Eye, onClick: (ticket) => void openTicketDetails(ticket.id) },
           {
             label: "Start",
             icon: Play,
@@ -633,74 +655,44 @@ export function HelpDeskContent({
             hidden: (ticket) => !(canUserChangeTicketStatus(ticket, userId) && ticket.status === "in_progress"),
           },
         ]}
-        expandable={{
-          render: (ticket) => (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-              <div>
-                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Description</p>
-                <p className="mt-1 text-sm">{ticket.description || "No description provided."}</p>
-                <div className="text-muted-foreground mt-3 space-y-1 text-xs">
-                  <p>Request Type: {formatName(ticket.request_type)}</p>
-                  <p>SLA Target: {ticket.sla_target_at ? formatWATDateTime(ticket.sla_target_at) : "-"}</p>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between rounded-md border p-2 text-xs">
-                  <span className="text-muted-foreground">Goal</span>
-                  <span className="max-w-[65%] truncate font-medium">{ticket.goal_title || "Not linked"}</span>
-                </div>
-                {ticket.requester_id === userId && ticket.status === "resolved" && (
-                  <div className="space-y-2 rounded-md border p-2">
-                    <p className="text-muted-foreground text-xs">Rate service</p>
-                    <div className="flex items-center gap-2">
-                      <Select
-                        value={ratingDrafts[ticket.id] || ""}
-                        onValueChange={(value) =>
-                          setRatingDrafts((previous) => ({
-                            ...previous,
-                            [ticket.id]: value,
-                          }))
-                        }
-                      >
-                        <SelectTrigger className="h-8 w-[120px] text-xs">
-                          <SelectValue placeholder="Rate 1-5" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="1">1</SelectItem>
-                          <SelectItem value="2">2</SelectItem>
-                          <SelectItem value="3">3</SelectItem>
-                          <SelectItem value="4">4</SelectItem>
-                          <SelectItem value="5">5</SelectItem>
-                        </SelectContent>
-                      </Select>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={!ratingDrafts[ticket.id]}
-                        onClick={async () => {
-                          const selected = Number(ratingDrafts[ticket.id])
-                          if (!selected || Number.isNaN(selected)) return
-                          await rateTicket(ticket.id, selected)
-                          setRatingDrafts((previous) => {
-                            const next = { ...previous }
-                            delete next[ticket.id]
-                            return next
-                          })
-                        }}
-                      >
-                        Submit
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ),
-        }}
+        stickyToolbar
         viewToggle
+        contactsView
+        // Seven columns are worth a table where they fit and unreadable where they
+        // do not, so the opening view follows the width.
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          // Urgency first: an urgent ticket needs answering whatever else is open.
+          accentClass: (ticket) =>
+            ["urgent", "high"].includes(ticket.priority)
+              ? "bg-rose-500"
+              : ["resolved", "closed"].includes(ticket.status)
+                ? "bg-emerald-500"
+                : undefined,
+          title: (ticket) => ticket.title,
+          subtitle: (ticket) =>
+            [
+              ticket.ticket_number,
+              ticket.service_department,
+              (ticket.comment_count || 0) > 0
+                ? `${ticket.comment_count} comment${ticket.comment_count === 1 ? "" : "s"}`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(" · "),
+          trailing: (ticket) => <TicketStatusBadge status={ticket.status} />,
+          // One detail surface for a ticket, reached the same way from every view.
+          // The expandable row this replaces showed the description, request type,
+          // SLA and goal — all of which the dialog now carries.
+          onSelect: (ticket) => void openTicketDetails(ticket.id),
+        }}
+        emptyTitle="No tickets"
+        emptyDescription="Tickets you raise or are assigned appear here."
+        emptyIcon={Headset}
+        skeletonRows={6}
         cardRenderer={(ticket) => (
           <div
-            className="bg-card hover:border-primary cursor-pointer rounded-xl border-2 p-4 transition-all"
+            className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full cursor-pointer rounded-xl border p-4 shadow-sm transition-all"
             onClick={() => void openTicketDetails(ticket.id)}
           >
             <div className="mb-2 flex items-start justify-between">
@@ -715,8 +707,11 @@ export function HelpDeskContent({
               </div>
               <PriorityBadge priority={ticket.priority} />
             </div>
-            <h4 className="line-clamp-1 text-sm font-semibold">{ticket.title}</h4>
-            <p className="text-muted-foreground mt-1 mb-3 text-[10px] uppercase">{ticket.service_department}</p>
+            <h4 className="line-clamp-2 text-sm font-semibold">{ticket.title}</h4>
+            <p className="text-muted-foreground mt-1 mb-3 flex items-center gap-1.5 text-xs">
+              <Building2 className="h-3.5 w-3.5 shrink-0" />
+              {ticket.service_department}
+            </p>
             <div className="flex items-center justify-between border-t pt-2">
               <TicketStatusBadge status={ticket.status} />
               <span className="text-muted-foreground text-[10px]">{formatWATDate(ticket.created_at)}</span>
@@ -753,6 +748,49 @@ export function HelpDeskContent({
         onAddComment={addTicketCommentFromModal}
         isPostingComment={isDetailSaving}
         attachmentsSlot={<TicketAttachmentsPanel ticketId={selectedTicketId} currentUserId={userId} />}
+        ratingSlot={
+          selectedTicketDetail?.ticket &&
+          selectedTicketDetail.ticket.requester_id === userId &&
+          selectedTicketDetail.ticket.status === "resolved" ? (
+            <div className="flex items-center gap-2">
+              <Select
+                value={ratingDrafts[selectedTicketDetail.ticket.id] || ""}
+                onValueChange={(value) =>
+                  setRatingDrafts((previous) => ({ ...previous, [selectedTicketDetail.ticket.id]: value }))
+                }
+              >
+                <SelectTrigger className="h-9 w-32 text-sm">
+                  <SelectValue placeholder="Rate 1-5" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="1">1</SelectItem>
+                  <SelectItem value="2">2</SelectItem>
+                  <SelectItem value="3">3</SelectItem>
+                  <SelectItem value="4">4</SelectItem>
+                  <SelectItem value="5">5</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!ratingDrafts[selectedTicketDetail.ticket.id]}
+                onClick={async () => {
+                  const ticketId = selectedTicketDetail.ticket.id
+                  const selected = Number(ratingDrafts[ticketId])
+                  if (!selected || Number.isNaN(selected)) return
+                  await rateTicket(ticketId, selected)
+                  setRatingDrafts((previous) => {
+                    const next = { ...previous }
+                    delete next[ticketId]
+                    return next
+                  })
+                }}
+              >
+                Submit
+              </Button>
+            </div>
+          ) : null
+        }
       />
     </DataTablePage>
   )

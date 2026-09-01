@@ -314,8 +314,8 @@ export function DirectiveFormDialog({
               searchPlaceholder="Search staff..."
             />
             <p className="text-muted-foreground text-xs">
-              A directive can name several staff across departments. Leave empty when the whole department is
-              responsible.
+              A directive can name several staff across departments. Whoever is named here is who can move its status
+              and report a hindrance — leave empty when the whole department is responsible.
             </p>
           </div>
 

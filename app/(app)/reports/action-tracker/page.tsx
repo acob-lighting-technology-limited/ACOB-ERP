@@ -11,10 +11,12 @@ import {
   CheckCircle2,
   Clock,
   Download,
-  Eye,
   FileSpreadsheet,
   Gavel,
+  CalendarDays,
+  CircleDashed,
   Paperclip,
+  Users,
   RefreshCw,
   TriangleAlert,
 } from "lucide-react"
@@ -26,11 +28,13 @@ import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { DetailCallout, DetailSectionHeading } from "@/components/ui/detail-dialog"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { fetchWeeklyReportLockState } from "@/lib/weekly-report-lock"
 import { type ActionItem } from "@/lib/export-utils"
 import { logger } from "@/lib/logger"
 import { fetchActionTrackerMetadata, fetchActionTrackerTasks, type ActionTask } from "./_lib/queries"
+import { canUpdateActionProgress } from "@/lib/reports/action-tracker-permissions"
 import { apiFetch } from "@/lib/api-client"
 import { BlockerDialog, type BlockerTarget } from "@/components/admin/action-tracker/blocker-dialog"
 
@@ -134,7 +138,14 @@ export default function ActionTrackerPortal() {
     searchParams.get("tab") === "directives" ? "directives" : "weekly"
   )
   const [processedDirectives, setProcessedDirectives] = useState<ActionTask[]>([])
-  const [blockerTarget, setBlockerTarget] = useState<(BlockerTarget & { department: string }) | null>(null)
+  const [blockerTarget, setBlockerTarget] = useState<
+    | (BlockerTarget & {
+        department: string
+        origin?: ActionTask["origin"]
+        assigneeIds?: string[]
+      })
+    | null
+  >(null)
 
   const { data: metaData } = useQuery({
     queryKey: QUERY_KEYS.actionTrackerMetadata(),
@@ -160,7 +171,17 @@ export default function ActionTrackerPortal() {
   })
 
   const tasks = useMemo(() => tasksData?.tasks ?? [], [tasksData?.tasks])
-  const canMutateTask = (task: ActionTask) => profile?.department === task.department
+  /**
+   * Status and hindrance follow accountability, not the department stamp: a
+   * directive that names responsible staff is theirs to move, wherever they sit,
+   * and a colleague in the stamped department who was never tagged is a reader.
+   */
+  const canMutateTask = (task: ActionTask) =>
+    canUpdateActionProgress(profile, {
+      department: task.department,
+      origin: task.origin,
+      assigneeIds: (task.assignees || []).map((person) => person.id),
+    })
 
   const toActionItems = (sourceTasks: ActionTask[]): ActionItem[] =>
     sourceTasks.map((task) => ({
@@ -178,6 +199,8 @@ export default function ActionTrackerPortal() {
       id: task.id,
       title: task.title,
       department: task.department,
+      origin: task.origin,
+      assigneeIds: (task.assignees || []).map((person) => person.id),
       blocker_note: task.blocker_note,
       blocker_reported_at: task.blocker_reported_at,
       blocker_reported_by_name: task.blocker_reported_by_name,
@@ -285,7 +308,10 @@ export default function ActionTrackerPortal() {
     const source = activeTab === "directives" ? directives : weeklyTasks
     const total = source.length
     const completed = source.filter((task) => task.status === "completed").length
-    const pending = source.filter((task) => task.status !== "completed").length
+    // Was `status !== "completed"`, which made this card the sum of the three
+    // beside it — so the five never added up to the total and it disagreed with
+    // the per-department breakdown, which counts the real `pending` status.
+    const pending = source.filter((task) => task.status === "pending").length
     const notStarted = source.filter((task) => task.status === "not_started").length
     const inProgress = source.filter((task) => task.status === "in_progress").length
     return { total, completed, pending, notStarted, inProgress }
@@ -629,13 +655,14 @@ export default function ActionTrackerPortal() {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={(tab) => setActiveTab(tab === "directives" ? "directives" : "weekly")}
+      spacing="tight"
+      actionsPlacement="inline-always"
       actions={
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-2">
           {actionItemsForExport.length > 0 ? (
             <Button
               variant="outline"
               size="sm"
-              className="h-8 gap-2"
               onClick={() => {
                 setExportScope({
                   label: activeTab === "directives" ? "Management Directives" : "All Departments",
@@ -644,28 +671,69 @@ export default function ActionTrackerPortal() {
                 setExportOptionsOpen(true)
               }}
             >
-              <Download className="h-4 w-4" />
-              Export
+              <Download className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Export</span>
             </Button>
           ) : null}
-          <Button variant="outline" onClick={handleCarryForward} disabled={isCarryForwarding} className="h-8" size="sm">
-            <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+          <Button variant="outline" onClick={handleCarryForward} disabled={isCarryForwarding} size="sm">
+            <RefreshCw className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Carry Forward</span>
-            <span className="sm:hidden">Carry</span>
           </Button>
         </div>
       }
+      statBadgeStyle="line"
+      statBadges={[
+        {
+          icon: activeTab === "directives" ? Gavel : FileSpreadsheet,
+          label: `${stats.total} total`,
+        },
+        { icon: CheckCircle2, label: `${stats.completed} completed` },
+        { icon: RefreshCw, label: `${stats.inProgress} in progress` },
+        { icon: CircleDashed, label: `${stats.notStarted} not started` },
+        { icon: Clock, label: `${stats.pending} pending` },
+      ]}
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
           <StatCard
+            variant="compact"
             title={activeTab === "directives" ? "Total Directives" : "Total Action Points"}
             value={stats.total}
             icon={activeTab === "directives" ? Gavel : FileSpreadsheet}
+            iconBgColor="bg-blue-500/10"
+            iconColor="text-blue-500"
           />
-          <StatCard title="Completed" value={stats.completed} icon={CheckCircle2} />
-          <StatCard title="Pending" value={stats.pending} icon={Clock} />
-          <StatCard title="Not Started" value={stats.notStarted} icon={Clock} />
-          <StatCard title="In Progress" value={stats.inProgress} icon={RefreshCw} />
+          <StatCard
+            variant="compact"
+            title="Completed"
+            value={stats.completed}
+            icon={CheckCircle2}
+            iconBgColor="bg-emerald-500/10"
+            iconColor="text-emerald-500"
+          />
+          <StatCard
+            variant="compact"
+            title="In Progress"
+            value={stats.inProgress}
+            icon={RefreshCw}
+            iconBgColor="bg-sky-500/10"
+            iconColor="text-sky-500"
+          />
+          <StatCard
+            variant="compact"
+            title="Not Started"
+            value={stats.notStarted}
+            icon={CircleDashed}
+            iconBgColor="bg-slate-500/10"
+            iconColor="text-slate-500"
+          />
+          <StatCard
+            variant="compact"
+            title="Pending"
+            value={stats.pending}
+            icon={Clock}
+            iconBgColor="bg-amber-500/10"
+            iconColor="text-amber-500"
+          />
         </div>
       }
     >
@@ -696,11 +764,6 @@ export default function ActionTrackerPortal() {
           }}
           rowActions={[
             {
-              label: "View",
-              icon: Eye,
-              onClick: (row) => setViewingDepartment(row),
-            },
-            {
               label: "Export",
               icon: Download,
               onClick: (row) => {
@@ -713,63 +776,31 @@ export default function ActionTrackerPortal() {
               },
             },
           ]}
-          expandable={{
-            render: (row) => (
-              <div className="space-y-3">
-                <p className="text-muted-foreground text-xs font-semibold tracking-wide uppercase">Action Points</p>
-                <div className="overflow-x-auto rounded-lg border">
-                  <table className="w-full text-sm">
-                    <thead className="bg-muted/40">
-                      <tr>
-                        <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">#</th>
-                        <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Action Point</th>
-                        <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Status</th>
-                        <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Hindrance</th>
-                        <th className="px-3 py-2 text-left text-xs font-bold tracking-wide uppercase">Due Date</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {row.tasks.map((task, index) => (
-                        <tr key={task.id} className="border-t">
-                          <td className="text-muted-foreground px-3 py-2 text-xs">{index + 1}</td>
-                          <td className="px-3 py-2">
-                            <p className="font-medium">{task.title}</p>
-                            {task.description ? (
-                              <p className="text-muted-foreground text-xs">{task.description}</p>
-                            ) : null}
-                          </td>
-                          <td className="px-3 py-2">
-                            <Select
-                              value={task.status}
-                              disabled={!canMutateTask(task)}
-                              onValueChange={(newStatus) => {
-                                void handleStatusChange(task.id, newStatus)
-                              }}
-                            >
-                              <SelectTrigger className="h-8 w-[160px] text-xs font-semibold uppercase">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="pending">Pending</SelectItem>
-                                <SelectItem value="not_started">Not Started</SelectItem>
-                                <SelectItem value="in_progress">In Progress</SelectItem>
-                                <SelectItem value="completed">Completed</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </td>
-                          <td className="px-3 py-2">{renderBlockerButton(task)}</td>
-                          <td className={`px-3 py-2 text-xs ${getDueDateClassName(task)}`}>{formatDueDate(task)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ),
-          }}
+          stickyToolbar
           viewToggle
+          contactsView
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (row) =>
+              row.summaryStatus === "Finished"
+                ? "bg-emerald-500"
+                : row.summaryStatus === "Not Started"
+                  ? "bg-rose-500"
+                  : "bg-amber-500",
+            title: (row) => row.department,
+            subtitle: (row) =>
+              `${row.completedPoints} of ${row.totalPoints} done · ${row.inProgressPoints} in progress · ${row.notStartedPoints} not started`,
+            trailing: (row) => (
+              <Badge className={`${getSummaryBadgeClass(row.summaryStatus)} text-[10px]`}>{row.summaryStatus}</Badge>
+            ),
+            // The department's action points are an editable list, not a set of
+            // read-only fields, so this opens the dialog rather than the standard
+            // detail sheet — which is also why the expandable row that rendered a
+            // second, hand-rolled copy of that same list is gone.
+            onSelect: (row) => setViewingDepartment(row),
+          }}
           cardRenderer={(row) => (
-            <div className="space-y-3 rounded-xl border p-4">
+            <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-medium">{row.department}</p>
@@ -819,9 +850,68 @@ export default function ActionTrackerPortal() {
           onRetry={() => {
             void refetch()
           }}
+          stickyToolbar
           viewToggle
+          contactsView
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (row) =>
+              row.status === "completed"
+                ? "bg-emerald-500"
+                : row.status === "not_started"
+                  ? "bg-rose-500"
+                  : "bg-amber-500",
+            title: (row) => row.title,
+            subtitle: (row) =>
+              [(row.assignees || []).map((person) => person.name).join(", ") || row.department, row.timeline_text]
+                .filter(Boolean)
+                .join(" · "),
+            trailing: (row) => (
+              <Badge className={`${getItemStatusBadgeClass(row.status)} text-[10px] capitalize`}>
+                {row.status.replace(/_/g, " ")}
+              </Badge>
+            ),
+            detail: {
+              title: (row) => row.title,
+              subtitle: (row) => (
+                <span className="text-muted-foreground text-xs">
+                  {row.department}
+                  {row.timeline_text ? ` · ${row.timeline_text}` : ""}
+                </span>
+              ),
+              badges: (row) => (
+                <Badge className={`${getItemStatusBadgeClass(row.status)} text-[10px] capitalize`}>
+                  {row.status.replace(/_/g, " ")}
+                </Badge>
+              ),
+              // `description` was searchable but displayed nowhere — not in a column,
+              // not in the card, and this tab has no expandable row.
+              fields: (row) => [
+                { icon: Gavel, label: "Directive", value: row.description, copyable: true },
+                {
+                  icon: Users,
+                  label: "Responsible",
+                  value: (row.assignees || []).map((person) => person.name).join(", ") || row.department,
+                },
+                { icon: Clock, label: "Timeline", value: row.timeline_text },
+                { icon: CalendarDays, label: "Due", value: formatDueDate(row), copyable: false },
+                {
+                  icon: TriangleAlert,
+                  label: "Hindrance",
+                  value: row.blocker_note,
+                  copyable: true,
+                },
+                {
+                  icon: CalendarDays,
+                  label: "Meeting",
+                  value: row.meeting_date ? `${row.meeting_date} · week ${row.week_number}` : `Week ${row.week_number}`,
+                  copyable: false,
+                },
+              ],
+            },
+          }}
           cardRenderer={(row) => (
-            <div className="space-y-3 rounded-xl border p-4">
+            <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
               <div className="flex items-start justify-between gap-3">
                 <p className="font-medium">{row.title}</p>
                 <Badge className={`${getItemStatusBadgeClass(row.status)} shrink-0 capitalize`}>
@@ -850,23 +940,48 @@ export default function ActionTrackerPortal() {
         />
       )}
 
+      {/* The one place a department's action points are listed and edited. It
+          replaces both the old expandable row (a hand-rolled <table> nested inside
+          the data table) and this dialog's own earlier markup, which were two
+          implementations of the same list that had already drifted — only one of
+          them showed the blocker note. */}
       <Dialog open={Boolean(viewingDepartment)} onOpenChange={(open) => !open && setViewingDepartment(null)}>
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>{viewingDepartment?.department || "Department"} Action Points</DialogTitle>
-            <DialogDescription>Update individual action point statuses.</DialogDescription>
+        <DialogContent className="flex max-h-[88dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl">
+          <DialogHeader className="space-y-2 border-b px-4 py-4 text-left sm:px-6">
+            {viewingDepartment && (
+              <div className="flex flex-wrap items-center gap-1.5">
+                <Badge className={`${getSummaryBadgeClass(viewingDepartment.summaryStatus)} text-[11px]`}>
+                  {viewingDepartment.summaryStatus}
+                </Badge>
+                <Badge variant="outline" className="text-[11px]">
+                  Week {week} · {year}
+                </Badge>
+              </div>
+            )}
+            <DialogTitle className="text-base leading-snug font-semibold">
+              {viewingDepartment?.department || "Department"}
+            </DialogTitle>
+            <DialogDescription className="text-muted-foreground text-xs">
+              {viewingDepartment
+                ? `${viewingDepartment.completedPoints} of ${viewingDepartment.totalPoints} action points completed · ${viewingDepartment.inProgressPoints} in progress · ${viewingDepartment.notStartedPoints} not started`
+                : "Update individual action point statuses."}
+            </DialogDescription>
           </DialogHeader>
-          {viewingDepartment ? (
-            <div className="space-y-3">
-              {viewingDepartment.tasks.map((task, index) => (
-                <div key={task.id} className="rounded-lg border p-3">
-                  <div className="mb-2 flex items-start justify-between gap-3">
-                    <div>
-                      <p className="text-muted-foreground text-xs">#{index + 1}</p>
-                      <p className="font-medium">{task.title}</p>
-                      {task.description ? <p className="text-muted-foreground text-xs">{task.description}</p> : null}
+
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="space-y-5 px-4 py-4 sm:px-6">
+              {viewingDepartment?.tasks.map((task, index) => (
+                <section key={task.id} className="space-y-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <DetailSectionHeading>{`${index + 1}. ${task.title}`}</DetailSectionHeading>
+                      {task.description ? (
+                        <p className="text-muted-foreground mt-0.5 text-sm leading-relaxed whitespace-pre-wrap">
+                          {task.description}
+                        </p>
+                      ) : null}
                     </div>
-                    <div className="min-w-[170px]">
+                    <div className="w-full sm:w-44">
                       <Select
                         value={task.status}
                         disabled={!canMutateTask(task)}
@@ -874,7 +989,7 @@ export default function ActionTrackerPortal() {
                           void handleStatusChange(task.id, newStatus)
                         }}
                       >
-                        <SelectTrigger className="h-8 text-xs font-semibold uppercase">
+                        <SelectTrigger className="h-9 text-sm">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -886,19 +1001,21 @@ export default function ActionTrackerPortal() {
                       </Select>
                     </div>
                   </div>
+
+                  {task.blocker_note ? (
+                    <DetailCallout tone="amber" label="Hindrance">
+                      {task.blocker_note}
+                    </DetailCallout>
+                  ) : null}
+
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <p className={`text-xs ${getDueDateClassName(task)}`}>Due: {formatDueDate(task)}</p>
+                    <span className={`text-xs ${getDueDateClassName(task)}`}>Due {formatDueDate(task)}</span>
                     {renderBlockerButton(task)}
                   </div>
-                  {task.blocker_note ? (
-                    <p className="mt-2 rounded border border-amber-500/30 bg-amber-500/5 p-2 text-xs text-amber-800 dark:text-amber-300">
-                      {task.blocker_note}
-                    </p>
-                  ) : null}
-                </div>
+                </section>
               ))}
             </div>
-          ) : null}
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -909,7 +1026,15 @@ export default function ActionTrackerPortal() {
           void refetch()
         }}
         target={blockerTarget}
-        canEdit={blockerTarget ? profile?.department === blockerTarget.department : false}
+        canEdit={
+          blockerTarget
+            ? canUpdateActionProgress(profile, {
+                department: blockerTarget.department,
+                origin: blockerTarget.origin,
+                assigneeIds: blockerTarget.assigneeIds,
+              })
+            : false
+        }
       />
 
       <ExportOptionsDialog

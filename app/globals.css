@@ -55,7 +55,11 @@
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(1 0 0);
   --border: oklch(0.875 0.002 75); /* slightly more visible borders */
-  --input: oklch(0.975 0.002 75);
+  /* Matches --border, as it already does in dark mode. At 0.975 this sat between
+     the white card (1.0) and the page (0.955), so every control drawing
+     `border-input` — Input, SelectTrigger, SearchableMultiSelect, outline Buttons
+     — had a border too faint to read in light mode. */
+  --input: oklch(0.875 0.002 75);
   --ring: oklch(0.45 0.2 142);
   --chart-1: oklch(0.45 0.2 142);
   --chart-2: oklch(0.6 0.118 184.704);
@@ -331,6 +335,23 @@ html:has(.admin-shell[data-scope="lead"]) {
   --accent-foreground: var(--lead-primary-foreground);
   --ring: var(--lead-primary);
   --scrollbar-thumb: var(--lead-primary);
+}
+
+/* ── Opt-out: scroller with no visible bar ────────────────────────────────
+   The rules below theme every scrollbar in the app, including small horizontal
+   strips like tab/filter pill rows — where a thick primary-coloured bar reads as
+   an underline or progress meter rather than a scrollbar. `.scrollbar-none` opts
+   a single scroller out. It must win against the `!important` universal rules
+   below, hence the same flag here. */
+.scrollbar-none {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.scrollbar-none::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
 }
 
 html::-webkit-scrollbar,

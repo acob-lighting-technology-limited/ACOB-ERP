@@ -5,8 +5,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
-import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
+import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { toLocalISODate } from "@/lib/utils/date"
@@ -30,6 +30,8 @@ type DirectoryRow = {
   is_department_lead: boolean | null
   lead_departments: string[] | null
   employment_status: string | null
+  /** Short-lived signed URL; the private storage path never leaves the server. */
+  avatar_url: string | null
 }
 
 /** Field/contract staff are on the payroll but have no office contact details to look up. */
@@ -80,13 +82,31 @@ function CopyValue({ value, className, muted }: { value: string | null; classNam
   )
 }
 
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return (name.slice(0, 2) || "AC").toUpperCase()
+}
+
+/**
+ * "Surname, Firstname" — a directory is scanned down the surname column and grouped
+ * by its initial, so the surname has to lead. Falls back to whatever is available:
+ * a row with only `full_name` keeps its last word as the surname.
+ */
 function displayName(row: DirectoryRow): string {
-  return (
-    row.full_name?.trim() ||
-    [row.first_name, row.last_name].filter(Boolean).join(" ").trim() ||
-    row.company_email ||
-    "Unknown"
-  )
+  const first = row.first_name?.trim()
+  const last = row.last_name?.trim()
+  if (last && first) return `${last}, ${first}`
+  if (last) return last
+
+  const full = row.full_name?.trim()
+  if (full) {
+    const parts = full.split(/\s+/)
+    if (parts.length > 1) return `${parts[parts.length - 1]}, ${parts.slice(0, -1).join(" ")}`
+    return full
+  }
+
+  return first || row.company_email || "Unknown"
 }
 
 async function fetchDirectory(): Promise<DirectoryRow[]> {
@@ -101,6 +121,10 @@ export function DirectoryContent() {
   const [exportOpen, setExportOpen] = useState(false)
   // Rows currently visible in the table (after search + filters + sort).
   const [processedRows, setProcessedRows] = useState<DirectoryRow[]>([])
+  // Controlled only so the "leads" metric can toggle its own filter; the toolbar
+  // still renders and drives these values exactly as it does uncontrolled.
+  const [filterValues, setFilterValues] = useState<Record<string, string[]>>({ staff_type: ["permanent"] })
+  const leadsOnly = filterValues.is_department_lead?.length === 1 && filterValues.is_department_lead[0] === "lead"
 
   const {
     data: rows = [],
@@ -238,7 +262,7 @@ export function DirectoryContent() {
           { value: "permanent", label: "Office staff" },
           { value: "contract", label: "Contract staff" },
         ],
-        defaultValues: ["permanent"],
+        // Seeded in `filterValues` above: defaults are ignored in controlled mode.
         mode: "custom",
         filterFn: (row, values) => values.includes(isContractStaff(row) ? "contract" : "permanent"),
       },
@@ -276,44 +300,70 @@ export function DirectoryContent() {
             <RefreshCw className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Refresh</span>
           </Button>
-          <Button size="sm" onClick={() => setExportOpen(true)} disabled={rows.length === 0}>
+          <Button variant="outline" size="sm" onClick={() => setExportOpen(true)} disabled={rows.length === 0}>
             <Download className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Export</span>
           </Button>
         </div>
       }
+      // box in the first screenful, which four stat cards do not allow.
+      // Paired with `statBadges`: the line carries mobile, these take over from `md`
+      // where there is room. `compact` keeps them to a slim band rather than the
+      // full-height cards that used to push search off a small screen.
       stats={
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
-            title="People"
-            value={stats.total}
+            variant="compact"
+            title="Colleagues"
+            value={stats.total === rows.length ? stats.total : `${stats.total} of ${rows.length}`}
             icon={Users}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Departments"
             value={stats.departments}
             icon={Building2}
             iconBgColor="bg-violet-500/10"
             iconColor="text-violet-500"
           />
-          <StatCard
-            title="Department Leads"
-            value={stats.leads}
-            icon={ShieldCheck}
-            iconBgColor="bg-emerald-500/10"
-            iconColor="text-emerald-500"
-          />
-          <StatCard
-            title="Offices"
-            value={stats.offices}
-            icon={MapPin}
-            iconBgColor="bg-amber-500/10"
-            iconColor="text-amber-500"
-          />
+          {/* Clickable like its badge counterpart — the toggle must not vanish just
+              because the viewport crossed `md`. Shown on the same condition as that
+              badge too, so the two never disagree about which metrics exist. */}
+          {(stats.leads > 0 || leadsOnly) && (
+            <button
+              type="button"
+              onClick={() => setFilterValues((prev) => ({ ...prev, is_department_lead: leadsOnly ? [] : ["lead"] }))}
+              aria-pressed={leadsOnly}
+              title={leadsOnly ? "Show everyone" : "Show department leads only"}
+              className="rounded-xl text-left transition-colors"
+            >
+              <StatCard
+                variant="compact"
+                title={leadsOnly ? "Leads · filtered" : "Department Leads"}
+                value={stats.leads}
+                icon={ShieldCheck}
+                iconBgColor="bg-emerald-500/10"
+                iconColor="text-emerald-500"
+                className={cn("h-full", leadsOnly && "border-primary/50 bg-primary/5")}
+              />
+            </button>
+          )}
+          {stats.offices > 0 && (
+            <StatCard
+              variant="compact"
+              title="Offices"
+              value={stats.offices}
+              icon={MapPin}
+              iconBgColor="bg-amber-500/10"
+              iconColor="text-amber-500"
+            />
+          )}
         </div>
       }
+      spacing="tight"
+      actionsPlacement="inline-always"
     >
       <ExportOptionsDialog
         open={exportOpen}
@@ -330,6 +380,8 @@ export function DirectoryContent() {
         data={rows}
         columns={columns}
         filters={filters}
+        filterValues={filterValues}
+        onFilterValuesChange={setFilterValues}
         getRowId={(r) => r.id}
         onProcessedDataChange={setProcessedRows}
         pagination={{ pageSize: 50 }}
@@ -351,9 +403,83 @@ export function DirectoryContent() {
         onRetry={() => {
           void refetch()
         }}
+        mobileRow={{
+          // A-Z sections, contacts-app style
+          groupBy: (r) => {
+            const letter = displayName(r).trim()[0]?.toUpperCase() || "#"
+            return /[A-Z]/.test(letter) ? letter : "#"
+          },
+          leading: (r) => (
+            <span className="bg-primary/10 text-primary flex h-9 w-9 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold">
+              {r.avatar_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={r.avatar_url} alt={displayName(r)} className="h-full w-full object-cover" />
+              ) : (
+                getInitials(displayName(r))
+              )}
+            </span>
+          ),
+          title: (r) => displayName(r),
+          subtitle: (r) => [r.designation, r.department].filter(Boolean).join(" · ") || "—",
+          trailing: (r) =>
+            r.is_department_lead ? (
+              <Badge variant="outline" className="text-[10px] text-emerald-600 dark:text-emerald-400">
+                Lead
+              </Badge>
+            ) : null,
+          detail: {
+            title: (r) => displayName(r),
+            subtitle: (r) => r.designation,
+            avatar: (r) => (
+              <span className="bg-primary/10 text-primary flex h-16 w-16 items-center justify-center overflow-hidden rounded-full text-lg font-bold">
+                {r.avatar_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={r.avatar_url} alt={displayName(r)} className="h-full w-full object-cover" />
+                ) : (
+                  getInitials(displayName(r))
+                )}
+              </span>
+            ),
+            badges: (r) =>
+              r.is_department_lead ? (
+                <Badge
+                  variant="outline"
+                  className="border-emerald-500/40 bg-emerald-500/10 text-[10px] text-emerald-700 dark:text-emerald-300"
+                >
+                  Lead
+                </Badge>
+              ) : null,
+            fields: (r) => [
+              { icon: Mail, label: "Email", value: r.company_email },
+              { icon: Mail, label: "Alt. email", value: r.additional_email, muted: true },
+              { icon: Phone, label: "Phone", value: r.phone_number },
+              { icon: Phone, label: "Alt. phone", value: r.additional_phone, muted: true },
+              { icon: Building2, label: "Department", value: r.department },
+              { icon: MapPin, label: "Office", value: r.office_location },
+            ],
+            actions: (r) => [
+              ...(r.phone_number
+                ? [
+                    {
+                      label: "Call",
+                      icon: Phone,
+                      href: `tel:${r.phone_number.replace(/\s+/g, "")}`,
+                    },
+                  ]
+                : []),
+              ...(r.company_email
+                ? [{ label: "Email", icon: Mail, href: `mailto:${r.company_email}`, variant: "outline" as const }]
+                : []),
+            ],
+          },
+        }}
         viewToggle
+        // A directory is a lookup tool: the A–Z contacts list is the right default
+        // on desktop too, with the table there for anyone scanning columns.
+        contactsView
+        defaultViewMode="contacts"
         cardRenderer={(r) => (
-          <div className="group space-y-3 rounded-xl border p-4">
+          <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 space-y-3 rounded-xl border p-4 shadow-sm transition-all">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <CopyValue value={displayName(r)} className="font-medium" />
@@ -395,6 +521,7 @@ export function DirectoryContent() {
         emptyDescription="Staff contact details will appear here."
         emptyIcon={Users}
         skeletonRows={6}
+        stickyToolbar
         urlSync
       />
     </DataTablePage>

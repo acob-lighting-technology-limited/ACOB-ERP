@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from "next/server"
 import { z } from "zod"
 import { createClient } from "@/lib/supabase/server"
+import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { logger } from "@/lib/logger"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import {
+  canEditActionContent,
+  canUpdateActionProgress,
+  type ActionTrackerScopeProfile,
+} from "@/lib/reports/action-tracker-permissions"
 
 const log = logger("action-tracker-item-route")
 
@@ -24,32 +30,26 @@ const ActionStatusSchema = z.object({
   blocker_note: z.string().trim().optional().nullable(),
 })
 
-type ScopeProfile = {
-  role?: string | null
-  department?: string | null
-  is_department_lead?: boolean | null
-  lead_departments?: string[] | null
+type ActionEntity = {
+  table: "action_items" | "tasks"
+  entityType: "action_item" | "task"
+  item: Record<string, unknown> & { id: string; department?: string | null }
+  /** Named responsible staff. Always empty for anything but a management directive. */
+  assigneeIds: string[]
 }
 
-type ActionEntity =
-  | {
-      table: "action_items"
-      entityType: "action_item"
-      item: Record<string, unknown> & { id: string; department?: string | null }
-    }
-  | {
-      table: "tasks"
-      entityType: "task"
-      item: Record<string, unknown> & { id: string; department?: string | null }
-    }
-
-function canManageDepartment(profile: ScopeProfile | null, department: string | null | undefined) {
-  const role = String(profile?.role || "").toLowerCase()
-  if (["developer", "super_admin", "admin"].includes(role)) return true
-  if (!profile?.is_department_lead || !department) return false
-  const leadDepartments = Array.isArray(profile.lead_departments) ? profile.lead_departments : []
-  return profile.department === department || leadDepartments.includes(department)
-}
+/** Fields that describe the item itself, as opposed to progress against it. */
+const CONTENT_FIELDS = [
+  "title",
+  "description",
+  "priority",
+  "department",
+  "week_number",
+  "year",
+  "meeting_date",
+  "timeline_text",
+  "assignee_ids",
+] as const
 
 async function findActionEntity(
   supabase: Awaited<ReturnType<typeof createClient>>,
@@ -66,19 +66,31 @@ async function findActionEntity(
       table: "tasks",
       entityType: "task",
       item: task as Record<string, unknown> & { id: string; department?: string | null },
+      assigneeIds: [],
     }
   }
 
   const { data: actionItem } = await supabase.from("action_items").select("*").eq("id", id).maybeSingle()
-  if (actionItem) {
-    return {
-      table: "action_items",
-      entityType: "action_item",
-      item: actionItem as Record<string, unknown> & { id: string; department?: string | null },
-    }
+  if (!actionItem) return null
+
+  // Named responsible staff decide who may move a directive, so they are loaded
+  // before the permission check rather than only when the assignee list changes.
+  let assigneeIds: string[] = []
+  if (String(actionItem.origin) === "management_directive") {
+    const { data: assignees } = await supabase
+      .from("action_item_assignees")
+      .select("profile_id")
+      .eq("action_item_id", id)
+      .returns<{ profile_id: string }[]>()
+    assigneeIds = (assignees || []).map((row) => String(row.profile_id))
   }
 
-  return null
+  return {
+    table: "action_items",
+    entityType: "action_item",
+    item: actionItem as Record<string, unknown> & { id: string; department?: string | null },
+    assigneeIds,
+  }
 }
 
 export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
@@ -105,15 +117,40 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
     const [{ data: profile }, entity] = await Promise.all([
       supabase
         .from("profiles")
-        .select("role, department, is_department_lead, lead_departments")
+        .select("id, role, department, is_department_lead, lead_departments")
         .eq("id", user.id)
-        .single<ScopeProfile>(),
+        .single<ActionTrackerScopeProfile>(),
       findActionEntity(supabase, params.id),
     ])
 
     if (!entity) return NextResponse.json({ error: "Action item not found" }, { status: 404 })
-    if (!canManageDepartment(profile ?? null, entity.item.department)) {
+
+    const scope = {
+      department: entity.item.department,
+      origin: String(entity.item.origin || ""),
+      assigneeIds: entity.assigneeIds,
+    }
+    const canEditContent = canEditActionContent(profile ?? null, scope)
+    const canUpdateProgress = canUpdateActionProgress(profile ?? null, scope)
+
+    if (!canEditContent && !canUpdateProgress) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    const touchesContent = CONTENT_FIELDS.some((field) => typeof parsed.data[field] !== "undefined")
+    if (touchesContent && !canEditContent) {
+      return NextResponse.json(
+        { error: "You can report progress on this directive, but not edit it." },
+        { status: 403 }
+      )
+    }
+
+    const touchesProgress = typeof parsed.data.status !== "undefined" || typeof parsed.data.blocker_note !== "undefined"
+    if (touchesProgress && !canUpdateProgress) {
+      return NextResponse.json(
+        { error: "This directive is assigned to named staff. Only they can update its status." },
+        { status: 403 }
+      )
     }
 
     const updates: Record<string, unknown> = {
@@ -148,7 +185,12 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
       if (typeof parsed.data.timeline_text !== "undefined") updates.timeline_text = parsed.data.timeline_text || null
     }
 
-    const { data: updatedItem, error } = await supabase
+    // RLS on action_items grants UPDATE to admins and department leads only. A
+    // tagged assignee outside that set is authorised here, on the progress fields
+    // this route controls, so their write goes through the data client instead.
+    const writeClient = canEditContent ? supabase : getServiceRoleClientOrFallback(supabase)
+
+    const { data: updatedItem, error } = await writeClient
       .from(entity.table)
       .update(updates)
       .eq("id", params.id)
@@ -212,14 +254,16 @@ export async function DELETE(_: NextRequest, props: { params: Promise<{ id: stri
     const [{ data: profile }, entity] = await Promise.all([
       supabase
         .from("profiles")
-        .select("role, department, is_department_lead, lead_departments")
+        .select("id, role, department, is_department_lead, lead_departments")
         .eq("id", user.id)
-        .single<ScopeProfile>(),
+        .single<ActionTrackerScopeProfile>(),
       findActionEntity(supabase, params.id),
     ])
 
     if (!entity) return NextResponse.json({ error: "Action item not found" }, { status: 404 })
-    if (!canManageDepartment(profile ?? null, entity.item.department)) {
+    // Deleting is editing the record, not reporting against it: being tagged on a
+    // directive never grants the right to remove it.
+    if (!canEditActionContent(profile ?? null, { department: entity.item.department })) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

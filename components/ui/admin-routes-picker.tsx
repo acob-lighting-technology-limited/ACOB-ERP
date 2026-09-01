@@ -54,6 +54,14 @@ export const ADMIN_ROUTE_GROUPS: RouteGroup[] = [
     ],
   },
   {
+    label: "Projects",
+    routes: [
+      { key: "portfolios.main", label: "Portfolios", hint: "Programmes & client groupings" },
+      { key: "projects.main", label: "Projects", hint: "Project register & project tasks" },
+      { key: "scorecard.main", label: "Corporate Scorecard", hint: "Register, Department Cascade & Summary" },
+    ],
+  },
+  {
     label: "Tasks",
     routes: [
       { key: "tasks.main", label: "Tasks" },
@@ -73,11 +81,18 @@ export const ADMIN_ROUTE_GROUPS: RouteGroup[] = [
     ],
   },
   {
+    label: "System & Security",
+    routes: [
+      { key: "auditlogs.main", label: "Audit Logs" },
+      { key: "security.networkActivity", label: "Network Activity" },
+      { key: "security.bypassOverride", label: "Bypass & Override" },
+    ],
+  },
+  {
     label: "Others",
     routes: [
       { key: "tools.main", label: "Tools" },
       { key: "settings.main", label: "Settings", hint: "Users, Roles, Company, Mail & Maintenance" },
-      { key: "auditlogs.main", label: "Audit Logs" },
     ],
   },
 ]

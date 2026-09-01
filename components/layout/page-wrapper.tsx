@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils"
 type MaxWidth = "full" | "content" | "form" | "narrow"
 type Background = "gradient" | "plain"
 type Padding = "standard" | "compact" | "none"
+type Spacing = "standard" | "responsive" | "compact" | "tight" | "none"
 
 interface PageWrapperProps {
   children: React.ReactNode
@@ -12,6 +13,8 @@ interface PageWrapperProps {
   background?: Background
   /** Padding around the content */
   padding?: Padding
+  /** Vertical rhythm between direct children of the content area */
+  spacing?: Spacing
   /** Additional CSS classes */
   className?: string
 }
@@ -26,6 +29,14 @@ const maxWidthClasses: Record<MaxWidth, string> = {
 const backgroundClasses: Record<Background, string> = {
   gradient: "from-background via-background to-muted/20 bg-gradient-to-br",
   plain: "bg-background",
+}
+
+const spacingClasses: Record<Spacing, string> = {
+  standard: "space-y-6", // 24px - default section rhythm
+  responsive: "space-y-4 sm:space-y-6", // tighter on mobile, standard from sm up
+  compact: "space-y-4", // 16px - dense pages with many small sections
+  tight: "space-y-3", // 12px - toolbars and filters stacked close together
+  none: "", // caller controls spacing itself
 }
 
 const paddingClasses: Record<Padding, string> = {
@@ -46,6 +57,12 @@ const paddingClasses: Record<Padding, string> = {
  * </PageWrapper>
  *
  * @example
+ * // Dense page with a tighter rhythm between sections
+ * <PageWrapper maxWidth="full" spacing="compact">
+ *   {sections}
+ * </PageWrapper>
+ *
+ * @example
  * // Form page with narrower width
  * <PageWrapper maxWidth="form" background="plain">
  *   <PageHeader title="Edit Profile" />
@@ -57,11 +74,12 @@ export function PageWrapper({
   maxWidth = "full",
   background = "gradient",
   padding = "standard",
+  spacing = "standard",
   className,
 }: PageWrapperProps) {
   return (
     <div className={cn("min-h-screen", backgroundClasses[background], paddingClasses[padding], className)}>
-      <div className={cn("mx-auto space-y-6", maxWidthClasses[maxWidth])}>{children}</div>
+      <div className={cn("mx-auto", spacingClasses[spacing], maxWidthClasses[maxWidth])}>{children}</div>
     </div>
   )
 }

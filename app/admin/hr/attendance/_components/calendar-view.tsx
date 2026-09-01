@@ -42,7 +42,7 @@ type DayStatus =
   | "holiday"
   | "weekend"
 
-interface DayRecord {
+export interface DayRecord {
   id: string
   date: string
   clock_in: string | null
@@ -54,7 +54,7 @@ interface DayRecord {
   manual_comment?: string | null
 }
 
-interface UnifiedDay {
+export interface UnifiedDay {
   date: string
   record: DayRecord | null
   status: DayStatus
@@ -104,7 +104,7 @@ function buildCalendarCells(yearMonth: string): (string | null)[] {
   return cells
 }
 
-const CELL_BG: Record<string, string> = {
+export const CELL_BG: Record<string, string> = {
   early: "bg-green-50/80 border-green-200 dark:bg-green-950/30 dark:border-green-800",
   present: "bg-blue-50/80 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800",
   late: "bg-yellow-50/80 border-yellow-200 dark:bg-yellow-950/30 dark:border-yellow-800",
@@ -300,9 +300,9 @@ export function CalendarView({ employees }: CalendarViewProps) {
       ) : loading ? (
         <div className="text-muted-foreground py-16 text-center text-sm">Loading calendar…</div>
       ) : (
-        <div className="rounded-lg border">
+        <div className="bg-card text-card-foreground overflow-hidden rounded-lg border shadow-xs">
           {/* Day-of-week headers */}
-          <div className="grid grid-cols-7 border-b">
+          <div className="bg-muted/40 grid grid-cols-7 border-b">
             {DAY_HEADERS.map((d) => (
               <div key={d} className="text-muted-foreground py-2 text-center text-xs font-semibold">
                 {d}

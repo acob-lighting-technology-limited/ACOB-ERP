@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { monthBounds } from "@/lib/hr/attendance-utils"
+import { repriceLeaveForHolidayChange } from "@/lib/hr/leave-holiday-recalc"
 
 const HolidaySchema = z.object({
   holiday_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -105,7 +106,28 @@ export async function POST(request: NextRequest) {
   }
   if (insertError) return NextResponse.json({ error: insertError.message || "Failed to add holiday" }, { status: 500 })
 
-  return NextResponse.json({ message: dates.length > 1 ? `${dates.length} holidays added` : "Holiday added" })
+  // Leave booked before this holiday existed was priced without it. Hand the
+  // day back on any request that has not started yet.
+  const reprice = await repriceLeaveForHolidayChange(dataClient, {
+    fromDate: startDate,
+    toDate: endDate || startDate,
+    actorId: auth.userId,
+    reason: `Holiday added: ${name}`,
+  })
+
+  const baseMessage = dates.length > 1 ? `${dates.length} holidays added` : "Holiday added"
+  const repriceMessage = reprice.updated.length
+    ? ` ${reprice.updated.length} upcoming leave request(s) recalculated.`
+    : ""
+  const reviewMessage = reprice.needsReview.length
+    ? ` ${reprice.needsReview.length} request(s) now fall entirely on holidays and need manual review.`
+    : ""
+
+  return NextResponse.json({
+    message: `${baseMessage}.${repriceMessage}${reviewMessage}`.trim(),
+    leave_recalculated: reprice.updated,
+    leave_needs_review: reprice.needsReview,
+  })
 }
 
 export async function DELETE(request: NextRequest) {
@@ -125,5 +147,19 @@ export async function DELETE(request: NextRequest) {
     .eq("holiday_date", holidayDate)
     .eq("location", location)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ message: "Holiday removed" })
+
+  // Removing a holiday puts the day back on the clock for future leave.
+  const reprice = await repriceLeaveForHolidayChange(dataClient, {
+    fromDate: holidayDate,
+    toDate: holidayDate,
+    actorId: auth.userId,
+    reason: "Holiday removed",
+  })
+
+  return NextResponse.json({
+    message: reprice.updated.length
+      ? `Holiday removed. ${reprice.updated.length} upcoming leave request(s) recalculated.`
+      : "Holiday removed",
+    leave_recalculated: reprice.updated,
+  })
 }

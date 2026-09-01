@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { normalizeDepartmentName, normalizeDepartmentList } from "@/shared/departments"
+import { getAvatarSignedUrls } from "@/lib/profile-photos"
 import { logger } from "@/lib/logger"
 
 export const dynamic = "force-dynamic"
@@ -10,8 +11,10 @@ const log = logger("directory")
 
 // Company directory: contact fields every employee is allowed to see. Deliberately
 // excludes sensitive HR data (DOB, salary, employee number, leave, attendance, etc.).
+// avatar_path is read but never returned — it is exchanged for a short-lived signed URL,
+// since profile photos live in a private bucket.
 const DIRECTORY_COLUMNS =
-  "id, first_name, last_name, full_name, company_email, additional_email, phone_number, additional_phone, department, designation, office_location, is_department_lead, lead_departments, employment_status"
+  "id, first_name, last_name, full_name, company_email, additional_email, phone_number, additional_phone, department, designation, office_location, is_department_lead, lead_departments, employment_status, avatar_path"
 
 type DirectoryRow = {
   id: string
@@ -28,6 +31,7 @@ type DirectoryRow = {
   is_department_lead: boolean | null
   lead_departments: string[] | null
   employment_status: string | null
+  avatar_path: string | null
 }
 
 export async function GET(request: NextRequest) {
@@ -45,7 +49,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await dataClient
     .from("profiles")
     .select(DIRECTORY_COLUMNS)
-    .order("first_name", { ascending: true })
+    .order("last_name", { ascending: true })
 
   if (error) {
     log.error({ err: error.message }, "Failed to fetch directory")
@@ -54,13 +58,19 @@ export async function GET(request: NextRequest) {
 
   // Hide people who have left, and normalise department names so renamed
   // departments (e.g. "Technical Extension" → "Project") show their canonical name.
-  const rows = ((data as unknown as DirectoryRow[] | null) ?? [])
-    .filter((r) => r.employment_status !== "exited")
-    .map((r) => ({
-      ...r,
-      department: r.department ? normalizeDepartmentName(r.department) : r.department,
-      lead_departments: r.lead_departments?.length ? normalizeDepartmentList(r.lead_departments) : r.lead_departments,
-    }))
+  const visible = ((data as unknown as DirectoryRow[] | null) ?? []).filter((r) => r.employment_status !== "exited")
+
+  const signedUrlsByPath = await getAvatarSignedUrls(
+    dataClient,
+    visible.map((r) => r.avatar_path).filter((path): path is string => Boolean(path))
+  )
+
+  const rows = visible.map(({ avatar_path, ...r }) => ({
+    ...r,
+    department: r.department ? normalizeDepartmentName(r.department) : r.department,
+    lead_departments: r.lead_departments?.length ? normalizeDepartmentList(r.lead_departments) : r.lead_departments,
+    avatar_url: avatar_path ? (signedUrlsByPath.get(avatar_path) ?? null) : null,
+  }))
 
   return NextResponse.json({ data: rows })
 }

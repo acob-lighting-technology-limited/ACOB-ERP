@@ -2,14 +2,14 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { FileCode2 } from "lucide-react"
+import { AlertTriangle, Building2, CalendarClock, Check, CircleDot, FileCode2, Mail, User } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
-import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
+import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import type { CorrespondenceRecord } from "@/types/correspondence"
 import { CreateReferenceDialog, type CreateReferenceForm } from "@/components/correspondence/create-reference-dialog"
-import { formatName } from "@/lib/utils"
+import { cn, formatName } from "@/lib/utils"
 import { apiFetch } from "@/lib/api-client"
 
 interface DepartmentCodeOption {
@@ -56,7 +56,6 @@ export function PortalReferenceGeneratorContent({
     : ""
 
   const [records, setRecords] = useState<CorrespondenceRecord[]>(initialRecords)
-  const [activeTab, setActiveTab] = useState<"all" | "internal" | "external">("all")
   const [isSaving, setIsSaving] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [editOpen, setEditOpen] = useState(false)
@@ -90,30 +89,17 @@ export function PortalReferenceGeneratorContent({
       ).length,
       closed: records.filter((record) => ["closed", "sent", "filed", "approved"].includes(record.status)).length,
       internal: records.filter((record) => record.letter_type === "internal").length,
-      external: records.filter((record) => record.letter_type === "external").length,
     }),
     [records]
-  )
-
-  const tabs: DataTableTab[] = useMemo(
-    () => [
-      { key: "all", label: `All (${stats.total})` },
-      { key: "external", label: `External (${stats.external})` },
-      { key: "internal", label: `Internal (${stats.internal})` },
-    ],
-    [stats.external, stats.internal, stats.total]
-  )
-
-  const filteredRecords = useMemo(
-    () => records.filter((record) => (activeTab === "all" ? true : record.letter_type === activeTab)),
-    [records, activeTab]
   )
 
   useEffect(() => {
     let active = true
 
     async function loadRecords() {
-      const response = await apiFetch("/api/correspondence/records?page=1&limit=100&scope=mine", { cache: "no-store" })
+      // No page/limit: the API returns the full scoped set when neither is passed.
+      // `limit=100` silently capped the list and made every stat card understate.
+      const response = await apiFetch("/api/correspondence/records?scope=mine", { cache: "no-store" })
       const payload = await response.json()
       if (!response.ok || !active) return
       setRecords(payload.data || [])
@@ -293,10 +279,8 @@ export function PortalReferenceGeneratorContent({
         label: "Reference",
         sortable: true,
         accessor: (row) => row.reference_number,
-        resizable: true,
-        initialWidth: 220,
         render: (row) => (
-          <span className="font-medium">
+          <span className="font-mono text-xs font-medium whitespace-nowrap">
             {["approved", "sent", "filed"].includes(row.status) ? row.reference_number : "-"}
           </span>
         ),
@@ -314,6 +298,14 @@ export function PortalReferenceGeneratorContent({
         sortable: true,
         accessor: (row) => row.department_name || row.assigned_department_name || "-",
         hideOnMobile: true,
+        render: (row) => (
+          <span
+            className="block max-w-[180px] truncate"
+            title={row.department_name || row.assigned_department_name || undefined}
+          >
+            {row.department_name || row.assigned_department_name || "-"}
+          </span>
+        ),
       },
       {
         key: "status",
@@ -327,6 +319,11 @@ export function PortalReferenceGeneratorContent({
         label: "Subject",
         sortable: true,
         accessor: (row) => row.subject,
+        render: (row) => (
+          <span className="block max-w-[260px] truncate font-normal xl:max-w-md" title={row.subject}>
+            {row.subject}
+          </span>
+        ),
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -363,9 +360,6 @@ export function PortalReferenceGeneratorContent({
       description="Create and manage correspondence references."
       icon={FileCode2}
       backLink={{ href: "/profile", label: "Back to Home" }}
-      tabs={tabs}
-      activeTab={activeTab}
-      onTabChange={(tab) => setActiveTab(tab as "all" | "internal" | "external")}
       actions={
         <>
           <CreateReferenceDialog
@@ -395,33 +389,39 @@ export function PortalReferenceGeneratorContent({
           />
         </>
       }
+      spacing="tight"
+      actionsPlacement="inline-always"
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
-            title="Total"
+            variant="compact"
+            title="Total References"
             value={stats.total}
             icon={FileCode2}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
           />
           <StatCard
-            title="Open"
+            variant="compact"
+            title="Open / In Review"
             value={stats.open}
-            icon={FileCode2}
+            icon={CircleDot}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Approved"
             value={stats.closed}
-            icon={FileCode2}
+            icon={Check}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Internal"
             value={stats.internal}
-            icon={FileCode2}
+            icon={Mail}
             iconBgColor="bg-violet-500/10"
             iconColor="text-violet-500"
           />
@@ -429,7 +429,7 @@ export function PortalReferenceGeneratorContent({
       }
     >
       <DataTable<CorrespondenceRecord>
-        data={filteredRecords}
+        data={records}
         columns={columns}
         filters={filters}
         getRowId={(row) => row.id}
@@ -439,9 +439,105 @@ export function PortalReferenceGeneratorContent({
             .toLowerCase()
             .includes(query)
         }
+        mobileRow={{
+          title: (row) => (
+            <span className="font-mono text-xs font-bold">
+              {["approved", "sent", "filed"].includes(row.status) ? row.reference_number : "Reference pending"}
+            </span>
+          ),
+          subtitle: (row) => row.subject,
+          trailing: (row) => (
+            <Badge className={cn("text-[10px]", statusBadgeClass(row.status))}>{statusLabel(row.status)}</Badge>
+          ),
+          detail: {
+            title: (row) =>
+              ["approved", "sent", "filed"].includes(row.status) && row.reference_number
+                ? row.reference_number
+                : "Reference Pending",
+            subtitle: (row) => (
+              <div className="text-muted-foreground flex flex-wrap items-center justify-center gap-1.5 text-xs">
+                <Badge variant="outline" className="text-[10px] font-medium uppercase">
+                  {row.letter_type || "external"}
+                </Badge>
+                {(row.department_name || row.assigned_department_name) && (
+                  <span className="inline-flex items-center gap-1">
+                    <Building2 className="text-muted-foreground/70 h-3.5 w-3.5" />
+                    <span>{row.department_name || row.assigned_department_name}</span>
+                  </span>
+                )}
+              </div>
+            ),
+            badges: (row) => (
+              <Badge className={cn("text-[10px]", statusBadgeClass(row.status))}>{statusLabel(row.status)}</Badge>
+            ),
+            fields: (row) => [
+              // Restored from the old expandable row: the amber pill says the record
+              // came back, this says what to do about it.
+              ...(row.status === "returned_for_correction"
+                ? [
+                    {
+                      icon: AlertTriangle,
+                      label: "Returned for correction",
+                      value: "Edit this record and resubmit it for review.",
+                      copyable: false,
+                    },
+                  ]
+                : []),
+              { icon: FileCode2, label: "Subject", value: row.subject, copyable: true },
+              {
+                icon: User,
+                label: "Recipient",
+                value: row.recipient_name
+                  ? `${row.recipient_name}${row.recipient_code ? ` (${row.recipient_code})` : ""}`
+                  : null,
+              },
+              { icon: User, label: "Requested by", value: row.sender_name },
+              ...(row.created_by_name && row.created_by_name !== row.sender_name
+                ? [{ icon: User, label: "Created by", value: row.created_by_name }]
+                : []),
+              { icon: CalendarClock, label: "Due date", value: row.due_date, copyable: false },
+              {
+                icon: CircleDot,
+                label: "Action required",
+                value: row.action_required ? "Yes" : "No",
+                copyable: false,
+              },
+              ...((row.metadata as Record<string, string> | null)?.notes
+                ? [
+                    {
+                      icon: FileCode2,
+                      label: "Notes",
+                      value: (row.metadata as Record<string, string>).notes,
+                      copyable: true,
+                    },
+                  ]
+                : []),
+            ],
+            actions: (row) => [
+              ...(EDITABLE_STATUSES.includes(row.status)
+                ? [
+                    {
+                      label: "Edit",
+                      variant: "outline" as const,
+                      onClick: () => openEdit(row),
+                    },
+                    {
+                      label: "Delete",
+                      variant: "destructive" as const,
+                      onClick: () => void deleteRecord(row.id),
+                    },
+                  ]
+                : []),
+            ],
+          },
+        }}
+        pagination={{ pageSize: 25 }}
+        stickyToolbar
         viewToggle
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
         cardRenderer={(row) => (
-          <div className="space-y-3">
+          <div className="bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
             <div className="flex items-center justify-between gap-2">
               <span className="font-mono text-xs font-bold">
                 {["approved", "sent", "filed"].includes(row.status) ? row.reference_number : "Reference Pending"}
@@ -476,39 +572,10 @@ export function PortalReferenceGeneratorContent({
             hidden: (row) => !EDITABLE_STATUSES.includes(row.status),
           },
         ]}
-        expandable={{
-          render: (row) => (
-            <div className="grid gap-3 md:grid-cols-2">
-              <p className="text-sm">
-                <span className="text-muted-foreground">Recipient:</span> {row.recipient_name || "-"}
-                {row.recipient_code ? ` (${row.recipient_code})` : ""}
-              </p>
-              <p className="text-sm">
-                <span className="text-muted-foreground">Requested by:</span> {row.sender_name || "-"}
-              </p>
-              {row.created_by_name && row.created_by_name !== row.sender_name && (
-                <p className="text-sm">
-                  <span className="text-muted-foreground">Created by:</span> {row.created_by_name}
-                </p>
-              )}
-              <p className="text-sm">
-                <span className="text-muted-foreground">Due Date:</span> {row.due_date || "-"}
-              </p>
-              <p className="text-sm">
-                <span className="text-muted-foreground">Action Required:</span> {row.action_required ? "Yes" : "No"}
-              </p>
-              {row.status === "returned_for_correction" && (
-                <p className="text-sm text-amber-700 md:col-span-2">
-                  <span className="font-medium">Returned for correction</span> — you can edit and resubmit this record.
-                </p>
-              )}
-            </div>
-          ),
-        }}
         emptyTitle="No references found"
         emptyDescription="No correspondence records match the current filters."
         emptyIcon={FileCode2}
-        skeletonRows={5}
+        skeletonRows={6}
         urlSync
       />
     </DataTablePage>

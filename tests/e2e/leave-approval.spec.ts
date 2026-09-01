@@ -13,11 +13,10 @@ test("Full leave approval flow", async ({ browser }) => {
   const createResponse = await employee.page.request.post("/api/hr/leave/requests", {
     data: {
       leave_type_id: seed.leaveTypeId,
-      start_date: startDate,
-      days_count: 2,
+      segments: [{ start_date: startDate, end_date: futureIsoDate(13) }],
       reason: `${unique} reason`,
       reliever_identifier: seed.testReliever.id,
-      handover_note: `${unique} handover note`,
+      handover_checklist_url: "https://example.sharepoint.com/test-handover.pdf",
     },
   })
   await expectApiOk(createResponse, "create leave request")

@@ -1930,9 +1930,9 @@ export function LunchRegisterPage({
                 Select an employee to view their lunch calendar.
               </div>
             ) : (
-              <div className="rounded-lg border">
+              <div className="bg-card text-card-foreground overflow-hidden rounded-lg border shadow-xs">
                 {/* Day-of-week headers */}
-                <div className="grid grid-cols-7 border-b">
+                <div className="bg-muted/40 grid grid-cols-7 border-b">
                   {DAY_HEADERS.map((d) => (
                     <div key={d} className="text-muted-foreground py-2 text-center text-xs font-semibold">
                       {d}

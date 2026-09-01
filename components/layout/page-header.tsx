@@ -18,8 +18,15 @@ interface PageHeaderProps {
   backLink?: BackLink
   /** Actions (buttons, dropdowns) shown on the right */
   actions?: React.ReactNode
-  /** Controls whether actions sit beside the title block or below it */
-  actionsPlacement?: "inline" | "below"
+  /**
+   * Where the action buttons sit relative to the title block.
+   * - "inline"        beside the title from `sm` up, stacked below it on mobile
+   * - "inline-always" beside the title at every width — for pages whose actions
+   *                   collapse to icon-only buttons, where a dedicated mobile row
+   *                   spends vertical space above the fold on ~80px of controls
+   * - "below"         always on their own full-width row
+   */
+  actionsPlacement?: "inline" | "inline-always" | "below"
   /** Additional classes for the container */
   className?: string
 }
@@ -58,7 +65,14 @@ export function PageHeader({
   className,
 }: PageHeaderProps) {
   const renderActions = actions ? (
-    <div className={cn("flex shrink-0 items-center gap-2 pt-0.5", actionsPlacement === "below" ? "w-full" : "w-auto")}>
+    <div
+      className={cn(
+        "flex flex-wrap items-center gap-2 pt-0.5",
+        actionsPlacement === "below" && "w-full",
+        actionsPlacement === "inline" && "w-full sm:w-auto sm:shrink-0",
+        actionsPlacement === "inline-always" && "w-auto shrink-0 flex-nowrap"
+      )}
+    >
       {actions}
     </div>
   ) : null
@@ -66,9 +80,9 @@ export function PageHeader({
   return (
     <div
       className={cn(
-        actionsPlacement === "below"
-          ? "flex flex-col gap-3"
-          : "flex flex-row items-start justify-between gap-3 sm:gap-4",
+        actionsPlacement === "below" && "flex flex-col gap-3",
+        actionsPlacement === "inline" && "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4",
+        actionsPlacement === "inline-always" && "flex flex-row items-start justify-between gap-3 sm:gap-4",
         className
       )}
     >
