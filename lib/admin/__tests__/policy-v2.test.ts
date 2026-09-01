@@ -120,4 +120,55 @@ test("route resolver maps critical override routes", () => {
   assert.equal(resolveAdminRouteKeyV2("/admin/accounts"), "accounts.main")
   assert.equal(resolveAdminRouteKeyV2("/admin/finance"), "accounts.main")
   assert.equal(resolveAdminRouteKeyV2("/admin/reports/general-meeting/weekly-reports"), "reports.weekly")
+  // Projects domain — these three shipped without keys and used to resolve to "unknown".
+  assert.equal(resolveAdminRouteKeyV2("/admin/portfolios"), "portfolios.main")
+  assert.equal(resolveAdminRouteKeyV2("/admin/project"), "projects.main")
+  assert.equal(resolveAdminRouteKeyV2("/admin/corporate-scorecard/departments"), "scorecard.main")
+})
+
+test("unrecognised admin routes are denied, not dept-visible", () => {
+  const unknownRoute = resolveAdminRouteKeyV2("/admin/some-section-with-no-key")
+  assert.equal(unknownRoute, "unknown")
+  // A lead must not reach an ungated page just because it has no route key.
+  assert.equal(canAccessRouteV2(leadContext, unknownRoute), false)
+  // An admin without a matching grant is blocked; super_admin still gets through.
+  assert.equal(canAccessRouteV2(adminGlobalContext, unknownRoute), false)
+  assert.equal(canAccessRouteV2(superAdminContext, unknownRoute), true)
+})
+
+test("projects domain routes are grant-driven and admin-only", () => {
+  const adminProjectsContext: AccessContextV2 = {
+    baseRole: "admin",
+    isDepartmentLead: false,
+    isAdminLike: true,
+    adminRoutes: ["portfolios.main", "projects.main"],
+    actingContext: "global_admin",
+    managedDepartments: [],
+  }
+
+  assert.equal(canAccessRouteV2(adminProjectsContext, "portfolios.main"), true)
+  assert.equal(canAccessRouteV2(adminProjectsContext, "projects.main"), true)
+  assert.equal(canMutateV2(adminProjectsContext, "projects.main"), true)
+  // Not granted the scorecard, so still blocked.
+  assert.equal(canAccessRouteV2(adminProjectsContext, "scorecard.main"), false)
+  // An admin with unrelated grants gets nothing here.
+  assert.equal(canAccessRouteV2(adminReportsContext, "portfolios.main"), false)
+  // Leads have no /admin projects surface.
+  assert.equal(canAccessRouteV2(leadContext, "portfolios.main"), false)
+  assert.equal(canAccessRouteV2(leadContext, "scorecard.main"), false)
+})
+
+test("security routes are grantable to a plain admin", () => {
+  const adminSecurityContext: AccessContextV2 = {
+    baseRole: "admin",
+    isDepartmentLead: false,
+    isAdminLike: true,
+    adminRoutes: ["security.networkActivity", "security.bypassOverride"],
+    actingContext: "global_admin",
+    managedDepartments: [],
+  }
+
+  assert.equal(canAccessRouteV2(adminSecurityContext, "security.networkActivity"), true)
+  assert.equal(canAccessRouteV2(adminSecurityContext, "security.bypassOverride"), true)
+  assert.equal(canAccessRouteV2(leadContext, "security.networkActivity"), false)
 })
