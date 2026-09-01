@@ -4,7 +4,18 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { formatWATDate } from "@/lib/utils/date"
 import { cn } from "@/lib/utils"
-import { Clock, Download, FileQuestion, UserCheck, MapPin, AlertCircle, Calendar } from "lucide-react"
+import {
+  Clock,
+  Download,
+  FileQuestion,
+  UserCheck,
+  MapPin,
+  AlertCircle,
+  Calendar,
+  MessageSquare,
+  Gavel,
+  Trash2,
+} from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
@@ -351,14 +362,6 @@ export function AttendanceContent({
         ),
       },
       {
-        key: "day",
-        label: "Day",
-        sortable: true,
-        accessor: (row) => row.dayLabel,
-        render: (row) => <span className="font-medium">{row.dayLabel}</span>,
-        hideOnMobile: true,
-      },
-      {
         key: "clock_in",
         label: "Clock In",
         sortable: true,
@@ -577,7 +580,7 @@ export function AttendanceContent({
         activeTab={activeTab}
         onTabChange={(t) => setActiveTab(t as "log" | "calendar")}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2">
             {remoteCheckinEnabled && (
               <Button
                 variant="outline"
@@ -589,20 +592,25 @@ export function AttendanceContent({
                   setRemoteModalOpen(true)
                 }}
               >
-                <MapPin className="mr-2 h-4 w-4" />
-                Remote {todayRecord?.clock_in && !todayRecord?.clock_out ? "Clock Out" : "Clock In"}
+                <MapPin className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">
+                  Remote {todayRecord?.clock_in && !todayRecord?.clock_out ? "Clock Out" : "Clock In"}
+                </span>
               </Button>
             )}
             <Button variant="outline" onClick={exportCSV} size="sm">
-              <Download className="mr-2 h-4 w-4" />
-              Export
+              <Download className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Export</span>
             </Button>
           </div>
         }
+        spacing="tight"
+        actionsPlacement="inline-always"
         stats={
           <TooltipProvider>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
               <StatCard
+                variant="compact"
                 title="Today Status"
                 value={ATTENDANCE_STATUS_LABELS[todayStatus] ?? todayStatus}
                 icon={UserCheck}
@@ -611,8 +619,10 @@ export function AttendanceContent({
               />
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="cursor-help">
+                  <div className="h-full cursor-help">
                     <StatCard
+                      variant="compact"
+                      className="h-full"
                       title="Total Days"
                       value={`${attendedDays} / ${totalWorkdays} days`}
                       icon={Calendar}
@@ -629,8 +639,10 @@ export function AttendanceContent({
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="cursor-help">
+                  <div className="h-full cursor-help">
                     <StatCard
+                      variant="compact"
+                      className="h-full"
                       title="Total Work Hours"
                       value={`${totalWorkedHours} hrs`}
                       icon={Clock}
@@ -647,8 +659,10 @@ export function AttendanceContent({
               </Tooltip>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <div className="cursor-help">
+                  <div className="h-full cursor-help">
                     <StatCard
+                      variant="compact"
+                      className="h-full"
                       title="Missed Hours"
                       value={`${totalMissedHours} hrs`}
                       icon={AlertCircle}
@@ -699,114 +713,142 @@ export function AttendanceContent({
             }
             emptyIcon={Clock}
             skeletonRows={6}
-            expandable={{
-              render: (row) => {
-                const rowAppeals = appeals
-                  .filter((a) => a.appeal_date === row.date)
-                  .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
+            mobileRow={{
+              // The whole point of this log is spotting the days that cost you
+              // something, so those days carry an accent instead of blending in.
+              accentClass: (row) =>
+                row.normalizedStatus === "absent"
+                  ? "bg-rose-500"
+                  : ["late", "incomplete"].includes(row.normalizedStatus)
+                    ? "bg-amber-500"
+                    : undefined,
+              title: (row) => (
+                <span className="text-foreground font-medium">
+                  {formatWATDate(row.date, { day: "numeric", month: "short", year: "numeric" })}
+                </span>
+              ),
+              // Three clauses truncate on a phone before the third is readable.
+              // Clock times plus the number that actually matters — hours lost.
+              subtitle: (row) =>
+                `${formatClockTime(row.clock_in)} – ${getClockOutLabel(row)}${
+                  (row.missedHoursValue ?? 0) > 0 ? ` · ${row.missedHoursValue!.toFixed(2)} hrs missed` : ""
+                }`,
+              trailing: (row) => <StatusBadge status={row.normalizedStatus} />,
+              detail: {
+                title: (row) =>
+                  formatWATDate(row.date, { weekday: "long", day: "numeric", month: "long", year: "numeric" }),
+                subtitle: (row) => row.dayLabel,
+                badges: (row) => <StatusBadge status={row.normalizedStatus} />,
+                fields: (row) => {
+                  // Newest first: an appealed day can carry a rejected attempt and
+                  // the re-appeal that followed it.
+                  const rowAppeals = appeals
+                    .filter((a) => a.appeal_date === row.date)
+                    .sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""))
+                  const latestAppeal = rowAppeals[0]
 
-                return (
-                  <div className="space-y-4">
-                    <div className="grid max-w-xl grid-cols-3 gap-3">
-                      <div>
-                        <p className="text-muted-foreground text-[11px] font-semibold uppercase">Work Hours</p>
-                        <p className="text-sm font-medium">
-                          {row.workHours != null ? `${row.workHours.toFixed(2)} hrs` : "-"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-[11px] font-semibold uppercase">Missed Hours</p>
-                        <p
-                          className={cn(
-                            "text-sm font-medium",
-                            (row.missedHoursValue ?? 0) > 0 ? "text-orange-500" : ""
-                          )}
-                        >
-                          {row.missedHoursValue != null && row.missedHoursValue > 0
-                            ? `${row.missedHoursValue.toFixed(2)} hrs`
-                            : "0.00 hrs"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-muted-foreground text-[11px] font-semibold uppercase">Total Hours</p>
-                        <p className="text-sm font-medium">
-                          {row.calculatedTotalHours != null ? `${row.calculatedTotalHours.toFixed(2)} hrs` : "-"}
-                        </p>
-                      </div>
-                    </div>
-                    {rowAppeals.map((appeal, index) => (
-                      <div key={appeal.id} className="bg-muted/50 max-w-2xl space-y-2 rounded-lg border p-3 text-sm">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-muted-foreground text-xs font-semibold uppercase">
-                              Appeal {rowAppeals.length > 1 ? `#${rowAppeals.length - index}` : ""} ({appeal.status})
-                            </span>
-                            <Badge
-                              variant="outline"
-                              className={
-                                appeal.status === "pending"
-                                  ? "border-amber-500 bg-amber-500/5 text-amber-500 hover:bg-amber-500/5"
-                                  : appeal.status === "approved"
-                                    ? "border-emerald-500 bg-emerald-500/5 text-emerald-500 hover:bg-emerald-500/5"
-                                    : "border-rose-500 bg-rose-500/5 text-rose-500 hover:bg-rose-500/5"
-                              }
-                            >
-                              {appeal.status === "pending" && "Pending Approval"}
-                              {appeal.status === "approved" && "Approved"}
-                              {appeal.status === "rejected" && "Rejected"}
-                            </Badge>
-                          </div>
-                          {appeal.status === "pending" && (
-                            <div className="flex gap-2">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                className="h-7 px-2 text-xs"
-                                onClick={() => {
-                                  setEditAppeal(appeal)
-                                  setAppealDialogRow(row)
-                                }}
-                              >
-                                Edit Appeal
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                className="h-7 px-2 text-xs"
-                                onClick={() => setCancelAppealId(appeal.id)}
-                              >
-                                Cancel Appeal
-                              </Button>
-                            </div>
-                          )}
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground text-xs font-semibold uppercase">Your Reason</p>
-                          <p className="mt-0.5 text-sm font-medium whitespace-pre-wrap">{appeal.appeal_reason}</p>
-                        </div>
-                        {appeal.resolution_note && (
-                          <div className="mt-2 border-t pt-2">
-                            <p className="text-muted-foreground text-xs font-semibold uppercase">
-                              Admin Comment / Note
-                            </p>
-                            <p
-                              className={`mt-0.5 text-sm font-medium whitespace-pre-wrap ${
-                                appeal.status === "approved"
-                                  ? "text-emerald-600 dark:text-emerald-400"
-                                  : "text-rose-600 dark:text-rose-400"
-                              }`}
-                            >
-                              {appeal.resolution_note}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )
+                  return [
+                    { icon: Clock, label: "Clock In", value: formatClockTime(row.clock_in) },
+                    { icon: Clock, label: "Clock Out", value: getClockOutLabel(row) },
+                    {
+                      icon: Clock,
+                      label: "Work Hours",
+                      value: row.workHours != null ? `${row.workHours.toFixed(2)} hrs` : "-",
+                    },
+                    {
+                      icon: AlertCircle,
+                      label: "Missed Hours",
+                      value: (row.missedHoursValue ?? 0) > 0 ? `${row.missedHoursValue!.toFixed(2)} hrs` : "0.00 hrs",
+                      muted: (row.missedHoursValue ?? 0) === 0,
+                    },
+                    {
+                      icon: Clock,
+                      label: "Total Hours",
+                      value: row.calculatedTotalHours != null ? `${row.calculatedTotalHours.toFixed(2)} hrs` : "-",
+                    },
+                    // ── Appeal thread ──────────────────────────────────────────
+                    // Restored from the removed expandable row. Without these an
+                    // employee cannot see why an appeal was refused, which is the
+                    // one thing they open this record to find out.
+                    ...(latestAppeal
+                      ? [
+                          {
+                            icon: Gavel,
+                            label: rowAppeals.length > 1 ? `Latest Appeal (${rowAppeals.length} submitted)` : "Appeal",
+                            value:
+                              latestAppeal.status === "pending"
+                                ? "Pending approval"
+                                : latestAppeal.status === "approved"
+                                  ? "Approved"
+                                  : "Rejected",
+                            copyable: false,
+                          },
+                          {
+                            icon: FileQuestion,
+                            label: "Your Reason",
+                            value: latestAppeal.appeal_reason,
+                            copyable: true,
+                          },
+                          ...(latestAppeal.resolution_note
+                            ? [
+                                {
+                                  icon: MessageSquare,
+                                  label: "Admin Comment / Note",
+                                  value: latestAppeal.resolution_note,
+                                  copyable: true,
+                                },
+                              ]
+                            : []),
+                        ]
+                      : []),
+                  ]
+                },
+                actions: (row) => {
+                  const rowAppeals = appeals.filter((a) => a.appeal_date === row.date)
+                  const pendingAppeal = rowAppeals.find((a) => a.status === "pending")
+                  const isEligible = (["absent", "late", "incomplete"] as string[]).includes(row.normalizedStatus)
+                  if (pendingAppeal) {
+                    return [
+                      {
+                        label: "Edit Appeal",
+                        icon: FileQuestion,
+                        variant: "outline" as const,
+                        onClick: () => {
+                          setEditAppeal(pendingAppeal)
+                          setAppealDialogRow(row)
+                        },
+                      },
+                      // Withdrawing a pending appeal was only reachable from the
+                      // expandable row; without this its confirm dialog can never open.
+                      {
+                        label: "Cancel Appeal",
+                        icon: Trash2,
+                        variant: "destructive" as const,
+                        onClick: () => setCancelAppealId(pendingAppeal.id),
+                      },
+                    ]
+                  }
+                  if (isEligible || rowAppeals.length > 0) {
+                    return [
+                      {
+                        label: rowAppeals.some((a) => a.status === "rejected") ? "Re-submit Appeal" : "Submit Appeal",
+                        icon: FileQuestion,
+                        variant: "default" as const,
+                        onClick: () => {
+                          setEditAppeal(null)
+                          setAppealDialogRow(row)
+                        },
+                      },
+                    ]
+                  }
+                  return []
+                },
               },
             }}
             viewToggle
+            contactsView
+            defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+            stickyToolbar
             cardRenderer={(row) => {
               const rowAppeals = appeals.filter((a) => a.appeal_date === row.date)
               const pendingAppeal = rowAppeals.find((a) => a.status === "pending")
@@ -815,7 +857,7 @@ export function AttendanceContent({
               const isEligible = (["absent", "late", "incomplete"] as string[]).includes(row.normalizedStatus)
 
               return (
-                <div className="space-y-3 rounded-xl border p-3.5 sm:p-4">
+                <div className="bg-card text-card-foreground border-border/60 hover:border-primary/40 space-y-3 rounded-xl border p-3.5 shadow-sm transition-all sm:p-4">
                   <div className="flex items-center justify-between gap-2 border-b pb-2">
                     <div>
                       <span className="text-foreground block text-sm font-semibold">
@@ -828,13 +870,13 @@ export function AttendanceContent({
 
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div className="flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 shrink-0 text-green-600" />
+                      <Clock className="text-primary h-3.5 w-3.5 shrink-0" />
                       <span>
                         In: <strong className="text-foreground">{formatClockTime(row.clock_in)}</strong>
                       </span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <Clock className="h-3.5 w-3.5 shrink-0 text-red-500" />
+                      <Clock className="text-muted-foreground h-3.5 w-3.5 shrink-0" />
                       <span>
                         Out: <strong className="text-foreground">{getClockOutLabel(row)}</strong>
                       </span>
@@ -867,7 +909,7 @@ export function AttendanceContent({
                         <Button
                           size="sm"
                           variant="outline"
-                          className="h-7 gap-1 text-xs text-red-600"
+                          className="text-destructive h-7 gap-1 text-xs"
                           onClick={() => {
                             setEditAppeal(null)
                             setAppealDialogRow(row)
