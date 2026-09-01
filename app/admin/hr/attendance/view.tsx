@@ -52,7 +52,7 @@ import { apiFetch } from "@/lib/api-client"
 
 const log = logger("hr-attendance-reports")
 
-interface AttendanceReport {
+export interface AttendanceReport {
   user_id: string
   employee_no?: string
   user_name: string
@@ -335,7 +335,7 @@ interface EmployeeExpandProps {
   onRecordChanged?: (userId: string) => void
 }
 
-function EmployeeExpandPanel({ report, yearMonth, policy, onRecordChanged }: EmployeeExpandProps) {
+export function EmployeeExpandPanel({ report, yearMonth, policy, onRecordChanged }: EmployeeExpandProps) {
   const [days, setDays] = useState<CalendarDay[] | null>(null)
   const [editTarget, setEditTarget] = useState<{ date: string; record: DayRecord | null } | null>(null)
   const [editForm, setEditForm] = useState({

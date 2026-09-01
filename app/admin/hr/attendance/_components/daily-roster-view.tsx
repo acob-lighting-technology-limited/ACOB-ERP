@@ -36,7 +36,7 @@ function parseTimeToMinutes(value: string | null | undefined): number | null {
   return h * 60 + m
 }
 
-function getHourBreakdown(r: AttendanceRecord, policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY) {
+export function getHourBreakdown(r: AttendanceRecord, policy: AttendancePolicy = DEFAULT_ATTENDANCE_POLICY) {
   const inMin = parseTimeToMinutes(r.clock_in)
   const outMin = parseTimeToMinutes(r.clock_out)
 
@@ -88,7 +88,7 @@ function getHourBreakdown(r: AttendanceRecord, policy: AttendancePolicy = DEFAUL
   return { total, work, overtime, missed }
 }
 
-interface AttendanceRecord {
+export interface AttendanceRecord {
   id: string
   user_id: string
   user_name: string
