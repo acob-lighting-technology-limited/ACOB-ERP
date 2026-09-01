@@ -114,9 +114,14 @@ const nextConfig = {
     },
   },
 
-  // Ensure build fails on TypeScript errors (matches Vercel behavior)
+  // Type-checking is enforced before code ever reaches the remote: the pre-push
+  // hook runs `type-check`, and `npm run check-all` runs it locally. Re-running
+  // it inside `next build` is duplicate work — and on the 2-core/8GB Hobby
+  // builder that step hung indefinitely on commit 79c0d1d (PR #130), burning the
+  // full 45-minute build ceiling with no error output. Skipping it here keeps
+  // deploys at ~3 minutes without weakening the gate that actually runs.
   typescript: {
-    ignoreBuildErrors: false,
+    ignoreBuildErrors: true,
   },
 
   async redirects() {
