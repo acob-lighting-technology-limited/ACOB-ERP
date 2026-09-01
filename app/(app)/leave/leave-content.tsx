@@ -5,7 +5,22 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
-import { CalendarDays, Clock, Plus, ExternalLink, Trash2, Pencil, Paperclip, CircleHelp, FileText } from "lucide-react"
+import {
+  CalendarDays,
+  Clock,
+  Plus,
+  Trash2,
+  Pencil,
+  Paperclip,
+  CircleHelp,
+  FileText,
+  Building2,
+  Mail,
+  User,
+  History,
+  Inbox,
+  Wallet,
+} from "lucide-react"
 import type { LeaveApprovalAudit, LeaveBalance, LeaveRequest, LeaveType } from "./page"
 
 import { LeaveTypesCard } from "@/components/leave/leave-types-card"
@@ -88,10 +103,17 @@ const EMPTY_REQUEST_FORM: LeaveRequestFormData = {
   attachment: null,
 }
 
-const TABS: DataTableTab[] = [
-  { key: "my-requests", label: "My Requests", icon: Clock },
-  { key: "approvals", label: "Pending Reviews", icon: Clock },
-]
+type CombinedLeaveItem = Omit<LeaveRequest, "user"> & {
+  isIncomingReview?: boolean
+  user?: {
+    id?: string
+    first_name?: string | null
+    last_name?: string | null
+    full_name?: string | null
+    company_email?: string | null
+    department?: string | null
+  } | null
+}
 
 export function LeaveContent({
   currentUserId,
@@ -102,7 +124,6 @@ export function LeaveContent({
   initialRelieverDebug,
 }: LeaveContentProps) {
   const queryClient = useQueryClient()
-  const [activeTab, setActiveTab] = useState("my-requests")
 
   const { data: leaveData } = useQuery<LeaveQueryData>({
     queryKey: QUERY_KEYS.leaveRequests({ userId: currentUserId }),
@@ -146,6 +167,16 @@ export function LeaveContent({
   const [deleteConfirmRequest, setDeleteConfirmRequest] = useState<LeaveRequest | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isOverviewOpen, setIsOverviewOpen] = useState(false)
+  const [isReviewHistoryOpen, setIsReviewHistoryOpen] = useState(false)
+  /**
+   * "My requests" and "Pending reviews" are two different jobs, not two subsets
+   * of one list: one is leave you asked for, the other is decisions you owe other
+   * people, and they want different columns, different actions and different
+   * metrics above them. That is what a tab is for — folding them into one list
+   * behind a filter option hid the queue from the reliever who had to act on it.
+   */
+  const [activeTab, setActiveTab] = useState<"my-requests" | "reviews">("my-requests")
+  const isReviewTab = activeTab === "reviews"
   const [isCreateBlockedOpen, setIsCreateBlockedOpen] = useState(false)
   const [formData, setFormData] = useState(EMPTY_REQUEST_FORM)
 
@@ -218,25 +249,210 @@ export function LeaveContent({
     }
   }, [myRequests, balances, approverQueue])
 
-  const columns: DataTableColumn<LeaveRequest>[] = useMemo(
+  function approvalStageLabel(code?: string | null) {
+    const value = String(code || "").toLowerCase()
+    if (value.includes("reliever")) return "Reliever"
+    if (value.includes("department_lead")) return "Department Lead"
+    if (value.includes("admin_hr_lead")) return "Admin and HR Lead"
+    if (value.includes("hcs")) return "HCS"
+    if (value.includes("md")) return "MD"
+    return formatName(code || "Stage")
+  }
+
+  function approvalStageKey(code?: string | null) {
+    const value = String(code || "").toLowerCase()
+    if (value.includes("reliever")) return "reliever"
+    if (value.includes("department_lead")) return "department_lead"
+    if (value.includes("admin_hr_lead")) return "admin_hr_lead"
+    if (value.includes("hcs")) return "hcs"
+    if (value.includes("md")) return "md"
+    return value || "unknown"
+  }
+
+  function resolvePersonName(person?: PersonNameRef | null) {
+    if (!person) return ""
+    const full = String(person.full_name || "").trim()
+    if (full) return full
+    const composed = `${person.first_name || ""} ${person.last_name || ""}`.trim()
+    if (composed) return composed
+    const email = String(person.company_email || "").trim()
+    if (email) return email.split("@")[0] || email
+    return ""
+  }
+
+  function getApprovalTimeline(row: LeaveRequest) {
+    const timeline = [...(row.approvals || [])].sort((left, right) => {
+      const leftOrder = Number(left.stage_order || left.approval_level || 999)
+      const rightOrder = Number(right.stage_order || right.approval_level || 999)
+      if (leftOrder !== rightOrder) return leftOrder - rightOrder
+      return String(left.approved_at || "").localeCompare(String(right.approved_at || ""))
+    })
+
+    const stageAuditMap = new Map<string, LeaveApprovalAudit>()
+    for (const item of timeline) {
+      const key = approvalStageKey(item.stage_code)
+      const existing = stageAuditMap.get(key)
+      if (!existing) {
+        stageAuditMap.set(key, item)
+        continue
+      }
+
+      const existingTime = existing.approved_at ? new Date(existing.approved_at).getTime() : 0
+      const nextTime = item.approved_at ? new Date(item.approved_at).getTime() : 0
+      if (nextTime >= existingTime) {
+        stageAuditMap.set(key, item)
+      }
+    }
+
+    if (timeline.length === 0) {
+      if (row.reliever_decision_at) {
+        stageAuditMap.set("reliever", {
+          id: `${row.id}-reliever-fallback`,
+          status: row.status === "rejected" ? "rejected" : "approved",
+          stage_code: "pending_reliever",
+          approved_at: row.reliever_decision_at,
+          approver: row.reliever
+            ? {
+                id: row.reliever.id,
+                full_name: row.reliever.full_name,
+                company_email: row.reliever.company_email,
+              }
+            : null,
+        })
+      }
+
+      if (row.supervisor_decision_at) {
+        stageAuditMap.set("department_lead", {
+          id: `${row.id}-deptlead-fallback`,
+          status: row.status === "rejected" ? "rejected" : "approved",
+          stage_code: "pending_department_lead",
+          approved_at: row.supervisor_decision_at,
+          approver: row.supervisor
+            ? {
+                id: row.supervisor.id,
+                full_name: row.supervisor.full_name,
+                company_email: row.supervisor.company_email,
+              }
+            : null,
+        })
+      }
+
+      if (row.hr_decision_at) {
+        stageAuditMap.set("admin_hr_lead", {
+          id: `${row.id}-hr-fallback`,
+          status: row.status === "rejected" ? "rejected" : "approved",
+          stage_code: "pending_admin_hr_lead",
+          approved_at: row.hr_decision_at,
+          approver: row.approved_by_profile
+            ? {
+                id: row.approved_by_profile.id,
+                full_name: row.approved_by_profile.full_name,
+                company_email: row.approved_by_profile.company_email,
+              }
+            : null,
+        })
+      }
+    }
+
+    const stageOrder = ["reliever", "department_lead", "admin_hr_lead", "hcs", "md"]
+    const stageName: Record<string, string> = {
+      reliever: "Reliever",
+      department_lead: "Department Lead",
+      admin_hr_lead: "Admin & HR Lead",
+      hcs: "HCS",
+      md: "MD",
+    }
+    const currentStageKey = approvalStageKey(row.current_stage_code || row.approval_stage)
+    const hasRelieverAssignee = Boolean(row.reliever?.id)
+    const relieverHandledByLead =
+      Boolean(row.reliever?.id) &&
+      Boolean(row.supervisor?.id) &&
+      row.reliever?.id === row.supervisor?.id &&
+      Boolean(stageAuditMap.get("department_lead"))
+    const departmentLeadApproverName = resolvePersonName(stageAuditMap.get("department_lead")?.approver)
+    const advancedPastReliever = ["department_lead", "admin_hr_lead", "hcs", "md"].includes(currentStageKey)
+
+    const lines: string[] = []
+    for (const stageKey of stageOrder) {
+      const item = stageAuditMap.get(stageKey)
+      const stageActorName =
+        resolvePersonName(item?.approver) ||
+        (stageKey === "reliever"
+          ? resolvePersonName(row.reliever) || null
+          : stageKey === "department_lead"
+            ? resolvePersonName(row.supervisor) || null
+            : stageKey === "admin_hr_lead"
+              ? resolvePersonName(row.approved_by_profile) || null
+              : null)
+      if (item) {
+        lines.push(
+          `${stageName[stageKey]}: ${formatName(item.status)}${stageActorName ? ` by ${stageActorName}` : ""}${item.approved_at ? ` (${formatWATDateTime(item.approved_at)})` : ""}`
+        )
+      } else if (stageKey === "reliever" && !hasRelieverAssignee) {
+        lines.push(`${stageName[stageKey]}: Not required`)
+      } else if (stageKey === "reliever" && relieverHandledByLead) {
+        lines.push(`${stageName[stageKey]}: Handled by ${departmentLeadApproverName || "Department Lead"}`)
+      } else if (stageKey === "reliever" && advancedPastReliever && currentStageKey !== "reliever") {
+        lines.push(`${stageName[stageKey]}: Skipped by route rules`)
+      } else {
+        lines.push(`${stageName[stageKey]}: Pending`)
+      }
+    }
+    return lines.join("\n")
+  }
+
+  // One row shape either way, so the list anatomy, the detail sheet and the row
+  // actions stay shared — only the source and the labels change with the tab.
+  const visibleRecords = useMemo<CombinedLeaveItem[]>(
+    () =>
+      isReviewTab
+        ? approverQueue.map((r) => ({ ...r, isIncomingReview: true }))
+        : myRequests.map((r) => ({ ...r, isIncomingReview: false })),
+    [isReviewTab, myRequests, approverQueue]
+  )
+
+  const tabs = useMemo<DataTableTab[]>(
+    () => [
+      { key: "my-requests", label: "My Requests", icon: CalendarDays },
+      // Always present, empty or not. A tab that only appears once you have work
+      // is one you discover too late — and its count already answers "is there
+      // anything for me?" without being clicked.
+      { key: "reviews", label: `Pending Reviews (${approverQueue.length})`, icon: Inbox },
+    ],
+    [approverQueue.length]
+  )
+
+  const columns: DataTableColumn<CombinedLeaveItem>[] = useMemo(
     () => [
       {
         key: "leave_type",
-        label: "Type",
+        // The column no longer has to mean two things at once: inside a tab every
+        // row is the same kind of record.
+        label: isReviewTab ? "Employee" : "Leave Type",
         sortable: true,
-        accessor: (r) => leaveTypeMap.get(r.leave_type_id)?.name || "Leave",
+        accessor: (r) =>
+          isReviewTab ? r.user?.full_name || "Employee" : leaveTypeMap.get(r.leave_type_id)?.name || "Leave",
+        render: (r) => (
+          <div className="space-y-0.5">
+            <span className="block font-medium">
+              {isReviewTab ? r.user?.full_name || "Employee" : leaveTypeMap.get(r.leave_type_id)?.name || "Leave"}
+            </span>
+            {isReviewTab && (
+              <span className="text-muted-foreground block text-xs">
+                {r.user?.department || leaveTypeMap.get(r.leave_type_id)?.name || "Leave"}
+              </span>
+            )}
+          </div>
+        ),
       },
       {
         key: "period",
         label: "Period",
         accessor: (r) => `${r.start_date} to ${r.end_date}`,
         render: (r) => (
-          <div className="flex flex-col text-xs">
-            <span className="font-medium">
-              {r.start_date} to {r.end_date}
-            </span>
-            <span className="text-muted-foreground">{r.days_count} day(s)</span>
-          </div>
+          <span className="font-mono text-xs whitespace-nowrap">
+            {r.start_date} to {r.end_date} <span className="text-muted-foreground">({r.days_count}d)</span>
+          </span>
         ),
       },
       {
@@ -253,7 +469,7 @@ export function LeaveContent({
                   ? "destructive"
                   : "outline"
             }
-            className="capitalize"
+            className="text-[11px] capitalize"
           >
             {formatName(r.status)}
           </Badge>
@@ -261,44 +477,37 @@ export function LeaveContent({
       },
       {
         key: "stage",
-        label: "Current Stage",
+        label: "Stage",
         accessor: (r) => r.current_stage_code || r.approval_stage || "-",
         render: (r) => (
-          <span className="text-muted-foreground text-xs">
-            {formatName(r.current_stage_code || r.approval_stage || "-")}
+          <span
+            className="text-muted-foreground block max-w-[140px] truncate text-xs"
+            title={approvalStageLabel(r.current_stage_code || r.approval_stage)}
+          >
+            {approvalStageLabel(r.current_stage_code || r.approval_stage)}
+          </span>
+        ),
+        hideOnMobile: true,
+      },
+      {
+        key: "reliever",
+        label: "Reliever",
+        accessor: (r) => resolvePersonName(r.reliever) || "-",
+        render: (r) => (
+          <span
+            className="text-muted-foreground block max-w-[140px] truncate text-xs"
+            title={resolvePersonName(r.reliever) || "-"}
+          >
+            {resolvePersonName(r.reliever) || "-"}
           </span>
         ),
         hideOnMobile: true,
       },
     ],
-    [leaveTypeMap]
+    [leaveTypeMap, isReviewTab]
   )
 
-  const filters: DataTableFilter<LeaveRequest>[] = [
-    {
-      key: "status",
-      label: "Status",
-      options: [
-        { value: "pending", label: "Pending" },
-        { value: "pending_evidence", label: "Pending Evidence" },
-        { value: "approved", label: "Approved" },
-        { value: "rejected", label: "Rejected" },
-        { value: "cancelled", label: "Cancelled" },
-      ],
-    },
-    {
-      key: "leave_type",
-      label: "Leave Type",
-      options: leaveTypes.map((leaveType) => ({
-        value: leaveType.id,
-        label: leaveType.name,
-      })),
-      mode: "custom",
-      filterFn: (row, selected) => selected.includes(row.leave_type_id),
-    },
-  ]
-
-  const approvalFilters: DataTableFilter<ApproverQueueItem>[] = useMemo(
+  const filters: DataTableFilter<CombinedLeaveItem>[] = useMemo(
     () => [
       {
         key: "status",
@@ -308,6 +517,7 @@ export function LeaveContent({
           { value: "pending_evidence", label: "Pending Evidence" },
           { value: "approved", label: "Approved" },
           { value: "rejected", label: "Rejected" },
+          { value: "cancelled", label: "Cancelled" },
         ],
       },
       {
@@ -324,12 +534,24 @@ export function LeaveContent({
     [leaveTypes]
   )
 
-  const staticRowActions: RowAction<LeaveRequest>[] = [
+  const staticRowActions: RowAction<CombinedLeaveItem>[] = [
+    {
+      label: "Approve",
+      onClick: (item) => setApprovePrompt({ requestId: item.id }),
+      hidden: (r) => !r.isIncomingReview,
+    },
+    {
+      label: "Reject",
+      variant: "destructive",
+      onClick: (item) => setRejectPrompt({ requestId: item.id }),
+      hidden: (r) => !r.isIncomingReview,
+    },
     {
       label: "Edit",
       icon: Pencil,
       onClick: (item) => openEditDialog(item),
       hidden: (r) => {
+        if (r.isIncomingReview) return true
         const isEditAllowed =
           ["pending", "pending_evidence"].includes(r.status) &&
           ["pending_reliever", "reliever_pending"].includes(r.current_stage_code || r.approval_stage || "")
@@ -340,14 +562,14 @@ export function LeaveContent({
       label: "Upload Evidence",
       icon: Paperclip,
       onClick: (item) => setEvidencePrompt({ requestId: item.id, documentType: "Sick Note" }),
-      hidden: (r) => r.status !== "pending_evidence",
+      hidden: (r) => r.isIncomingReview || r.status !== "pending_evidence",
     },
     {
-      label: "Delete",
+      label: "Cancel Request",
       icon: Trash2,
       variant: "destructive",
       onClick: (item) => setDeleteConfirmRequest(item),
-      hidden: (r) => !["pending", "pending_evidence"].includes(r.status),
+      hidden: (r) => r.isIncomingReview || !["pending", "pending_evidence"].includes(r.status),
     },
   ]
 
@@ -559,49 +781,21 @@ export function LeaveContent({
 
   const hasPendingRequest = myRequests.some((r) => ["pending", "pending_evidence"].includes(r.status))
 
-  function approvalStageLabel(code?: string | null) {
-    const value = String(code || "").toLowerCase()
-    if (value.includes("reliever")) return "Reliever"
-    if (value.includes("department_lead")) return "Department Lead"
-    if (value.includes("admin_hr_lead")) return "Admin and HR Lead"
-    if (value.includes("hcs")) return "HCS"
-    if (value.includes("md")) return "MD"
-    return formatName(code || "Stage")
-  }
-
-  function approvalStageKey(code?: string | null) {
-    const value = String(code || "").toLowerCase()
-    if (value.includes("reliever")) return "reliever"
-    if (value.includes("department_lead")) return "department_lead"
-    if (value.includes("admin_hr_lead")) return "admin_hr_lead"
-    if (value.includes("hcs")) return "hcs"
-    if (value.includes("md")) return "md"
-    return value || "unknown"
-  }
-
-  function resolvePersonName(person?: PersonNameRef | null) {
-    if (!person) return ""
-    const full = String(person.full_name || "").trim()
-    if (full) return full
-    const composed = `${person.first_name || ""} ${person.last_name || ""}`.trim()
-    if (composed) return composed
-    const email = String(person.company_email || "").trim()
-    if (email) return email.split("@")[0] || email
-    return ""
-  }
-
   return (
     <DataTablePage
       title="My Leave Center"
       description="Track eligibility, submit requests, and manage approvals in one view."
       icon={CalendarDays}
       backLink={{ href: "/profile", label: "Back to Home" }}
-      tabs={TABS}
+      tabs={tabs}
       activeTab={activeTab}
-      onTabChange={setActiveTab}
+      onTabChange={(tab) => setActiveTab(tab === "reviews" ? "reviews" : "my-requests")}
+      spacing="tight"
+      actionsPlacement="inline-always"
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Taken (Days)"
             value={stats.totalTaken}
             icon={CalendarDays}
@@ -609,6 +803,7 @@ export function LeaveContent({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Ongoing Requests"
             value={stats.pending}
             icon={Clock}
@@ -616,17 +811,21 @@ export function LeaveContent({
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Available Balances"
             value={stats.availableBalances}
-            icon={ExternalLink}
+            icon={Wallet}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
           />
+          {/* Only for people who approve something — nobody else should be told
+              they have zero approvals to make. Matches the Pending Reviews tab. */}
           {stats.waitingReviews > 0 && (
             <StatCard
+              variant="compact"
               title="Need Your Review"
               value={stats.waitingReviews}
-              icon={Plus}
+              icon={Inbox}
               iconBgColor="bg-violet-500/10"
               iconColor="text-violet-500"
             />
@@ -639,6 +838,12 @@ export function LeaveContent({
             <CircleHelp className="h-4 w-4 sm:mr-2" />
             <span className="hidden sm:inline">Overview</span>
           </Button>
+          {pendingReviewHistory.length > 0 && (
+            <Button variant="outline" size="sm" onClick={() => setIsReviewHistoryOpen(true)}>
+              <History className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Review History</span>
+            </Button>
+          )}
           <Button
             size="sm"
             onClick={() => {
@@ -656,395 +861,243 @@ export function LeaveContent({
         </div>
       }
     >
-      <div className="space-y-6">
-        {activeTab === "my-requests" && (
-          <DataTable<LeaveRequest>
-            data={myRequests}
-            columns={columns}
-            getRowId={(r) => r.id}
-            filters={filters}
-            pagination={{ pageSize: 50 }}
-            searchPlaceholder="Search reason or type..."
-            searchFn={(r, q) => `${leaveTypeMap.get(r.leave_type_id)?.name} ${r.reason}`.toLowerCase().includes(q)}
-            rowActions={staticRowActions}
-            expandable={{
-              render: (row) => {
-                const timeline = [...(row.approvals || [])].sort((left, right) => {
-                  const leftOrder = Number(left.stage_order || left.approval_level || 999)
-                  const rightOrder = Number(right.stage_order || right.approval_level || 999)
-                  if (leftOrder !== rightOrder) return leftOrder - rightOrder
-                  return String(left.approved_at || "").localeCompare(String(right.approved_at || ""))
-                })
-
-                const stageAuditMap = new Map<string, LeaveApprovalAudit>()
-                for (const item of timeline) {
-                  const key = approvalStageKey(item.stage_code)
-                  const existing = stageAuditMap.get(key)
-                  if (!existing) {
-                    stageAuditMap.set(key, item)
-                    continue
-                  }
-
-                  const existingTime = existing.approved_at ? new Date(existing.approved_at).getTime() : 0
-                  const nextTime = item.approved_at ? new Date(item.approved_at).getTime() : 0
-                  if (nextTime >= existingTime) {
-                    stageAuditMap.set(key, item)
-                  }
-                }
-
-                if (timeline.length === 0) {
-                  if (row.reliever_decision_at) {
-                    stageAuditMap.set("reliever", {
-                      id: `${row.id}-reliever-fallback`,
-                      status: row.status === "rejected" ? "rejected" : "approved",
-                      stage_code: "pending_reliever",
-                      approved_at: row.reliever_decision_at,
-                      approver: row.reliever
-                        ? {
-                            id: row.reliever.id,
-                            full_name: row.reliever.full_name,
-                            company_email: row.reliever.company_email,
-                          }
-                        : null,
-                    })
-                  }
-
-                  if (row.supervisor_decision_at) {
-                    stageAuditMap.set("department_lead", {
-                      id: `${row.id}-deptlead-fallback`,
-                      status: row.status === "rejected" ? "rejected" : "approved",
-                      stage_code: "pending_department_lead",
-                      approved_at: row.supervisor_decision_at,
-                      approver: row.supervisor
-                        ? {
-                            id: row.supervisor.id,
-                            full_name: row.supervisor.full_name,
-                            company_email: row.supervisor.company_email,
-                          }
-                        : null,
-                    })
-                  }
-
-                  if (row.hr_decision_at) {
-                    stageAuditMap.set("admin_hr_lead", {
-                      id: `${row.id}-hr-fallback`,
-                      status: row.status === "rejected" ? "rejected" : "approved",
-                      stage_code: "pending_admin_hr_lead",
-                      approved_at: row.hr_decision_at,
-                      approver: row.approved_by_profile
-                        ? {
-                            id: row.approved_by_profile.id,
-                            full_name: row.approved_by_profile.full_name,
-                            company_email: row.approved_by_profile.company_email,
-                          }
-                        : null,
-                    })
-                  }
-                }
-
-                const stageOrder = ["reliever", "department_lead", "admin_hr_lead", "hcs", "md"]
-                const stageName: Record<string, string> = {
-                  reliever: "Reliever",
-                  department_lead: "Department Lead",
-                  admin_hr_lead: "Admin and HR Lead",
-                  hcs: "HCS",
-                  md: "MD",
-                }
-                const currentStageKey = approvalStageKey(row.current_stage_code || row.approval_stage)
-                const hasRelieverAssignee = Boolean(row.reliever?.id)
-                const relieverHandledByLead =
-                  Boolean(row.reliever?.id) &&
-                  Boolean(row.supervisor?.id) &&
-                  row.reliever?.id === row.supervisor?.id &&
-                  Boolean(stageAuditMap.get("department_lead"))
-                const departmentLeadApproverName = resolvePersonName(stageAuditMap.get("department_lead")?.approver)
-                const advancedPastReliever = ["department_lead", "admin_hr_lead", "hcs", "md"].includes(currentStageKey)
-
-                return (
-                  <div className="grid gap-3 p-2 text-sm md:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <p>
-                        <span className="text-muted-foreground">Reliever:</span>{" "}
-                        <span className="font-medium">{resolvePersonName(row.reliever) || "Not assigned"}</span>
-                      </p>
-                      <p>
-                        <span className="text-muted-foreground">Current Stage:</span>{" "}
-                        <span className="font-medium">
-                          {approvalStageLabel(row.current_stage_code || row.approval_stage)}
-                        </span>
-                      </p>
-                      {row.leave_request_segments && row.leave_request_segments.length > 1 && (
-                        <p className="text-xs">
-                          <span className="text-muted-foreground">Date Ranges:</span>{" "}
-                          <span className="text-foreground">
-                            {[...row.leave_request_segments]
-                              .sort((a, b) => a.segment_order - b.segment_order)
-                              .map((segment) =>
-                                segment.start_date === segment.end_date
-                                  ? segment.start_date
-                                  : `${segment.start_date} to ${segment.end_date}`
-                              )
-                              .join(", ")}
-                          </span>
-                        </p>
-                      )}
-                      {row.handover_checklist_url && (
-                        <p className="flex items-center gap-1.5 pt-1 text-xs">
-                          <span className="text-muted-foreground">Handover Doc:</span>
-                          <a
-                            href={leaveHandoverHref(row.id, row.handover_checklist_url)}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-primary inline-flex items-center gap-1 font-medium hover:underline"
-                          >
-                            <FileText className="h-3.5 w-3.5" />
-                            View Attached Handover
-                          </a>
-                        </p>
-                      )}
-                      {row.handover_note &&
-                        (!row.handover_checklist_url || !row.handover_note.startsWith("Attached:")) && (
-                          <p className="text-xs">
-                            <span className="text-muted-foreground">Handover Note:</span>{" "}
-                            <span className="text-foreground">{row.handover_note}</span>
-                          </p>
-                        )}
-                    </div>
-                    <div className="space-y-1">
-                      <p className="text-muted-foreground text-xs">Approval Timeline</p>
-                      {stageAuditMap.size === 0 ? (
-                        <p className="text-muted-foreground text-xs">No approvals recorded yet.</p>
-                      ) : (
-                        <ul className="space-y-1">
-                          {stageOrder.map((stageKey) => {
-                            const item = stageAuditMap.get(stageKey)
-                            const stageActorName =
-                              resolvePersonName(item?.approver) ||
-                              (stageKey === "reliever"
-                                ? resolvePersonName(row.reliever) || null
-                                : stageKey === "department_lead"
-                                  ? resolvePersonName(row.supervisor) || null
-                                  : stageKey === "admin_hr_lead"
-                                    ? resolvePersonName(row.approved_by_profile) || null
-                                    : null)
-                            return (
-                              <li key={stageKey} className="text-xs">
-                                <span className="font-medium">{stageName[stageKey]}:</span>{" "}
-                                {item ? (
-                                  <>
-                                    <span className="capitalize">{item.status}</span>
-                                    {stageActorName ? ` by ${stageActorName}` : ""}
-                                    {stageActorName ? ` (${stageName[stageKey]})` : ""}
-                                    {item.approved_at ? ` at ${formatWATDateTime(item.approved_at)}` : ""}
-                                  </>
-                                ) : stageKey === "reliever" && !hasRelieverAssignee ? (
-                                  <span className="text-muted-foreground">Not required for this request</span>
-                                ) : stageKey === "reliever" && relieverHandledByLead ? (
-                                  <span className="text-muted-foreground">
-                                    {departmentLeadApproverName
-                                      ? `Handled by ${departmentLeadApproverName} (Department Lead)`
-                                      : "Handled by Department Lead stage"}
-                                  </span>
-                                ) : stageKey === "reliever" &&
-                                  advancedPastReliever &&
-                                  currentStageKey !== "reliever" ? (
-                                  <span className="text-muted-foreground">Skipped by route rules</span>
-                                ) : (
-                                  <span className="text-muted-foreground">Pending / not acted</span>
-                                )}
-                              </li>
-                            )
-                          })}
-                        </ul>
-                      )}
-                    </div>
-                  </div>
-                )
-              },
-            }}
-            viewToggle
-            cardRenderer={(row) => (
-              <div className="space-y-3 rounded-xl border p-3.5 sm:p-4">
-                <div className="flex items-center justify-between gap-2 border-b pb-2">
-                  <div>
-                    <span className="text-foreground block text-sm font-semibold">
-                      {leaveTypeMap.get(row.leave_type_id)?.name || "Leave"}
-                    </span>
-                    <span className="text-muted-foreground block text-xs">
-                      {row.start_date} to {row.end_date} ({row.days_count} day{Number(row.days_count) > 1 ? "s" : ""})
-                    </span>
-                  </div>
-                  <Badge
-                    variant={
-                      row.status === "approved"
-                        ? "default"
-                        : ["rejected", "cancelled"].includes(row.status)
-                          ? "destructive"
-                          : "outline"
-                    }
-                    className="capitalize"
-                  >
-                    {formatName(row.status)}
-                  </Badge>
-                </div>
-                <div className="space-y-1 text-xs">
-                  <p>
-                    <span className="text-muted-foreground">Reliever:</span>{" "}
-                    <span className="font-medium">{resolvePersonName(row.reliever) || "Not assigned"}</span>
-                  </p>
-                  <p>
-                    <span className="text-muted-foreground">Current Stage:</span>{" "}
-                    <span className="font-medium">
-                      {approvalStageLabel(row.current_stage_code || row.approval_stage)}
-                    </span>
-                  </p>
-                </div>
-              </div>
-            )}
-            urlSync
-          />
-        )}
-
-        {activeTab === "approvals" && (
-          <div className="space-y-4">
-            <DataTable<ApproverQueueItem>
-              data={approverQueue}
-              getRowId={(r) => r.id}
-              pagination={{ pageSize: 50 }}
-              columns={[
-                {
-                  key: "requester",
-                  label: "Requester",
-                  accessor: (r) => r.user?.full_name || "Employee",
-                },
-                {
-                  key: "period",
-                  label: "Period",
-                  accessor: (r) => `${r.start_date} to ${r.end_date}`,
-                },
-                {
-                  key: "status",
-                  label: "Status",
-                  render: (r) => <Badge variant="outline">{r.status}</Badge>,
-                },
-              ]}
-              filters={approvalFilters}
-              searchPlaceholder="Search requester or leave period..."
-              searchFn={(r, q) =>
-                `${r.user?.full_name || ""} ${r.start_date} ${r.end_date} ${r.reason || ""}`.toLowerCase().includes(q)
+      <DataTable<CombinedLeaveItem>
+        data={visibleRecords}
+        columns={columns}
+        getRowId={(r) => (r.isIncomingReview ? `review-${r.id}` : r.id)}
+        filters={filters}
+        pagination={{ pageSize: 25 }}
+        stickyToolbar
+        viewToggle
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        searchPlaceholder="Search reason, leave type, requester, or reliever..."
+        searchFn={(r, q) =>
+          `${leaveTypeMap.get(r.leave_type_id)?.name || ""} ${r.reason || ""} ${r.user?.full_name || ""} ${resolvePersonName(r.reliever)} ${r.start_date} ${r.end_date} ${r.status}`
+            .toLowerCase()
+            .includes(q)
+        }
+        rowActions={staticRowActions}
+        mobileRow={{
+          title: (r) =>
+            r.isIncomingReview ? r.user?.full_name || "Employee" : leaveTypeMap.get(r.leave_type_id)?.name || "Leave",
+          subtitle: (r) =>
+            r.isIncomingReview
+              ? `${leaveTypeMap.get(r.leave_type_id)?.name || "Leave"} · ${r.start_date} to ${r.end_date}`
+              : `${r.start_date} to ${r.end_date} · ${r.days_count} day${Number(r.days_count) > 1 ? "s" : ""}`,
+          trailing: (r) => (
+            <Badge
+              variant={
+                r.status === "approved"
+                  ? "default"
+                  : ["rejected", "cancelled"].includes(r.status)
+                    ? "destructive"
+                    : "outline"
               }
-              rowActions={[
-                {
-                  label: "Approve",
-                  onClick: (r) => setApprovePrompt({ requestId: r.id }),
-                },
-                {
-                  label: "Reject",
-                  variant: "destructive",
-                  onClick: (r) => setRejectPrompt({ requestId: r.id }),
-                },
-              ]}
-              expandable={{
-                render: (r) => (
-                  <div className="space-y-2 p-2 text-xs">
-                    {r.reason && (
-                      <p>
-                        <span className="text-muted-foreground">Reason:</span>{" "}
-                        <span className="text-foreground">{r.reason}</span>
-                      </p>
-                    )}
-                    {r.handover_checklist_url && (
-                      <p className="flex items-center gap-1.5 pt-0.5">
-                        <span className="text-muted-foreground">Handover Document:</span>
-                        <a
-                          href={leaveHandoverHref(r.id, r.handover_checklist_url)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-primary inline-flex items-center gap-1 font-medium hover:underline"
-                        >
-                          <FileText className="h-3.5 w-3.5" />
-                          View / Download Handover File
-                        </a>
-                      </p>
-                    )}
-                    {r.handover_note && (!r.handover_checklist_url || !r.handover_note.startsWith("Attached:")) && (
-                      <p>
-                        <span className="text-muted-foreground">Handover Note:</span>{" "}
-                        <span className="text-foreground">{r.handover_note}</span>
-                      </p>
-                    )}
-                  </div>
-                ),
-              }}
-              viewToggle
-              cardRenderer={(r) => (
-                <div className="space-y-3 rounded-xl border p-3.5 sm:p-4">
-                  <div className="flex items-center justify-between gap-2 border-b pb-2">
-                    <div>
-                      <span className="text-foreground block text-sm font-semibold">
-                        {r.user?.full_name || "Employee"}
-                      </span>
-                      <span className="text-muted-foreground block text-xs">
-                        {r.start_date} to {r.end_date} ({r.days_count} day{Number(r.days_count) > 1 ? "s" : ""})
-                      </span>
-                    </div>
-                    <Badge variant="outline" className="capitalize">
-                      {formatName(r.status)}
-                    </Badge>
-                  </div>
-                  {r.reason && (
-                    <p className="text-muted-foreground text-xs">
-                      Reason: <span className="text-foreground">{r.reason}</span>
-                    </p>
-                  )}
-                  {r.handover_checklist_url && (
-                    <p className="flex items-center gap-1.5 text-xs">
-                      <span className="text-muted-foreground">Handover:</span>
-                      <a
-                        href={leaveHandoverHref(r.id, r.handover_checklist_url)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-primary inline-flex items-center gap-1 font-medium hover:underline"
-                      >
-                        <FileText className="h-3.5 w-3.5" />
-                        View Attached File
-                      </a>
-                    </p>
-                  )}
+              className="text-[10px] capitalize"
+            >
+              {formatName(r.status)}
+            </Badge>
+          ),
+          detail: {
+            title: (r) =>
+              r.isIncomingReview
+                ? r.user?.full_name || "Employee Request"
+                : leaveTypeMap.get(r.leave_type_id)?.name || "Leave Request",
+            subtitle: (r) => (
+              <div className="text-muted-foreground flex flex-wrap items-center justify-center gap-1.5 text-xs">
+                <Badge variant="outline" className="text-[10px] font-medium">
+                  {leaveTypeMap.get(r.leave_type_id)?.name || "Leave"}
+                </Badge>
+                <span className="inline-flex items-center gap-1">
+                  <CalendarDays className="text-muted-foreground/70 h-3.5 w-3.5" />
+                  <span>
+                    {r.start_date} to {r.end_date} ({r.days_count} day{Number(r.days_count) > 1 ? "s" : ""})
+                  </span>
+                </span>
+              </div>
+            ),
+            badges: (r) => (
+              <Badge
+                variant={
+                  r.status === "approved"
+                    ? "default"
+                    : ["rejected", "cancelled"].includes(r.status)
+                      ? "destructive"
+                      : "outline"
+                }
+                className="text-[10px] capitalize"
+              >
+                {formatName(r.status)}
+              </Badge>
+            ),
+            fields: (r) => [
+              ...(r.isIncomingReview && r.user?.department
+                ? [{ icon: Building2, label: "Department", value: r.user.department }]
+                : []),
+              ...(r.isIncomingReview && r.user?.company_email
+                ? [{ icon: Mail, label: "Email", value: r.user.company_email }]
+                : []),
+              { icon: FileText, label: "Reason", value: r.reason, copyable: true },
+              {
+                icon: Clock,
+                label: "Current Stage",
+                value: approvalStageLabel(r.current_stage_code || r.approval_stage),
+                copyable: false,
+              },
+              {
+                icon: User,
+                label: "Reliever",
+                value: resolvePersonName(r.reliever) || "Not assigned",
+                copyable: Boolean(resolvePersonName(r.reliever)),
+              },
+              ...(r.leave_request_segments && r.leave_request_segments.length > 1
+                ? [
+                    {
+                      icon: CalendarDays,
+                      label: "Date Breakdown",
+                      value: [...r.leave_request_segments]
+                        .sort((a, b) => a.segment_order - b.segment_order)
+                        .map((s) => (s.start_date === s.end_date ? s.start_date : `${s.start_date} to ${s.end_date}`))
+                        .join(", "),
+                      copyable: false,
+                    },
+                  ]
+                : []),
+              ...(r.handover_checklist_url
+                ? [
+                    {
+                      icon: Paperclip,
+                      label: "Handover Document",
+                      value: "View attached handover checklist",
+                      // An approver cannot decide without reading it, so this has to
+                      // open the file, not copy its description.
+                      href: leaveHandoverHref(r.id, r.handover_checklist_url),
+                    },
+                  ]
+                : r.handover_note && !r.handover_note.startsWith("Attached:")
+                  ? [
+                      {
+                        icon: Paperclip,
+                        label: "Handover Note",
+                        value: r.handover_note,
+                        copyable: true,
+                      },
+                    ]
+                  : []),
+              {
+                icon: Clock,
+                label: "Approval Timeline",
+                value: getApprovalTimeline(r),
+                copyable: false,
+              },
+            ],
+            actions: (r) => [
+              ...(r.isIncomingReview
+                ? [
+                    {
+                      label: "Approve",
+                      onClick: () => setApprovePrompt({ requestId: r.id }),
+                    },
+                    {
+                      label: "Reject",
+                      variant: "destructive" as const,
+                      onClick: () => setRejectPrompt({ requestId: r.id }),
+                    },
+                  ]
+                : [
+                    ...(["pending", "pending_evidence"].includes(r.status) &&
+                    ["pending_reliever", "reliever_pending"].includes(r.current_stage_code || r.approval_stage || "")
+                      ? [
+                          {
+                            label: "Edit",
+                            icon: Pencil,
+                            variant: "outline" as const,
+                            onClick: () => openEditDialog(r),
+                          },
+                        ]
+                      : []),
+                    ...(r.status === "pending_evidence"
+                      ? [
+                          {
+                            label: "Upload Evidence",
+                            icon: Paperclip,
+                            variant: "outline" as const,
+                            onClick: () => setEvidencePrompt({ requestId: r.id, documentType: "Sick Note" }),
+                          },
+                        ]
+                      : []),
+                    ...(["pending", "pending_evidence"].includes(r.status)
+                      ? [
+                          {
+                            label: "Cancel Request",
+                            icon: Trash2,
+                            variant: "destructive" as const,
+                            onClick: () => setDeleteConfirmRequest(r),
+                          },
+                        ]
+                      : []),
+                  ]),
+            ],
+          },
+        }}
+        emptyTitle={isReviewTab ? "Nothing waiting on you" : "No leave requests"}
+        emptyDescription={
+          isReviewTab
+            ? "Requests reach you here when you are the reliever, the department lead, or the next approver in the route."
+            : "Submit a request and it will appear here with its approval trail."
+        }
+        emptyIcon={CalendarDays}
+        skeletonRows={6}
+        cardRenderer={(row) => (
+          <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <span className="text-foreground block text-sm font-semibold">
+                  {row.isIncomingReview
+                    ? row.user?.full_name || "Employee"
+                    : leaveTypeMap.get(row.leave_type_id)?.name || "Leave"}
+                </span>
+                <span className="text-muted-foreground block font-mono text-xs">
+                  {row.start_date} to {row.end_date} ({row.days_count} day{Number(row.days_count) > 1 ? "s" : ""})
+                </span>
+              </div>
+              <Badge
+                variant={
+                  row.status === "approved"
+                    ? "default"
+                    : ["rejected", "cancelled"].includes(row.status)
+                      ? "destructive"
+                      : "outline"
+                }
+                className="text-[10px] capitalize"
+              >
+                {formatName(row.status)}
+              </Badge>
+            </div>
+            <div className="text-muted-foreground grid gap-1 text-xs">
+              {row.isIncomingReview && row.user?.department && (
+                <div className="flex items-center gap-1.5">
+                  <Building2 className="h-3.5 w-3.5 shrink-0" />
+                  <span>{row.user.department}</span>
                 </div>
               )}
-            />
-
-            <div className="rounded-lg border p-4">
-              <p className="text-sm font-semibold">Recent Review History</p>
-              <p className="text-muted-foreground mb-3 text-xs">
-                Your latest acceptance and rejection decisions are recorded here.
-              </p>
-              {pendingReviewHistory.length === 0 ? (
-                <p className="text-muted-foreground text-xs">No review activity yet.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {pendingReviewHistory.slice(0, 10).map((item) => (
-                    <li key={item.id} className="rounded-md border p-2 text-xs">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge variant={item.status === "rejected" ? "destructive" : "outline"} className="capitalize">
-                          {item.status || "recorded"}
-                        </Badge>
-                        <span className="font-medium">{formatName(item.stage_code || "approval_stage")}</span>
-                        <span className="text-muted-foreground">{item.request?.user?.full_name || "Employee"}</span>
-                        <span className="text-muted-foreground">
-                          {item.approved_at ? formatWATDateTime(item.approved_at) : ""}
-                        </span>
-                      </div>
-                      {item.comments ? <p className="mt-1 text-xs">{item.comments}</p> : null}
-                    </li>
-                  ))}
-                </ul>
+              <div className="flex items-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 shrink-0" />
+                <span>Stage: {approvalStageLabel(row.current_stage_code || row.approval_stage)}</span>
+              </div>
+              {resolvePersonName(row.reliever) && (
+                <div className="flex items-center gap-1.5">
+                  <User className="h-3.5 w-3.5 shrink-0" />
+                  <span>Reliever: {resolvePersonName(row.reliever)}</span>
+                </div>
               )}
+              {row.reason && <p className="line-clamp-1 truncate text-xs font-normal">Reason: {row.reason}</p>}
             </div>
           </div>
         )}
-      </div>
+        urlSync
+      />
 
       <LeaveDeleteConfirmDialog
         request={deleteConfirmRequest}
@@ -1124,6 +1177,39 @@ export function LeaveContent({
             </DialogDescription>
           </DialogHeader>
           <LeaveTypesCard leaveTypes={leaveTypes} balanceMap={balanceMap} />
+        </DialogContent>
+      </Dialog>
+
+      {/* An approver's own decision trail. It lives in a dialog rather than a panel
+          under the table so the record list stays the whole page — but it is not
+          optional: without it there is no way to see what you already decided. */}
+      <Dialog open={isReviewHistoryOpen} onOpenChange={setIsReviewHistoryOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Recent Review History</DialogTitle>
+            <DialogDescription>Your latest acceptance and rejection decisions are recorded here.</DialogDescription>
+          </DialogHeader>
+          {pendingReviewHistory.length === 0 ? (
+            <p className="text-muted-foreground text-sm">No review activity yet.</p>
+          ) : (
+            <ul className="max-h-[60vh] space-y-2 overflow-y-auto">
+              {pendingReviewHistory.slice(0, 25).map((item) => (
+                <li key={item.id} className="rounded-md border p-2.5 text-xs">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={item.status === "rejected" ? "destructive" : "outline"} className="capitalize">
+                      {item.status || "recorded"}
+                    </Badge>
+                    <span className="font-medium">{approvalStageLabel(item.stage_code || "approval_stage")}</span>
+                    <span className="text-muted-foreground">{item.request?.user?.full_name || "Employee"}</span>
+                    <span className="text-muted-foreground ml-auto">
+                      {item.approved_at ? formatWATDateTime(item.approved_at) : ""}
+                    </span>
+                  </div>
+                  {item.comments ? <p className="mt-1">{item.comments}</p> : null}
+                </li>
+              ))}
+            </ul>
+          )}
         </DialogContent>
       </Dialog>
 
