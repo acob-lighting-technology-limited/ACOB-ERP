@@ -138,14 +138,30 @@ export async function updateSession(request: NextRequest) {
 
   if (isAdminOrApiPath && user) {
     try {
-      // Check role from user_metadata first (fast path, no extra DB query for non-admins).
-      // Pure dept leads no longer enter /admin — only admin-like roles need scope here.
+      // The user_metadata fast path (no extra DB query for non-admins) applies to
+      // the /api/* prefixes only, where the handlers do their own authorization.
+      //
+      // /admin/* always resolves scope, because this gate is the only per-route
+      // check those pages get: AdminLayout verifies login and a non-null scope but
+      // never the route key, and the pages themselves don't re-check. Skipping the
+      // lookup for a non-admin-like metadata role therefore skipped the gate
+      // entirely, letting a department lead open any /admin page by typing its URL.
+      // Metadata can also be stale, so it must never be the basis for a *denial*.
       const metaRole = user.user_metadata?.role as string | undefined
-      const needsScope = !metaRole || isAdminLikeRole(metaRole)
+      const isAdminPage = pathname.startsWith("/admin")
+      const needsScope = isAdminPage || !metaRole || isAdminLikeRole(metaRole)
       if (needsScope) {
         const scope = await resolveAdminScope(supabase, user.id)
+        if (!scope && isAdminPage) {
+          // No scope at all means no admin standing — AdminLayout would redirect
+          // here anyway, so short-circuit before rendering.
+          const blockedTarget = request.nextUrl.clone()
+          blockedTarget.pathname = "/profile"
+          blockedTarget.search = ""
+          return NextResponse.redirect(blockedTarget)
+        }
         if (scope) {
-          if (pathname.startsWith("/admin")) {
+          if (isAdminPage) {
             const routeKey = resolveAdminRouteKeyV2(pathname)
             const accessContext = buildAccessContextV2(scope)
             if (!canAccessRouteV2(accessContext, routeKey)) {
