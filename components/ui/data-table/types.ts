@@ -1,6 +1,38 @@
 import type { ReactNode } from "react"
 import type { LucideIcon } from "lucide-react"
 
+/** The three renderings a `DataTable` can show. */
+export type DataTableViewMode = "list" | "card" | "contacts"
+
+// ─── Mobile detail sheet ─────────────────────────────────────────────────────
+
+/** One labelled value in the standard mobile detail sheet. Tapping copies it. */
+export interface DataTableDetailField {
+  icon?: LucideIcon
+  label: string
+  value: string | null | undefined
+  /**
+   * Turns the row into a link opening in a new tab — for an attachment, a signed
+   * download, a record elsewhere in the app. Takes precedence over `copyable`:
+   * a value you can open is one you want to open, not copy.
+   */
+  href?: string
+  /** Set false for values that make no sense to copy (a computed total, say). */
+  copyable?: boolean
+  muted?: boolean
+}
+
+/** A primary action button in the detail sheet footer (call, email, open…). */
+export interface DataTableDetailAction {
+  label: string
+  icon?: LucideIcon
+  /** Renders an anchor — use for tel:/mailto:/links. */
+  href?: string
+  onClick?: () => void
+  variant?: "default" | "outline" | "destructive"
+  className?: string
+}
+
 // ─── Column Definition ───────────────────────────────────────────────────────
 
 export interface DataTableColumn<TData> {
@@ -135,6 +167,23 @@ export interface DataTableProps<TData> {
 
   // ── Filters ──────────────────────────────────────────────────────────────
   filters?: DataTableFilter<TData>[]
+  /**
+   * Controlled filter state, keyed by filter key. Supplying this hands ownership
+   * of filter values to the parent — the table renders what you pass and reports
+   * every change through `onFilterValuesChange` instead of storing it.
+   *
+   * Only reach for this when something *outside* the toolbar has to drive a
+   * filter — a stat badge that toggles its own metric, a link that lands
+   * pre-filtered. Leave it undefined for the normal case: the table owning its
+   * own state is what keeps pages free of the inline filter state that the
+   * Table Page Standard prohibits.
+   *
+   * `defaultValues` on a filter are ignored in controlled mode; seed the parent's
+   * initial state instead.
+   */
+  filterValues?: Record<string, string[]>
+  /** Required companion to `filterValues` — receives the complete next state. */
+  onFilterValuesChange?: (filters: Record<string, string[]>) => void
 
   // ── Sorting ──────────────────────────────────────────────────────────────
   /** Override default alphabetic/numeric sort */
@@ -169,10 +218,83 @@ export interface DataTableProps<TData> {
   selectable?: boolean
 
   // ── View Modes ───────────────────────────────────────────────────────────
-  /** Show list/card toggle button */
+  /** Show the view-mode toggle */
   viewToggle?: boolean
-  /** Required when viewToggle is true — renders a card for each row */
+  /** Enables the "Cards" mode — renders a card for each row */
   cardRenderer?: (row: TData) => ReactNode
+  /**
+   * Enables a third "Contacts" mode: the `mobileRow` list — grouped section
+   * headers, tap-to-open detail sheet and all — rendered at *every* breakpoint
+   * rather than only below `md`.
+   *
+   * For lookup-oriented pages (a staff directory, a supplier list) a phone-style
+   * A–Z list beats a data table on desktop too, and this keeps that one list
+   * anatomy instead of a page hand-rolling a second one. Requires `mobileRow`;
+   * ignored without it. Opt-in, so pages that don't set it are unaffected — it
+   * also un-hides the toggle below `md`, which is otherwise desktop-only.
+   */
+  contactsView?: boolean
+  /**
+   * Which mode the page opens in. Defaults to "list" (the table), so existing
+   * pages are unchanged. Falls back to the table if the requested mode isn't
+   * available.
+   *
+   * Pass `{ mobile, desktop }` when the best opening view differs by width. A
+   * records page with eight columns wants the row list on a phone and the table
+   * on a desktop that has room for all of them; a lookup page like the staff
+   * directory wants its A–Z list at both, and passes a plain string.
+   *
+   * This is only the *default* — once the reader picks a mode from the toggle,
+   * their choice holds across resizes.
+   */
+  defaultViewMode?: DataTableViewMode | { mobile: DataTableViewMode; desktop: DataTableViewMode }
+
+  /**
+   * Mobile row anatomy. Supplying this switches the table for a native-style list
+   * below `md` — the pattern workforce/directory apps use, where a squeezed data
+   * table is unreadable.
+   *
+   * Deliberately a *structured* config rather than a free render function: every
+   * page then produces the same row anatomy (accent · leading · title/subtitle ·
+   * fixed-width trailing), so values stay aligned down the page across the whole
+   * app. Pages that omit it keep the existing table on mobile, so this is opt-in
+   * and changes nothing until adopted.
+   */
+  mobileRow?: {
+    /** Left status accent bar, e.g. "bg-red-500". */
+    accentClass?: (row: TData) => string | undefined
+    /** Avatar, S/N bubble, or icon slot. Receives row and 1-based Serial Number (sn). */
+    leading?: (row: TData, sn: number) => ReactNode
+    /** Primary line. */
+    title: (row: TData) => ReactNode
+    /** Secondary line — status, category, meta. */
+    subtitle?: (row: TData) => ReactNode
+    /** Right-hand slot, fixed width so it aligns across rows. */
+    trailing?: (row: TData) => ReactNode
+    /** Tapping the row. Ignored when `detail` is set (the sheet opens instead). */
+    onSelect?: (row: TData) => void
+
+    /**
+     * Sticky section headers, contacts-app style — return the heading a row belongs
+     * under (e.g. its surname initial). Grouping applies to the mobile list only;
+     * the desktop table keeps its own sort.
+     */
+    groupBy?: (row: TData) => string
+
+    /**
+     * The standard detail sheet. Supplying this makes tapping a row open a bottom
+     * sheet with the same anatomy on every page — avatar, title, badges, tap-to-copy
+     * fields, and footer actions — so no page hand-rolls its own.
+     */
+    detail?: {
+      title: (row: TData) => string
+      subtitle?: (row: TData) => ReactNode
+      avatar?: (row: TData) => ReactNode
+      badges?: (row: TData) => ReactNode
+      fields: (row: TData) => DataTableDetailField[]
+      actions?: (row: TData) => DataTableDetailAction[]
+    }
+  }
 
   // ── URL Sync ─────────────────────────────────────────────────────────────
   /**
@@ -190,6 +312,12 @@ export interface DataTableProps<TData> {
   showRowNumbers?: boolean
   /** Show column visibility toggle button (default: true) */
   columnToggle?: boolean
+  /**
+   * Pins the search/filter toolbar below the app bar while the list scrolls.
+   * Opt-in: it only helps on long, scan-heavy lists, and on pages that scroll
+   * inside their own container it would pin to the wrong edge.
+   */
+  stickyToolbar?: boolean
   /** Number of skeleton rows shown while loading (default: 8) */
   skeletonRows?: number
 
@@ -218,7 +346,48 @@ export interface DataTablePageProps {
   secondaryTabs?: DataTableTab[]
   secondaryActiveTab?: string
   onSecondaryTabChange?: (tab: string) => void
-  /** Stats row rendered between header and table content */
+  /**
+   * Stats row rendered between header and table content. When `statBadges` is
+   * supplied as well, the two form a responsive pair: badges below `md`, this
+   * from `md` up.
+   */
   stats?: ReactNode
+
+  /**
+   * Compact metric pills shown under the header — the mobile-friendly counterpart
+   * to `stats`. Full StatCards cost most of a phone screen before any data is
+   * visible, so pages should prefer these and reserve `stats` for desktop-heavy
+   * dashboards. Rendered as outline pills so they never sit on a filled
+   * background (muted text on a filled badge fails contrast).
+   */
+  statBadges?: {
+    label: string
+    tone?: string
+    /** Leading glyph. Used by both styles. */
+    icon?: LucideIcon
+    /**
+     * Makes the badge a control. Only supply this where the metric maps onto a
+     * filter one-to-one — a count of *distinct* values (12 offices) has no single
+     * value to filter to, and a badge that looks pressable but isn't is worse than
+     * a plain one.
+     */
+    onClick?: () => void
+    /** Renders the badge in its engaged state; pairs with `onClick`. */
+    active?: boolean
+  }[]
+  /**
+   * How `statBadges` render.
+   * - "pill" (default) bordered chips, one per metric
+   * - "line"           a single muted metadata row, icon + value + label, scrolling
+   *                    horizontally on mobile rather than wrapping into a ragged
+   *                    block. Preferred on lookup pages, where the metrics are
+   *                    context rather than content and every row above the search
+   *                    box costs a phone screen.
+   */
+  statBadgeStyle?: "pill" | "line"
+  /** Vertical rhythm between page sections. See PageWrapper's `spacing`. */
+  spacing?: "standard" | "responsive" | "compact" | "tight" | "none"
+  /** Where header actions sit. See PageHeader's `actionsPlacement`. */
+  actionsPlacement?: "inline" | "inline-always" | "below"
   children: ReactNode
 }

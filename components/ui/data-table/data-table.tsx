@@ -26,6 +26,7 @@ import { CSS } from "@dnd-kit/utilities"
 import {
   ChevronDown,
   ChevronRight,
+  SlidersHorizontal as FiltersIcon,
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
@@ -35,11 +36,14 @@ import {
   X,
   LayoutGrid,
   List,
+  Table2 as TableProperties,
   Check,
   GripVertical,
   MoreHorizontal,
+  ExternalLink,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
+import { useIsMobile } from "@/hooks/use-mobile"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -57,7 +61,18 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@/components/ui/sheet"
 import { cn } from "@/lib/utils"
+import { toast } from "sonner"
+import { Copy } from "lucide-react"
 import type { DataTableProps, SortConfig } from "./types"
 
 // ─── Debounce hook ───────────────────────────────────────────────────────────
@@ -274,6 +289,8 @@ export function DataTable<TData>({
   searchDisabled = false,
   // Filters
   filters = [],
+  filterValues: controlledFilterValues,
+  onFilterValuesChange,
   // Sorting
   sortFn,
   // Pagination
@@ -295,6 +312,9 @@ export function DataTable<TData>({
   // View
   viewToggle = false,
   cardRenderer,
+  contactsView = false,
+  defaultViewMode,
+  mobileRow,
   // URL sync
   urlSync = false,
   // Appearance
@@ -302,6 +322,7 @@ export function DataTable<TData>({
   minWidth,
   showRowNumbers = true,
   columnToggle = true,
+  stickyToolbar = false,
   skeletonRows = 8,
   // State
   isLoading = false,
@@ -352,7 +373,76 @@ export function DataTable<TData>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []) // only on mount
 
-  const [filterValues, setFilterValues] = useState<Record<string, string[]>>(initialFilters)
+  const [internalFilterValues, setInternalFilterValues] = useState<Record<string, string[]>>(initialFilters)
+  const isFilterControlled = controlledFilterValues !== undefined
+  const filterValues = controlledFilterValues ?? internalFilterValues
+
+  // Every mutation runs through here so controlled and uncontrolled modes cannot
+  // drift: the parent always hears about the change, and internal state is only
+  // written when the parent isn't the owner.
+  const commitFilters = useCallback(
+    (updater: (prev: Record<string, string[]>) => Record<string, string[]>) => {
+      // Closes over this render's values rather than a ref: these only run from
+      // event handlers, which always see the committed render's state.
+      const next = updater(filterValues)
+      if (!isFilterControlled) setInternalFilterValues(next)
+      onFilterValuesChange?.(next)
+    },
+    [filterValues, isFilterControlled, onFilterValuesChange]
+  )
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
+  const [detailRow, setDetailRow] = useState<TData | null>(null)
+  const detailConfig = mobileRow?.detail
+  /** Row activation when the page has no detail sheet — it opens its own dialog. */
+  const onRowSelect = mobileRow?.onSelect
+
+  // ─── View mode (user-controlled; never auto-switch) ──────────────────────
+  // Declared above the URL sync because it is part of it: a shared link that
+  // restores the sender's search and filters but drops the view they were
+  // looking at arrives showing something they never saw.
+  const [manualViewMode, setManualViewMode] = useState<"list" | "card" | "contacts" | null>(() => {
+    if (!urlSync) return null
+    const fromUrl = searchParams.get("view")
+    return fromUrl === "list" || fromUrl === "card" || fromUrl === "contacts" ? fromUrl : null
+  })
+  /** "Contacts" is only real when the page supplied the list anatomy it renders. */
+  const contactsAvailable = contactsView && Boolean(mobileRow)
+
+  // A page may open in a different mode per width. Resolved from the live
+  // breakpoint rather than baked in, but only ever as the *default*: once
+  // `manualViewMode` is set the reader's choice survives every resize.
+  // `useIsMobile` reports false until its effect runs, so the first paint is the
+  // desktop default and a phone settles on its own a frame later.
+  const isMobile = useIsMobile()
+  const resolvedDefaultViewMode =
+    defaultViewMode && typeof defaultViewMode === "object"
+      ? isMobile
+        ? defaultViewMode.mobile
+        : defaultViewMode.desktop
+      : defaultViewMode
+
+  const requestedViewMode = manualViewMode ?? resolvedDefaultViewMode ?? "list"
+  const viewMode = requestedViewMode === "contacts" && !contactsAvailable ? "list" : requestedViewMode
+
+  /**
+   * The one pair CSS can settle without JS: row list below `md`, table from `md`
+   * up. Rendering both and letting media queries choose means the correct shape
+   * is present in the very first paint — `useIsMobile` only reports after the
+   * first effect, so resolving this in JS alone flashes the desktop table on a
+   * phone. Only while the reader has made no choice of their own; the moment
+   * they touch the toggle a single mode takes over.
+   */
+  const responsivePair =
+    !manualViewMode &&
+    contactsAvailable &&
+    // A grouped list renders whole while the table paginates, so the two halves
+    // of the pair would disagree about the pager. An A–Z book wants to be the
+    // list at every width anyway — that is what a plain "contacts" default is for.
+    !mobileRow?.groupBy &&
+    defaultViewMode &&
+    typeof defaultViewMode === "object" &&
+    defaultViewMode.mobile === "contacts" &&
+    defaultViewMode.desktop === "list"
 
   // ─── Sync state → URL ──────────────────────────────────────────────────────
   const isFirstRender = useRef(true)
@@ -367,8 +457,9 @@ export function DataTable<TData>({
     for (const [key, vals] of Object.entries(filterValues)) {
       for (const v of vals) params.append(key, v)
     }
+    if (manualViewMode) params.set("view", manualViewMode)
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-  }, [searchQuery, filterValues, urlSync, pathname, router])
+  }, [searchQuery, filterValues, manualViewMode, urlSync, pathname, router])
 
   // ─── Trigger external search callback ──────────────────────────────────────
   useEffect(() => {
@@ -389,9 +480,35 @@ export function DataTable<TData>({
   // ─── Selected rows ─────────────────────────────────────────────────────────
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
 
-  // ─── View mode (user-controlled; never auto-switch) ──────────────────────
-  const [manualViewMode, setManualViewMode] = useState<"list" | "card" | null>(null)
-  const viewMode = manualViewMode ?? "list"
+  // ─── Sticky offsets ───────────────────────────────────────────────────────
+  // Group headings stick *below* the pinned toolbar, not at the viewport top —
+  // otherwise the letter slides under the toolbar and the section is unlabelled
+  // exactly while you are scrolling through it. The toolbar's height varies with
+  // breakpoint and filter count, so it is measured rather than guessed.
+  const toolbarRef = useRef<HTMLDivElement | null>(null)
+  const rootRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    const root = rootRef.current
+    if (!root) return
+    if (!stickyToolbar) {
+      root.style.setProperty("--dt-sticky-offset", "0px")
+      return
+    }
+
+    const APP_BAR_PX = 64 // matches the toolbar's `top-16`
+    const measure = () => {
+      const height = toolbarRef.current?.offsetHeight ?? 0
+      root.style.setProperty("--dt-sticky-offset", `${APP_BAR_PX + height}px`)
+    }
+
+    measure()
+    const node = toolbarRef.current
+    if (!node || typeof ResizeObserver === "undefined") return
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [stickyToolbar])
 
   // ─── Column visibility ────────────────────────────────────────────────────
   const [hiddenColumns, setHiddenColumns] = useState<Set<string>>(
@@ -607,21 +724,24 @@ export function DataTable<TData>({
     }
   }, [paginatedData, selectedRows.size, getRowId])
 
-  const handleFilterChange = useCallback((key: string, values: string[]) => {
-    setFilterValues((prev) => ({ ...prev, [key]: values }))
-  }, [])
+  const handleFilterChange = useCallback(
+    (key: string, values: string[]) => {
+      commitFilters((prev) => ({ ...prev, [key]: values }))
+    },
+    [commitFilters]
+  )
 
-  const removeFilterPill = useCallback((key: string, value: string) => {
-    setFilterValues((prev) => ({
-      ...prev,
-      [key]: (prev[key] ?? []).filter((v) => v !== value),
-    }))
-  }, [])
+  const removeFilterPill = useCallback(
+    (key: string, value: string) => {
+      commitFilters((prev) => ({ ...prev, [key]: (prev[key] ?? []).filter((v) => v !== value) }))
+    },
+    [commitFilters]
+  )
 
   const clearAllFilters = useCallback(() => {
     setSearchInput("")
-    setFilterValues({})
-  }, [])
+    commitFilters(() => ({}))
+  }, [commitFilters])
 
   const handlePageChange = useCallback(
     (newPage: number) => {
@@ -645,10 +765,17 @@ export function DataTable<TData>({
         e.preventDefault()
         rows[idx - 1]?.focus()
       } else if (e.key === "Enter" || e.key === " ") {
-        if (expandable) toggleExpand(rowId)
+        const targetRow = paginatedData.find((r) => getRowId(r) === rowId)
+        if (expandable) {
+          toggleExpand(rowId)
+        } else if (detailConfig) {
+          if (targetRow) setDetailRow(targetRow)
+        } else if (onRowSelect && targetRow) {
+          onRowSelect(targetRow)
+        }
       }
     },
-    [expandable, toggleExpand]
+    [expandable, toggleExpand, detailConfig, onRowSelect, paginatedData, getRowId]
   )
 
   // Where the pointer went down on a row, so a click that was really a text-selection
@@ -677,10 +804,39 @@ export function DataTable<TData>({
 
   // ─── Toolbar (shared across all states) ──────────────────────────────────
 
-  const showToolbar = !searchDisabled || filters.length > 0 || columnToggle || (viewToggle && cardRenderer)
+  // Three genuinely distinct renderings, and they stay distinct at every width:
+  // List is the row anatomy, Cards is the grid, Table is the real table (which
+  // scrolls horizontally on a phone rather than being swapped for the list).
+  // `hideOnMobile` is also ignored here — it exists to squeeze a table that is a
+  // page's *only* mobile rendering, and choosing Table over an available List is
+  // an explicit request to see the columns.
+  const viewOptions = [
+    // "Contacts" only when the list is actually grouped like an address book;
+    // on a records page it is just the list view and must not claim otherwise.
+    ...(contactsAvailable
+      ? [
+          mobileRow?.groupBy
+            ? { key: "contacts" as const, label: "Contacts", Icon: List, hint: "Contacts list (A–Z)" }
+            : { key: "contacts" as const, label: "List", Icon: List, hint: "List view" },
+        ]
+      : []),
+    ...(cardRenderer ? [{ key: "card" as const, label: "Cards", Icon: LayoutGrid, hint: "Card grid" }] : []),
+    { key: "list" as const, label: "Table", Icon: TableProperties, hint: "Data table" },
+  ]
+  const showViewToggle = viewToggle && viewOptions.length > 1
+
+  const showToolbar = !searchDisabled || filters.length > 0 || columnToggle || showViewToggle
 
   const toolbar = showToolbar ? (
-    <div className="space-y-3 p-4">
+    <div
+      ref={toolbarRef}
+      className={cn(
+        "space-y-3 p-4",
+        // `top-16` clears the app bar. Card has no overflow of its own, so the
+        // sticky context is the page scroller, which is what we want.
+        stickyToolbar && "bg-card/95 sticky top-16 z-20 rounded-t-xl backdrop-blur-md"
+      )}
+    >
       {/* Row 1: search + column toggle + view toggle */}
       <div className="flex items-center gap-2">
         {!searchDisabled && (
@@ -706,10 +862,77 @@ export function DataTable<TData>({
         )}
 
         <div className="flex shrink-0 items-center gap-2">
+          {/* Mobile filters: one button + sheet, instead of a stack of selects */}
+          {filters.length > 0 && (
+            <Sheet open={mobileFiltersOpen} onOpenChange={setMobileFiltersOpen}>
+              <SheetTrigger asChild>
+                <Button variant="outline" size="icon" className="relative h-9 w-9 md:hidden" aria-label="Filters">
+                  <FiltersIcon className="h-4 w-4" />
+                  {activeFilterPills.length > 0 && (
+                    <span className="bg-primary text-primary-foreground absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full text-[10px] font-bold">
+                      {activeFilterPills.length}
+                    </span>
+                  )}
+                </Button>
+              </SheetTrigger>
+              <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto px-4 sm:px-6">
+                <div className="mx-auto w-full max-w-lg space-y-4 py-2">
+                  <SheetHeader>
+                    <SheetTitle>Filters</SheetTitle>
+                  </SheetHeader>
+                  <div className="space-y-3 pb-2">
+                    {filters.map((filter) => (
+                      <div key={filter.key} className="space-y-1.5">
+                        <p className="text-muted-foreground text-xs font-medium">{filter.label}</p>
+                        {filter.render ? (
+                          filter.render(filterValues[filter.key] ?? [], (vals) => handleFilterChange(filter.key, vals))
+                        ) : filter.multi === false ? (
+                          <Select
+                            value={filterValues[filter.key]?.[0] ?? "all"}
+                            onValueChange={(val) => handleFilterChange(filter.key, val === "all" ? [] : [val])}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder={filter.placeholder ?? filter.label} />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="all">{filter.placeholder ?? `All ${filter.label}`}</SelectItem>
+                              {filter.options.map((opt: { value: string; label: string }) => (
+                                <SelectItem key={opt.value} value={opt.value}>
+                                  {opt.label}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <SearchableMultiSelect
+                            label={filter.label}
+                            icon={filter.icon}
+                            values={filterValues[filter.key] ?? []}
+                            options={filter.options}
+                            onChange={(vals) => handleFilterChange(filter.key, vals)}
+                            placeholder={filter.placeholder ?? `All ${filter.label}`}
+                          />
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <SheetFooter className="flex-row gap-2 pt-2">
+                    <Button variant="outline" className="flex-1" onClick={clearAllFilters}>
+                      Clear all
+                    </Button>
+                    <SheetClose asChild>
+                      <Button className="flex-1">Apply</Button>
+                    </SheetClose>
+                  </SheetFooter>
+                </div>
+              </SheetContent>
+            </Sheet>
+          )}
+
           {columnToggle && columns.length > 1 && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9 gap-2">
+                <Button variant="outline" size="sm" className="hidden h-9 gap-2 md:inline-flex">
                   <SlidersHorizontal className="h-4 w-4" />
                   <span className="hidden sm:inline">Columns</span>
                   {hiddenColumns.size > 0 && (
@@ -757,70 +980,102 @@ export function DataTable<TData>({
               </DropdownMenuContent>
             </DropdownMenu>
           )}
-
-          {viewToggle && cardRenderer && (
-            <div className="flex items-center rounded-lg border p-1">
-              <Button
-                variant={viewMode === "list" ? "default" : "ghost"}
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => setManualViewMode("list")}
-                aria-label="List view"
-              >
-                <List className="h-4 w-4" />
-              </Button>
-              <Button
-                variant={viewMode === "card" ? "default" : "ghost"}
-                size="icon"
-                className="h-7 w-7"
-                onClick={() => setManualViewMode("card")}
-                aria-label="Card view"
-              >
-                <LayoutGrid className="h-4 w-4" />
-              </Button>
-            </div>
-          )}
         </div>
       </div>
 
-      {/* Row 2: filter dropdowns */}
-      {filters.length > 0 && (
-        <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
-          {filters.map((filter) =>
-            filter.render ? (
-              <div key={filter.key}>
-                {filter.render(filterValues[filter.key] ?? [], (vals) => handleFilterChange(filter.key, vals))}
-              </div>
-            ) : filter.multi === false ? (
-              <Select
-                key={filter.key}
-                value={filterValues[filter.key]?.[0] ?? "all"}
-                onValueChange={(val) => handleFilterChange(filter.key, val === "all" ? [] : [val])}
+      {/* Row 2: filter dropdowns (desktop) with the view switcher pinned right.
+          On mobile the filters live in the sheet from row 1, so this row carries
+          just the switcher — stretched full-width, since a lone control hugging
+          the right edge leaves a dead half-row. */}
+      {(filters.length > 0 || showViewToggle) && (
+        <div className="flex items-center gap-2">
+          <div className="hidden grid-cols-2 gap-2 md:grid md:flex-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6">
+            {filters.map((filter) =>
+              filter.render ? (
+                <div key={filter.key}>
+                  {filter.render(filterValues[filter.key] ?? [], (vals) => handleFilterChange(filter.key, vals))}
+                </div>
+              ) : filter.multi === false ? (
+                <Select
+                  key={filter.key}
+                  value={filterValues[filter.key]?.[0] ?? "all"}
+                  onValueChange={(val) => handleFilterChange(filter.key, val === "all" ? [] : [val])}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder={filter.placeholder ?? filter.label} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">{filter.placeholder ?? `All ${filter.label}`}</SelectItem>
+                    {filter.options.map((opt: { value: string; label: string }) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <SearchableMultiSelect
+                  key={filter.key}
+                  label={filter.label}
+                  icon={filter.icon}
+                  values={filterValues[filter.key] ?? []}
+                  options={filter.options}
+                  onChange={(vals) => handleFilterChange(filter.key, vals)}
+                  placeholder={filter.placeholder ?? `All ${filter.label}`}
+                />
+              )
+            )}
+          </div>
+
+          <div className="w-full md:ml-auto md:w-auto md:shrink-0">
+            {/* Segmented view switcher. Desktop-only unless the page offers the
+                contacts list, which is a mode phones need to reach as well. */}
+            {showViewToggle && (
+              <div
+                className={cn(
+                  // Identical surface to the selects beside it: `border-input` over
+                  // transparent, so it picks up the card underneath rather than the
+                  // page background (which is a shade darker and reads as dull).
+                  "border-input h-9 items-center rounded-lg border bg-transparent p-1",
+                  contactsAvailable ? "flex w-full md:inline-flex md:w-auto md:shrink-0" : "hidden md:inline-flex"
+                )}
+                role="group"
+                aria-label="View mode"
               >
-                <SelectTrigger>
-                  <SelectValue placeholder={filter.placeholder ?? filter.label} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">{filter.placeholder ?? `All ${filter.label}`}</SelectItem>
-                  {filter.options.map((opt: { value: string; label: string }) => (
-                    <SelectItem key={opt.value} value={opt.value}>
-                      {opt.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ) : (
-              <SearchableMultiSelect
-                key={filter.key}
-                label={filter.label}
-                icon={filter.icon}
-                values={filterValues[filter.key] ?? []}
-                options={filter.options}
-                onChange={(vals) => handleFilterChange(filter.key, vals)}
-                placeholder={filter.placeholder ?? `All ${filter.label}`}
-              />
-            )
-          )}
+                {viewOptions.map(({ key, label, Icon, hint }) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setManualViewMode(key)}
+                    className={cn(
+                      "inline-flex h-7 flex-1 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors md:flex-none",
+                      // While the body is CSS-resolved, so is the pressed state —
+                      // otherwise the highlight says "Table" for a frame on a phone
+                      // that is already showing the list.
+                      responsivePair
+                        ? cn(
+                            key === "contacts"
+                              ? "bg-muted text-foreground md:text-muted-foreground shadow-xs md:bg-transparent md:shadow-none"
+                              : "text-muted-foreground hover:text-foreground",
+                            key === "list" && "md:bg-muted md:text-foreground md:shadow-xs"
+                          )
+                        : viewMode === key
+                          ? "bg-muted text-foreground shadow-xs"
+                          : "text-muted-foreground hover:text-foreground"
+                    )}
+                    title={hint}
+                    aria-label={`${label} view`}
+                    // aria-pressed cannot vary by media query; it reports the
+                    // desktop mode, which is what the first paint renders.
+                    aria-pressed={responsivePair ? key === "list" : viewMode === key}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    <span className={cn(contactsAvailable ? "inline" : "hidden lg:inline")}>{label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -938,7 +1193,7 @@ export function DataTable<TData>({
                 ) : (
                   <>
                     {expandable && expandAtStart && <TableHead className="w-10 text-center" />}
-                    {showRowNumbers && <TableHead className="w-14 text-center">S/N</TableHead>}
+                    {showRowNumbers && <TableHead className="w-12 text-center">S/N</TableHead>}
                   </>
                 )}
                 {visibleColumns.map((col) => (
@@ -947,7 +1202,7 @@ export function DataTable<TData>({
                     id={col.key}
                     label={col.label}
                     align={col.align}
-                    hideOnMobile={col.hideOnMobile}
+                    hideOnMobile={col.hideOnMobile && !contactsAvailable}
                     sortable={col.sortable}
                     resizable={col.resizable}
                     sortConfig={sortConfig}
@@ -1008,17 +1263,25 @@ export function DataTable<TData>({
                         if (clickWasTextSelection(e)) return
                         if (canExpand) {
                           toggleExpand(rowId)
+                        } else if (detailConfig) {
+                          setDetailRow(row)
+                        } else if (onRowSelect) {
+                          // A page whose detail lives in its own dialog opens it from
+                          // the table row too, so "click the row" means the same thing
+                          // in every view rather than only in the list.
+                          onRowSelect(row)
                         }
                       }}
                       className={cn(
                         isExpanded && "border-b-0",
                         selectedRows.has(rowId) && "bg-muted/50",
-                        canExpand && "hover:bg-muted/30 cursor-pointer",
+                        (canExpand || Boolean(detailConfig) || Boolean(onRowSelect)) &&
+                          "hover:bg-muted/30 cursor-pointer",
                         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
                       )}
                     >
                       {selectable && (
-                        <TableCell>
+                        <TableCell className="w-10 text-center">
                           <Checkbox
                             checked={selectedRows.has(rowId)}
                             onCheckedChange={() => toggleSelect(rowId)}
@@ -1027,8 +1290,8 @@ export function DataTable<TData>({
                         </TableCell>
                       )}
                       {showRowNumbers && expandable && expandAtStart ? (
-                        <TableCell className="text-muted-foreground font-medium whitespace-nowrap">
-                          <div className="flex items-center gap-1">
+                        <TableCell className="text-muted-foreground w-16 text-center font-mono text-xs font-medium whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1">
                             {canExpand ? (
                               <Button
                                 variant="ghost"
@@ -1054,7 +1317,7 @@ export function DataTable<TData>({
                       ) : (
                         <>
                           {expandable && expandAtStart && (
-                            <TableCell>
+                            <TableCell className="w-10 text-center">
                               {canExpand ? (
                                 <Button
                                   variant="ghost"
@@ -1077,7 +1340,9 @@ export function DataTable<TData>({
                             </TableCell>
                           )}
                           {showRowNumbers && (
-                            <TableCell className="text-muted-foreground font-medium">{globalIndex + 1}</TableCell>
+                            <TableCell className="text-muted-foreground w-12 text-center font-mono text-xs font-medium">
+                              {globalIndex + 1}
+                            </TableCell>
                           )}
                         </>
                       )}
@@ -1087,7 +1352,7 @@ export function DataTable<TData>({
                           className={cn(
                             col.align === "right" && "text-right",
                             col.align === "center" && "text-center",
-                            col.hideOnMobile && "hidden md:table-cell"
+                            col.hideOnMobile && !contactsAvailable && "hidden md:table-cell"
                           )}
                         >
                           {col.render ? col.render(row, globalIndex) : col.accessor ? (col.accessor(row) ?? "-") : "-"}
@@ -1179,10 +1444,242 @@ export function DataTable<TData>({
     </DndContext>
   )
 
+  // ─── Mobile list ──────────────────────────────────────────────────────────
+  // Below `md` a data table is unreadable: columns either overflow the viewport or
+  // get hidden until the row says nothing. Pages that supply `mobileRow` render a
+  // native-style list here instead. The anatomy is fixed by the config shape, so
+  // every page's rows align identically — that consistency is the point.
+
+  // A *grouped* contacts list renders whole: an A–Z book cut across numbered
+  // pages stops being a book, and a page that opts into `groupBy` is saying its
+  // data is lookup-sized. An ungrouped contacts list has no such structure to
+  // preserve, so it keeps pagination rather than rendering an unbounded record
+  // set — the same list anatomy, still one screen of work at a time.
+  const listRendersEverything = viewMode === "contacts" && Boolean(mobileRow?.groupBy)
+  const listSource = listRendersEverything ? sortedData : paginatedData
+
+  // Serial numbers count down the list actually being rendered — the whole set
+  // starts at 1, a page carries its own offset.
+  const snByRowId = useMemo(() => {
+    const offset = listRendersEverything || isServerPagination ? 0 : activePage * pageSize
+    const map = new Map<string, number>()
+    listSource.forEach((row, index) => map.set(getRowId(row), offset + index + 1))
+    return map
+  }, [listSource, listRendersEverything, isServerPagination, activePage, pageSize, getRowId])
+
+  const mobileGroups = useMemo(() => {
+    if (!mobileRow) return []
+    if (!mobileRow.groupBy) return [{ heading: null as string | null, rows: listSource }]
+    const map = new Map<string, TData[]>()
+    for (const row of listSource) {
+      const heading = mobileRow.groupBy(row)
+      if (!map.has(heading)) map.set(heading, [])
+      map.get(heading)!.push(row)
+    }
+
+    // Sections are ordered by their heading, not by which row happened to appear
+    // first: sort the table by any column and the A–Z book must still read A–Z.
+    // Headings that do not start with a letter or digit ("#", "—") collect at the
+    // end, the way a contacts app files them.
+    const isSymbol = (heading: string) => !/^[\p{L}\p{N}]/u.test(heading)
+    return Array.from(map.entries())
+      .sort(([a], [b]) => {
+        if (isSymbol(a) !== isSymbol(b)) return isSymbol(a) ? 1 : -1
+        return a.localeCompare(b, undefined, { numeric: true })
+      })
+      .map(([heading, rows]) => ({ heading, rows }))
+  }, [mobileRow, listSource])
+
+  const copyField = useCallback((value: string, label: string) => {
+    navigator.clipboard
+      .writeText(value)
+      .then(() => toast.success(`Copied ${label.toLowerCase()}`, { description: value }))
+      .catch(() => toast.error("Clipboard access was blocked"))
+  }, [])
+
+  const mobileList = mobileRow ? (
+    <div>
+      {mobileGroups.map((group, groupIdx) => (
+        <div key={group.heading ?? groupIdx}>
+          {group.heading && (
+            <div
+              className="bg-muted text-muted-foreground sticky z-[5] border-b px-3 py-1 text-xs font-bold"
+              style={{ top: "var(--dt-sticky-offset, 0px)" }}
+            >
+              {group.heading}
+            </div>
+          )}
+          <div className="divide-y">
+            {group.rows.map((row) => {
+              const rowId = getRowId(row)
+              const accent = mobileRow.accentClass?.(row)
+              const canExpand = expandable && (!expandable.canExpand || expandable.canExpand(row))
+              const isExpanded = expandedRows.has(rowId)
+              const sn = snByRowId.get(rowId) ?? 1
+
+              const handleSelect = () => {
+                if (mobileRow.detail) setDetailRow(row)
+                else if (mobileRow.onSelect) mobileRow.onSelect(row)
+                else if (canExpand) toggleExpand(rowId)
+              }
+
+              const leadingContent = mobileRow.leading ? (
+                mobileRow.leading(row, sn)
+              ) : showRowNumbers ? (
+                <span className="bg-muted text-muted-foreground flex h-7 w-7 shrink-0 items-center justify-center rounded-full font-mono text-xs font-medium">
+                  {sn}
+                </span>
+              ) : null
+
+              return (
+                <div key={rowId}>
+                  <button
+                    type="button"
+                    onClick={handleSelect}
+                    className="hover:bg-muted/40 active:bg-muted relative flex w-full items-center gap-3 py-2.5 pr-3.5 pl-3 text-left transition-colors"
+                  >
+                    {accent && <span className={cn("absolute inset-y-1 left-0 w-1 rounded-r", accent)} />}
+                    {leadingContent && <span className="shrink-0">{leadingContent}</span>}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">{mobileRow.title(row)}</span>
+                      {mobileRow.subtitle && (
+                        <span className="text-muted-foreground block truncate text-xs">{mobileRow.subtitle(row)}</span>
+                      )}
+                    </span>
+                    {mobileRow.trailing && <span className="shrink-0 text-right">{mobileRow.trailing(row)}</span>}
+                    <ChevronRight className="text-muted-foreground/50 h-4 w-4 shrink-0" />
+                  </button>
+                  {expandable && isExpanded && canExpand && (
+                    <div className="bg-muted/30 border-t p-3">{expandable.render(row)}</div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      ))}
+    </div>
+  ) : null
+
+  // ─── Standard mobile detail sheet ─────────────────────────────────────────
+  // One sheet anatomy for the whole app: avatar, title, badges, tap-to-copy
+  // fields, footer actions. Pages supply values, never markup.
+  const detailSheet = detailConfig ? (
+    <Sheet open={detailRow !== null} onOpenChange={(open) => !open && setDetailRow(null)}>
+      <SheetContent side="bottom" className="max-h-[85vh] overflow-y-auto px-4 sm:px-6">
+        {detailRow && (
+          <div className="mx-auto w-full max-w-lg space-y-4 py-2">
+            <SheetHeader className="items-center text-center">
+              {detailConfig.avatar?.(detailRow)}
+              <SheetTitle className="mt-1 text-base">{detailConfig.title(detailRow)}</SheetTitle>
+              {detailConfig.subtitle && (
+                <div className="text-muted-foreground text-sm">{detailConfig.subtitle(detailRow)}</div>
+              )}
+              {detailConfig.badges && (
+                <div className="mt-1 flex flex-wrap items-center justify-center gap-1.5">
+                  {detailConfig.badges(detailRow)}
+                </div>
+              )}
+            </SheetHeader>
+
+            <div className="space-y-1">
+              {detailConfig.fields(detailRow).map((field) => {
+                if (!field.value) return null
+                const canOpen = Boolean(field.href)
+                const canCopy = !canOpen && field.copyable !== false
+                const Icon = field.icon
+                const body = (
+                  <>
+                    {Icon && <Icon className="text-muted-foreground h-4 w-4 shrink-0" />}
+                    <span className="min-w-0 flex-1">
+                      <span className="text-muted-foreground block text-[11px]">{field.label}</span>
+                      <span
+                        className={cn(
+                          "block text-sm leading-relaxed break-words whitespace-pre-wrap",
+                          field.muted && "text-muted-foreground",
+                          canOpen && "text-primary font-medium"
+                        )}
+                      >
+                        {field.value}
+                      </span>
+                    </span>
+                    {canOpen && <ExternalLink className="text-primary/70 h-3.5 w-3.5 shrink-0" />}
+                    {canCopy && <Copy className="text-muted-foreground/60 h-3.5 w-3.5 shrink-0" />}
+                  </>
+                )
+
+                if (canOpen) {
+                  return (
+                    <a
+                      key={field.label}
+                      href={field.href}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="hover:bg-muted/40 flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors"
+                    >
+                      {body}
+                    </a>
+                  )
+                }
+
+                return canCopy ? (
+                  <button
+                    key={field.label}
+                    type="button"
+                    onClick={() => copyField(String(field.value), field.label)}
+                    className="hover:bg-muted/40 flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors"
+                  >
+                    {body}
+                  </button>
+                ) : (
+                  <div key={field.label} className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5">
+                    {body}
+                  </div>
+                )
+              })}
+            </div>
+
+            {detailConfig.actions && detailConfig.actions(detailRow).length > 0 && (
+              <SheetFooter className="flex-row gap-2 pt-2">
+                {detailConfig.actions(detailRow).map((action) => {
+                  const Icon = action.icon
+                  return action.href ? (
+                    <Button
+                      key={action.label}
+                      asChild
+                      variant={action.variant ?? "default"}
+                      className={cn("flex-1 gap-2", action.className)}
+                    >
+                      <a href={action.href}>
+                        {Icon && <Icon className="h-4 w-4" />}
+                        {action.label}
+                      </a>
+                    </Button>
+                  ) : (
+                    <Button
+                      key={action.label}
+                      variant={action.variant ?? "default"}
+                      className={cn("flex-1 gap-2", action.className)}
+                      onClick={action.onClick}
+                    >
+                      {Icon && <Icon className="h-4 w-4" />}
+                      {action.label}
+                    </Button>
+                  )
+                })}
+              </SheetFooter>
+            )}
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  ) : null
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="space-y-3">
+    <div ref={rootRef} className="space-y-3">
+      {detailSheet}
       {/* Card view: toolbar card + grid below */}
       {!isLoading && !error && viewMode === "card" && cardRenderer ? (
         <>
@@ -1202,9 +1699,37 @@ export function DataTable<TData>({
             />
           ) : (
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {paginatedData.map((row) => (
-                <div key={getRowId(row)}>{cardRenderer(row)}</div>
-              ))}
+              {paginatedData.map((row) => {
+                const rowId = getRowId(row)
+                const handleCardClick = (e: ReactMouseEvent<HTMLDivElement>) => {
+                  const target = e.target as HTMLElement
+                  if (
+                    target.closest("button") ||
+                    target.closest("a") ||
+                    target.closest("input") ||
+                    target.closest("label") ||
+                    target.closest("[role='menuitem']") ||
+                    target.closest("[role='checkbox']")
+                  ) {
+                    return
+                  }
+                  if (detailConfig) setDetailRow(row)
+                  else if (mobileRow?.onSelect) mobileRow.onSelect(row)
+                }
+
+                return (
+                  <div
+                    key={rowId}
+                    onClick={handleCardClick}
+                    className={cn(
+                      "h-full",
+                      (Boolean(detailConfig) || Boolean(mobileRow?.onSelect)) && "cursor-pointer"
+                    )}
+                  >
+                    {cardRenderer(row)}
+                  </div>
+                )
+              })}
             </div>
           )}
         </>
@@ -1233,6 +1758,58 @@ export function DataTable<TData>({
                 </Button>
               )}
             </div>
+          ) : responsivePair && mobileList ? (
+            /* Both shapes in the DOM; the media query decides. No first-paint flash. */
+            <>
+              <div className="border-t md:hidden">
+                {listSource.length === 0 ? (
+                  <EmptyState
+                    EmptyIcon={EmptyIcon}
+                    emptyTitle={emptyTitle}
+                    emptyDescription={emptyDescription}
+                    hasActiveFilters={hasActiveFilters}
+                    onClearFilters={clearAllFilters}
+                  />
+                ) : (
+                  mobileList
+                )}
+              </div>
+              <div className="hidden border-t md:block">{tableInner}</div>
+            </>
+          ) : viewMode === "contacts" && mobileList ? (
+            /* Contacts mode: the same list at every width, no table underneath. */
+            <div className="border-t">
+              {listSource.length === 0 ? (
+                <EmptyState
+                  EmptyIcon={EmptyIcon}
+                  emptyTitle={emptyTitle}
+                  emptyDescription={emptyDescription}
+                  hasActiveFilters={hasActiveFilters}
+                  onClearFilters={clearAllFilters}
+                />
+              ) : (
+                mobileList
+              )}
+            </div>
+          ) : mobileList && !contactsAvailable ? (
+            /* No separate List mode exists, so the table has to stand down below
+               `md` and let the row list represent it. */
+            <>
+              <div className="border-t md:hidden">
+                {paginatedData.length === 0 ? (
+                  <EmptyState
+                    EmptyIcon={EmptyIcon}
+                    emptyTitle={emptyTitle}
+                    emptyDescription={emptyDescription}
+                    hasActiveFilters={hasActiveFilters}
+                    onClearFilters={clearAllFilters}
+                  />
+                ) : (
+                  mobileList
+                )}
+              </div>
+              <div className="hidden border-t md:block">{tableInner}</div>
+            </>
           ) : (
             <div className="border-t">{tableInner}</div>
           )}
@@ -1241,7 +1818,7 @@ export function DataTable<TData>({
               launcher is fixed to the bottom-right of the viewport, so controls pinned
               to the right edge here sit under it whenever the footer scrolls through
               that band. */}
-          {pagination && totalPages > 1 && !isLoading && !error && (
+          {pagination && totalPages > 1 && !listRendersEverything && !isLoading && !error && (
             <div className="flex items-center gap-4 border-t px-4 py-3 text-sm">
               <p className="text-muted-foreground">
                 Page {activePage + 1} of {totalPages}
