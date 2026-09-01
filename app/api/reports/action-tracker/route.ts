@@ -6,6 +6,7 @@ import { logger } from "@/lib/logger"
 import { getCurrentOfficeWeek } from "@/lib/meeting-week"
 import { fetchActionTrackerItems } from "@/lib/reports/action-tracker-data"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
+import { canEditActionContent, type ActionTrackerScopeProfile } from "@/lib/reports/action-tracker-permissions"
 
 const log = logger("action-tracker-route")
 
@@ -24,21 +25,6 @@ const CreateActionItemSchema = z.object({
   timeline_text: z.string().trim().optional().nullable(),
   assignee_ids: z.array(z.string().uuid()).optional(),
 })
-
-type ScopeProfile = {
-  role?: string | null
-  department?: string | null
-  is_department_lead?: boolean | null
-  lead_departments?: string[] | null
-}
-
-function canManageDepartment(profile: ScopeProfile | null, department: string) {
-  const role = String(profile?.role || "").toLowerCase()
-  if (["developer", "super_admin", "admin"].includes(role)) return true
-  if (!profile?.is_department_lead) return false
-  const leadDepartments = Array.isArray(profile.lead_departments) ? profile.lead_departments : []
-  return profile.department === department || leadDepartments.includes(department)
-}
 
 export async function POST(request: NextRequest) {
   const rl = await rateLimit(`reports-action-tracker:${getClientId(request)}`, { limit: 20, windowSec: 60 })
@@ -62,11 +48,11 @@ export async function POST(request: NextRequest) {
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("role, department, is_department_lead, lead_departments")
+      .select("id, role, department, is_department_lead, lead_departments")
       .eq("id", user.id)
-      .single<ScopeProfile>()
+      .single<ActionTrackerScopeProfile>()
 
-    if (!canManageDepartment(profile ?? null, parsed.data.department)) {
+    if (!canEditActionContent(profile ?? null, { department: parsed.data.department })) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 

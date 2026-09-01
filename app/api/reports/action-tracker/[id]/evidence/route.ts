@@ -4,6 +4,7 @@ import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { writeAuditLog } from "@/lib/audit/write-audit"
 import { logger } from "@/lib/logger"
+import { canUpdateActionProgress, type ActionTrackerScopeProfile } from "@/lib/reports/action-tracker-permissions"
 
 const log = logger("action-tracker-evidence-route")
 export const dynamic = "force-dynamic"
@@ -27,24 +28,8 @@ const ALLOWED_MIME = new Set([
 const EVIDENCE_COLUMNS =
   "id, action_item_id, file_name, file_path, mime_type, file_size, caption, uploaded_by, created_at"
 
-type ScopeProfile = {
-  role?: string | null
-  department?: string | null
-  is_department_lead?: boolean | null
-  lead_departments?: string[] | null
-}
-
 function sanitizeName(name: string): string {
   return String(name || "file").replace(/[^a-zA-Z0-9._-]/g, "_")
-}
-
-/** Same rule that governs who may change an action item's status. */
-function canManageDepartment(profile: ScopeProfile | null, department: string | null | undefined) {
-  const role = String(profile?.role || "").toLowerCase()
-  if (["developer", "super_admin", "admin"].includes(role)) return true
-  if (!profile?.is_department_lead || !department) return false
-  const leadDepartments = Array.isArray(profile.lead_departments) ? profile.lead_departments : []
-  return profile.department === department || leadDepartments.includes(department)
 }
 
 /**
@@ -100,18 +85,31 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
     const [{ data: profile }, { data: item }] = await Promise.all([
       supabase
         .from("profiles")
-        .select("role, department, is_department_lead, lead_departments")
+        .select("id, role, department, is_department_lead, lead_departments")
         .eq("id", user.id)
-        .single<ScopeProfile>(),
+        .single<ActionTrackerScopeProfile>(),
       supabase
         .from("action_items")
-        .select("id, title, department")
+        .select("id, title, department, origin")
         .eq("id", params.id)
-        .maybeSingle<{ id: string; title: string | null; department: string | null }>(),
+        .maybeSingle<{ id: string; title: string | null; department: string | null; origin: string | null }>(),
     ])
 
     if (!item) return NextResponse.json({ error: "Action item not found" }, { status: 404 })
-    if (!canManageDepartment(profile ?? null, item.department)) {
+
+    // Evidence hangs off the hindrance note, so it follows the same rule: a
+    // directive with named staff belongs to those staff, not to the department.
+    let assigneeIds: string[] = []
+    if (String(item.origin) === "management_directive") {
+      const { data: assignees } = await supabase
+        .from("action_item_assignees")
+        .select("profile_id")
+        .eq("action_item_id", params.id)
+        .returns<{ profile_id: string }[]>()
+      assigneeIds = (assignees || []).map((row) => String(row.profile_id))
+    }
+
+    if (!canUpdateActionProgress(profile ?? null, { department: item.department, origin: item.origin, assigneeIds })) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
@@ -207,7 +205,7 @@ export async function DELETE(request: NextRequest, props: { params: Promise<{ id
         .from("profiles")
         .select("role, department, is_department_lead, lead_departments")
         .eq("id", user.id)
-        .single<ScopeProfile>(),
+        .single<ActionTrackerScopeProfile>(),
       supabase
         .from("action_item_evidence")
         .select("id, file_path, uploaded_by")
