@@ -1,28 +1,36 @@
 {
-  "generatedAt": "2026-08-19T16:54:11.937Z",
+  "generatedAt": "2026-08-24T18:41:15.227Z",
   "summary": {
-    "totalPages": 239,
-    "missingLoading": 22,
+    "totalPages": 251,
+    "missingLoading": 30,
     "headerViolations": 4,
     "tableViolations": 0,
     "statsViolations": 0,
     "modalViolations": 2,
-    "adHocEmptyStatePages": 3,
+    "adHocEmptyStatePages": 2,
     "adHocErrorStatePages": 0,
     "adHocSectionPages": 1,
     "adHocFormFieldPages": 4
   },
   "violations": {
     "missingLoading": [
+      "app/(app)/directory2",
+      "app/(app)/directory4",
+      "app/(app)/directory5",
       "app/(app)/payroll",
       "app/(app)/requisition/[id]",
       "app/(app)/settings/notifications",
       "app/(app)/settings/profile",
       "app/(app)/settings/security",
+      "app/(app)/task2",
+      "app/(app)/task3",
+      "app/(app)/task5",
       "app/(app)/tools/test",
+      "app/admin/hr/employee2",
       "app/admin/hr/employees/attendance",
       "app/admin/hr/employees/lunch",
       "app/admin/hr/employees/payroll",
+      "app/admin/hr/employees2",
       "app/admin/hr/payroll",
       "app/admin/hr/payroll/[id]",
       "app/admin/hr/payroll/dummy",
@@ -51,7 +59,6 @@
     ],
     "adHocEmptyStatePages": [
       "app/(app)/pms/development-plans/page.tsx",
-      "app/(app)/pms/peer-feedback/page.tsx",
       "app/admin/hr/pms/cbt/extra/scores/page.tsx"
     ],
     "adHocErrorStatePages": [],
