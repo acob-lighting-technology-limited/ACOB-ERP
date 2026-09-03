@@ -436,6 +436,8 @@ export default function WeeklyReportsPortal() {
       description="Review and export departmental reports."
       icon={FileBarChart}
       backLink={{ href: "/reports/general-meeting", label: "Back to General Meeting" }}
+      spacing="tight"
+      actionsPlacement="inline-always"
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -472,6 +474,7 @@ export default function WeeklyReportsPortal() {
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Reports"
             value={stats.total}
             icon={FileBarChart}
@@ -479,6 +482,7 @@ export default function WeeklyReportsPortal() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Tracker Started"
             value={stats.withTrackerStarted}
             icon={CalendarDays}
@@ -486,6 +490,7 @@ export default function WeeklyReportsPortal() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Finished"
             value={stats.finished}
             icon={FileSpreadsheet}
@@ -493,6 +498,7 @@ export default function WeeklyReportsPortal() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Locked Week"
             value={stats.locked}
             icon={Download}
@@ -622,6 +628,32 @@ export default function WeeklyReportsPortal() {
           ),
         }}
         viewToggle
+        stickyToolbar
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (report) => report.department,
+          subtitle: (report) => `W${report.week_number} · ${report.year}`,
+          trailing: (report) => {
+            const trackerStatus = getActionTrackerStatus(report.department, trackingData)
+            return <Badge className={trackerStatus.color}>{trackerStatus.label}</Badge>
+          },
+          detail: {
+            title: (report) => report.department,
+            fields: (report) => {
+              const profileInfo = Array.isArray(report.profiles) ? report.profiles[0] : report.profiles
+              const submitterName = profileInfo ? `${profileInfo.first_name} ${profileInfo.last_name}` : "Unknown"
+              const trackerStatus = getActionTrackerStatus(report.department, trackingData)
+              return [
+                { label: "Week", value: `W${report.week_number}, ${report.year}` },
+                { label: "Meeting Date", value: meetingDate },
+                { label: "Submitted By", value: submitterName },
+                { label: "Action Tracker", value: trackerStatus.label },
+                { label: "Submitted", value: formatWATTimeDate(report.created_at) },
+              ]
+            },
+          },
+        }}
         cardRenderer={(report) => {
           const profileInfo = Array.isArray(report.profiles) ? report.profiles[0] : report.profiles
           const submitterName = profileInfo ? `${profileInfo.first_name} ${profileInfo.last_name}` : "Unknown"
