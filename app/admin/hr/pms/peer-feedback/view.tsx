@@ -284,8 +284,9 @@ export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string 
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total"
             value={feedback.length}
             icon={MessageSquare}
@@ -293,6 +294,7 @@ export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string 
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Subjects"
             value={new Set(feedback.map((row) => row.subject_user_id)).size}
             icon={Users}
@@ -300,6 +302,7 @@ export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string 
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Avg Score"
             value={avgScore !== null ? `${avgScore}%` : "-"}
             icon={UserRoundSearch}
@@ -307,6 +310,7 @@ export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string 
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Submitted"
             value={submittedCount}
             icon={MessageSquare}
@@ -367,6 +371,21 @@ export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string 
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (row) => (row.score >= 70 ? "bg-emerald-500" : "bg-amber-500"),
+          title: (row) => `${formatName(row.subject)} (by ${formatName(row.reviewer)})`,
+          subtitle: (row) =>
+            `${row.subject?.department || "No dept"} · ${cycleNameMap.get(row.review_cycle_id) || "No cycle"} · Score: ${row.score}%`,
+          trailing: (row) => (
+            <Badge variant={row.score >= 70 ? "default" : "secondary"} className="text-[10px]">
+              {row.score}%
+            </Badge>
+          ),
+          onSelect: (row) => setSelectedRow(row),
+        }}
         cardRenderer={(row) => <FeedbackCard row={row} onView={setSelectedRow} />}
         emptyTitle="No peer feedback found"
         emptyDescription="Peer feedback submissions will appear here once employees start reviewing colleagues."

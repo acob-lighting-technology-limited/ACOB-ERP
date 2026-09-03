@@ -58,7 +58,13 @@ type DevelopmentPlan = {
   review?: { id: string } | null
 }
 
-type Cycle = { id: string; name: string; review_type?: string | null; start_date?: string | null; end_date?: string | null }
+type Cycle = {
+  id: string
+  name: string
+  review_type?: string | null
+  start_date?: string | null
+  end_date?: string | null
+}
 
 const FOCUS_LABELS: Record<string, string> = {
   general: "General",
@@ -488,8 +494,9 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total Plans"
             value={totalPlans}
             icon={BookOpen}
@@ -497,6 +504,7 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Active"
             value={activePlans}
             icon={Users}
@@ -504,6 +512,7 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Completed"
             value={completedPlans}
             icon={Target}
@@ -511,6 +520,7 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Avg Progress"
             value={avgProgress}
             icon={TrendingUp}
@@ -548,15 +558,15 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
           render: (plan) => (
             <div className="grid gap-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
               <div>
-                <p className="text-muted-foreground text-xs">Description</p>
-                <p className="mt-1">{plan.description || "No description provided."}</p>
+                <p className="text-muted-foreground text-xs">Employee</p>
+                <p className="mt-1 font-medium">{formatName(plan.user)}</p>
               </div>
               <div>
                 <p className="text-muted-foreground text-xs">Quarter</p>
                 <p className="mt-1">{cycleNameMap.get(plan.review_cycle_id || "") || "-"}</p>
               </div>
               <div>
-                <p className="text-muted-foreground text-xs">Due Date</p>
+                <p className="text-muted-foreground text-xs">Target Date</p>
                 <p className="mt-1">{formatDate(plan.target_date)}</p>
               </div>
               <div>
@@ -567,6 +577,28 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (plan) =>
+            plan.status === "completed"
+              ? "bg-emerald-500"
+              : plan.status === "active"
+                ? "bg-blue-500"
+                : plan.status === "cancelled"
+                  ? "bg-red-500"
+                  : "bg-amber-500",
+          title: (plan) => `${formatName(plan.user)} · ${plan.title}`,
+          subtitle: (plan) =>
+            `${plan.user?.department || "No dept"} · ${FOCUS_LABELS[plan.focus_area] || plan.focus_area} · Progress: ${plan.progress_pct}%`,
+          trailing: (plan) => (
+            <Badge variant={STATUS_VARIANTS[plan.status] || "outline"} className="text-[10px] capitalize">
+              {plan.status.replace("_", " ")}
+            </Badge>
+          ),
+          onSelect: (plan) => setViewingPlan(plan),
+        }}
         cardRenderer={(plan) => (
           <PlanCard
             plan={plan}

@@ -369,7 +369,10 @@ export function AdminPmsReviewsPage({
   // Reviews carry their cycle inline; dedupe it into the list the shared cycle
   // filters need.
   const cycles = useMemo(() => {
-    const byId = new Map<string, { id: string; name: string; review_type: string | null; start_date?: string | null; end_date?: string | null }>()
+    const byId = new Map<
+      string,
+      { id: string; name: string; review_type: string | null; start_date?: string | null; end_date?: string | null }
+    >()
     for (const review of canonicalReviews) {
       if (review.cycle) byId.set(review.cycle.id, review.cycle)
     }
@@ -840,8 +843,9 @@ export function AdminPmsReviewsPage({
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title={tab === "individual" ? "Total Reviews" : tab === "department" ? "Departments" : "Cycles"}
             value={totalCount}
             icon={Users}
@@ -849,6 +853,7 @@ export function AdminPmsReviewsPage({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Submitted"
             value={submittedCount}
             icon={TrendingUp}
@@ -856,6 +861,7 @@ export function AdminPmsReviewsPage({
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Completed"
             value={completedCount}
             icon={CheckCircle2}
@@ -863,6 +869,7 @@ export function AdminPmsReviewsPage({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Active Quarter"
             value={activeQuarter}
             icon={BarChart3}
@@ -911,6 +918,20 @@ export function AdminPmsReviewsPage({
             },
           ]}
           viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (r) =>
+              r.status === "completed" ? "bg-emerald-500" : r.status === "submitted" ? "bg-blue-500" : "bg-amber-500",
+            title: (r) => employeeName(r),
+            subtitle: (r) =>
+              `${r.user?.department ?? "No dept"} · ${r.cycle?.name ?? "No cycle"} · ${r.final_score !== null ? `${r.final_score?.toFixed(1)}%` : "No score"}`,
+            trailing: (r) => <StatusBadge status={r.status} />,
+            onSelect: (r) => {
+              if (r.review_cycle_id) goToIndividualCycle(r.review_cycle_id)
+            },
+          }}
           cardRenderer={(row) => (
             <ReviewCard
               row={row}
@@ -963,6 +984,41 @@ export function AdminPmsReviewsPage({
               hidden: (row) => row.cycleId === "no-cycle",
             },
           ]}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: () => "bg-blue-500",
+            title: (r) => r.department,
+            subtitle: (r) => `${r.cycle} · Reviews: ${r.submitted}/${r.reviews} · Avg: ${r.final}`,
+            trailing: (r) => <span className="text-xs font-semibold">{r.final}</span>,
+            onSelect: (r) => {
+              if (r.cycleId !== "no-cycle") goDeptCycle(r.cycleId, r.department)
+            },
+          }}
+          cardRenderer={(r) => (
+            <div
+              className="bg-card cursor-pointer space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md"
+              onClick={() => {
+                if (r.cycleId !== "no-cycle") goDeptCycle(r.cycleId, r.department)
+              }}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{r.department}</p>
+                  <p className="text-muted-foreground text-xs">{r.cycle}</p>
+                </div>
+                <Badge variant="outline">{r.final}</Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-2 border-t pt-2 text-xs">
+                <div>
+                  Reviews: {r.submitted}/{r.reviews}
+                </div>
+                <div>Avg KPI: {r.kpi}</div>
+              </div>
+            </div>
+          )}
           emptyIcon={Users}
           emptyTitle="No department data"
           emptyDescription="No department review data matches your filters."
@@ -1013,6 +1069,47 @@ export function AdminPmsReviewsPage({
               hidden: (row) => row.cycleId === "no-cycle",
             },
           ]}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: () => "bg-purple-500",
+            title: (r) => r.cycle,
+            subtitle: (r) => `${r.review_type} · ${r.reviews} staff · Completed: ${r.completed}`,
+            trailing: (r) => (
+              <span className="text-xs font-medium text-emerald-600">
+                {r.reviews > 0 ? Math.round((r.completed / r.reviews) * 100) : 0}%
+              </span>
+            ),
+            onSelect: (r) => {
+              if (r.cycleId !== "no-cycle") goToIndividualCycle(r.cycleId)
+            },
+          }}
+          cardRenderer={(r) => (
+            <div
+              className="bg-card cursor-pointer space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md"
+              onClick={() => {
+                if (r.cycleId !== "no-cycle") goToIndividualCycle(r.cycleId)
+              }}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{r.cycle}</p>
+                  <p className="text-muted-foreground text-xs">{r.review_type}</p>
+                </div>
+                <Badge variant="outline">{r.reviews} staff</Badge>
+              </div>
+              <div className="space-y-1 border-t pt-2">
+                <div className="flex justify-between text-xs">
+                  <span>Completed</span>
+                  <span className="font-semibold text-emerald-600">
+                    {r.completed}/{r.reviews} ({r.reviews > 0 ? Math.round((r.completed / r.reviews) * 100) : 0}%)
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
           emptyIcon={Clock}
           emptyTitle="No cycles found"
           emptyDescription="No review cycles match your filters."

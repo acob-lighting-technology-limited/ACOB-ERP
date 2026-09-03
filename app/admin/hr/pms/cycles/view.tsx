@@ -348,8 +348,9 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total"
             value={cycles.length}
             icon={Calendar}
@@ -357,6 +358,7 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Active"
             value={activeCycle ? activeCycle.name : "None"}
             icon={CheckCircle2}
@@ -364,6 +366,7 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Planned"
             value={cycles.filter((cycle) => cycle.status === "planned").length}
             icon={Calendar}
@@ -371,6 +374,7 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Closed"
             value={cycles.filter((cycle) => ["closed", "locked"].includes(String(cycle.status))).length}
             icon={Lock}
@@ -420,6 +424,23 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (cycle) =>
+            cycle.status === "active"
+              ? "bg-emerald-500"
+              : cycle.status === "closed"
+                ? "bg-blue-500"
+                : cycle.status === "locked"
+                  ? "bg-slate-500"
+                  : "bg-amber-500",
+          title: (cycle) => cycle.name,
+          subtitle: (cycle) =>
+            `${cycle.review_type.replace(/_/g, " ")} · ${formatDate(cycle.start_date)} - ${formatDate(cycle.end_date)}`,
+          trailing: (cycle) => <StatusBadge status={cycle.status} />,
+        }}
         cardRenderer={(cycle) => (
           <CycleCard
             cycle={cycle}

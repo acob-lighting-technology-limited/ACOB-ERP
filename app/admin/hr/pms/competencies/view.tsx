@@ -413,8 +413,9 @@ export function AdminCompetenciesPage({ backLinkHref }: { backLinkHref?: string 
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total"
             value={competencies.length}
             icon={BookOpen}
@@ -422,6 +423,7 @@ export function AdminCompetenciesPage({ backLinkHref }: { backLinkHref?: string 
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Active"
             value={activeCount}
             icon={ToggleRight}
@@ -429,6 +431,7 @@ export function AdminCompetenciesPage({ backLinkHref }: { backLinkHref?: string 
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Inactive"
             value={inactiveCount}
             icon={ToggleLeft}
@@ -436,6 +439,7 @@ export function AdminCompetenciesPage({ backLinkHref }: { backLinkHref?: string 
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Behaviour"
             value={behaviourCount}
             icon={BookOpen}
@@ -481,6 +485,20 @@ export function AdminCompetenciesPage({ backLinkHref }: { backLinkHref?: string 
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (c) => (c.is_active ? "bg-emerald-500" : "bg-slate-400"),
+          title: (c) => c.label,
+          subtitle: (c) => `${CATEGORY_LABELS[c.category] || c.category} · ${c.key}`,
+          trailing: (c) => (
+            <Badge variant={c.is_active ? "default" : "secondary"} className="text-[10px]">
+              {c.is_active ? "Active" : "Inactive"}
+            </Badge>
+          ),
+          onSelect: (c) => openEdit(c),
+        }}
         cardRenderer={(competency) => (
           <CompetencyCard
             competency={competency}
