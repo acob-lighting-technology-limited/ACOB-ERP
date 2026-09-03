@@ -1060,7 +1060,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-4">
           <StatCard
             variant="compact"
             title="Total Staff"
@@ -1092,6 +1092,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             icon={Users}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
+            className="hidden sm:block"
           />
         </div>
       }

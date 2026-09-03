@@ -349,7 +349,7 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
             variant="compact"
             title="Total"
@@ -373,6 +373,7 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
             icon={Calendar}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
+            className="hidden sm:block"
           />
           <StatCard
             variant="compact"

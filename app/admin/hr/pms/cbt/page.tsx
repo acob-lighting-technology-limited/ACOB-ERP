@@ -759,7 +759,7 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
             variant="compact"
             title="Rows"
@@ -791,6 +791,7 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
             icon={Brain}
             iconBgColor="bg-violet-500/10"
             iconColor="text-violet-500"
+            className="hidden sm:block"
           />
         </div>
       }

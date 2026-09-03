@@ -284,7 +284,7 @@ export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string 
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
             variant="compact"
             title="Total"
@@ -300,6 +300,7 @@ export function AdminPeerFeedbackPage({ backLinkHref }: { backLinkHref?: string 
             icon={Users}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
+            className="hidden sm:block"
           />
           <StatCard
             variant="compact"

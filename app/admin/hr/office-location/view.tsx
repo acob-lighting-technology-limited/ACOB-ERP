@@ -479,7 +479,7 @@ export function OfficeLocationsPage({
         ) : null
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
             variant="compact"
             title="Total Spaces"
@@ -511,6 +511,7 @@ export function OfficeLocationsPage({
             icon={MapPin}
             iconBgColor="bg-violet-500/10"
             iconColor="text-violet-500"
+            className="hidden sm:block"
           />
         </div>
       }
