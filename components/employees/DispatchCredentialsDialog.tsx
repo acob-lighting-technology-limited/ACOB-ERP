@@ -93,9 +93,9 @@ export function DispatchCredentialsDialog({ employee, open, onOpenChange, onSucc
         body: JSON.stringify({ password: password.trim() }),
       })
 
-      const data = await res.json()
+      const data = (await res.json().catch(() => null)) as { error?: string } | null
       if (!res.ok) {
-        throw new Error(data.error || "Failed to dispatch credentials")
+        throw new Error(data?.error || `Failed to dispatch credentials (${res.status} ${res.statusText})`)
       }
 
       toast.success(`Webmail credentials dispatched to ${employee.personal_email}`)

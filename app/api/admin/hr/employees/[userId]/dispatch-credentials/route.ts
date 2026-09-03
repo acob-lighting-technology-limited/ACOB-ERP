@@ -11,12 +11,13 @@ import { logger } from "@/lib/logger"
 const log = logger("api-dispatch-credentials")
 
 interface RouteContext {
-  params: Promise<{ id: string }>
+  params: Promise<{ userId: string }>
 }
 
 export async function POST(req: NextRequest, context: RouteContext) {
   try {
-    const { id } = await context.params
+    const { userId } = await context.params
+    const id = userId
     if (!id) {
       return NextResponse.json({ error: "Missing employee ID" }, { status: 400 })
     }
