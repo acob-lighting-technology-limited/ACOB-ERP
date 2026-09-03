@@ -277,8 +277,9 @@ export function PortfoliosContent() {
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Portfolios"
             value={stats.portfolios}
             icon={Layers}
@@ -286,6 +287,7 @@ export function PortfoliosContent() {
             iconColor="text-violet-500"
           />
           <StatCard
+            variant="compact"
             title="Projects"
             value={stats.projectCount}
             icon={FolderKanban}
@@ -293,6 +295,7 @@ export function PortfoliosContent() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="At Risk / Behind"
             value={stats.atRisk}
             icon={AlertTriangle}
@@ -300,6 +303,7 @@ export function PortfoliosContent() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Overdue Tasks"
             value={stats.overdue}
             icon={FolderGit2}
@@ -326,6 +330,40 @@ export function PortfoliosContent() {
         isLoading={isLoading}
         error={error instanceof Error ? error.message : null}
         onRetry={refetch}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.status === "closed" ? "bg-slate-400" : r.status === "on_hold" ? "bg-amber-500" : "bg-emerald-500",
+          title: (r) => (r.code ? `${r.code} — ${r.name}` : r.name),
+          subtitle: (r) =>
+            `${r.rollup.projectCount} projects · ${r.rollup.deliveryPct ?? 0}% delivery · ${r.rollup.overdueCount} overdue`,
+          trailing: (r) => (
+            <Badge variant="outline" className="text-[10px] capitalize">
+              {r.status.replaceAll("_", " ")}
+            </Badge>
+          ),
+          onSelect: (r) => setEditing(r),
+        }}
+        cardRenderer={(r) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{r.code ? `${r.code} — ${r.name}` : r.name}</p>
+                {r.description && <p className="text-muted-foreground line-clamp-1 text-xs">{r.description}</p>}
+              </div>
+              <Badge variant="outline" className="capitalize">
+                {r.status.replaceAll("_", " ")}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between border-t pt-2 text-xs">
+              <span className="text-muted-foreground">{r.rollup.projectCount} projects</span>
+              <span className="text-muted-foreground">{r.rollup.deliveryPct ?? 0}% delivery</span>
+            </div>
+          </div>
+        )}
         rowActions={[{ label: "Edit Portfolio", onClick: (r) => setEditing(r) }]}
         expandable={{
           render: (r) => (

@@ -339,8 +339,9 @@ export function ProjectAdminContent({ profiles, currentUser }: ProjectAdminConte
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total Projects"
             value={stats.total}
             icon={FolderKanban}
@@ -348,6 +349,7 @@ export function ProjectAdminContent({ profiles, currentUser }: ProjectAdminConte
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Ongoing Projects"
             value={stats.active}
             icon={Wrench}
@@ -355,6 +357,7 @@ export function ProjectAdminContent({ profiles, currentUser }: ProjectAdminConte
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Completed Projects"
             value={stats.completed}
             icon={ShieldCheck}
@@ -362,6 +365,7 @@ export function ProjectAdminContent({ profiles, currentUser }: ProjectAdminConte
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Total Power Capacity"
             value={stats.totalCapacity}
             icon={FolderGit2}
@@ -388,6 +392,47 @@ export function ProjectAdminContent({ profiles, currentUser }: ProjectAdminConte
         isLoading={isLoading}
         error={error instanceof Error ? error.message : null}
         onRetry={refetch}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.status === "completed" ? "bg-emerald-500" : r.status === "active" ? "bg-blue-500" : "bg-amber-500",
+          title: (r) => r.project_name,
+          subtitle: (r) => `${r.location} · ${formatCapacity(r.capacity_w)} · ${r.technology_type || "General"}`,
+          trailing: (r) => (
+            <Badge variant="outline" className="text-[10px] capitalize">
+              {r.status || "Planned"}
+            </Badge>
+          ),
+          onSelect: (r) => {
+            setActiveProject(r)
+            setIsEditOpen(true)
+          },
+        }}
+        cardRenderer={(r) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{r.project_name}</p>
+                <p className="text-muted-foreground text-xs">{r.location}</p>
+              </div>
+              <Badge variant="outline" className="capitalize">
+                {r.status || "Planned"}
+              </Badge>
+            </div>
+            <div className="text-muted-foreground flex items-center justify-between text-xs">
+              <span>{formatCapacity(r.capacity_w)}</span>
+              <span>{r.technology_type || "General"}</span>
+            </div>
+            {r.portfolio && (
+              <Badge variant="secondary" className="text-[10px]">
+                {r.portfolio.code || r.portfolio.name}
+              </Badge>
+            )}
+          </div>
+        )}
         rowActions={[
           {
             label: "Edit Project Details",

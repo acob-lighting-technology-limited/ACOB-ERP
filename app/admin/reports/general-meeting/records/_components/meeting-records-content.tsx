@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { AlertCircle, CalendarDays, Download, FileText, RefreshCw, Users } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { StatCard } from "@/components/ui/stat-card"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, DataTableTab } from "@/components/ui/data-table"
@@ -66,10 +67,7 @@ export function MeetingRecordsContent() {
   }, [rows, officeWeek.year])
 
   const weekOptions = useMemo(() => Array.from({ length: 53 }, (_, i) => i + 1), [])
-  const yearOptions = useMemo(
-    () => [officeWeek.year - 1, officeWeek.year, officeWeek.year + 1],
-    [officeWeek.year]
-  )
+  const yearOptions = useMemo(() => [officeWeek.year - 1, officeWeek.year, officeWeek.year + 1], [officeWeek.year])
 
   const download = (row: Row) => {
     if (!row.signed_url) {
@@ -137,7 +135,11 @@ export function MeetingRecordsContent() {
   const filters = useMemo<DataTableFilter<Row>[]>(
     () => [
       { key: "source_label", label: "Meeting", options: meetingOptions },
-      { key: "meeting_week", label: "Week", options: weekOptions.map((w) => ({ value: String(w), label: `Week ${w}` })) },
+      {
+        key: "meeting_week",
+        label: "Week",
+        options: weekOptions.map((w) => ({ value: String(w), label: `Week ${w}` })),
+      },
       { key: "meeting_year", label: "Year", options: yearOptions.map((y) => ({ value: String(y), label: String(y) })) },
     ],
     [meetingOptions, weekOptions, yearOptions]
@@ -163,6 +165,7 @@ export function MeetingRecordsContent() {
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
           <StatCard
+            variant="compact"
             title={isTranscript ? "Transcripts" : "Attendance Reports"}
             value={stats.total}
             icon={FileText}
@@ -170,6 +173,7 @@ export function MeetingRecordsContent() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="This Year"
             value={stats.thisYear}
             icon={CalendarDays}
@@ -177,6 +181,7 @@ export function MeetingRecordsContent() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Downloadable"
             value={stats.downloadable}
             icon={Download}
@@ -203,6 +208,39 @@ export function MeetingRecordsContent() {
         isLoading={isLoading}
         error={error instanceof Error ? error.message : null}
         onRetry={() => refetch()}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (r) => r.source_label || r.file_name,
+          subtitle: (r) => `W${r.meeting_week} · ${r.meeting_year} · ${formatMeetingDate(r.meeting_date)}`,
+          trailing: (r) => (
+            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => download(r)}>
+              <Download className="h-3.5 w-3.5" />
+            </Button>
+          ),
+          onSelect: (r) => download(r),
+        }}
+        cardRenderer={(r) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{r.source_label || r.file_name}</p>
+                <p className="text-muted-foreground text-xs">{formatMeetingDate(r.meeting_date)}</p>
+              </div>
+              <Badge variant="outline">
+                W{r.meeting_week} {r.meeting_year}
+              </Badge>
+            </div>
+            <div className="flex items-center justify-between border-t pt-2 text-[10px]">
+              <span className="text-muted-foreground">{r.file_name}</span>
+              <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => download(r)}>
+                <Download className="mr-1 h-3 w-3" /> Download
+              </Button>
+            </div>
+          </div>
+        )}
         rowActions={[{ label: "Download", icon: Download, onClick: (r: Row) => download(r) }]}
         emptyTitle={isTranscript ? "No transcripts yet" : "No attendance reports yet"}
         emptyDescription="Artifacts appear here automatically after each meeting is synced."
