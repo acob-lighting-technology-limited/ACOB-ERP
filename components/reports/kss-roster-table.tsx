@@ -866,23 +866,27 @@ export function KssRosterTable({
       description="Manage KSS roster and uploaded files by week."
       icon={Presentation}
       backLink={{ href: backHref, label: backLabel }}
+      spacing="tight"
+      actionsPlacement="inline-always"
       actions={
         readOnly ? null : (
           <Button
+            size="sm"
             onClick={() => {
               setEditingId(null)
               resetForm()
               setShowCreate(true)
             }}
-            disabled={false}
           >
-            <Plus className="mr-2 h-4 w-4" /> Add KSS
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Add KSS</span>
           </Button>
         )
       }
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="KSS Rows"
             value={stats.total}
             icon={Presentation}
@@ -890,6 +894,7 @@ export function KssRosterTable({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Current"
             value={stats.current}
             icon={CalendarDays}
@@ -897,6 +902,7 @@ export function KssRosterTable({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Past"
             value={stats.past}
             icon={FileText}
@@ -904,6 +910,7 @@ export function KssRosterTable({
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Upcoming"
             value={stats.upcoming}
             icon={ShieldAlert}
@@ -1344,7 +1351,27 @@ export function KssRosterTable({
               )
             },
           }}
+          stickyToolbar
           viewToggle
+          contactsView
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            title: (row) => row.department,
+            subtitle: (row) => getPresenterName(row),
+            trailing: (row) => <Badge variant="outline">{getTimeType(row)}</Badge>,
+            detail: {
+              title: (row) => row.department,
+              fields: (row) => [
+                { label: "Presenter", value: getPresenterName(row) },
+                { label: "Week", value: `W${row.meeting_week}, ${row.meeting_year}` },
+                {
+                  label: "Document",
+                  value: docByWeekYear.get(`${row.meeting_year}-${row.meeting_week}`)?.file_name ?? "Pending",
+                },
+                { label: "Notes", value: row.notes ?? null },
+              ],
+            },
+          }}
           cardRenderer={(row) => {
             const presenterName = getPresenterName(row)
             const doc = docByWeekYear.get(`${row.meeting_year}-${row.meeting_week}`)

@@ -1,26 +1,23 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useMemo } from "react"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "sonner"
-import { FileText, Plus } from "lucide-react"
+import { Edit2, Eye, FileText, Plus, Trash2 } from "lucide-react"
 import { formatWATDateTime } from "@/lib/utils/date"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { Documentation } from "./page"
-import { AppTablePage } from "@/components/app/app-table-page"
+import { DataTable, DataTablePage } from "@/components/ui/data-table"
+import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
+import { StatCard } from "@/components/ui/stat-card"
 import { DepartmentDocumentsBrowser } from "@/components/documentation/department-documents-browser"
-import { DocStatsCards } from "@/components/documentation/doc-stats-cards"
-import { DocFilterBar } from "@/components/documentation/doc-filter-bar"
-import { DocListView } from "@/components/documentation/doc-list-view"
-import { DocCardView } from "@/components/documentation/doc-card-view"
 import { DocViewDialog } from "@/components/documentation/doc-view-dialog"
 import { DocFormDialog, type DocFormData } from "@/components/documentation/doc-form-dialog"
 import { DocDeleteDialog } from "@/components/documentation/doc-delete-dialog"
-import { DocViewToggle } from "@/components/documentation/doc-view-toggle"
-import { DocEmptyState } from "@/components/documentation/doc-empty-state"
 
 import { logger } from "@/lib/logger"
 import { apiFetch } from "@/lib/api-client"
@@ -59,15 +56,11 @@ export function DocumentationContent({
     initialTab as "knowledge-docs" | "department-documents"
   )
   const [docs, setDocs] = useState<Documentation[]>(initialDocs)
-  const [filteredDocs, setFilteredDocs] = useState<Documentation[]>(initialDocs)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [selectedDoc, setSelectedDoc] = useState<Documentation | null>(null)
   const [isSaving, setIsSaving] = useState(false)
-  const [searchQuery, setSearchQuery] = useState("")
-  const [categoryFilter, setCategoryFilter] = useState("all")
-  const [viewMode, setViewMode] = useState<"list" | "card">("list")
   const [formData, setFormData] = useState<DocFormData>({
     title: "",
     content: "",
@@ -78,11 +71,6 @@ export function DocumentationContent({
     attachments: [],
   })
   const supabase = createClient()
-
-  useEffect(() => {
-    filterDocumentation()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [docs, searchQuery, categoryFilter])
 
   const loadDocumentation = async () => {
     try {
@@ -98,31 +86,6 @@ export function DocumentationContent({
       log.error("Error loading documentation:", error)
       toast.error("Failed to load documentation")
     }
-  }
-
-  const filterDocumentation = () => {
-    let filtered = docs
-
-    if (searchQuery) {
-      filtered = filtered.filter(
-        (doc) =>
-          doc.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          doc.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          doc.tags?.some((tag) => tag.toLowerCase().includes(searchQuery.toLowerCase()))
-      )
-    }
-
-    if (categoryFilter !== "all") {
-      if (categoryFilter === "draft") {
-        filtered = filtered.filter((doc) => doc.is_draft)
-      } else if (categoryFilter === "published") {
-        filtered = filtered.filter((doc) => !doc.is_draft)
-      } else {
-        filtered = filtered.filter((doc) => doc.category === categoryFilter)
-      }
-    }
-
-    setFilteredDocs(filtered)
   }
 
   const openCreateDialog = () => {
@@ -244,6 +207,74 @@ export function DocumentationContent({
       ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
       : "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
 
+  const categoryOptions = useMemo(
+    () =>
+      Array.from(new Set(docs.map((d) => d.category).filter(Boolean))).map((c) => ({
+        value: String(c),
+        label: String(c),
+      })),
+    [docs]
+  )
+
+  const columns = useMemo<DataTableColumn<Documentation>[]>(
+    () => [
+      {
+        key: "title",
+        label: "Title",
+        sortable: true,
+        accessor: (d) => d.title,
+        resizable: true,
+        initialWidth: 320,
+        render: (d) => <span className="font-medium">{d.title}</span>,
+      },
+      {
+        key: "category",
+        label: "Category",
+        sortable: true,
+        accessor: (d) => d.category ?? "-",
+        hideOnMobile: true,
+      },
+      {
+        key: "status",
+        label: "Status",
+        sortable: true,
+        accessor: (d) => (d.is_draft ? "draft" : "published"),
+        render: (d) => <Badge className={getStatusColor(d.is_draft)}>{d.is_draft ? "Draft" : "Published"}</Badge>,
+      },
+      {
+        key: "updated_at",
+        label: "Updated",
+        sortable: true,
+        accessor: (d) => d.updated_at,
+        render: (d) => <span className="text-muted-foreground text-xs">{formatDate(d.updated_at)}</span>,
+        hideOnMobile: true,
+      },
+    ],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  )
+
+  const filters = useMemo<DataTableFilter<Documentation>[]>(
+    () => [
+      {
+        key: "status",
+        label: "Status",
+        options: [
+          { value: "draft", label: "Draft" },
+          { value: "published", label: "Published" },
+        ],
+        mode: "custom" as const,
+        filterFn: (doc: Documentation, selected: string[]) => selected.includes(doc.is_draft ? "draft" : "published"),
+      },
+      {
+        key: "category",
+        label: "Category",
+        options: categoryOptions,
+      },
+    ],
+    [categoryOptions]
+  )
+
   return (
     <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "knowledge-docs" | "department-documents")}>
       {!hideTabList && (
@@ -256,65 +287,148 @@ export function DocumentationContent({
       )}
 
       <TabsContent value="knowledge-docs" className="space-y-4">
-        <AppTablePage
+        <DataTablePage
           title="My Documentation"
           description="Create and manage your work documentation"
           icon={FileText}
-          backLinkHref={backLinkHref}
-          backLinkLabel={backLinkLabel}
+          backLink={{ href: backLinkHref, label: backLinkLabel }}
+          spacing="tight"
+          actionsPlacement="inline-always"
           actions={
-            <div className="flex flex-wrap items-center gap-2">
-              <DocViewToggle viewMode={viewMode} onViewModeChange={setViewMode} />
-              <Button onClick={openCreateDialog} className="gap-2">
-                <Plus className="h-4 w-4" />
-                New Document
-              </Button>
+            <Button size="sm" onClick={openCreateDialog}>
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">New Document</span>
+            </Button>
+          }
+          stats={
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
+              <StatCard
+                variant="compact"
+                title="Total"
+                value={stats.total}
+                icon={FileText}
+                iconBgColor="bg-blue-500/10"
+                iconColor="text-blue-500"
+              />
+              <StatCard
+                variant="compact"
+                title="Published"
+                value={stats.published}
+                icon={FileText}
+                iconBgColor="bg-emerald-500/10"
+                iconColor="text-emerald-500"
+              />
+              <StatCard
+                variant="compact"
+                title="Draft"
+                value={stats.draft}
+                icon={FileText}
+                iconBgColor="bg-amber-500/10"
+                iconColor="text-amber-500"
+              />
             </div>
           }
-          stats={<DocStatsCards total={stats.total} published={stats.published} draft={stats.draft} />}
-          filters={
-            <DocFilterBar
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              categoryFilter={categoryFilter}
-              onCategoryChange={setCategoryFilter}
-            />
-          }
         >
-          {filteredDocs.length > 0 ? (
-            viewMode === "list" ? (
-              <DocListView
-                docs={filteredDocs}
-                getStatusColor={getStatusColor}
-                formatDate={formatDate}
-                onView={(doc) => {
-                  setSelectedDoc(doc)
+          <DataTable<Documentation>
+            data={docs}
+            columns={columns}
+            filters={filters}
+            getRowId={(d) => d.id}
+            searchPlaceholder="Search title, content, or tags..."
+            searchFn={(d, q) => {
+              const lq = q.toLowerCase()
+              return (
+                d.title.toLowerCase().includes(lq) ||
+                d.content.toLowerCase().includes(lq) ||
+                (d.tags ?? []).some((t) => t.toLowerCase().includes(lq))
+              )
+            }}
+            rowActions={[
+              {
+                label: "View",
+                icon: Eye,
+                onClick: (d) => {
+                  setSelectedDoc(d)
+                  setIsViewDialogOpen(true)
+                },
+              },
+              {
+                label: "Edit",
+                icon: Edit2,
+                onClick: openEditDialog,
+              },
+              {
+                label: "Delete",
+                icon: Trash2,
+                variant: "destructive",
+                onClick: (d) => {
+                  setSelectedDoc(d)
+                  setIsDeleteDialogOpen(true)
+                },
+              },
+            ]}
+            expandable={{
+              render: (d) => (
+                <div className="space-y-2">
+                  <p className="text-muted-foreground text-xs tracking-wide uppercase">Content Preview</p>
+                  <div className="bg-muted/30 rounded-lg border p-4">
+                    <p className="line-clamp-6 text-sm whitespace-pre-line">{d.content || "No content."}</p>
+                  </div>
+                </div>
+              ),
+            }}
+            stickyToolbar
+            viewToggle
+            contactsView
+            defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+            mobileRow={{
+              title: (d) => d.title,
+              subtitle: (d) => d.category ?? (d.is_draft ? "Draft" : "Published"),
+              trailing: (d) => (
+                <Badge className={getStatusColor(d.is_draft)}>{d.is_draft ? "Draft" : "Published"}</Badge>
+              ),
+              detail: {
+                title: (d) => d.title,
+                fields: (d) => [
+                  { label: "Category", value: d.category ?? null },
+                  { label: "Status", value: d.is_draft ? "Draft" : "Published" },
+                  { label: "Tags", value: d.tags?.join(", ") ?? null },
+                  { label: "Updated", value: formatDate(d.updated_at) },
+                ],
+                actions: (d) => [
+                  {
+                    label: "View",
+                    icon: Eye,
+                    variant: "outline" as const,
+                    onClick: () => {
+                      setSelectedDoc(d)
+                      setIsViewDialogOpen(true)
+                    },
+                  },
+                ],
+              },
+            }}
+            cardRenderer={(d) => (
+              <div
+                className="bg-card hover:border-primary cursor-pointer rounded-xl border-2 p-4 transition-all"
+                onClick={() => {
+                  setSelectedDoc(d)
                   setIsViewDialogOpen(true)
                 }}
-                onEdit={openEditDialog}
-                onDelete={(doc) => {
-                  setSelectedDoc(doc)
-                  setIsDeleteDialogOpen(true)
-                }}
-              />
-            ) : (
-              <DocCardView
-                docs={filteredDocs}
-                formatDate={formatDate}
-                onView={(doc) => {
-                  setSelectedDoc(doc)
-                  setIsViewDialogOpen(true)
-                }}
-                onEdit={openEditDialog}
-                onDelete={(doc) => {
-                  setSelectedDoc(doc)
-                  setIsDeleteDialogOpen(true)
-                }}
-              />
-            )
-          ) : (
-            <DocEmptyState hasFilters={!!(searchQuery || categoryFilter !== "all")} onCreateClick={openCreateDialog} />
-          )}
+              >
+                <div className="mb-2 flex items-start justify-between gap-2">
+                  <h4 className="line-clamp-1 text-sm font-semibold">{d.title}</h4>
+                  <Badge className={getStatusColor(d.is_draft)}>{d.is_draft ? "Draft" : "Published"}</Badge>
+                </div>
+                <p className="text-muted-foreground text-[11px]">{d.category ?? "-"}</p>
+                <p className="text-muted-foreground mt-2 line-clamp-3 text-xs">{d.content}</p>
+              </div>
+            )}
+            emptyTitle="No documents found"
+            emptyDescription="Create your first document to get started."
+            emptyIcon={FileText}
+            urlSync
+          />
 
           <DocViewDialog
             open={isViewDialogOpen}
@@ -342,7 +456,7 @@ export function DocumentationContent({
             onConfirm={handleDelete}
             isSaving={isSaving}
           />
-        </AppTablePage>
+        </DataTablePage>
       </TabsContent>
 
       <TabsContent value="department-documents" className="space-y-4">
