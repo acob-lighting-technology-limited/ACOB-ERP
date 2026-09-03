@@ -457,6 +457,7 @@ export function BypassOverrideContent({ rows, error }: { rows: EnrichedBypassLog
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total Overrides"
             value={stats.total}
             icon={ShieldAlert}
@@ -464,6 +465,7 @@ export function BypassOverrideContent({ rows, error }: { rows: EnrichedBypassLog
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Emergency Reqs"
             value={stats.emergencyReqs}
             icon={AlertCircle}
@@ -471,6 +473,7 @@ export function BypassOverrideContent({ rows, error }: { rows: EnrichedBypassLog
             iconColor="text-red-500"
           />
           <StatCard
+            variant="compact"
             title="Attendance Overrides"
             value={stats.attendanceOverrides}
             icon={CalendarRange}
@@ -478,6 +481,7 @@ export function BypassOverrideContent({ rows, error }: { rows: EnrichedBypassLog
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Manual Leaves"
             value={stats.manualLeaves}
             icon={FileText}
@@ -519,35 +523,40 @@ export function BypassOverrideContent({ rows, error }: { rows: EnrichedBypassLog
               <div className="bg-muted/40 space-y-4 rounded-lg border-2 p-4">
                 <div className="grid gap-4 md:grid-cols-3">
                   <div>
-                    <h4 className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
-                      Activity Summary
-                    </h4>
-                    <p className="text-primary mt-1 text-sm font-semibold">{getBypassSummary(row)}</p>
+                    <span className="text-muted-foreground block text-xs font-medium uppercase">Target / Entity</span>
+                    <span className="text-foreground text-sm font-semibold">{target}</span>
                   </div>
                   <div>
-                    <h4 className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
-                      Target / Subject
-                    </h4>
-                    <p className="mt-1 text-sm font-semibold">{target}</p>
+                    <span className="text-muted-foreground block text-xs font-medium uppercase">Requested By</span>
+                    <span className="text-foreground text-sm font-semibold">{getRequestedBy(row)}</span>
                   </div>
                   <div>
-                    <h4 className="text-muted-foreground text-xs font-bold tracking-wider uppercase">
-                      Bypass Reason / Comments
-                    </h4>
-                    <p className="bg-background mt-1 rounded border p-2 text-sm italic">&ldquo;{reason}&rdquo;</p>
+                    <span className="text-muted-foreground block text-xs font-medium uppercase">IP Address</span>
+                    <span className="text-muted-foreground font-mono text-xs">
+                      {(row.metadata as any)?.ip_address || "Internal / Unknown"}
+                    </span>
                   </div>
                 </div>
 
+                {reason && (
+                  <div>
+                    <span className="text-muted-foreground block text-xs font-medium uppercase">
+                      Reason / Justification
+                    </span>
+                    <p className="bg-background mt-1 rounded border p-2 text-xs italic">{reason}</p>
+                  </div>
+                )}
+
                 {details.length > 0 && (
                   <div>
-                    <h4 className="text-muted-foreground mb-2 text-xs font-bold tracking-wider uppercase">
-                      Detailed Properties
-                    </h4>
-                    <div className="bg-background grid grid-cols-2 gap-3 rounded-lg border p-3 sm:grid-cols-3 md:grid-cols-4">
-                      {details.map((item, idx) => (
-                        <div key={idx} className="flex flex-col">
-                          <span className="text-muted-foreground text-[10px] font-bold uppercase">{item.label}</span>
-                          <span className="mt-0.5 text-xs font-medium">{item.value}</span>
+                    <span className="text-muted-foreground mb-1 block text-xs font-medium uppercase">
+                      Detailed Parameters
+                    </span>
+                    <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-3">
+                      {details.map((d, i) => (
+                        <div key={i} className="bg-background rounded border p-2">
+                          <span className="text-muted-foreground block text-[10px]">{d.label}</span>
+                          <span className="font-semibold">{d.value}</span>
                         </div>
                       ))}
                     </div>
@@ -558,6 +567,25 @@ export function BypassOverrideContent({ rows, error }: { rows: EnrichedBypassLog
           },
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (row) =>
+            getBypassType(row).includes("Emergency")
+              ? "bg-red-500"
+              : getBypassType(row).includes("Manual")
+                ? "bg-amber-500"
+                : "bg-blue-500",
+          title: (row) => getBypassSummary(row),
+          subtitle: (row) =>
+            `${formatWATDateTime(row.created_at)} · By: ${row.actor ? `${row.actor.first_name} ${row.actor.last_name}` : "System"}`,
+          trailing: (row) => (
+            <Badge variant="outline" className="text-[10px]">
+              {getBypassType(row)}
+            </Badge>
+          ),
+        }}
         cardRenderer={(row) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">

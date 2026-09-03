@@ -267,8 +267,9 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
       activeTab={hasLeadFeedback ? activeTab : undefined}
       onTabChange={(tab) => setActiveTab(tab as "general" | "leads")}
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total"
             value={initialStats.total}
             icon={MessageSquare}
@@ -276,6 +277,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Open"
             value={initialStats.open}
             icon={AlertCircle}
@@ -283,6 +285,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="In Progress"
             value={initialStats.inProgress}
             icon={Clock}
@@ -290,6 +293,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Resolved"
             value={initialStats.resolved}
             icon={ShieldCheck}
@@ -297,6 +301,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
             iconColor="text-violet-500"
           />
           <StatCard
+            variant="compact"
             title="Closed"
             value={initialStats.closed}
             icon={XCircle}
@@ -355,6 +360,33 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.status === "open"
+              ? "bg-emerald-500"
+              : r.status === "in_progress"
+                ? "bg-blue-500"
+                : r.status === "resolved"
+                  ? "bg-violet-500"
+                  : "bg-slate-400",
+          title: (r) => r.title,
+          subtitle: (r) =>
+            `${r.is_anonymous ? "Anonymous" : r.profiles ? `${r.profiles.first_name || ""} ${r.profiles.last_name || ""}`.trim() || "Unknown" : "Unknown"} · ${r.feedback_type} · ${formatWATDate(r.created_at)}`,
+          trailing: (r) => (
+            <Badge
+              className={cn("px-2 py-0.5 text-[10px]", STATUS_COLOR_MAP[r.status] || "bg-muted text-muted-foreground")}
+            >
+              {formatName(r.status)}
+            </Badge>
+          ),
+          onSelect: (r) => {
+            setSelectedFeedback(r)
+            setIsModalOpen(true)
+          },
+        }}
         cardRenderer={(r) => (
           <div
             className="bg-card group relative cursor-pointer rounded-xl border p-4 transition-all hover:shadow-md"
