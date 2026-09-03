@@ -19,7 +19,18 @@ import { isAssignableProfile } from "@/lib/workforce/assignment-policy"
 import { ASSET_TYPES, ASSET_TYPE_MAP } from "@/lib/asset-types"
 import { getDepartmentForOffice } from "@/lib/rooms-and-offices"
 import { assignmentValidation } from "@/lib/validation"
-import { Package, AlertCircle, Plus, Download, History, Pencil, RefreshCw, Wrench, UserMinus } from "lucide-react"
+import {
+  Package,
+  AlertCircle,
+  Plus,
+  Download,
+  History,
+  Pencil,
+  RefreshCw,
+  Wrench,
+  UserMinus,
+  FileText,
+} from "lucide-react"
 import { StatCard } from "@/components/ui/stat-card"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
@@ -36,6 +47,7 @@ import { AssetIssuesDialog } from "@/components/assets/AssetIssuesDialog"
 import { AssetTypeDialog } from "@/components/assets/AssetTypeDialog"
 import { AssetExportDialog } from "@/components/assets/AssetExportDialog"
 import { EmployeeAssetsReportDialog } from "@/components/assets/EmployeeAssetsReportDialog"
+import { AssetHandoverDialog } from "@/components/assets/AssetHandoverDialog"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import {
   buildAssetExportRows,
@@ -258,6 +270,8 @@ export function AdminAssetsContent({
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isReleaseDialogOpen, setIsReleaseDialogOpen] = useState(false)
+  const [isHandoverDialogOpen, setIsHandoverDialogOpen] = useState(false)
+  const [selectedHandoverAsset, setSelectedHandoverAsset] = useState<Asset | null>(null)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [isIssuesDialogOpen, setIsIssuesDialogOpen] = useState(false)
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
@@ -1432,6 +1446,15 @@ export function AdminAssetsContent({
       onClick: (asset) => void loadAssetHistory(asset),
     },
     {
+      label: "Handover Policy",
+      icon: FileText,
+      onClick: (asset) => {
+        setSelectedHandoverAsset(asset)
+        setIsHandoverDialogOpen(true)
+      },
+      hidden: (asset) => Boolean(asset.deleted_at),
+    },
+    {
       label: "Archive",
       icon: AlertCircle,
       variant: "destructive",
@@ -1843,6 +1866,15 @@ export function AdminAssetsContent({
           if (id === "employee_pdf") return handleEmployeeReportClick("pdf")
           handleEmployeeReportClick("word")
         }}
+      />
+
+      {/* Asset Handover Policy PDF Dialog */}
+      <AssetHandoverDialog
+        open={isHandoverDialogOpen}
+        onOpenChange={setIsHandoverDialogOpen}
+        asset={selectedHandoverAsset as any}
+        userProfile={userProfile as any}
+        employees={employees as any}
       />
     </DataTablePage>
   )
