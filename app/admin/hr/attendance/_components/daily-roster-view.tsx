@@ -425,7 +425,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
 
   return (
     <>
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
+      <div className="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3">
         <StatCard
           variant="compact"
           title="Present"
@@ -441,6 +441,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           icon={Users}
           iconBgColor="bg-green-500/10"
           iconColor="text-green-500"
+          className="hidden sm:block"
         />
         <StatCard
           variant="compact"
@@ -457,6 +458,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           icon={AlertCircle}
           iconBgColor="bg-cyan-500/10"
           iconColor="text-cyan-500"
+          className="hidden sm:block"
         />
         <StatCard
           variant="compact"
