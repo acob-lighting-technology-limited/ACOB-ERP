@@ -342,7 +342,7 @@ export function ProjectContent() {
         cardRenderer={(r) => {
           const info = getProgressInfo(r)
           return (
-            <div className="space-y-3">
+            <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
               <div className="flex items-start justify-between gap-2">
                 <h4 className="line-clamp-2 text-sm font-semibold">{r.project_name}</h4>
                 {renderStatusBadge(r.status)}

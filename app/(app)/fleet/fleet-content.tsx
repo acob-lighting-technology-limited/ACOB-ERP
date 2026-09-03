@@ -1,10 +1,22 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { formatWATDateTime, toLocalISODate } from "@/lib/utils/date"
+import { formatWATDateTime, formatWATDateTimeRange, toLocalISODate } from "@/lib/utils/date"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { QUERY_KEYS } from "@/lib/query-keys"
-import { CalendarClock, Car, Paperclip, Pencil, Plus, Trash2 } from "lucide-react"
+import {
+  CalendarClock,
+  Car,
+  Paperclip,
+  Pencil,
+  Plus,
+  Trash2,
+  Clock,
+  CheckCircle2,
+  FileText,
+  MessageSquare,
+  User,
+} from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -326,9 +338,26 @@ export function FleetContent() {
       bookings.map((booking) => ({
         ...booking,
         resourceName: booking.resource?.name || "Resource",
-        timeRange: `${formatDateTime(booking.start_at)} - ${formatDateTime(booking.end_at)}`,
+        timeRange: formatWATDateTimeRange(booking.start_at, booking.end_at),
       })),
     [bookings]
+  )
+
+  const statusPill = (row: FleetBookingRow) => (
+    <Badge
+      variant={
+        row.status === "approved"
+          ? "default"
+          : row.status === "pending"
+            ? "secondary"
+            : row.status === "rejected"
+              ? "destructive"
+              : "outline"
+      }
+      className="text-[10px] whitespace-nowrap capitalize"
+    >
+      {row.status}
+    </Badge>
   )
 
   const columns = useMemo<DataTableColumn<FleetBookingRow>[]>(
@@ -363,21 +392,7 @@ export function FleetContent() {
         label: "Status",
         sortable: true,
         accessor: (row) => row.status,
-        render: (row) => (
-          <Badge
-            variant={
-              row.status === "approved"
-                ? "default"
-                : row.status === "pending"
-                  ? "secondary"
-                  : row.status === "rejected"
-                    ? "destructive"
-                    : "outline"
-            }
-          >
-            {row.status}
-          </Badge>
-        ),
+        render: (row) => statusPill(row),
       },
       {
         key: "attachments",
@@ -463,16 +478,25 @@ export function FleetContent() {
       tabs={FLEET_TABS}
       activeTab={activeTab}
       onTabChange={(tab) => setActiveTab(tab as "all" | "my")}
+      spacing="tight"
+      actionsPlacement="inline-always"
       actions={
-        <Button onClick={() => setOpen(true)} size="sm" className="gap-2">
-          <Plus className="h-4 w-4" />
+        <Button onClick={() => setOpen(true)} size="sm">
+          <Plus className="h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">New Application</span>
-          <span className="sm:hidden">New</span>
         </Button>
       }
+      statBadgeStyle="line"
+      statBadges={[
+        { icon: Car, label: `${stats.total} applications` },
+        { icon: Clock, label: `${stats.pending} pending` },
+        { icon: CheckCircle2, label: `${stats.approved} approved` },
+        { icon: CalendarClock, label: `${stats.occupiedSlots} slots booked` },
+      ]}
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Applications"
             value={stats.total}
             icon={Car}
@@ -480,20 +504,23 @@ export function FleetContent() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Pending"
             value={stats.pending}
-            icon={CalendarClock}
+            icon={Clock}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Approved"
             value={stats.approved}
-            icon={CalendarClock}
+            icon={CheckCircle2}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Occupied Slots"
             value={stats.occupiedSlots}
             icon={CalendarClock}
@@ -532,66 +559,103 @@ export function FleetContent() {
             hidden: (row) => row.status !== "pending" || cancelingId === row.id,
           },
         ]}
-        expandable={{
-          render: (row) => (
-            <div className="space-y-3">
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">Reason</p>
-                <p className="text-sm">{row.reason}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">Admin Note</p>
-                <p className="text-sm">{row.admin_note || "-"}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">
-                  {row.status === "rejected" ? "Rejected By" : "Approved By"}
-                </p>
-                {row.reviewer?.full_name ? (
-                  <>
-                    <p className="text-sm">
-                      {row.reviewer.full_name}
-                      {row.reviewer.department ? ` — ${row.reviewer.department}` : ""}
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      {row.reviewed_at ? formatDateTime(row.reviewed_at) : "Time not recorded"}
-                    </p>
-                  </>
-                ) : (
-                  <p className="text-sm">Not yet reviewed</p>
-                )}
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">Attachments</p>
-                <p className="text-sm">{(row.attachments || []).length} file(s)</p>
-              </div>
-            </div>
-          ),
-        }}
+        stickyToolbar
         viewToggle
+        contactsView
+        // Seven columns, four of them people and timestamps: a table where it
+        // fits, the row list where it does not.
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (row) =>
+            row.status === "pending"
+              ? "bg-amber-500"
+              : row.status === "approved"
+                ? "bg-emerald-500"
+                : row.status === "rejected"
+                  ? "bg-rose-500"
+                  : undefined,
+          title: (row) => row.resourceName,
+          subtitle: (row) => `${row.timeRange} · ${row.requester?.full_name || "Self"}`,
+          trailing: (row) => statusPill(row),
+          detail: {
+            title: (row) => row.resourceName,
+            subtitle: (row) => (
+              <span className="text-muted-foreground text-xs">
+                {row.timeRange} · requested by {row.requester?.full_name || "Self"}
+              </span>
+            ),
+            badges: (row) => statusPill(row),
+            // Everything the removed expandable row carried, plus the decision
+            // timestamp it only half-showed.
+            fields: (row) => [
+              { icon: FileText, label: "Reason", value: row.reason, copyable: true },
+              {
+                icon: MessageSquare,
+                label: "Admin note",
+                value: row.admin_note,
+                copyable: true,
+              },
+              {
+                icon: User,
+                label: row.status === "rejected" ? "Rejected by" : "Approved by",
+                value: row.reviewer?.full_name
+                  ? `${row.reviewer.full_name}${row.reviewer.department ? ` — ${row.reviewer.department}` : ""}${
+                      row.reviewed_at ? ` · ${formatDateTime(row.reviewed_at)}` : ""
+                    }`
+                  : "Not yet reviewed",
+                copyable: false,
+                muted: !row.reviewer?.full_name,
+              },
+              {
+                icon: CalendarClock,
+                label: "Submitted",
+                value: formatDateTime(row.created_at),
+                copyable: false,
+              },
+              {
+                icon: Paperclip,
+                label: "Attachments",
+                value: `${(row.attachments || []).length} file${(row.attachments || []).length === 1 ? "" : "s"}`,
+                copyable: false,
+              },
+            ],
+            actions: (row) =>
+              row.status === "pending"
+                ? [
+                    {
+                      label: "Edit",
+                      icon: Pencil,
+                      variant: "outline" as const,
+                      onClick: () => handleOpenEdit(row),
+                    },
+                    {
+                      label: "Delete",
+                      icon: Trash2,
+                      variant: "destructive" as const,
+                      onClick: () => setDeleteConfirmId(row.id),
+                    },
+                  ]
+                : [],
+          },
+        }}
+        emptyTitle="No bookings"
+        emptyDescription="Applications you submit, and those you can see, appear here."
+        emptyIcon={Car}
+        skeletonRows={6}
         cardRenderer={(row) => (
-          <div className="space-y-3 rounded-xl border p-3.5 sm:p-4">
+          <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
             <div className="flex items-start justify-between gap-2 border-b pb-2">
-              <div>
+              <div className="min-w-0">
                 <span className="text-foreground block text-sm font-semibold">{row.resourceName}</span>
                 <span className="text-muted-foreground block text-xs">{row.requester?.full_name || "Self"}</span>
               </div>
-              <Badge
-                variant={
-                  row.status === "approved"
-                    ? "default"
-                    : row.status === "pending"
-                      ? "secondary"
-                      : row.status === "rejected"
-                        ? "destructive"
-                        : "outline"
-                }
-              >
-                {row.status}
-              </Badge>
+              {statusPill(row)}
             </div>
             <div className="space-y-1 text-xs">
-              <p className="text-muted-foreground">{row.timeRange}</p>
+              <p className="text-muted-foreground flex items-center gap-1.5">
+                <CalendarClock className="h-3.5 w-3.5 shrink-0" />
+                {row.timeRange}
+              </p>
               <p className="text-foreground line-clamp-2 font-medium">{row.reason}</p>
             </div>
           </div>

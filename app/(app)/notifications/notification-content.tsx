@@ -431,21 +431,28 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
+      spacing="tight"
+      statBadgeStyle="line"
+      statBadges={[
+        { icon: Bell, label: `${counts.all} total` },
+        ...(counts.unread > 0 ? [{ icon: Clock, label: `${counts.unread} unread` }] : []),
+        ...(counts.critical > 0 ? [{ icon: AlertTriangle, label: `${counts.critical} critical` }] : []),
+      ]}
       actions={
-        <div className="flex gap-2">
+        <div className="flex gap-1.5">
           <Link href="/notifications/settings">
             <Button variant="outline" size="sm">
-              <Settings className="mr-2 h-4 w-4" />
-              Settings
+              <Settings className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Settings</span>
             </Button>
           </Link>
           <Button variant="outline" size="sm" onClick={refreshNotifications} disabled={isLoading}>
-            <RefreshCw className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")} />
-            Refresh
+            <RefreshCw className={cn("h-4 w-4 sm:mr-2", isLoading && "animate-spin")} />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
           <Button size="sm" variant="secondary" onClick={() => void markAllAsRead()} disabled={counts.unread === 0}>
-            <CheckCheck className="mr-2 h-4 w-4" />
-            Mark all read
+            <CheckCheck className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Mark all read</span>
           </Button>
         </div>
       }
@@ -460,7 +467,93 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
         isLoading={isLoading}
         rowActions={rowActions}
         pagination={{ pageSize: 50 }}
+        stickyToolbar
         viewToggle
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (n) =>
+            !n.read && (n.priority === "urgent" || n.priority === "high") ? "bg-rose-500" : undefined,
+          leading: (n) => {
+            const Icon = TYPE_ICONS[n.type as NotificationType] || Info
+            return (
+              <span className="bg-muted flex h-8 w-8 shrink-0 items-center justify-center rounded-full">
+                <Icon className="h-4 w-4" />
+              </span>
+            )
+          },
+          title: (n) => n.title,
+          subtitle: (n) => n.message,
+          trailing: (n) =>
+            !n.read ? (
+              <Badge variant="default" className="text-[10px]">
+                New
+              </Badge>
+            ) : (
+              <span className="text-muted-foreground text-[10px] whitespace-nowrap">
+                {formatRelativeTime(n.created_at)}
+              </span>
+            ),
+          detail: {
+            title: (n) => n.title,
+            subtitle: (n) => <span className="text-muted-foreground text-xs">{formatRelativeTime(n.created_at)}</span>,
+            badges: (n) => (
+              <>
+                {!n.read && (
+                  <Badge variant="default" className="text-[10px]">
+                    New
+                  </Badge>
+                )}
+                <Badge variant="outline" className={cn("text-[10px] capitalize", getPriorityBadgeClass(n.priority))}>
+                  {n.priority}
+                </Badge>
+                <Badge variant="outline" className="text-[10px] capitalize">
+                  {n.category}
+                </Badge>
+              </>
+            ),
+            fields: (n) => [
+              { icon: Bell, label: "Message", value: n.message },
+              ...(n.actor_name ? [{ icon: User, label: "From", value: n.actor_name }] : []),
+              { icon: Calendar, label: "Received", value: formatWATDate(n.created_at) },
+            ],
+            actions: (n) => [
+              ...(n.action_url
+                ? [
+                    {
+                      label: "Open",
+                      icon: ChevronRight,
+                      variant: "default" as const,
+                      onClick: () => void openNotification(n),
+                    },
+                  ]
+                : []),
+              ...(n.read
+                ? [
+                    {
+                      label: "Mark unread",
+                      icon: Clock,
+                      variant: "outline" as const,
+                      onClick: () => void markAsUnread(n.id),
+                    },
+                  ]
+                : [
+                    {
+                      label: "Mark read",
+                      icon: CheckCheck,
+                      variant: "outline" as const,
+                      onClick: () => void markAsRead(n.id),
+                    },
+                  ]),
+              {
+                label: "Delete",
+                icon: Trash2,
+                variant: "destructive" as const,
+                onClick: () => void deleteNotification(n.id),
+              },
+            ],
+          },
+        }}
         cardRenderer={(n) => {
           const iconKey = n.type as NotificationType
           const Icon = TYPE_ICONS[iconKey] || Info

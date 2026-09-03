@@ -309,7 +309,7 @@ export default function PeerFeedbackPage() {
             },
           }}
           cardRenderer={(f) => (
-            <div className="space-y-3">
+            <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
               <div className="flex items-start justify-between gap-2">
                 <span className="text-sm font-semibold">{formatName(f.subject)}</span>
                 <Badge variant="secondary">{f.score}%</Badge>
@@ -357,7 +357,7 @@ export default function PeerFeedbackPage() {
             },
           }}
           cardRenderer={(f) => (
-            <div className="space-y-3">
+            <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
               <div className="flex items-start justify-between gap-2">
                 <span className="text-muted-foreground text-sm">Anonymous Peer</span>
                 <Badge variant="secondary">{f.score}%</Badge>

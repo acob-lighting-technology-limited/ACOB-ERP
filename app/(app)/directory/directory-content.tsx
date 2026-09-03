@@ -93,6 +93,38 @@ function getInitials(name: string): string {
  * by its initial, so the surname has to lead. Falls back to whatever is available:
  * a row with only `full_name` keeps its last word as the surname.
  */
+const AVATAR_SIZES = {
+  sm: "h-8 w-8 text-[10px]",
+  md: "h-9 w-9 text-[11px]",
+  lg: "h-12 w-12 text-sm",
+  xl: "h-16 w-16 text-lg",
+} as const
+
+/**
+ * The person, in every view. A directory is a list of people, so the face (or
+ * the initials standing in for it) belongs in the table cell and the card as
+ * much as in the contacts row — it was previously written inline twice and
+ * missing from the other two.
+ */
+function DirectoryAvatar({ row, size = "md" }: { row: DirectoryRow; size?: keyof typeof AVATAR_SIZES }) {
+  const name = displayName(row)
+  return (
+    <span
+      className={cn(
+        "bg-primary/10 text-primary flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold",
+        AVATAR_SIZES[size]
+      )}
+    >
+      {row.avatar_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={row.avatar_url} alt={name} className="h-full w-full object-cover" />
+      ) : (
+        getInitials(name)
+      )}
+    </span>
+  )
+}
+
 function displayName(row: DirectoryRow): string {
   const first = row.first_name?.trim()
   const last = row.last_name?.trim()
@@ -186,16 +218,19 @@ export function DirectoryContent() {
         sortable: true,
         accessor: (r) => displayName(r),
         render: (r) => (
-          <div className="group space-y-1">
-            <div className="flex items-center gap-2">
-              <CopyValue value={displayName(r)} className="font-medium" />
-              {r.is_department_lead && (
-                <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400">
-                  Lead
-                </Badge>
-              )}
+          <div className="group flex items-center gap-2.5">
+            <DirectoryAvatar row={r} size="sm" />
+            <div className="min-w-0 space-y-1">
+              <div className="flex items-center gap-2">
+                <CopyValue value={displayName(r)} className="font-medium" />
+                {r.is_department_lead && (
+                  <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400">
+                    Lead
+                  </Badge>
+                )}
+              </div>
+              {r.designation && <p className="text-muted-foreground text-xs">{r.designation}</p>}
             </div>
-            {r.designation && <p className="text-muted-foreground text-xs">{r.designation}</p>}
           </div>
         ),
       },
@@ -409,16 +444,7 @@ export function DirectoryContent() {
             const letter = displayName(r).trim()[0]?.toUpperCase() || "#"
             return /[A-Z]/.test(letter) ? letter : "#"
           },
-          leading: (r) => (
-            <span className="bg-primary/10 text-primary flex h-9 w-9 items-center justify-center overflow-hidden rounded-full text-[11px] font-bold">
-              {r.avatar_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={r.avatar_url} alt={displayName(r)} className="h-full w-full object-cover" />
-              ) : (
-                getInitials(displayName(r))
-              )}
-            </span>
-          ),
+          leading: (r) => <DirectoryAvatar row={r} />,
           title: (r) => displayName(r),
           subtitle: (r) => [r.designation, r.department].filter(Boolean).join(" · ") || "—",
           trailing: (r) =>
@@ -430,16 +456,7 @@ export function DirectoryContent() {
           detail: {
             title: (r) => displayName(r),
             subtitle: (r) => r.designation,
-            avatar: (r) => (
-              <span className="bg-primary/10 text-primary flex h-16 w-16 items-center justify-center overflow-hidden rounded-full text-lg font-bold">
-                {r.avatar_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={r.avatar_url} alt={displayName(r)} className="h-full w-full object-cover" />
-                ) : (
-                  getInitials(displayName(r))
-                )}
-              </span>
-            ),
+            avatar: (r) => <DirectoryAvatar row={r} size="xl" />,
             badges: (r) =>
               r.is_department_lead ? (
                 <Badge
@@ -481,12 +498,15 @@ export function DirectoryContent() {
         cardRenderer={(r) => (
           <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 space-y-3 rounded-xl border p-4 shadow-sm transition-all">
             <div className="flex items-start justify-between gap-3">
-              <div>
-                <CopyValue value={displayName(r)} className="font-medium" />
-                {r.designation && <p className="text-muted-foreground text-sm">{r.designation}</p>}
+              <div className="flex min-w-0 items-center gap-3">
+                <DirectoryAvatar row={r} size="lg" />
+                <div className="min-w-0">
+                  <CopyValue value={displayName(r)} className="font-medium" />
+                  {r.designation && <p className="text-muted-foreground text-sm">{r.designation}</p>}
+                </div>
               </div>
               {r.is_department_lead && (
-                <Badge variant="outline" className="text-emerald-600 dark:text-emerald-400">
+                <Badge variant="outline" className="shrink-0 text-emerald-600 dark:text-emerald-400">
                   Lead
                 </Badge>
               )}

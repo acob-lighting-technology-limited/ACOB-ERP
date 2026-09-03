@@ -7,7 +7,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createClient } from "@/lib/supabase/client"
 import { getCurrentOfficeWeek, getReportingOfficeWeek } from "@/lib/meeting-week"
 import { fetchWeeklyReportLockState, getDefaultMeetingDateIso } from "@/lib/weekly-report-lock"
-import { CalendarDays, Download, FileBarChart, FileSpreadsheet, Plus } from "lucide-react"
+import { CalendarDays, Download, FileBarChart, FileSpreadsheet, Pencil, Plus } from "lucide-react"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
@@ -253,6 +253,40 @@ export default function WeeklyReportsPortal() {
     )
   }
 
+  const targetWeek = useMemo(
+    () => (hasManualWeekSelection ? { week: weekFilter, year: yearFilter } : reportingWeek),
+    [hasManualWeekSelection, weekFilter, yearFilter, reportingWeek]
+  )
+
+  const existingReportForUserDept = useMemo(() => {
+    const deptToCheck = deptFilter !== "all" ? deptFilter : profile?.department
+    if (!deptToCheck) return null
+    const targetDeptAliases = getDepartmentAliases(deptToCheck)
+    return (
+      reports.find(
+        (r) =>
+          r.week_number === targetWeek.week &&
+          r.year === targetWeek.year &&
+          targetDeptAliases.includes(normalizeDepartmentName(r.department))
+      ) ?? null
+    )
+  }, [deptFilter, profile?.department, reports, targetWeek.week, targetWeek.year])
+
+  const hasUnsubmittedManagedDept = useMemo(() => {
+    if (deptFilter !== "all" || managedDepartments.length <= 1) return false
+    return managedDepartments.some((dept) => {
+      const aliases = getDepartmentAliases(dept)
+      return !reports.some(
+        (r) =>
+          r.week_number === targetWeek.week &&
+          r.year === targetWeek.year &&
+          aliases.includes(normalizeDepartmentName(r.department))
+      )
+    })
+  }, [deptFilter, managedDepartments, reports, targetWeek.week, targetWeek.year])
+
+  const showEditButton = Boolean(existingReportForUserDept && !hasUnsubmittedManagedDept)
+
   const openAllPptxModeDialog = () => {
     setPendingPptxExport({ kind: "all" })
     setPptxModeDialogOpen(true)
@@ -452,23 +486,43 @@ export default function WeeklyReportsPortal() {
             <Download className="h-4 w-4" />
             Export
           </Button>
-          <Button
-            size="sm"
-            className="h-8 gap-2"
-            onClick={() => {
-              const target = hasManualWeekSelection ? { week: weekFilter, year: yearFilter } : reportingWeek
-              setSelectedReportParams({
-                week: target.week,
-                year: target.year,
-                dept: profile?.department || undefined,
-              })
-              setIsDialogOpen(true)
-            }}
-          >
-            <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Add Report</span>
-            <span className="sm:hidden">Add</span>
-          </Button>
+          {showEditButton && existingReportForUserDept ? (
+            <Button
+              size="sm"
+              className="h-8 gap-2"
+              disabled={!canMutateFilteredWeek || !canMutateReport(existingReportForUserDept)}
+              onClick={() => {
+                setSelectedReportParams({
+                  week: existingReportForUserDept.week_number,
+                  year: existingReportForUserDept.year,
+                  dept: existingReportForUserDept.department,
+                })
+                setIsDialogOpen(true)
+              }}
+            >
+              <Pencil className="h-4 w-4" />
+              <span className="hidden sm:inline">Edit Report</span>
+              <span className="sm:hidden">Edit</span>
+            </Button>
+          ) : (
+            <Button
+              size="sm"
+              className="h-8 gap-2"
+              disabled={!canMutateFilteredWeek}
+              onClick={() => {
+                setSelectedReportParams({
+                  week: targetWeek.week,
+                  year: targetWeek.year,
+                  dept: (deptFilter !== "all" ? deptFilter : profile?.department) || undefined,
+                })
+                setIsDialogOpen(true)
+              }}
+            >
+              <Plus className="h-4 w-4" />
+              <span className="hidden sm:inline">Add Report</span>
+              <span className="sm:hidden">Add</span>
+            </Button>
+          )}
         </div>
       }
       stats={
@@ -633,7 +687,11 @@ export default function WeeklyReportsPortal() {
         defaultViewMode={{ mobile: "contacts", desktop: "list" }}
         mobileRow={{
           title: (report) => report.department,
-          subtitle: (report) => `W${report.week_number} · ${report.year}`,
+          subtitle: (report) => {
+            const profileInfo = Array.isArray(report.profiles) ? report.profiles[0] : report.profiles
+            const submitterName = profileInfo ? `${profileInfo.first_name} ${profileInfo.last_name}` : "Unknown"
+            return `${submitterName} (W${report.week_number}) · ${report.year}`
+          },
           trailing: (report) => {
             const trackerStatus = getActionTrackerStatus(report.department, trackingData)
             return <Badge className={trackerStatus.color}>{trackerStatus.label}</Badge>
@@ -660,11 +718,13 @@ export default function WeeklyReportsPortal() {
           const trackerStatus = getActionTrackerStatus(report.department, trackingData)
 
           return (
-            <div className="space-y-3 rounded-xl border p-4">
+            <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <p className="font-medium">{report.department}</p>
-                  <p className="text-muted-foreground text-sm">{submitterName}</p>
+                  <p className="text-muted-foreground text-sm">
+                    {submitterName} (W{report.week_number})
+                  </p>
                 </div>
                 <Badge className={trackerStatus.color}>{trackerStatus.label}</Badge>
               </div>

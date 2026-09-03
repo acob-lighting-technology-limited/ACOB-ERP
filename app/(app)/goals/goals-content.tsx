@@ -95,8 +95,10 @@ export function GoalsContent({
         resizable: true,
         initialWidth: 280,
         render: (row) => (
-          <div>
-            <p className="text-foreground font-medium">{row.title}</p>
+          <div className="max-w-[280px] min-w-0 space-y-0.5">
+            <p className="text-foreground truncate font-medium" title={row.title}>
+              {row.title}
+            </p>
             {row.description ? (
               <p className="text-muted-foreground truncate text-xs" title={row.description}>
                 {row.description}
@@ -163,14 +165,14 @@ export function GoalsContent({
 
   const filters = useMemo<DataTableFilter<GoalRow>[]>(
     () => [
+      ...cycleFilters,
       {
         key: "department",
         label: "Department",
         options: availableDepartments.map((d) => ({ value: d, label: d })),
       },
-      ...cycleFilters,
     ],
-    [availableDepartments, cycleFilters]
+    [cycleFilters, availableDepartments]
   )
 
   async function handleCreateGoal() {
@@ -318,7 +320,7 @@ export function GoalsContent({
           },
         }}
         cardRenderer={(row) => (
-          <div className="space-y-3">
+          <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
             <div className="flex items-start justify-between gap-2">
               <h4 className="line-clamp-2 text-sm font-semibold">{row.title}</h4>
               <Badge variant="secondary" className="shrink-0 text-[10px] capitalize">

@@ -319,7 +319,7 @@ export default function DevelopmentPlansPage() {
           const totalActions = plan.actions?.length || 0
           const doneActions = (plan.actions || []).filter((a) => a.status === "completed").length
           return (
-            <div className="space-y-3">
+            <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
               <div className="flex items-start justify-between gap-2">
                 <h4 className="line-clamp-2 text-sm font-semibold">{plan.title}</h4>
                 <Badge variant={STATUS_VARIANTS[plan.status] || "outline"} className="shrink-0 text-[10px] capitalize">

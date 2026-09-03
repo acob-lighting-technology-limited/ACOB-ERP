@@ -4,7 +4,18 @@ import { useMemo, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
-import { FileText, Star, TrendingUp, CheckCircle, ClipboardList } from "lucide-react"
+import {
+  FileText,
+  Star,
+  TrendingUp,
+  CheckCircle,
+  ClipboardList,
+  BarChart2,
+  MessageSquare,
+  User,
+  CalendarDays,
+  CheckCircle2,
+} from "lucide-react"
 import type { Review } from "./page"
 import { toast } from "sonner"
 import {
@@ -165,6 +176,7 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
   })
 
   const filters: DataTableFilter<Review>[] = [
+    ...cycleFilters,
     {
       key: "status",
       label: "Status",
@@ -174,7 +186,6 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
         { value: "completed", label: "Completed" },
       ],
     },
-    ...cycleFilters,
   ]
 
   async function acknowledgeReview() {
@@ -286,9 +297,17 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
       description="View and acknowledge your quarterly and annual evaluations."
       icon={FileText}
       backLink={{ href: "/profile", label: "Back to Dashboard" }}
+      spacing="tight"
+      statBadgeStyle="line"
+      statBadges={[
+        { icon: ClipboardList, label: `${stats.total} reviews` },
+        { icon: TrendingUp, label: `${stats.avgScore} avg` },
+        { icon: CheckCircle, label: `${stats.completed} completed` },
+      ]}
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
           <StatCard
+            variant="compact"
             title="Total Reviews"
             value={stats.total}
             icon={ClipboardList}
@@ -296,6 +315,7 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Avg. Performance"
             value={stats.avgScore}
             icon={TrendingUp}
@@ -303,6 +323,7 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Completed"
             value={stats.completed}
             icon={CheckCircle}
@@ -322,9 +343,84 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
         searchFn={(r, q) =>
           `${getQuarterLabel(r)} ${r.reviewer?.first_name} ${r.reviewer?.last_name}`.toLowerCase().includes(q)
         }
+        stickyToolbar
         viewToggle
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (r) => getQuarterLabel(r),
+          subtitle: (r) =>
+            r.reviewer_id === currentUserId
+              ? "Self-review"
+              : r.reviewer
+                ? `${r.reviewer.first_name || ""} ${r.reviewer.last_name || ""}`.trim() || "—"
+                : "—",
+          trailing: (r) => (
+            <Badge
+              variant={r.acknowledged_at ? "default" : r.status === "completed" ? "secondary" : "outline"}
+              className="text-[10px] capitalize"
+            >
+              {r.acknowledged_at ? "Acknowledged" : r.status || "draft"}
+            </Badge>
+          ),
+          onSelect: (r) => setDetailsReview(r),
+          detail: {
+            title: (r) => getQuarterLabel(r),
+            subtitle: (r) => (
+              <span className="text-muted-foreground text-xs">
+                {r.reviewer_id === currentUserId
+                  ? "Self-review"
+                  : r.reviewer
+                    ? `${r.reviewer.first_name || ""} ${r.reviewer.last_name || ""}`.trim()
+                    : "—"}
+              </span>
+            ),
+            badges: (r) => (
+              <Badge
+                variant={r.acknowledged_at ? "default" : r.status === "completed" ? "secondary" : "outline"}
+                className="text-[10px] capitalize"
+              >
+                {r.acknowledged_at ? "Acknowledged" : r.status || "draft"}
+              </Badge>
+            ),
+            fields: (r) => [
+              { icon: BarChart2, label: "Final score", value: `${formatMetric(r.final_score)}%` },
+              { icon: BarChart2, label: "KPI score", value: `${formatMetric(r.kpi_score)}/100` },
+              { icon: BarChart2, label: "Attendance score", value: `${formatMetric(r.attendance_score)}/100` },
+              { icon: BarChart2, label: "Behaviour score", value: `${formatMetric(r.behaviour_score)}/100` },
+              { icon: BarChart2, label: "CBT score", value: `${formatMetric(r.cbt_score)}/100` },
+              { icon: MessageSquare, label: "Strengths", value: r.strengths || null },
+              { icon: MessageSquare, label: "Areas for improvement", value: r.areas_for_improvement || null },
+              { icon: MessageSquare, label: "Manager comments", value: r.manager_comments || null },
+              {
+                icon: CheckCircle2,
+                label: "Acknowledged",
+                value: r.acknowledged_at ? formatWATDate(r.acknowledged_at) : null,
+              },
+              {
+                icon: MessageSquare,
+                label: "Your comments",
+                value: r.acknowledged_at ? r.employee_comments || "No comment" : null,
+              },
+            ],
+            actions: (r) =>
+              r.status === "completed" && !r.acknowledged_at
+                ? [
+                    {
+                      label: "Acknowledge Review",
+                      icon: CheckCircle,
+                      variant: "default" as const,
+                      onClick: () => {
+                        setSelectedReview(r)
+                        setEmployeeComments(r.employee_comments || "")
+                      },
+                    },
+                  ]
+                : [],
+          },
+        }}
         cardRenderer={(r) => (
-          <div className="space-y-3">
+          <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold">{getQuarterLabel(r)}</span>
               <Badge variant={r.acknowledged_at ? "default" : "outline"} className="capitalize">
@@ -345,14 +441,7 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
             </div>
           </div>
         )}
-        expandable={{
-          render: (r) => renderReviewDetails(r),
-        }}
         rowActions={[
-          {
-            label: "View Detail",
-            onClick: (r) => setDetailsReview(r),
-          },
           {
             label: "Acknowledge",
             onClick: (r) => {

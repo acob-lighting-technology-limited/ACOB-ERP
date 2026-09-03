@@ -7,7 +7,7 @@ import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-tabl
 import { StatCard } from "@/components/ui/stat-card"
 
 import type { ReviewCycleOption } from "../_lib"
-import { CycleSelector } from "../_components/cycle-selector"
+import { useCycleUrlFilters } from "../_components/cycle-selector"
 
 type BehaviourRow = {
   competency: string
@@ -71,16 +71,13 @@ export function BehaviourContent({
     []
   )
 
+  const cycleFilters = useCycleUrlFilters<BehaviourRow>({ cycles, activeCycleId })
+
   const filters = useMemo<DataTableFilter<BehaviourRow>[]>(() => {
     const list: DataTableFilter<BehaviourRow>[] = []
 
     if (cycles && cycles.length > 0) {
-      list.push({
-        key: "cycle_selector",
-        label: "Review Cycle",
-        options: cycles.map((c) => ({ value: c.id, label: c.name })),
-        render: () => <CycleSelector cycles={cycles} activeCycleId={activeCycleId} />,
-      })
+      list.push(...cycleFilters)
     }
 
     // The cycle selector above already scopes the page to one cycle; a second
@@ -92,7 +89,7 @@ export function BehaviourContent({
     })
 
     return list
-  }, [activeCycleId, cycles, rows])
+  }, [cycleFilters, cycles, rows])
 
   return (
     <DataTablePage
@@ -159,7 +156,7 @@ export function BehaviourContent({
         }}
         viewToggle
         cardRenderer={(row) => (
-          <div className="space-y-3">
+          <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold">{row.competency}</span>
               <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">{row.value}%</span>

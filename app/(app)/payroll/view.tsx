@@ -238,7 +238,7 @@ export function UserPayrollPage({ initialData }: UserPayrollPageProps) {
           },
         }}
         cardRenderer={(e) => (
-          <div className="space-y-3">
+          <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
             <div className="flex items-start justify-between gap-2">
               <h4 className="text-sm font-semibold">{e.payroll_periods?.name || "—"}</h4>
               <span className="font-mono text-sm font-bold text-emerald-600">{fmt(Number(e.net_salary))}</span>

@@ -451,6 +451,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
   return (
     <DataTablePage
       title="Lunch"
+      spacing="tight"
       description="Vote for what you want to eat and see what everyone else picked."
       icon={Utensils}
       backLink={{ href: "/profile", label: "Back to Home" }}
@@ -461,6 +462,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
         activeTab === "poll" ? (
           <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
             <StatCard
+              variant="compact"
               title="Your Choice"
               value={myPickLabel}
               icon={Check}
@@ -468,6 +470,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
               iconColor="text-emerald-500"
             />
             <StatCard
+              variant="compact"
               title="Voted"
               value={totalVotes}
               icon={Users}
@@ -475,6 +478,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
               iconColor="text-blue-500"
             />
             <StatCard
+              variant="compact"
               title={votingOpen ? "Voting Closes" : "Voting"}
               value={data.deadline ? (votingOpen ? formatWATTime(data.deadline) : "Closed") : "—"}
               icon={Clock}
@@ -482,6 +486,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
               iconColor="text-amber-500"
             />
             <StatCard
+              variant="compact"
               title="Deduction / Meal"
               value={naira(data.pricing.employee_deduction)}
               icon={Wallet}
@@ -492,6 +497,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
         ) : (
           <div className="grid max-w-xl grid-cols-2 gap-2 sm:gap-3">
             <StatCard
+              variant="compact"
               title="Total Deduction"
               value={naira(monthDeduction)}
               icon={Wallet}
@@ -499,6 +505,7 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
               iconColor="text-red-500"
             />
             <StatCard
+              variant="compact"
               title="Meals This Period"
               value={historyRows.length}
               icon={Utensils}
@@ -720,9 +727,47 @@ export function LunchContent({ initialData, currentUserId }: LunchContentProps) 
             error={historyError}
             onRetry={() => void loadHistory(historyMonth)}
             pagination={{ pageSize: 31 }}
+            stickyToolbar
             viewToggle
+            contactsView
+            defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+            mobileRow={{
+              title: (row) =>
+                formatWATDate(row.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" }),
+              subtitle: (row) => (row.picks.length > 0 ? row.picks.join(", ") : "Logged by admin"),
+              trailing: (row) => (
+                <span className="font-mono text-sm font-bold text-red-500">{naira(row.employee_deduction)}</span>
+              ),
+              detail: {
+                title: (row) =>
+                  formatWATDate(row.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" }),
+                fields: (row) => [
+                  {
+                    icon: Utensils,
+                    label: "What you ate",
+                    value: row.picks.length > 0 ? row.picks.join(", ") : "Logged by admin",
+                  },
+                  { icon: Wallet, label: "Deduction", value: naira(row.employee_deduction) },
+                ],
+                actions: (row) =>
+                  row.menu_id
+                    ? [
+                        {
+                          label: row.user_review ? `Reviewed ${row.user_review.rating}/5 — Edit` : "Give feedback",
+                          icon: Star,
+                          variant: "outline" as const,
+                          onClick: () => {
+                            setSelectedReviewMenuId(row.menu_id || null)
+                            setSelectedReviewDate(row.date)
+                            setReviewDialogOpen(true)
+                          },
+                        },
+                      ]
+                    : [],
+              },
+            }}
             cardRenderer={(row) => (
-              <div className="space-y-2.5 p-3.5 sm:p-4">
+              <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
                 <div className="flex items-center justify-between gap-2 border-b pb-2">
                   <div>
                     <span className="text-foreground block text-sm font-semibold">

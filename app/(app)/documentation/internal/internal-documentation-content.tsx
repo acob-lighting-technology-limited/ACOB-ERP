@@ -485,7 +485,7 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
         }}
         cardRenderer={(doc) => (
           <div
-            className="bg-card hover:border-primary cursor-pointer rounded-xl border-2 p-4 transition-all"
+            className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full cursor-pointer space-y-3 rounded-xl border p-4 shadow-sm transition-all"
             onClick={() => {
               setSelectedDoc(doc)
               setIsViewDialogOpen(true)
