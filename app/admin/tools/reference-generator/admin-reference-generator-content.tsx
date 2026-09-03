@@ -455,8 +455,9 @@ export function AdminReferenceGeneratorContent({
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total"
             value={stats.total}
             icon={FileText}
@@ -464,6 +465,7 @@ export function AdminReferenceGeneratorContent({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Under Review"
             value={stats.underReview}
             icon={Clock}
@@ -471,6 +473,7 @@ export function AdminReferenceGeneratorContent({
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Approved"
             value={stats.approved}
             icon={CheckCircle}
@@ -478,6 +481,7 @@ export function AdminReferenceGeneratorContent({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Rejected"
             value={stats.rejected}
             icon={ShieldCheck}
@@ -566,6 +570,48 @@ export function AdminReferenceGeneratorContent({
             </div>
           ),
         }}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.status === "approved"
+              ? "bg-emerald-500"
+              : r.status === "rejected"
+                ? "bg-rose-500"
+                : r.status === "under_review"
+                  ? "bg-blue-500"
+                  : "bg-amber-500",
+          title: (r) => `${r.reference_number} · ${r.subject}`,
+          subtitle: (r) =>
+            `${r.department_name || r.assigned_department_name || "No dept"} · ${r.recipient_name || "No recipient"} · ${formatWATDate(r.created_at)}`,
+          trailing: (r) => (
+            <Badge variant="outline" className={`text-[10px] capitalize ${statusBadgeClass(r.status)}`}>
+              {statusLabel(r.status)}
+            </Badge>
+          ),
+        }}
+        cardRenderer={(r) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{r.reference_number}</p>
+                <p className="text-muted-foreground line-clamp-1 text-xs">{r.subject}</p>
+              </div>
+              <Badge variant="outline" className={`capitalize ${statusBadgeClass(r.status)}`}>
+                {statusLabel(r.status)}
+              </Badge>
+            </div>
+            <div className="text-muted-foreground space-y-1 border-t pt-2 text-xs">
+              <p>Recipient: {r.recipient_name || "—"}</p>
+              <div className="flex items-center justify-between text-[10px]">
+                <span>{r.department_name || r.assigned_department_name || "—"}</span>
+                <span>{formatWATDate(r.created_at)}</span>
+              </div>
+            </div>
+          </div>
+        )}
         emptyTitle="No references found"
         emptyDescription="No correspondence records match the current filters."
         emptyIcon={ListFilter}
