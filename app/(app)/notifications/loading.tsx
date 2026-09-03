@@ -1,6 +1,7 @@
 import { Skeleton } from "@/components/ui/skeleton"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { PageWrapper } from "@/components/layout"
+import { cn } from "@/lib/utils"
 
 export default function NotificationLoading() {
   return (
@@ -15,12 +16,12 @@ export default function NotificationLoading() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-4">
         {[...Array(4)].map((_, i) => (
-          <Card key={i}>
-            <CardContent className="p-4">
-              <Skeleton className="h-7 w-12" />
-              <Skeleton className="mt-2 h-3 w-16" />
+          <Card key={i} className={cn(i >= 3 && "hidden sm:block")}>
+            <CardContent className="p-2.5 sm:p-4">
+              <Skeleton className="h-5 w-8 sm:h-7 sm:w-12" />
+              <Skeleton className="mt-1.5 h-2.5 w-12 sm:mt-2 sm:h-3 sm:w-16" />
             </CardContent>
           </Card>
         ))}

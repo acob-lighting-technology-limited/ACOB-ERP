@@ -1,3 +1,5 @@
+import { cn } from "@/lib/utils"
+
 function SkeletonLine({ className }: { className: string }) {
   return <div className={`bg-muted animate-pulse rounded-md ${className}`} />
 }
@@ -120,13 +122,17 @@ export function TablePageSkeleton({
         {/* ── 3b. Stats cards ── */}
         {showStats ? (
           <div
-            className={`grid grid-cols-2 gap-2 sm:gap-3 ${
+            className={`grid grid-cols-3 gap-2 sm:gap-3 ${
               statCards >= 5 ? "sm:grid-cols-3 lg:grid-cols-6" : statCards >= 4 ? "sm:grid-cols-4" : "lg:grid-cols-3"
             } ${statBadges && statBadges > 0 ? "hidden md:grid" : ""}`}
           >
-            {Array.from({ length: statCards }).map((_, i) =>
-              statCardVariant === "compact" ? (
-                <div key={`stat-${i}`} className="bg-card rounded-xl border p-2.5 sm:p-3.5">
+            {Array.from({ length: statCards }).map((_, i) => {
+              const hideOnMobile = statCards > 3 && i >= 3
+              return statCardVariant === "compact" ? (
+                <div
+                  key={`stat-${i}`}
+                  className={cn("bg-card rounded-xl border p-2.5 sm:p-3.5", hideOnMobile && "hidden sm:block")}
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0 flex-1 space-y-1">
                       <SkeletonLine className="h-2.5 w-16 sm:h-3" />
@@ -136,16 +142,19 @@ export function TablePageSkeleton({
                   </div>
                 </div>
               ) : (
-                <div key={`stat-${i}`} className="bg-card rounded-xl border p-4">
+                <div
+                  key={`stat-${i}`}
+                  className={cn("bg-card rounded-xl border p-2.5 sm:p-4", hideOnMobile && "hidden sm:block")}
+                >
                   <div className="flex items-center justify-between">
-                    <SkeletonLine className="h-4 w-20" />
-                    <SkeletonLine className="h-8 w-8 rounded-lg" />
+                    <SkeletonLine className="h-3 w-14 sm:h-4 sm:w-20" />
+                    <SkeletonLine className="h-6 w-6 rounded-md sm:h-8 sm:w-8 sm:rounded-lg" />
                   </div>
-                  <SkeletonLine className="mt-3 h-7 w-16" />
-                  <SkeletonLine className="mt-1 h-3 w-24" />
+                  <SkeletonLine className="mt-2 h-5 w-12 sm:mt-3 sm:h-7 sm:w-16" />
+                  <SkeletonLine className="mt-1 h-2.5 w-16 sm:h-3 sm:w-24" />
                 </div>
               )
-            )}
+            })}
           </div>
         ) : null}
 

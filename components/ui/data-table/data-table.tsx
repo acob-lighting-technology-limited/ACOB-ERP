@@ -1755,14 +1755,39 @@ export function DataTable<TData>({
           {statusBar}
 
           {isLoading ? (
-            /* Skeleton rows — no top border since statusBar has border-t */
+            /* Skeleton rows — responsive contacts list below md, table above md */
             <div className="border-t">
-              <TableSkeleton
-                rows={skeletonRows}
-                cols={visibleColumns.length + (showRowNumbers ? 1 : 0) + (rowActions?.length ? 1 : 0)}
-                headerClassName={headerClassName}
-                borderless
-              />
+              {responsivePair ? (
+                <>
+                  <div className="divide-y md:hidden">
+                    {Array.from({ length: Math.min(skeletonRows, 6) }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3">
+                        <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <Skeleton className="h-4 w-36 max-w-full" />
+                          <Skeleton className="h-3 w-48 max-w-full" />
+                        </div>
+                        <Skeleton className="h-5 w-14 shrink-0 rounded-full" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="hidden md:block">
+                    <TableSkeleton
+                      rows={skeletonRows}
+                      cols={visibleColumns.length + (showRowNumbers ? 1 : 0) + (rowActions?.length ? 1 : 0)}
+                      headerClassName={headerClassName}
+                      borderless
+                    />
+                  </div>
+                </>
+              ) : (
+                <TableSkeleton
+                  rows={skeletonRows}
+                  cols={visibleColumns.length + (showRowNumbers ? 1 : 0) + (rowActions?.length ? 1 : 0)}
+                  headerClassName={headerClassName}
+                  borderless
+                />
+              )}
             </div>
           ) : error ? (
             <div className="space-y-3 border-t py-12 text-center">
