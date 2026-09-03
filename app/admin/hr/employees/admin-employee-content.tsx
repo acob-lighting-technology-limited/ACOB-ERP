@@ -992,8 +992,9 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total Staff"
             value={stats.total}
             icon={Users}
@@ -1001,6 +1002,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Admins"
             value={stats.admins}
             icon={Shield}
@@ -1008,6 +1010,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             iconColor="text-violet-500"
           />
           <StatCard
+            variant="compact"
             title="Dept Leads"
             value={stats.leads}
             icon={Shield}
@@ -1015,6 +1018,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Current Employees"
             value={stats.currentEmployees}
             icon={Users}
@@ -1098,6 +1102,27 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.employment_status === "exited"
+              ? "bg-rose-500"
+              : r.employment_status === "suspended"
+                ? "bg-amber-500"
+                : r.employment_status === "on_leave"
+                  ? "bg-blue-500"
+                  : "bg-emerald-500",
+          title: (r) => `${formatName(r.first_name)} ${formatName(r.last_name)}`,
+          subtitle: (r) => `${r.designation || r.department || "Employee"} · ${r.office_location || r.company_email}`,
+          trailing: (r) => (
+            <div className="flex items-center gap-1.5">
+              <EmployeeStatusBadge status={r.employment_status || "active"} size="sm" />
+            </div>
+          ),
+          onSelect: (r) => handleViewEmployeeDetails(r),
+        }}
         cardRenderer={(r) => (
           <Card className="group transition-shadow hover:shadow-md">
             <CardContent className="space-y-4 p-4">

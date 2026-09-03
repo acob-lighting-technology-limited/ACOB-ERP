@@ -614,6 +614,7 @@ export function LeaveApprovePage({
           activeTab === "calendar" ? (
             <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
               <StatCard
+                variant="compact"
                 title="Days Taken"
                 value={calendarStats.total_days}
                 icon={CalendarDays}
@@ -621,6 +622,7 @@ export function LeaveApprovePage({
                 iconColor="text-blue-500"
               />
               <StatCard
+                variant="compact"
                 title="Employees on Leave"
                 value={calendarStats.active_leaves}
                 icon={Users}
@@ -628,6 +630,7 @@ export function LeaveApprovePage({
                 iconColor="text-violet-500"
               />
               <StatCard
+                variant="compact"
                 title="Approved Leaves"
                 value={calendarStats.approved_count}
                 icon={CheckCircle2}
@@ -635,6 +638,7 @@ export function LeaveApprovePage({
                 iconColor="text-emerald-500"
               />
               <StatCard
+                variant="compact"
                 title="Pending Approval"
                 value={calendarStats.pending_count}
                 icon={Clock}
@@ -645,6 +649,7 @@ export function LeaveApprovePage({
           ) : (
             <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
               <StatCard
+                variant="compact"
                 title="Total Requests"
                 value={stats.total}
                 icon={CalendarCheck2}
@@ -652,6 +657,7 @@ export function LeaveApprovePage({
                 iconColor="text-blue-500"
               />
               <StatCard
+                variant="compact"
                 title="Total Days"
                 value={stats.totalDays}
                 icon={CalendarDays}
@@ -659,6 +665,7 @@ export function LeaveApprovePage({
                 iconColor="text-violet-500"
               />
               <StatCard
+                variant="compact"
                 title="Approved"
                 value={stats.approved}
                 icon={CheckCircle2}
@@ -666,6 +673,7 @@ export function LeaveApprovePage({
                 iconColor="text-emerald-500"
               />
               <StatCard
+                variant="compact"
                 title="Pending Approval"
                 value={stats.pending}
                 icon={Clock}
@@ -966,6 +974,39 @@ export function LeaveApprovePage({
               },
             }}
             viewToggle
+            contactsView
+            stickyToolbar
+            defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+            mobileRow={{
+              accentClass: (r) =>
+                r.status === "rejected" || r.status === "cancelled"
+                  ? "bg-rose-500"
+                  : r.status === "approved" || r.status === "completed"
+                    ? "bg-emerald-500"
+                    : "bg-amber-500",
+              title: (r) => r.user?.full_name || "Employee",
+              subtitle: (r) => `${r.leave_type?.name || "Leave"} · ${r.start_date} to ${r.end_date} (${r.days_count}d)`,
+              trailing: (r) => (
+                <div className="flex items-center gap-1.5">
+                  <Badge
+                    variant={
+                      r.status === "approved" || r.status === "completed"
+                        ? "default"
+                        : r.status === "rejected" || r.status === "cancelled"
+                          ? "destructive"
+                          : "secondary"
+                    }
+                    className="text-[10px]"
+                  >
+                    {r.status}
+                  </Badge>
+                </div>
+              ),
+              onSelect: (r) => {
+                setSelectedLeaveDetail(r)
+                setDetailDialogOpen(true)
+              },
+            }}
             cardRenderer={(r) => (
               <div className="bg-card space-y-4 rounded-xl border p-4 transition-shadow hover:shadow-md">
                 <div className="flex items-start justify-between">

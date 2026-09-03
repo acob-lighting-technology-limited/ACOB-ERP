@@ -1094,8 +1094,9 @@ export function AttendanceReportsPage({
       }
       stats={
         activeTab === "summary" ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
             <StatCard
+              variant="compact"
               title="Employees"
               value={stats.employees}
               icon={Users}
@@ -1103,6 +1104,7 @@ export function AttendanceReportsPage({
               iconColor="text-blue-500"
             />
             <StatCard
+              variant="compact"
               title="Total Work Hours"
               value={stats.totalHours}
               icon={Clock}
@@ -1110,6 +1112,7 @@ export function AttendanceReportsPage({
               iconColor="text-emerald-500"
             />
             <StatCard
+              variant="compact"
               title="Missed Hours"
               value={stats.totalMissedHours}
               icon={AlertCircle}
@@ -1152,6 +1155,32 @@ export function AttendanceReportsPage({
             ),
           }}
           viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (r) =>
+              r.attendance_exempt
+                ? "bg-slate-400"
+                : r.absent_days > 2
+                  ? "bg-rose-500"
+                  : r.late_days > 3
+                    ? "bg-amber-500"
+                    : "bg-emerald-500",
+            title: (r) => r.user_name,
+            subtitle: (r) =>
+              `${r.department} · ${r.present_days} present · ${r.late_days} late · ${r.absent_days} absent`,
+            trailing: (r) =>
+              r.attendance_exempt ? (
+                <Badge variant="outline" className="text-[10px]">
+                  Exempt
+                </Badge>
+              ) : (
+                <span className="font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  {r.total_hours} hrs
+                </span>
+              ),
+          }}
           cardRenderer={(r) => (
             <div className="space-y-3 rounded-xl border p-4">
               <div className="flex items-start justify-between gap-3">
