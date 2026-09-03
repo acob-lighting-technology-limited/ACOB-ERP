@@ -247,13 +247,15 @@ export default function UsersPage() {
         <div className="flex flex-wrap gap-2">
           {roleFilter !== "all" && (
             <Button onClick={openAddUserDialog} variant="secondary" size="sm">
-              <UserPlus className="mr-2 h-4 w-4" />
-              Add User to {roleFilter.replace("_", " ")}
+              <UserPlus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add User to {roleFilter.replace("_", " ")}</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           )}
           <Button onClick={() => setIsInviteOpen(true)} size="sm">
-            <UserPlus className="mr-2 h-4 w-4" />
-            Invite User
+            <UserPlus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Invite User</span>
+            <span className="sm:hidden">Invite</span>
           </Button>
         </div>
       }

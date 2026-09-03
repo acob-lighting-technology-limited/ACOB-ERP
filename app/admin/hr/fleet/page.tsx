@@ -403,8 +403,9 @@ export default function AdminFleetPage() {
       actions={
         tab === "resources" ? (
           <Button size="sm" onClick={() => setIsResourceDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Resource
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Add Resource</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         ) : undefined
       }

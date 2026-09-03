@@ -240,9 +240,10 @@ export function BillsPage({
       icon={Receipt}
       backLink={{ href: backLinkHref ?? "/admin", label: "Back" }}
       actions={
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Bill
+        <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+          <Plus className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Add Bill</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       }
       stats={

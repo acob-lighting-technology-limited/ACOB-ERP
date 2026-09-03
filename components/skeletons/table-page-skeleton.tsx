@@ -65,7 +65,7 @@ export function TablePageSkeleton({
   statBadges,
   statCardVariant = "default",
   spacing = "standard",
-  inlineActions = false,
+  inlineActions = true,
   list = "table",
   groups = 3,
 }: TablePageSkeletonProps) {

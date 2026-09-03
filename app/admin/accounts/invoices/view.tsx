@@ -251,9 +251,10 @@ export function InvoicesPage({
       icon={FileText}
       backLink={{ href: backLinkHref ?? "/admin", label: "Back" }}
       actions={
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Invoice
+        <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+          <Plus className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Create Invoice</span>
+          <span className="sm:hidden">New</span>
         </Button>
       }
       stats={

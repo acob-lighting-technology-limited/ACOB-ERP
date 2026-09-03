@@ -734,21 +734,25 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
       actions={
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void loadCbtSnapshot()} disabled={isRefreshing}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
+            <RefreshCw className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
           {isLeadView ? (
             // Bonus questions are an admin-only concern (leads can't author
             // for the "Bonus" pseudo-department), so this stays hidden here.
             <Link href={`${basePath}/question`}>
-              <Button size="sm">Create Test</Button>
+              <Button size="sm">
+                <span className="hidden sm:inline">Create Test</span>
+                <span className="sm:hidden">Create</span>
+              </Button>
             </Link>
           ) : (
             // Regular question creation moved to the owning department lead —
             // admins keep Bonus Questions only.
             <Link href="/admin/hr/pms/cbt/extra">
               <Button variant="outline" size="sm">
-                Bonus Questions
+                <span className="hidden sm:inline">Bonus Questions</span>
+                <span className="sm:hidden">Bonus</span>
               </Button>
             </Link>
           )}

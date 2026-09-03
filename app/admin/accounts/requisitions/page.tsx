@@ -430,11 +430,15 @@ export default function AdminRequisitionsPage() {
             }}
             className="gap-1 text-xs"
           >
-            <Plus className="h-4 w-4" /> New Funding Category
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">New Funding Category</span>
+            <span className="sm:hidden">New</span>
           </Button>
         ) : (
           <Button variant="outline" size="sm" onClick={fetchRequisitions} className="gap-1 text-xs">
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh Data
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Refresh Data</span>
+            <span className="sm:hidden">Refresh</span>
           </Button>
         )
       }

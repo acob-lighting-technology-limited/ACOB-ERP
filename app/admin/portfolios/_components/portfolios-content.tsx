@@ -267,12 +267,13 @@ export function PortfoliosContent() {
             onClick={() => queryClient.invalidateQueries({ queryKey: ["portfolios"] })}
             disabled={isLoading}
           >
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
+            <RefreshCw className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
           <Button size="sm" onClick={() => setIsAddOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Portfolio
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Add Portfolio</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </div>
       }

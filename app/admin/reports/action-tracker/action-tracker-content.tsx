@@ -765,7 +765,8 @@ export function ActionTrackerContent({
               }}
             >
               <Plus className="h-4 w-4" />
-              Add Directive
+              <span className="hidden sm:inline">Add Directive</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           ) : null}
           {actionItemsForExport.length > 0 ? (

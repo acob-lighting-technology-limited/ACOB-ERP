@@ -200,9 +200,10 @@ export default function SuppliersPage() {
       icon={Users}
       backLink={{ href: "/admin/purchasing", label: "Back to Purchasing" }}
       actions={
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Supplier
+        <Button size="sm" onClick={openCreate}>
+          <Plus className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Add Supplier</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       }
       stats={

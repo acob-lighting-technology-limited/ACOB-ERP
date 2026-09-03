@@ -247,8 +247,9 @@ export default function SiteLocationsPage() {
               Show inactive
             </label>
             <Button size="sm" onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Site
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add Site</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           </div>
         }

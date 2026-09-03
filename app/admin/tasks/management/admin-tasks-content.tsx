@@ -505,10 +505,13 @@ export function AdminTasksContent({
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setIsWorkflowOpen(true)} className="h-8 gap-2">
-            <ArrowRight className="h-4 w-4" /> Workflow Guide
+            <ArrowRight className="h-4 w-4" />
+            <span className="hidden sm:inline">Workflow Guide</span>
           </Button>
           <Button onClick={() => handleOpenTaskDialog()} className="h-8 gap-2" size="sm">
-            <Plus className="h-4 w-4" /> Create Task
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Create Task</span>
+            <span className="sm:hidden">New</span>
           </Button>
         </div>
       }

@@ -262,9 +262,10 @@ export default function WarehousesPage() {
       actions={
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Warehouse
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add Warehouse</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[90vh] w-[95vw] max-w-lg overflow-y-auto">

@@ -622,7 +622,7 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
             size="sm"
           >
             <Download className="h-4 w-4" />
-            Export
+            <span className="hidden sm:inline">Export</span>
           </Button>
           <Button
             onClick={() => {
@@ -633,7 +633,8 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
             size="sm"
           >
             <Plus className="h-4 w-4" />
-            Add Review
+            <span className="hidden sm:inline">Add Review</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </div>
       }

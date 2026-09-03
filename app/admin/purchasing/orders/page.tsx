@@ -211,9 +211,10 @@ export default function PurchaseOrdersPage() {
       icon={ShoppingCart}
       backLink={{ href: "/admin/purchasing", label: "Back to Purchasing" }}
       actions={
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create PO
+        <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+          <Plus className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Create PO</span>
+          <span className="sm:hidden">New</span>
         </Button>
       }
       stats={

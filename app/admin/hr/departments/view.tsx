@@ -514,7 +514,8 @@ export function DepartmentsPage({
             <DialogTrigger asChild>
               <Button onClick={openCreateDialog} size="sm" className="gap-2">
                 <Plus className="h-4 w-4" />
-                Add Department
+                <span className="hidden sm:inline">Add Department</span>
+                <span className="sm:hidden">Add</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-h-[90vh] w-[95vw] max-w-lg overflow-y-auto">

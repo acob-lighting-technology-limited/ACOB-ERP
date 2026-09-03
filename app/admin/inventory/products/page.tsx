@@ -229,9 +229,10 @@ export default function ProductsPage() {
       icon={Package}
       backLink={{ href: "/admin/inventory", label: "Back to Inventory" }}
       actions={
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Product
+        <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+          <Plus className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Add Product</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       }
       stats={

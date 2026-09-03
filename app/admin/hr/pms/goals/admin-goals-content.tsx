@@ -260,7 +260,8 @@ export function AdminGoalsContent({
         canCreateGoal ? (
           <Button size="sm" onClick={() => setIsDialogOpen(true)} className="gap-1.5">
             <Plus className="h-4 w-4" />
-            Add Strategic Goal
+            <span className="hidden sm:inline">Add Strategic Goal</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         ) : undefined
       }

@@ -468,16 +468,18 @@ export default function AdminPmsCbtExtraQuestionPage() {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void loadPage()} disabled={isLoading}>
             <RefreshCw className="h-4 w-4" />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
           <Link href="/admin/hr/pms/cbt/extra/scores">
             <Button variant="outline" size="sm">
-              View Scores
+              <span className="hidden sm:inline">View Scores</span>
+              <span className="sm:hidden">Scores</span>
             </Button>
           </Link>
           <Button size="sm" onClick={openCreateModal}>
             <Plus className="h-4 w-4" />
-            Add Bonus Question
+            <span className="hidden sm:inline">Add Bonus Question</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </div>
       }

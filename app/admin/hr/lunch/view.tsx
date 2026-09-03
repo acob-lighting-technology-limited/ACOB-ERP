@@ -1305,7 +1305,9 @@ export function LunchRegisterPage({
                 setOpenMenuBuilder(true)
               }}
             >
-              <Plus className="mr-2 h-4 w-4" /> New Menu
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">New Menu</span>
+              <span className="sm:hidden">New</span>
             </Button>
           )}
 
@@ -1313,7 +1315,8 @@ export function LunchRegisterPage({
           <Dialog open={openSettings} onOpenChange={setOpenSettings}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm">
-                <Settings className="mr-2 h-4 w-4" /> Settings
+                <Settings className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">Settings</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">

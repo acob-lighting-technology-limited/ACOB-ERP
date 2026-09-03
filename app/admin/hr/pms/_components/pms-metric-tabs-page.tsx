@@ -710,12 +710,13 @@ export function PmsMetricTabsPage({
             size="sm"
           >
             <Download className="h-4 w-4" />
-            Export
+            <span className="hidden sm:inline">Export</span>
           </Button>
           {metric === "behaviour" ? (
             <Button className="h-8 gap-2" size="sm" onClick={() => setIsModalOpen(true)}>
               <Plus className="h-4 w-4" />
-              Add Behaviour
+              <span className="hidden sm:inline">Add Behaviour</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           ) : null}
         </div>

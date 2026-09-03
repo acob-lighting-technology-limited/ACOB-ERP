@@ -32,7 +32,7 @@ export function DataTablePage({
   statBadges,
   statBadgeStyle = "pill",
   spacing,
-  actionsPlacement,
+  actionsPlacement = "inline-always",
   children,
 }: DataTablePageProps) {
   return (

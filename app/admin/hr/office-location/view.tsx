@@ -387,7 +387,8 @@ export function OfficeLocationsPage({
             <DialogTrigger asChild>
               <Button onClick={openCreateDialog} size="sm" className="gap-2">
                 <Plus className="h-4 w-4" />
-                Add Room / Office
+                <span className="hidden sm:inline">Add Room / Office</span>
+                <span className="sm:hidden">Add</span>
               </Button>
             </DialogTrigger>
             <DialogContent className="max-h-[90vh] w-[95vw] max-w-lg overflow-y-auto">

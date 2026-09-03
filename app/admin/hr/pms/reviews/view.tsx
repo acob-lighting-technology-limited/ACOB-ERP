@@ -834,11 +834,12 @@ export function AdminPmsReviewsPage({
             className="h-8 gap-2"
           >
             <Download className="h-4 w-4" />
-            Export
+            <span className="hidden sm:inline">Export</span>
           </Button>
           <Button size="sm" className="h-8 gap-2" onClick={() => setIsCreateOpen(true)}>
             <Plus className="h-4 w-4" />
-            Add Review
+            <span className="hidden sm:inline">Add Review</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </div>
       }

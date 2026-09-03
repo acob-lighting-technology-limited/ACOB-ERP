@@ -409,7 +409,8 @@ export function AdminCompetenciesPage({ backLinkHref }: { backLinkHref?: string 
       actions={
         <Button onClick={openCreate} size="sm" className="gap-2">
           <Plus className="h-4 w-4" />
-          Add Competency
+          <span className="hidden sm:inline">Add Competency</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       }
       stats={

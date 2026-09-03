@@ -377,7 +377,7 @@ export function WeeklyReportsContent({
             }}
           >
             <Download className="h-4 w-4" />
-            Export
+            <span className="hidden sm:inline">Export</span>
           </Button>
           <Button
             onClick={() => {
@@ -393,7 +393,8 @@ export function WeeklyReportsContent({
             disabled={!canMutateFilteredWeek}
           >
             <Plus className="h-4 w-4" />
-            Add Report
+            <span className="hidden sm:inline">Add Report</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </div>
       }
