@@ -734,29 +734,34 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
       actions={
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void loadCbtSnapshot()} disabled={isRefreshing}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Refresh
+            <RefreshCw className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
           {isLeadView ? (
             // Bonus questions are an admin-only concern (leads can't author
             // for the "Bonus" pseudo-department), so this stays hidden here.
             <Link href={`${basePath}/question`}>
-              <Button size="sm">Create Test</Button>
+              <Button size="sm">
+                <span className="hidden sm:inline">Create Test</span>
+                <span className="sm:hidden">Create</span>
+              </Button>
             </Link>
           ) : (
             // Regular question creation moved to the owning department lead —
             // admins keep Bonus Questions only.
             <Link href="/admin/hr/pms/cbt/extra">
               <Button variant="outline" size="sm">
-                Bonus Questions
+                <span className="hidden sm:inline">Bonus Questions</span>
+                <span className="sm:hidden">Bonus</span>
               </Button>
             </Link>
           )}
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Rows"
             value={activeRowCount}
             icon={Brain}
@@ -764,6 +769,7 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Scores Recorded"
             value={scoreCount}
             icon={Brain}
@@ -771,6 +777,7 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Cycles"
             value={data.cycles.length}
             icon={Brain}
@@ -778,11 +785,13 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Selected Cycle"
             value={selectedCycleId === "all" ? "All" : cycleNameById.get(selectedCycleId) || "Current"}
             icon={Brain}
             iconBgColor="bg-violet-500/10"
             iconColor="text-violet-500"
+            className="hidden sm:block"
           />
         </div>
       }
@@ -816,6 +825,20 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
             render: (row) => <CbtAttemptDetail profileId={row.user_id} reviewCycleId={row.review_cycle_id} />,
           }}
           viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (row) => (typeof row.cbt_score === "number" ? "bg-emerald-500" : "bg-amber-500"),
+            title: (row) => row.employee,
+            subtitle: (row) =>
+              `${row.department} · ${formatCycleName(row.cycle)} · Score: ${scoreLabel(row.cbt_score)}`,
+            trailing: (row) => (
+              <Badge variant={typeof row.cbt_score === "number" ? "default" : "secondary"} className="text-[10px]">
+                {scoreLabel(row.cbt_score)}
+              </Badge>
+            ),
+          }}
           cardRenderer={(row) => <IndividualCard row={row} />}
           emptyTitle="No CBT records found"
           emptyDescription="Scores will appear here once employees start completing CBT assessments."
@@ -857,6 +880,16 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
             ),
           }}
           viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: () => "bg-blue-500",
+            title: (row) => row.department,
+            subtitle: (row) =>
+              `${formatCycleName(row.cycle)} · ${row.scores_recorded}/${row.total_employees} completed`,
+            trailing: (row) => <span className="text-xs font-semibold">{scoreLabel(row.average_score)}</span>,
+          }}
           cardRenderer={(row) => <DepartmentCard row={row} />}
           emptyTitle="No department CBT summary found"
           emptyDescription="Department averages will appear here when cycles have CBT scores."
@@ -897,6 +930,23 @@ export default function AdminPmsCbtPage({ deptId }: { deptId?: string } = {}) {
             ),
           }}
           viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: () => "bg-purple-500",
+            title: (row) => formatCycleName(row.cycle),
+            subtitle: (row) =>
+              `${row.review_type} · ${row.questions} questions · Avg: ${scoreLabel(row.average_score)}`,
+            trailing: (row) => (
+              <span className="text-xs font-semibold">
+                {row.scores_recorded}/{row.total_employees}
+              </span>
+            ),
+            onSelect: isLeadView
+              ? (row) => router.push(`${basePath}/question?cycleId=${encodeURIComponent(row.id)}`)
+              : undefined,
+          }}
           cardRenderer={(row) => (
             <CycleCard
               row={row}

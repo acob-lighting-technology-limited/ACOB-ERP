@@ -29,9 +29,11 @@ const ROUTE_LABELS: Array<[path: string, label: string]> = [
   ["/goals", "Goals"],
   ["/fleet", "Resource Booking"],
   ["/admin", "Admin"],
+  ["/accounts", "Accounts"],
   ["/dept", "Department console"],
   ["/pms", "PMS"],
   ["/cbt", "CBT"],
+  ["/hr", "HR"],
 ]
 
 function escapeRegExp(value: string): string {

@@ -376,15 +376,18 @@ export default function AdminRequisitionsPage() {
       activeTab={tab}
       onTabChange={setTab}
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-5">
           <StatCard
+            variant="compact"
             title="Total Requisitions"
             value={totalCount}
             icon={FileCheck2}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
+            className="hidden sm:block"
           />
           <StatCard
+            variant="compact"
             title="Pending Stage"
             value={pendingCount}
             icon={Clock}
@@ -392,6 +395,7 @@ export default function AdminRequisitionsPage() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Fully Approved"
             value={approvedCount}
             icon={CheckCircle2}
@@ -399,13 +403,16 @@ export default function AdminRequisitionsPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Emergency Route"
             value={emergencyCount}
             icon={Siren}
             iconBgColor="bg-red-500/10"
             iconColor="text-red-500"
+            className="hidden sm:block"
           />
           <StatCard
+            variant="compact"
             title="Total Amount (₦)"
             value={`₦${totalAmount.toLocaleString(undefined, { minimumFractionDigits: 0 })}`}
             icon={FileCheck2}
@@ -425,11 +432,15 @@ export default function AdminRequisitionsPage() {
             }}
             className="gap-1 text-xs"
           >
-            <Plus className="h-4 w-4" /> New Funding Category
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">New Funding Category</span>
+            <span className="sm:hidden">New</span>
           </Button>
         ) : (
           <Button variant="outline" size="sm" onClick={fetchRequisitions} className="gap-1 text-xs">
-            <RefreshCw className="h-3.5 w-3.5" /> Refresh Data
+            <RefreshCw className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Refresh Data</span>
+            <span className="sm:hidden">Refresh</span>
           </Button>
         )
       }
@@ -452,6 +463,49 @@ export default function AdminRequisitionsPage() {
           error={error}
           onRetry={fetchRequisitions}
           pagination={{ pageSize: 25 }}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (r) =>
+              r.status === "rejected"
+                ? "bg-rose-500"
+                : r.status === "approved"
+                  ? "bg-emerald-500"
+                  : r.is_emergency
+                    ? "bg-red-500"
+                    : "bg-amber-500",
+            title: (r) => `${r.requisition_number} · ₦${Number(r.amount).toLocaleString()}`,
+            subtitle: (r) => `${r.project_name} · ${r.requester?.full_name || "Staff"} · ${r.department}`,
+            trailing: (r) => (
+              <Badge
+                variant={r.status === "approved" ? "default" : r.status === "rejected" ? "destructive" : "secondary"}
+                className="text-[10px]"
+              >
+                {r.status}
+              </Badge>
+            ),
+          }}
+          cardRenderer={(r) => (
+            <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+              <div className="flex items-start justify-between">
+                <div>
+                  <span className="font-mono font-semibold">{r.requisition_number}</span>
+                  <p className="text-muted-foreground mt-0.5">{r.project_name}</p>
+                </div>
+                <Badge
+                  variant={r.status === "approved" ? "default" : r.status === "rejected" ? "destructive" : "secondary"}
+                >
+                  {r.status}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between border-t pt-2">
+                <span className="text-muted-foreground">{r.requester?.full_name || r.department}</span>
+                <span className="font-semibold">₦{Number(r.amount).toLocaleString()}</span>
+              </div>
+            </div>
+          )}
         />
       ) : (
         <DataTable<RequisitionFundingCategory>
@@ -468,6 +522,37 @@ export default function AdminRequisitionsPage() {
           emptyTitle="No funding categories"
           emptyDescription="Add the project funding lines requisitions are drawn against."
           emptyIcon={Wallet}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (c) => (c.is_active ? "bg-emerald-500" : "bg-slate-400"),
+            title: (c) => c.name,
+            subtitle: (c) => `${c.code} · ${c.description || "No description"}`,
+            trailing: (c) => (
+              <Badge variant={c.is_active ? "default" : "outline"} className="text-[10px]">
+                {c.is_active ? "Active" : "Inactive"}
+              </Badge>
+            ),
+            onSelect: (c) => {
+              setEditingCategory(c)
+              setSaveCategoryError(null)
+              setIsFundingDialogOpen(true)
+            },
+          }}
+          cardRenderer={(c) => (
+            <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{c.name}</p>
+                  <span className="text-muted-foreground font-mono text-[10px]">{c.code}</span>
+                </div>
+                <Badge variant={c.is_active ? "default" : "outline"}>{c.is_active ? "Active" : "Inactive"}</Badge>
+              </div>
+              <p className="text-muted-foreground text-xs">{c.description || "No description"}</p>
+            </div>
+          )}
           rowActions={[
             {
               label: "Edit",

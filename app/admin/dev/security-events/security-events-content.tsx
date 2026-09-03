@@ -133,13 +133,15 @@ export function SecurityEventsContent({ rows, error }: { rows: AuditLogRow[]; er
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
-            title="Events"
+            variant="compact"
+            title="Total Events"
             value={stats.total}
             icon={ShieldAlert}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Critical"
             value={stats.critical}
             icon={Siren}
@@ -147,6 +149,7 @@ export function SecurityEventsContent({ rows, error }: { rows: AuditLogRow[]; er
             iconColor="text-red-500"
           />
           <StatCard
+            variant="compact"
             title="High"
             value={stats.high}
             icon={AlertTriangle}
@@ -154,6 +157,7 @@ export function SecurityEventsContent({ rows, error }: { rows: AuditLogRow[]; er
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Medium"
             value={stats.medium}
             icon={ShieldCheck}
@@ -209,6 +213,24 @@ export function SecurityEventsContent({ rows, error }: { rows: AuditLogRow[]; er
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (row) =>
+            getSeverity(row) === "Critical"
+              ? "bg-red-500"
+              : getSeverity(row) === "High"
+                ? "bg-amber-500"
+                : "bg-blue-500",
+          title: (row) => row.action || row.operation || "Unknown action",
+          subtitle: (row) => `${row.entity_type || "Security"} · ${formatWATDateTime(row.created_at)}`,
+          trailing: (row) => (
+            <Badge variant={getSeverity(row) === "Critical" ? "destructive" : "outline"} className="text-[10px]">
+              {getSeverity(row)}
+            </Badge>
+          ),
+        }}
         cardRenderer={(row) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">

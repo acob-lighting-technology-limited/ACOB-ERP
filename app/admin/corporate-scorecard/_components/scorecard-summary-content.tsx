@@ -127,8 +127,9 @@ export function ScorecardSummaryContent() {
       backLink={{ href: "/admin/corporate-scorecard", label: "Back to Register" }}
       stats={
         <div className="space-y-4">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3">
             <StatCard
+              variant="compact"
               title="Company-Wide"
               value={companyPct != null ? `${companyPct}%` : "No data"}
               icon={TrendingUp}
@@ -139,6 +140,7 @@ export function ScorecardSummaryContent() {
             {perspectives.map((p) => (
               <StatCard
                 key={p.perspective}
+                variant="compact"
                 title={p.perspective}
                 value={p.attainmentPct != null ? `${p.attainmentPct}%` : "No data"}
                 description={`${p.objectives.length} objective${p.objectives.length === 1 ? "" : "s"}`}
@@ -168,6 +170,42 @@ export function ScorecardSummaryContent() {
               router.push(`/admin/corporate-scorecard/departments?department=${encodeURIComponent(r.department)}`),
           },
         ]}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: () => "bg-blue-500",
+          title: (r) => r.department,
+          subtitle: (r) =>
+            `CORE KPIs: ${r.coreKpiCount} · Attainment: ${r.attainmentPct != null ? `${r.attainmentPct}%` : "No data"}`,
+          trailing: (r) => ragBadge(r.status),
+          onSelect: (r) =>
+            router.push(`/admin/corporate-scorecard/departments?department=${encodeURIComponent(r.department)}`),
+        }}
+        cardRenderer={(r) => (
+          <div
+            className="bg-card cursor-pointer space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md"
+            onClick={() =>
+              router.push(`/admin/corporate-scorecard/departments?department=${encodeURIComponent(r.department)}`)
+            }
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{r.department}</p>
+                <p className="text-muted-foreground text-xs">{r.coreKpiCount} CORE KPIs</p>
+              </div>
+              {ragBadge(r.status)}
+            </div>
+            <div className="space-y-1 border-t pt-2">
+              <div className="flex justify-between text-xs">
+                <span>Attainment</span>
+                <span className="font-semibold">{r.attainmentPct != null ? `${r.attainmentPct}%` : "No data"}</span>
+              </div>
+              {r.attainmentPct != null && <Progress value={r.attainmentPct} className="h-1.5" />}
+            </div>
+          </div>
+        )}
       />
     </DataTablePage>
   )

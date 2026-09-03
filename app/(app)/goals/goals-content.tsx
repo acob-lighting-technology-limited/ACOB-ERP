@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useMemo, useState } from "react"
-import { Plus, Target, Trash2, ListPlus } from "lucide-react"
+import { Plus, Target, Trash2, ListPlus, FileText, CalendarDays, Building2, BarChart2 } from "lucide-react"
 import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
@@ -95,8 +95,10 @@ export function GoalsContent({
         resizable: true,
         initialWidth: 280,
         render: (row) => (
-          <div>
-            <p className="text-foreground font-medium">{row.title}</p>
+          <div className="max-w-[280px] min-w-0 space-y-0.5">
+            <p className="text-foreground truncate font-medium" title={row.title}>
+              {row.title}
+            </p>
             {row.description ? (
               <p className="text-muted-foreground truncate text-xs" title={row.description}>
                 {row.description}
@@ -163,14 +165,14 @@ export function GoalsContent({
 
   const filters = useMemo<DataTableFilter<GoalRow>[]>(
     () => [
+      ...cycleFilters,
       {
         key: "department",
         label: "Department",
         options: availableDepartments.map((d) => ({ value: d, label: d })),
       },
-      ...cycleFilters,
     ],
-    [availableDepartments, cycleFilters]
+    [cycleFilters, availableDepartments]
   )
 
   async function handleCreateGoal() {
@@ -219,11 +221,13 @@ export function GoalsContent({
       description={pageDescription}
       icon={Target}
       backLink={{ href: backHref, label: backLabel }}
+      spacing="tight"
+      actionsPlacement={canCreateGoal ? "inline-always" : undefined}
       actions={
         canCreateGoal ? (
-          <Button size="sm" className="h-8 gap-2" onClick={() => setIsDialogOpen(true)}>
-            <Plus className="h-4 w-4" />
-            Add Goal
+          <Button size="sm" onClick={() => setIsDialogOpen(true)}>
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Add Goal</span>
           </Button>
         ) : undefined
       }
@@ -233,6 +237,7 @@ export function GoalsContent({
             {summaryCards.map((card, index) => (
               <StatCard
                 key={card.label}
+                variant="compact"
                 title={card.label}
                 value={card.value}
                 icon={Target}
@@ -256,6 +261,86 @@ export function GoalsContent({
             .toLowerCase()
             .includes(query.toLowerCase())
         }
+        viewToggle
+        stickyToolbar
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (row) => row.title,
+          subtitle: (row) =>
+            [row.department, row.cycleLabel !== "-" ? row.cycleLabel : null].filter(Boolean).join(" · ") || "—",
+          trailing: (row) => (
+            <Badge variant="secondary" className="text-[10px] capitalize">
+              {String(row.status || "in_progress").replace("_", " ")}
+            </Badge>
+          ),
+          detail: {
+            title: (row) => row.title,
+            subtitle: (row) => <span className="text-muted-foreground text-xs">{row.department || "—"}</span>,
+            badges: (row) => (
+              <Badge variant="secondary" className="text-[10px] capitalize">
+                {String(row.status || "in_progress").replace("_", " ")}
+              </Badge>
+            ),
+            fields: (row) => [
+              { icon: FileText, label: "Description", value: row.description || "No description provided." },
+              { icon: BarChart2, label: "Priority", value: row.priority },
+              { icon: CalendarDays, label: "Due date", value: row.due_date ? formatWATDate(row.due_date) : null },
+              { icon: Building2, label: "Cycle", value: row.cycleLabel !== "-" ? row.cycleLabel : null },
+              {
+                icon: ListPlus,
+                label: "Linked tasks",
+                value:
+                  (row.linked_tasks?.length || 0) > 0
+                    ? `${row.linked_tasks!.length} task${row.linked_tasks!.length === 1 ? "" : "s"}`
+                    : "No linked tasks",
+              },
+            ],
+            actions: (row) =>
+              canCreateGoal
+                ? [
+                    {
+                      label: "Create Task",
+                      icon: ListPlus,
+                      variant: "outline" as const,
+                      onClick: () => {
+                        window.location.href = `/admin/tasks?goal_id=${encodeURIComponent(row.id)}`
+                      },
+                    },
+                    {
+                      label: "Archive",
+                      icon: Trash2,
+                      variant: "destructive" as const,
+                      onClick: () => handleArchiveGoal(row),
+                    },
+                  ]
+                : [],
+          },
+        }}
+        cardRenderer={(row) => (
+          <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
+            <div className="flex items-start justify-between gap-2">
+              <h4 className="line-clamp-2 text-sm font-semibold">{row.title}</h4>
+              <Badge variant="secondary" className="shrink-0 text-[10px] capitalize">
+                {String(row.status || "in_progress").replace("_", " ")}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 text-xs">
+              <div>
+                <p className="text-muted-foreground text-[10px] font-medium uppercase">Priority</p>
+                <p className="font-medium capitalize">{row.priority}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-[10px] font-medium uppercase">Cycle</p>
+                <p className="font-medium">{row.cycleLabel !== "-" ? row.cycleLabel : "—"}</p>
+              </div>
+            </div>
+            <div className="border-border/40 text-muted-foreground flex items-center justify-between border-t pt-2 text-xs">
+              <span>{row.department || "—"}</span>
+              <span>{row.due_date ? formatWATDate(row.due_date) : "No due date"}</span>
+            </div>
+          </div>
+        )}
         rowActions={
           canCreateGoal
             ? [
@@ -275,69 +360,6 @@ export function GoalsContent({
               ]
             : undefined
         }
-        expandable={{
-          render: (row) => (
-            <div className="space-y-3 p-3 text-xs">
-              <div>
-                <p className="text-muted-foreground text-[10px] font-semibold uppercase">Description</p>
-                <p className="pt-0.5 text-sm">{row.description || "No description provided."}</p>
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-lg border p-3">
-                  <p className="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">
-                    Linked Tasks
-                  </p>
-                  {row.linked_tasks && row.linked_tasks.length > 0 ? (
-                    <div className="space-y-2">
-                      {row.linked_tasks.map((task) => (
-                        <div key={task.id} className="rounded border p-2 text-xs">
-                          <p className="font-medium">
-                            {task.work_item_number ? `${task.work_item_number} - ` : ""}
-                            {task.title}
-                          </p>
-                          <p className="text-muted-foreground capitalize">
-                            {String(task.status || "").replace(/_/g, " ")}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground text-xs">No linked tasks yet.</p>
-                  )}
-                </div>
-                <div className="rounded-lg border p-3">
-                  <p className="text-muted-foreground mb-2 text-xs font-semibold tracking-wide uppercase">
-                    Linked Help Desk
-                  </p>
-                  {row.linked_help_desk && row.linked_help_desk.length > 0 ? (
-                    <div className="space-y-2">
-                      {row.linked_help_desk.map((ticket) => (
-                        <div key={ticket.id} className="rounded border p-2 text-xs">
-                          <p className="font-medium">
-                            {ticket.ticket_number ? `${ticket.ticket_number} - ` : ""}
-                            {ticket.title}
-                          </p>
-                          <p className="text-muted-foreground capitalize">
-                            {String(ticket.status || "").replace(/_/g, " ")}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground text-xs">No linked help desk tickets yet.</p>
-                  )}
-                </div>
-              </div>
-              {showCreateTaskAction ? (
-                <Link href={`/admin/tasks?goal_id=${encodeURIComponent(row.id)}`}>
-                  <Button size="sm" variant="outline" className="text-xs">
-                    Create Task under this Goal
-                  </Button>
-                </Link>
-              ) : null}
-            </div>
-          ),
-        }}
       />
 
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>

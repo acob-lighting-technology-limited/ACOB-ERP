@@ -354,6 +354,7 @@ export function PayrollCalculatorPage({ initialData }: CalculatorPageProps) {
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Altered Monthly Gross"
             value={money(currentBreakdown.monthlyGross)}
             description={
@@ -364,6 +365,7 @@ export function PayrollCalculatorPage({ initialData }: CalculatorPageProps) {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Simulated Net Pay"
             value={money(currentBreakdown.netPay)}
             description={
@@ -374,6 +376,7 @@ export function PayrollCalculatorPage({ initialData }: CalculatorPageProps) {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Monthly PAYE Tax"
             value={money(currentBreakdown.monthlyTax)}
             description={
@@ -384,6 +387,7 @@ export function PayrollCalculatorPage({ initialData }: CalculatorPageProps) {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Total Deductions"
             value={money(currentBreakdown.totalDeductions)}
             description={

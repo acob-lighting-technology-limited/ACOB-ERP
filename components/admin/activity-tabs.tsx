@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowRight } from "lucide-react"
 import { formatWATDate } from "@/lib/utils/date"
 
@@ -217,29 +218,55 @@ export function AdminActivityTabs({
       </CardHeader>
       <CardContent className="p-0">
         <Tabs defaultValue="assets" value={activeTab} onValueChange={setActiveTab}>
-          <div className="border-b px-2">
-            <TabsList className="h-auto w-full justify-start gap-0 overflow-x-auto rounded-none bg-transparent p-0">
-              {[
-                { value: "assets", label: "Assets", count: assets.length },
-                { value: "tasks", label: "Tasks", count: tasks.length },
-                { value: "documentation", label: "Docs", count: documentation.length },
-                { value: "feedback", label: "Feedback", count: feedback.length },
-                { value: "correspondence", label: "Mail", count: correspondence.length },
-                { value: "helpdesk", label: "Tickets", count: helpDesk.length },
-                { value: "payments", label: "Payments", count: payments.length },
-                { value: "leave", label: "Leave", count: leave.length },
-                { value: "attendance", label: "Attendance", count: attendance.length },
-              ].map(({ value, label, count }) => (
-                <TabsTrigger
-                  key={value}
-                  value={value}
-                  className="data-[state=active]:border-primary data-[state=active]:text-foreground text-muted-foreground relative flex shrink-0 items-center gap-1 rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 text-xs font-medium transition-none data-[state=active]:shadow-none"
-                >
-                  {label}
-                  <span className="text-muted-foreground text-[10px] tabular-nums">({count})</span>
-                </TabsTrigger>
-              ))}
-            </TabsList>
+          <div className="border-b px-2 py-2 sm:py-0">
+            <div className="sm:hidden">
+              <Select value={activeTab} onValueChange={setActiveTab}>
+                <SelectTrigger className="bg-muted/60 w-full font-medium">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    { value: "assets", label: "Assets", count: assets.length },
+                    { value: "tasks", label: "Tasks", count: tasks.length },
+                    { value: "documentation", label: "Docs", count: documentation.length },
+                    { value: "feedback", label: "Feedback", count: feedback.length },
+                    { value: "correspondence", label: "Mail", count: correspondence.length },
+                    { value: "helpdesk", label: "Tickets", count: helpDesk.length },
+                    { value: "payments", label: "Payments", count: payments.length },
+                    { value: "leave", label: "Leave", count: leave.length },
+                    { value: "attendance", label: "Attendance", count: attendance.length },
+                  ].map(({ value, label, count }) => (
+                    <SelectItem key={value} value={value}>
+                      {label} ({count})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="hidden sm:block">
+              <TabsList className="h-auto w-full justify-start gap-0 overflow-x-auto rounded-none bg-transparent p-0">
+                {[
+                  { value: "assets", label: "Assets", count: assets.length },
+                  { value: "tasks", label: "Tasks", count: tasks.length },
+                  { value: "documentation", label: "Docs", count: documentation.length },
+                  { value: "feedback", label: "Feedback", count: feedback.length },
+                  { value: "correspondence", label: "Mail", count: correspondence.length },
+                  { value: "helpdesk", label: "Tickets", count: helpDesk.length },
+                  { value: "payments", label: "Payments", count: payments.length },
+                  { value: "leave", label: "Leave", count: leave.length },
+                  { value: "attendance", label: "Attendance", count: attendance.length },
+                ].map(({ value, label, count }) => (
+                  <TabsTrigger
+                    key={value}
+                    value={value}
+                    className="data-[state=active]:border-primary data-[state=active]:text-foreground text-muted-foreground relative flex shrink-0 items-center gap-1 rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 text-xs font-medium transition-none data-[state=active]:shadow-none"
+                  >
+                    {label}
+                    <span className="text-muted-foreground text-[10px] tabular-nums">({count})</span>
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </div>
           </div>
 
           {/* Assets */}

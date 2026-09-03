@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
-import { Building2, Hash, Package, User } from "lucide-react"
+import { Building2, Hash, Package, User, Wrench, Layers, CalendarDays, FileText, Barcode } from "lucide-react"
 import { ASSET_TYPE_MAP } from "@/lib/asset-types"
 import { formatName } from "@/lib/utils"
 import { formatWATDate, formatWATDateTime } from "@/lib/utils/date"
@@ -157,9 +157,11 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
       description="View your currently assigned personal assets and equipment."
       icon={Package}
       backLink={{ href: "/profile", label: "Back to Dashboard" }}
+      spacing="tight"
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total Personal Assets"
             value={rows.length}
             icon={Package}
@@ -167,25 +169,32 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Active"
             value={activeCount}
             icon={User}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
           />
+          {/* Only when something is actually in the workshop — matches its badge. */}
+          {maintenanceCount > 0 && (
+            <StatCard
+              variant="compact"
+              title="In Maintenance"
+              value={maintenanceCount}
+              icon={Wrench}
+              iconBgColor="bg-amber-500/10"
+              iconColor="text-amber-500"
+            />
+          )}
           <StatCard
-            title="In Maintenance"
-            value={maintenanceCount}
-            icon={Building2}
-            iconBgColor="bg-amber-500/10"
-            iconColor="text-amber-500"
-          />
-          <StatCard
+            variant="compact"
             title="Asset Types"
             value={uniqueTypesCount}
-            icon={Package}
+            icon={Layers}
             iconBgColor="bg-violet-500/10"
             iconColor="text-violet-500"
+            className={maintenanceCount > 0 ? "hidden sm:block" : undefined}
           />
         </div>
       }
@@ -222,9 +231,57 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
         }
         emptyIcon={Package}
         skeletonRows={6}
+        stickyToolbar
         viewToggle
+        contactsView
+        // Seven columns of asset identifiers: a table where they fit, the row
+        // list where they do not.
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (row) => (row.statusLabel === "maintenance" ? "bg-amber-500" : undefined),
+          title: (row) => row.assetTypeLabel,
+          subtitle: (row) =>
+            [row.asset?.unique_code, row.asset?.asset_model].filter(Boolean).join(" · ") || "No code recorded",
+          trailing: (row) => <Badge className={`${statusClass(row.statusLabel)} text-[10px]`}>{row.statusLabel}</Badge>,
+          detail: {
+            title: (row) => row.assetTypeLabel,
+            subtitle: (row) => (
+              <span className="text-muted-foreground font-mono text-xs">{row.asset?.unique_code || "No code"}</span>
+            ),
+            badges: (row) => <Badge className={`${statusClass(row.statusLabel)} text-[10px]`}>{row.statusLabel}</Badge>,
+            // Everything the removed expandable row carried. The serial and code
+            // are the values you are asked for when reporting a fault, so they
+            // are tap-to-copy rather than something to read out.
+            fields: (row) => [
+              { icon: Hash, label: "Unique code", value: row.asset?.unique_code, copyable: true },
+              { icon: Package, label: "Model", value: row.asset?.asset_model },
+              { icon: Barcode, label: "Serial number", value: row.asset?.serial_number, copyable: true },
+              {
+                icon: CalendarDays,
+                label: "Acquisition year",
+                value: row.asset?.acquisition_year ? String(row.asset.acquisition_year) : null,
+                copyable: false,
+              },
+              {
+                icon: CalendarDays,
+                label: "Assigned",
+                value: formatWATDateTime(row.assigned_at),
+                copyable: false,
+              },
+              { icon: Building2, label: "Department", value: row.department },
+              {
+                icon: User,
+                label: "Assigned by",
+                value: row.assigner
+                  ? `${formatName(row.assigner.first_name)} ${formatName(row.assigner.last_name)}`
+                  : null,
+              },
+              { icon: FileText, label: "Notes", value: row.assignment_notes, copyable: true },
+            ],
+          },
+        }}
         cardRenderer={(row) => (
-          <div className="space-y-3 rounded-xl border p-4">
+          <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="font-medium">{row.assetTypeLabel}</p>
@@ -244,40 +301,6 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
             </div>
           </div>
         )}
-        expandable={{
-          render: (row) => (
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2 text-sm">
-                <p>
-                  <span className="text-muted-foreground">Serial:</span>{" "}
-                  <span className="font-mono">{row.asset?.serial_number || "-"}</span>
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Acquisition Year:</span> {row.asset?.acquisition_year || "-"}
-                </p>
-                <p>
-                  <span className="text-muted-foreground">Assigned:</span> {formatWATDateTime(row.assigned_at)}
-                </p>
-              </div>
-              <div className="space-y-2 text-sm">
-                {row.department ? (
-                  <p>
-                    <span className="text-muted-foreground">Department:</span> {row.department}
-                  </p>
-                ) : null}
-                {row.assigner ? (
-                  <p>
-                    <span className="text-muted-foreground">Assigned By:</span>{" "}
-                    {`${formatName(row.assigner.first_name)} ${formatName(row.assigner.last_name)}`}
-                  </p>
-                ) : null}
-                <p>
-                  <span className="text-muted-foreground">Notes:</span> {row.assignment_notes || "-"}
-                </p>
-              </div>
-            </div>
-          ),
-        }}
         urlSync
       />
     </DataTablePage>

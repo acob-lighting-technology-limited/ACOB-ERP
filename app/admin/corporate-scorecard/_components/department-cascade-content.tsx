@@ -238,16 +238,23 @@ export function DepartmentCascadeContent({
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Department Attainment"
             value={departmentAttainment != null ? `${departmentAttainment}%` : "No data"}
             icon={Target}
             description="CORE KPIs only"
           />
-          <StatCard title="CORE KPIs" value={coreRows.length} description="Scored" />
-          <StatCard title="SUPPORT KPIs" value={rows.length - coreRows.length} description="Visible, not scored" />
+          <StatCard variant="compact" title="CORE KPIs" value={coreRows.length} description="Scored" />
           <StatCard
+            variant="compact"
+            title="SUPPORT KPIs"
+            value={rows.length - coreRows.length}
+            description="Visible, not scored"
+          />
+          <StatCard
+            variant="compact"
             title="Recorded"
             value={`${recordedCount}/${coreRows.length}`}
             description="CORE KPIs with an actual"
@@ -303,6 +310,37 @@ export function DepartmentCascadeContent({
             </div>
           ),
         }}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) => (r.role === "core" ? "bg-emerald-500" : "bg-blue-500"),
+          title: (r) => r.measure,
+          subtitle: (r) =>
+            `${r.role.toUpperCase()} · ${r.perspective} · Attainment: ${r.capped_pct != null ? `${r.capped_pct}%` : "-"}`,
+          trailing: (r) => ragBadge(r.capped_pct != null ? ragStatus(r.capped_pct) : null),
+          onSelect: (r) => setEditingRow(r),
+        }}
+        cardRenderer={(r) => (
+          <div
+            className="bg-card cursor-pointer space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md"
+            onClick={() => setEditingRow(r)}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{r.measure}</p>
+                <p className="text-muted-foreground text-xs">{r.perspective}</p>
+              </div>
+              {ragBadge(r.capped_pct != null ? ragStatus(r.capped_pct) : null)}
+            </div>
+            <p className="text-muted-foreground line-clamp-2 text-xs">{r.strategic_objective}</p>
+            <div className="flex items-center justify-between border-t pt-2 text-[10px]">
+              <span>Role: {r.role.toUpperCase()}</span>
+              <span>Attainment: {r.capped_pct != null ? `${r.capped_pct}%` : "-"}</span>
+            </div>
+          </div>
+        )}
         urlSync
       />
 

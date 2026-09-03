@@ -197,6 +197,28 @@ export function CreateUserDialog({
   const contractCategoryCodeValue = watch("contractCategoryCode")
   const selectedGender = watch("gender")
 
+  const currentTrackValue =
+    employmentTypeValue === "full_time"
+      ? "full_time"
+      : employmentTypeValue === "part_time"
+        ? "part_time"
+        : contractCategoryCodeValue
+          ? `cat:${contractCategoryCodeValue}`
+          : "cat:CTR"
+
+  const handleTrackChange = (val: string) => {
+    if (val === "full_time") {
+      setValue("employmentType", "full_time")
+      setValue("contractCategoryCode", "")
+    } else if (val === "part_time") {
+      setValue("employmentType", "part_time")
+      setValue("contractCategoryCode", "")
+    } else if (val.startsWith("cat:")) {
+      setValue("employmentType", "contract")
+      setValue("contractCategoryCode", val.replace("cat:", ""))
+    }
+  }
+
   const getPreviewId = () => {
     const currentYear = new Date().getFullYear()
     if (employmentTypeValue === "full_time") {
@@ -204,7 +226,7 @@ export function CreateUserDialog({
     } else if (employmentTypeValue === "part_time") {
       return `ACOB/PT/${currentYear}/...`
     } else {
-      const catCode = contractCategoryCodeValue || "CATEGORY"
+      const catCode = contractCategoryCodeValue || "CTR"
       return `ACOB/${catCode}/${currentYear}/...`
     }
   }
@@ -278,49 +300,22 @@ export function CreateUserDialog({
 
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <Label htmlFor="create_employment_type">Employment Type</Label>
-              <Select
-                value={employmentTypeValue}
-                onValueChange={(value) => {
-                  setValue("employmentType", value as any)
-                  if (value !== "contract") {
-                    setValue("contractCategoryCode", "")
-                  } else if (contractCategories.length > 0) {
-                    setValue("contractCategoryCode", contractCategories[0].code)
-                  }
-                }}
-              >
+              <Label htmlFor="create_employment_type">Staff Classification / Track</Label>
+              <Select value={currentTrackValue} onValueChange={handleTrackChange}>
                 <SelectTrigger id="create_employment_type" className="mt-1.5">
-                  <SelectValue placeholder="Select type" />
+                  <SelectValue placeholder="Select classification" />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="full_time">Full Time</SelectItem>
                   <SelectItem value="part_time">Part Time</SelectItem>
-                  <SelectItem value="contract">Contract</SelectItem>
+                  {contractCategories.map((cat) => (
+                    <SelectItem key={cat.id} value={`cat:${cat.code}`}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
-
-            {employmentTypeValue === "contract" && (
-              <div>
-                <Label htmlFor="create_contract_category">Contract Category</Label>
-                <Select
-                  value={contractCategoryCodeValue}
-                  onValueChange={(value) => setValue("contractCategoryCode", value)}
-                >
-                  <SelectTrigger id="create_contract_category" className="mt-1.5">
-                    <SelectValue placeholder="Select category" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {contractCategories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.code}>
-                        {cat.name} ({cat.code})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
           </div>
 
           <div className="bg-muted/30 rounded-lg border p-3">

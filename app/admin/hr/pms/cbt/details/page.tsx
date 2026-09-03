@@ -250,6 +250,42 @@ export default function CbtDetailsLogPage() {
             </div>
           ),
         }}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (row) => (row.status === "submitted" ? "bg-emerald-500" : "bg-amber-500"),
+          title: (row) => (row.profiles ? `${row.profiles.first_name} ${row.profiles.last_name}` : row.company_email),
+          subtitle: (row) =>
+            `${row.profiles?.department || "No dept"} · ${row.review_cycles?.name || "No cycle"}${
+              row.status === "submitted" && typeof row.score === "number" ? ` · Score: ${row.score}%` : ""
+            }`,
+          trailing: (row) => (
+            <Badge variant={row.status === "submitted" ? "default" : "secondary"} className="text-[10px]">
+              {row.status === "submitted" && typeof row.score === "number" ? `${row.score}%` : row.status}
+            </Badge>
+          ),
+        }}
+        cardRenderer={(row) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">
+                  {row.profiles ? `${row.profiles.first_name} ${row.profiles.last_name}` : row.company_email}
+                </p>
+                <p className="text-muted-foreground text-xs">{row.company_email}</p>
+              </div>
+              <Badge variant={row.status === "submitted" ? "default" : "secondary"}>
+                {row.status === "submitted" && typeof row.score === "number" ? `${row.score}%` : row.status}
+              </Badge>
+            </div>
+            <div className="text-muted-foreground flex items-center justify-between border-t pt-2 text-[10px]">
+              <span>{row.profiles?.department || "No dept"}</span>
+              <span>{row.review_cycles?.name || "No cycle"}</span>
+            </div>
+          </div>
+        )}
         emptyTitle="No CBT logs found"
         emptyDescription="Audit records will appear here once candidates start CBT sessions."
         emptyIcon={Brain}

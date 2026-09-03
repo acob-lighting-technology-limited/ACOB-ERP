@@ -200,14 +200,16 @@ export default function SuppliersPage() {
       icon={Users}
       backLink={{ href: "/admin/purchasing", label: "Back to Purchasing" }}
       actions={
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Supplier
+        <Button size="sm" onClick={openCreate}>
+          <Plus className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Add Supplier</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total Suppliers"
             value={stats.total}
             icon={Building2}
@@ -215,6 +217,7 @@ export default function SuppliersPage() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Active"
             value={stats.active}
             icon={CheckCircle2}
@@ -222,6 +225,7 @@ export default function SuppliersPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Inactive"
             value={stats.inactive}
             icon={Ban}
@@ -229,11 +233,13 @@ export default function SuppliersPage() {
             iconColor="text-red-500"
           />
           <StatCard
+            variant="compact"
             title="Contact Ready"
             value={stats.contactReady}
             icon={Mail}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
+            className="hidden sm:block"
           />
         </div>
       }
@@ -279,11 +285,7 @@ export default function SuppliersPage() {
         ]}
         expandable={{
           render: (supplier) => (
-            <div className="grid gap-4 md:grid-cols-4">
-              <div className="rounded-lg border p-4">
-                <p className="text-muted-foreground text-xs tracking-wide uppercase">Contact Person</p>
-                <p className="mt-2 text-sm">{supplier.contact_person || "No contact person assigned"}</p>
-              </div>
+            <div className="grid gap-4 md:grid-cols-3">
               <div className="rounded-lg border p-4">
                 <p className="text-muted-foreground text-xs tracking-wide uppercase">Email</p>
                 <p className="mt-2 text-sm">{supplier.email || "No email on file"}</p>
@@ -300,6 +302,20 @@ export default function SuppliersPage() {
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (supplier) => (supplier.is_active ? "bg-emerald-500" : "bg-slate-400"),
+          title: (supplier) => supplier.name,
+          subtitle: (supplier) => `${supplier.code} · ${supplier.contact_person || supplier.email || "No contact"}`,
+          trailing: (supplier) => (
+            <Badge variant={supplier.is_active ? "default" : "secondary"} className="text-[10px]">
+              {supplier.is_active ? "Active" : "Inactive"}
+            </Badge>
+          ),
+          onSelect: (supplier) => openEdit(supplier),
+        }}
         cardRenderer={(supplier) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">

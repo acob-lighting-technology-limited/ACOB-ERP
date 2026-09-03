@@ -505,23 +505,29 @@ export function AdminTasksContent({
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setIsWorkflowOpen(true)} className="h-8 gap-2">
-            <ArrowRight className="h-4 w-4" /> Workflow Guide
+            <ArrowRight className="h-4 w-4" />
+            <span className="hidden sm:inline">Workflow Guide</span>
           </Button>
           <Button onClick={() => handleOpenTaskDialog()} className="h-8 gap-2" size="sm">
-            <Plus className="h-4 w-4" /> Create Task
+            <Plus className="h-4 w-4" />
+            <span className="hidden sm:inline">Create Task</span>
+            <span className="sm:hidden">New</span>
           </Button>
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total Tasks"
             value={stats.total}
             icon={ClipboardList}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
+            className="hidden sm:block"
           />
           <StatCard
+            variant="compact"
             title="Pending"
             value={stats.pending}
             icon={Clock}
@@ -529,6 +535,7 @@ export function AdminTasksContent({
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="In Progress"
             value={stats.inProgress}
             icon={ArrowRight}
@@ -536,13 +543,16 @@ export function AdminTasksContent({
             iconColor="text-sky-500"
           />
           <StatCard
+            variant="compact"
             title="Submitted"
             value={stats.submitted}
             icon={Send}
             iconBgColor="bg-purple-500/10"
             iconColor="text-purple-500"
+            className="hidden sm:block"
           />
           <StatCard
+            variant="compact"
             title="Completed"
             value={stats.completed}
             icon={CheckCircle2}
@@ -668,6 +678,26 @@ export function AdminTasksContent({
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.status === "completed"
+              ? "bg-emerald-500"
+              : r.priority === "urgent" || r.priority === "high"
+                ? "bg-rose-500"
+                : "bg-blue-500",
+          title: (r) => r.title,
+          subtitle: (r) =>
+            `${r.work_item_number || "Task"} · ${workflowOwnerLabel(r)} · Due ${r.due_date ? formatWATDate(r.due_date) : "No deadline"}`,
+          trailing: (r) => (
+            <Badge variant="outline" className="text-[10px]">
+              {formatName(r.status)}
+            </Badge>
+          ),
+          onSelect: (r) => handleOpenReviewDialog(r),
+        }}
         cardRenderer={(r) => (
           <div className="bg-card group relative space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
             <div className="flex items-start justify-between">

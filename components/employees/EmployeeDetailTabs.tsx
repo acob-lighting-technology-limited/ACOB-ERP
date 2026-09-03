@@ -1,4 +1,8 @@
+"use client"
+
+import { useState } from "react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -76,34 +80,47 @@ export function EmployeeDetailTabs({
   feedbackLinkBase = "/admin/feedback",
   auditLinkBase = "/admin/audit-logs",
 }: EmployeeDetailTabsProps) {
+  const [activeTab, setActiveTab] = useState("tasks")
+
+  const tabOptions = [
+    { value: "tasks", label: `Tasks (${tasks.length})`, icon: CheckSquare },
+    { value: "devices", label: `Devices (${devices.length})`, icon: Laptop },
+    { value: "assets", label: `Assets (${assets.length})`, icon: Package },
+    { value: "documentation", label: `Documentation (${documentation.length})`, icon: FileText },
+    { value: "feedback", label: `Feedback (${feedback.length})`, icon: MessageSquare },
+    { value: "logs", label: `Audit Logs (${auditLogs.length})`, icon: ScrollText },
+  ]
+
   return (
-    <Tabs defaultValue="tasks" className="space-y-4">
-      <TabsList>
-        <TabsTrigger value="tasks">
-          <CheckSquare className="mr-2 h-4 w-4" />
-          Tasks ({tasks.length})
-        </TabsTrigger>
-        <TabsTrigger value="devices">
-          <Laptop className="mr-2 h-4 w-4" />
-          Devices ({devices.length})
-        </TabsTrigger>
-        <TabsTrigger value="assets">
-          <Package className="mr-2 h-4 w-4" />
-          Assets ({assets.length})
-        </TabsTrigger>
-        <TabsTrigger value="documentation">
-          <FileText className="mr-2 h-4 w-4" />
-          Documentation ({documentation.length})
-        </TabsTrigger>
-        <TabsTrigger value="feedback">
-          <MessageSquare className="mr-2 h-4 w-4" />
-          Feedback ({feedback.length})
-        </TabsTrigger>
-        <TabsTrigger value="logs">
-          <ScrollText className="mr-2 h-4 w-4" />
-          Audit Logs ({auditLogs.length})
-        </TabsTrigger>
-      </TabsList>
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <div className="sm:hidden">
+        <Select value={activeTab} onValueChange={setActiveTab}>
+          <SelectTrigger className="bg-muted/60 w-full font-medium">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {tabOptions.map((tab) => (
+              <SelectItem key={tab.value} value={tab.value}>
+                <div className="flex items-center gap-2">
+                  <tab.icon className="text-muted-foreground h-4 w-4 shrink-0" />
+                  <span>{tab.label}</span>
+                </div>
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="hidden sm:block">
+        <TabsList>
+          {tabOptions.map((tab) => (
+            <TabsTrigger key={tab.value} value={tab.value}>
+              <tab.icon className="mr-2 h-4 w-4" />
+              {tab.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </div>
 
       {/* Tasks Tab */}
       <TabsContent value="tasks">

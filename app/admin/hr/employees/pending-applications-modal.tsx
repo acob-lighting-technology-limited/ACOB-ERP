@@ -4,15 +4,6 @@ import { useCallback, useEffect, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
@@ -100,8 +91,6 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
   const [pendingReject, setPendingReject] = useState(false)
   const [employmentType, setEmploymentType] = useState<"full_time" | "part_time" | "contract">("full_time")
   const [contractCategoryCode, setContractCategoryCode] = useState("")
-  const [pendingEmailDispatch, setPendingEmailDispatch] = useState<PendingEmailDispatch | null>(null)
-  const [isSendingEmails, setIsSendingEmails] = useState(false)
 
   // Edit fields states
   const [firstName, setFirstName] = useState("")
@@ -239,9 +228,12 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
         throw new Error(result.error || "Failed to approve user")
       }
 
-      toast.success("Account created successfully")
+      toast.success(
+        "Employee approved successfully. Staff ID generated. Mailbox status is set to 'Pending' for IT provisioning."
+      )
 
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pendingApplications() })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminEmployees() })
       const remaining = pendingUsers.filter((u) => u.id !== selectedUser.id)
       if (remaining.length > 0) {
         handleUserSelect(remaining[0])
@@ -249,15 +241,6 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
         setSelectedUser(null)
       }
       onEmployeeCreated()
-
-      // Prompt admin to send onboarding emails
-      if (result.profileId && result.pendingEmailPreview) {
-        setPendingEmailDispatch({
-          profileId: result.profileId as string,
-          welcome: result.pendingEmailPreview.welcome as PendingEmailDispatch["welcome"],
-          internal: result.pendingEmailPreview.internal as PendingEmailDispatch["internal"],
-        })
-      }
     } catch (error: unknown) {
       log.error("Approval error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to approve user")
@@ -398,48 +381,46 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                           />
                         </div>
                         <div className="flex flex-col items-start gap-1">
-                          <span className="text-muted-foreground text-[10px] font-bold uppercase">Employment Type</span>
+                          <span className="text-muted-foreground text-[10px] font-bold uppercase">
+                            Staff Classification
+                          </span>
                           <Select
-                            value={employmentType}
-                            onValueChange={(value: any) => {
-                              setEmploymentType(value)
-                              if (value !== "contract") {
+                            value={
+                              employmentType === "full_time"
+                                ? "full_time"
+                                : employmentType === "part_time"
+                                  ? "part_time"
+                                  : contractCategoryCode
+                                    ? `cat:${contractCategoryCode}`
+                                    : "cat:CTR"
+                            }
+                            onValueChange={(value) => {
+                              if (value === "full_time") {
+                                setEmploymentType("full_time")
                                 setContractCategoryCode("")
-                              } else if (contractCategories.length > 0) {
-                                setContractCategoryCode(contractCategories[0].code)
+                              } else if (value === "part_time") {
+                                setEmploymentType("part_time")
+                                setContractCategoryCode("")
+                              } else if (value.startsWith("cat:")) {
+                                setEmploymentType("contract")
+                                setContractCategoryCode(value.replace("cat:", ""))
                               }
                             }}
                           >
-                            <SelectTrigger className="bg-primary/5 border-primary/20 h-9 w-32 text-xs font-bold">
-                              <SelectValue placeholder="Type" />
+                            <SelectTrigger className="bg-primary/5 border-primary/20 h-9 w-44 text-xs font-bold">
+                              <SelectValue placeholder="Classification" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="full_time">Full Time</SelectItem>
                               <SelectItem value="part_time">Part Time</SelectItem>
-                              <SelectItem value="contract">Contract</SelectItem>
+                              {contractCategories.map((cat) => (
+                                <SelectItem key={cat.id} value={`cat:${cat.code}`}>
+                                  {cat.name}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>
-                        {employmentType === "contract" && (
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="text-muted-foreground text-[10px] font-bold uppercase">Category</span>
-                            <Select
-                              value={contractCategoryCode}
-                              onValueChange={(value) => setContractCategoryCode(value)}
-                            >
-                              <SelectTrigger className="bg-primary/5 border-primary/20 h-9 w-32 text-xs font-bold">
-                                <SelectValue placeholder="Category" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {contractCategories.map((cat) => (
-                                  <SelectItem key={cat.id} value={cat.code}>
-                                    {cat.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
                         <Badge variant="outline" className="mb-1 self-end py-0.5 text-[10px] font-bold">
                           PENDING APPROVAL
                         </Badge>
@@ -744,70 +725,6 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
           </main>
         </div>
       </DialogContent>
-
-      <AlertDialog
-        open={Boolean(pendingEmailDispatch)}
-        onOpenChange={(open) => {
-          if (!open && !isSendingEmails) setPendingEmailDispatch(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <Mail className="h-4 w-4" />
-              Send Onboarding Emails?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              The account has been created. Do you want to send the onboarding notification emails to the configured
-              recipients?
-              {pendingEmailDispatch && (
-                <span className="mt-2 block text-xs">
-                  Welcome email → {pendingEmailDispatch.welcome.recipients.join(", ") || "no recipients"}.
-                  <br />
-                  Internal notice → {pendingEmailDispatch.internal.recipients.join(", ") || "no recipients"}.
-                </span>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSendingEmails} onClick={() => setPendingEmailDispatch(null)}>
-              No, skip
-            </AlertDialogCancel>
-            <Button
-              loading={isSendingEmails}
-              onClick={async () => {
-                if (!pendingEmailDispatch) return
-                setIsSendingEmails(true)
-                try {
-                  const res = await apiFetch("/api/admin/send-onboarding-emails", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(pendingEmailDispatch),
-                  })
-                  const data = await res.json()
-                  if (res.ok) {
-                    const warnings = Array.isArray(data.warnings) ? (data.warnings as string[]) : []
-                    if (warnings.length > 0) {
-                      toast.warning("Emails sent with some issues", { description: warnings.join(" | ") })
-                    } else {
-                      toast.success("Onboarding emails sent successfully")
-                    }
-                  } else {
-                    toast.error(data.error || "Failed to send onboarding emails")
-                  }
-                } catch {
-                  toast.error("Failed to send onboarding emails")
-                } finally {
-                  setIsSendingEmails(false)
-                  setPendingEmailDispatch(null)
-                }
-              }}
-            >
-              Yes, send emails
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <PromptDialog
         open={pendingReject}

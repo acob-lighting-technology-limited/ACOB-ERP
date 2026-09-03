@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { getServiceRoleClientOrFallback } from "@/lib/supabase/admin"
 import { AdminEmployeeContent, type Employee, type UserProfile } from "./admin-employee-content"
 import { resolveAdminScope, expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
+import { getAvatarSignedUrls } from "@/lib/profile-photos"
 import { logger } from "@/lib/logger"
 import type { Database, UserRole } from "@/types/database"
 
@@ -34,7 +35,7 @@ async function getAdminEmployeeData() {
   }
 
   // Build the employee query, scoping to managed departments for leads
-  let query = dataClient.from("profiles").select("*").order("last_name", { ascending: true })
+  let query = dataClient.from("profiles").select("*, contract_categories(*)").order("last_name", { ascending: true })
 
   // Leads in lead mode only see their departments; super admins / global mode see all
   if (!scope.isAdminLike || scope.scopeMode === "lead") {
@@ -56,8 +57,19 @@ async function getAdminEmployeeData() {
     return { employees: [], userProfile }
   }
 
+  const rawEmployees = (employeeData || []) as (Record<string, unknown> & { avatar_path?: string | null })[]
+  const signedUrlsByPath = await getAvatarSignedUrls(
+    dataClient,
+    rawEmployees.map((r) => r.avatar_path).filter((path): path is string => Boolean(path))
+  )
+
+  const employees: Employee[] = rawEmployees.map((r) => ({
+    ...(r as unknown as Employee),
+    avatar_url: r.avatar_path ? (signedUrlsByPath.get(r.avatar_path) ?? null) : null,
+  }))
+
   return {
-    employees: (employeeData || []) as Employee[],
+    employees,
     userProfile,
   }
 }

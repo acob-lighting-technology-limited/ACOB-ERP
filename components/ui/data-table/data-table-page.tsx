@@ -1,6 +1,7 @@
 "use client"
 
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
 import { PageHeader, PageWrapper } from "@/components/layout"
@@ -31,7 +32,7 @@ export function DataTablePage({
   statBadges,
   statBadgeStyle = "pill",
   spacing,
-  actionsPlacement,
+  actionsPlacement = "inline-always",
   children,
 }: DataTablePageProps) {
   return (
@@ -48,29 +49,73 @@ export function DataTablePage({
 
       {/* 2 ── Tabs */}
       {tabs && tabs.length > 0 && activeTab && onTabChange && (
-        <Tabs value={activeTab} onValueChange={onTabChange} className="mb-4">
-          <TabsList>
-            {tabs.map((tab) => (
-              <TabsTrigger key={tab.key} value={tab.key}>
-                {tab.icon && <tab.icon className="mr-1.5 h-4 w-4" />}
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        <div className="mb-4">
+          <div className="sm:hidden">
+            <Select value={activeTab} onValueChange={onTabChange}>
+              <SelectTrigger className="bg-muted/60 w-full font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {tabs.map((tab) => (
+                  <SelectItem key={tab.key} value={tab.key}>
+                    <div className="flex items-center gap-2">
+                      {tab.icon && <tab.icon className="text-muted-foreground h-4 w-4 shrink-0" />}
+                      <span>{tab.label}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="hidden sm:block">
+            <Tabs value={activeTab} onValueChange={onTabChange}>
+              <TabsList>
+                {tabs.map((tab) => (
+                  <TabsTrigger key={tab.key} value={tab.key}>
+                    {tab.icon && <tab.icon className="mr-1.5 h-4 w-4" />}
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
       )}
 
       {secondaryTabs && secondaryTabs.length > 0 && secondaryActiveTab && onSecondaryTabChange && (
-        <Tabs value={secondaryActiveTab} onValueChange={onSecondaryTabChange} className="mb-4">
-          <TabsList>
-            {secondaryTabs.map((tab) => (
-              <TabsTrigger key={tab.key} value={tab.key}>
-                {tab.icon && <tab.icon className="mr-1.5 h-4 w-4" />}
-                {tab.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        <div className="mb-4">
+          <div className="sm:hidden">
+            <Select value={secondaryActiveTab} onValueChange={onSecondaryTabChange}>
+              <SelectTrigger className="bg-muted/60 w-full font-medium">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {secondaryTabs.map((tab) => (
+                  <SelectItem key={tab.key} value={tab.key}>
+                    <div className="flex items-center gap-2">
+                      {tab.icon && <tab.icon className="text-muted-foreground h-4 w-4 shrink-0" />}
+                      <span>{tab.label}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="hidden sm:block">
+            <Tabs value={secondaryActiveTab} onValueChange={onSecondaryTabChange}>
+              <TabsList>
+                {secondaryTabs.map((tab) => (
+                  <TabsTrigger key={tab.key} value={tab.key}>
+                    {tab.icon && <tab.icon className="mr-1.5 h-4 w-4" />}
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+          </div>
+        </div>
       )}
 
       {/* 3 ── Stats */}

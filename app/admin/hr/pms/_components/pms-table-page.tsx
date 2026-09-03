@@ -280,18 +280,14 @@ export function PmsTablePage({
       description={description}
       icon={Icon}
       backLink={{ href: backHref, label: backLabel }}
+      spacing="tight"
+      actionsPlacement="inline-always"
       actions={
         <div className="flex items-center gap-2">
           {headerActions}
-          <Button
-            variant="outline"
-            onClick={() => setIsExportOpen(true)}
-            disabled={rows.length === 0}
-            className="h-8 gap-2"
-            size="sm"
-          >
-            <Download className="h-4 w-4" />
-            Export
+          <Button variant="outline" onClick={() => setIsExportOpen(true)} disabled={rows.length === 0} size="sm">
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Export</span>
           </Button>
         </div>
       }
@@ -301,6 +297,7 @@ export function PmsTablePage({
             {summaryCards.map((card, index) => (
               <StatCard
                 key={card.label}
+                variant="compact"
                 title={card.label}
                 value={card.value}
                 icon={Icon}
@@ -323,6 +320,51 @@ export function PmsTablePage({
         searchFn={(row, query) =>
           columns.some((column) => normalizeCell(row[column.key]).toLowerCase().includes(query))
         }
+        stickyToolbar
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (row) => normalizeCell(row[firstColumnKey]),
+          subtitle: (row) => {
+            const second = columns[1]?.key ? normalizeCell(row[columns[1].key]) : null
+            const scoreCol = columns.find((c) => ["cbt_score", "score", "rating", "metric_value"].includes(c.key))
+            const scoreVal = scoreCol ? normalizeCell(row[scoreCol.key]) : null
+            const parts = [
+              second && second !== "-" ? second : null,
+              scoreVal && scoreVal !== "-" ? `${scoreCol?.label || "Score"}: ${scoreVal}` : null,
+            ].filter(Boolean)
+            return parts.length > 0 ? parts.join(" · ") : undefined
+          },
+          trailing: (row) => {
+            const statusVal = row.__rawStatus || row.status
+            const scoreCol = columns.find((c) => ["cbt_score", "score"].includes(c.key))
+            const scoreVal = scoreCol ? normalizeCell(row[scoreCol.key]) : null
+            const hasScore = Boolean(scoreVal && scoreVal !== "-")
+            const hasStatus = Boolean(statusVal && statusVal !== "-")
+
+            if (!hasScore && !hasStatus) return undefined
+
+            return (
+              <div className="flex flex-col items-end gap-1">
+                {scoreVal && scoreVal !== "-" && (
+                  <span className="text-foreground font-mono text-xs font-bold">
+                    {scoreVal.includes("%") ? scoreVal : `${scoreVal}%`}
+                  </span>
+                )}
+                {hasStatus ? renderStatusBadge(statusVal) : null}
+              </div>
+            )
+          },
+          detail: {
+            title: (row) => normalizeCell(row[firstColumnKey]),
+            fields: (row) =>
+              columns.slice(1).map((col) => ({
+                label: col.label,
+                value:
+                  col.key === "status" ? normalizeCell(row.__rawStatus || row.status) : normalizeCell(row[col.key]),
+              })),
+          },
+        }}
         expandable={
           shouldRenderTaskExpansion
             ? {

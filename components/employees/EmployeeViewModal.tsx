@@ -105,6 +105,7 @@ export interface EmployeeViewModalProps {
   viewEmployeeData: EmployeeViewData
   onEditEmployee: (employee: EmployeeProfile) => void
   onSignature: (employee: EmployeeProfile) => void
+  onDispatchCredentials?: (employee: EmployeeProfile) => void
   canManageUsers: boolean
   getAvailableRoles: () => UserRole[]
 }
@@ -164,21 +165,34 @@ function StaffTypeBadge({
   const isPartTime = normType === "part_time"
   const isContract = normType === "contract"
 
-  const label = isContract && categoryName ? `Contract (${categoryName})` : normType.replace(/_/g, " ")
+  let label = normType.replace(/_/g, " ")
+  let colorClasses = "border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800"
+
+  if (isPartTime) {
+    label = "Part Time"
+    colorClasses = "border-slate-200 bg-slate-500/10 text-slate-600 dark:border-slate-800"
+  } else if (categoryName) {
+    label = categoryName
+    const catUpper = categoryName.toUpperCase()
+    if (catUpper.includes("NYSC")) {
+      colorClasses = "border-purple-200 bg-purple-500/10 text-purple-600 dark:border-purple-800"
+    } else if (catUpper.includes("SIWES") || catUpper.includes("INTERN")) {
+      colorClasses = "border-cyan-200 bg-cyan-500/10 text-cyan-600 dark:border-cyan-800"
+    } else if (catUpper.includes("NEXT") || catUpper.includes("GEN")) {
+      colorClasses = "border-emerald-200 bg-emerald-500/10 text-emerald-600 dark:border-emerald-800"
+    } else {
+      colorClasses = "border-orange-200 bg-orange-500/10 text-orange-600 dark:border-orange-800"
+    }
+  } else if (isContract) {
+    label = "Contract Staff"
+    colorClasses = "border-orange-200 bg-orange-500/10 text-orange-600 dark:border-orange-800"
+  } else {
+    label = "Full Time"
+    colorClasses = "border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800"
+  }
 
   return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "text-xs font-medium capitalize",
-        isPartTime
-          ? "border-purple-200 bg-purple-500/10 text-purple-600 dark:border-purple-800"
-          : isContract
-            ? "border-orange-200 bg-orange-500/10 text-orange-600 dark:border-orange-800"
-            : "border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800",
-        className
-      )}
-    >
+    <Badge variant="outline" className={cn("text-xs font-medium", colorClasses, className)}>
       {label}
     </Badge>
   )
@@ -199,6 +213,7 @@ export function EmployeeViewModal({
   viewEmployeeData,
   onEditEmployee,
   onSignature,
+  onDispatchCredentials,
   canManageUsers,
   getAvailableRoles,
 }: EmployeeViewModalProps) {
@@ -473,6 +488,15 @@ export function EmployeeViewModal({
                           status={(viewEmployeeProfile.employment_status as EmploymentStatus) || "active"}
                           size="lg"
                         />
+                        {viewEmployeeProfile.employment_status === "active" &&
+                          !viewEmployeeProfile.mailbox_credentials_sent_at && (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 shadow-none dark:text-amber-400"
+                            >
+                              Mailbox Pending
+                            </Badge>
+                          )}
                         <StaffTypeBadge
                           type={viewEmployeeProfile.employment_type}
                           categoryName={viewEmployeeProfile.contract_categories?.name}
@@ -481,16 +505,33 @@ export function EmployeeViewModal({
                       </div>
                     </div>
                     {canManageUsers && (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          if (viewEmployeeProfile) onEditEmployee(viewEmployeeProfile)
-                        }}
-                        className="h-8 gap-1.5 text-xs"
-                      >
-                        <Edit className="h-3.5 w-3.5" />
-                        Edit Employment & Status
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {onDispatchCredentials && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (viewEmployeeProfile) onDispatchCredentials(viewEmployeeProfile)
+                            }}
+                            className="text-primary hover:text-primary h-8 gap-1.5 text-xs"
+                          >
+                            <Mail className="h-3.5 w-3.5" />
+                            {viewEmployeeProfile.mailbox_credentials_sent_at
+                              ? "Resend Credentials"
+                              : "Send Webmail Credentials"}
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            if (viewEmployeeProfile) onEditEmployee(viewEmployeeProfile)
+                          }}
+                          className="h-8 gap-1.5 text-xs"
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                          Edit Employment & Status
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>

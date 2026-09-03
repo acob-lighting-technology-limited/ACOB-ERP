@@ -262,9 +262,10 @@ export default function WarehousesPage() {
       actions={
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Warehouse
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add Warehouse</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           </DialogTrigger>
           <DialogContent className="max-h-[90vh] w-[95vw] max-w-lg overflow-y-auto">
@@ -321,8 +322,9 @@ export default function WarehousesPage() {
         </Dialog>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Warehouses"
             value={stats.total}
             icon={Warehouse}
@@ -330,6 +332,7 @@ export default function WarehousesPage() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Active"
             value={stats.active}
             icon={BadgeCheck}
@@ -337,6 +340,7 @@ export default function WarehousesPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Inactive"
             value={stats.inactive}
             icon={XCircle}
@@ -344,11 +348,13 @@ export default function WarehousesPage() {
             iconColor="text-red-500"
           />
           <StatCard
+            variant="compact"
             title="With Address"
             value={stats.configuredAddresses}
             icon={MapPin}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
+            className="hidden sm:block"
           />
         </div>
       }
@@ -395,6 +401,21 @@ export default function WarehousesPage() {
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (warehouse) => (warehouse.is_active ? "bg-emerald-500" : "bg-slate-400"),
+          title: (warehouse) => warehouse.name,
+          subtitle: (warehouse) =>
+            `${warehouse.code} · ${getRegionFromAddress(warehouse.address)} · ${warehouse.address || "No address"}`,
+          trailing: (warehouse) => (
+            <Badge variant={warehouse.is_active ? "default" : "secondary"} className="text-[10px]">
+              {warehouse.is_active ? "Active" : "Inactive"}
+            </Badge>
+          ),
+          onSelect: (warehouse) => openEdit(warehouse),
+        }}
         cardRenderer={(warehouse) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">

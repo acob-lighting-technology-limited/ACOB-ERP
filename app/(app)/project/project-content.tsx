@@ -233,6 +233,8 @@ export function ProjectContent() {
     <DataTablePage
       title="Projects &amp; Deployments"
       description="View ongoing mini-grid electrification and solar installations progress and task milestones."
+      spacing="tight"
+      actionsPlacement="inline-always"
       actions={
         <Button
           variant="outline"
@@ -240,13 +242,14 @@ export function ProjectContent() {
           onClick={() => queryClient.invalidateQueries({ queryKey: ["user-projects"] })}
           disabled={isLoading}
         >
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Refresh
+          <RefreshCw className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Refresh</span>
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Assigned Projects"
             value={stats.total}
             icon={FolderKanban}
@@ -254,6 +257,7 @@ export function ProjectContent() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Ongoing Status"
             value={stats.active}
             icon={Wrench}
@@ -261,6 +265,7 @@ export function ProjectContent() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Completed Scope"
             value={stats.completed}
             icon={ShieldCheck}
@@ -268,11 +273,13 @@ export function ProjectContent() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Cumulative Capacity"
             value={stats.totalCapacity}
             icon={FolderGit2}
             iconBgColor="bg-violet-500/10"
             iconColor="text-violet-500"
+            className="hidden sm:block"
           />
         </div>
       }
@@ -294,6 +301,75 @@ export function ProjectContent() {
         isLoading={isLoading}
         error={error instanceof Error ? error.message : null}
         onRetry={refetch}
+        viewToggle
+        stickyToolbar
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (r) => r.project_name,
+          subtitle: (r) => [r.location, r.technology_type].filter(Boolean).join(" · ") || r.location,
+          trailing: (r) => renderStatusBadge(r.status),
+          detail: {
+            title: (r) => r.project_name,
+            subtitle: (r) => <span className="text-muted-foreground text-xs">{r.location}</span>,
+            badges: (r) => renderStatusBadge(r.status),
+            fields: (r) => {
+              const info = getProgressInfo(r)
+              return [
+                { icon: MapPin, label: "Location", value: r.location },
+                {
+                  icon: Briefcase,
+                  label: "Project manager",
+                  value:
+                    r.project_manager?.full_name ||
+                    [r.project_manager?.first_name, r.project_manager?.last_name].filter(Boolean).join(" ") ||
+                    "Unassigned",
+                },
+                { icon: Wrench, label: "Technology", value: r.technology_type },
+                { icon: FolderGit2, label: "Capacity", value: formatCapacity(r.capacity_w) },
+                { icon: Calendar, label: "Delivery progress", value: `${info.percent}% — ${info.text}` },
+                { icon: FolderKanban, label: "Description", value: r.description },
+              ]
+            },
+          },
+        }}
+        cardRenderer={(r) => {
+          const info = getProgressInfo(r)
+          return (
+            <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
+              <div className="flex items-start justify-between gap-2">
+                <h4 className="line-clamp-2 text-sm font-semibold">{r.project_name}</h4>
+                {renderStatusBadge(r.status)}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Location</p>
+                  <p className="font-medium">{r.location || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Technology</p>
+                  <p className="font-medium">{r.technology_type || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Capacity</p>
+                  <p className="font-medium">{formatCapacity(r.capacity_w)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Progress</p>
+                  <p className="font-medium">{info.percent}%</p>
+                </div>
+              </div>
+              <div className="border-border/40 text-muted-foreground flex items-center justify-between border-t pt-2 text-xs">
+                <span>
+                  {r.project_manager?.full_name ||
+                    [r.project_manager?.first_name, r.project_manager?.last_name].filter(Boolean).join(" ") ||
+                    "Unassigned"}
+                </span>
+                <span>{info.text}</span>
+              </div>
+            </div>
+          )
+        }}
         expandable={{
           render: (r) => (
             <div className="bg-muted/20 rounded-lg border p-2">

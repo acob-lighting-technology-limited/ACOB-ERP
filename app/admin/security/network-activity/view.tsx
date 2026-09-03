@@ -221,10 +221,7 @@ export function AdminSecurityNetworkActivityPage({ backLinkHref }: { backLinkHre
   }, [load])
 
   const uniqueDomains = useMemo(() => new Set(records.map((r) => r.domain)).size, [records])
-  const uniquePeople = useMemo(
-    () => new Set(records.map((r) => r.user_id || r.matched_identifier)).size,
-    [records]
-  )
+  const uniquePeople = useMemo(() => new Set(records.map((r) => r.user_id || r.matched_identifier)).size, [records])
   const reviewCount = useMemo(
     () => filteredForExport.filter((r) => r.category === "review").length,
     [filteredForExport]
@@ -506,7 +503,12 @@ export function AdminSecurityNetworkActivityPage({ backLinkHref }: { backLinkHre
       icon={ShieldCheck}
       backLink={{ href: backLinkHref ?? "/admin/security", label: "Back to Security" }}
       actions={
-        <Button variant="outline" size="sm" onClick={() => setExportOpen(true)} disabled={filteredForExport.length === 0}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setExportOpen(true)}
+          disabled={filteredForExport.length === 0}
+        >
           <Download className="mr-2 h-4 w-4" />
           Export
         </Button>
@@ -514,6 +516,7 @@ export function AdminSecurityNetworkActivityPage({ backLinkHref }: { backLinkHre
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
           <StatCard
+            variant="compact"
             title="Total Visits"
             value={records.length}
             icon={Globe}
@@ -521,6 +524,7 @@ export function AdminSecurityNetworkActivityPage({ backLinkHref }: { backLinkHre
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Unique Domains"
             value={uniqueDomains}
             icon={ShieldCheck}
@@ -528,6 +532,7 @@ export function AdminSecurityNetworkActivityPage({ backLinkHref }: { backLinkHre
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="People"
             value={uniquePeople}
             icon={Users}
@@ -535,6 +540,7 @@ export function AdminSecurityNetworkActivityPage({ backLinkHref }: { backLinkHre
             iconColor="text-violet-500"
           />
           <StatCard
+            variant="compact"
             title="Flagged for Review"
             value={reviewCount}
             icon={AlertTriangle}
@@ -542,6 +548,7 @@ export function AdminSecurityNetworkActivityPage({ backLinkHref }: { backLinkHre
             iconColor="text-red-500"
           />
           <StatCard
+            variant="compact"
             title="Date Range"
             value={
               dateRange.start_date === dateRange.end_date
@@ -565,7 +572,14 @@ export function AdminSecurityNetworkActivityPage({ backLinkHref }: { backLinkHre
         pagination={{ pageSize: 50 }}
         searchPlaceholder="Search domain, source IP, device, or name..."
         searchFn={(r, q) =>
-          [r.domain, r.source_ip || "", r.device_hostname || "", whoName(r), r.matched_identifier, r.employee_email || ""]
+          [
+            r.domain,
+            r.source_ip || "",
+            r.device_hostname || "",
+            whoName(r),
+            r.matched_identifier,
+            r.employee_email || "",
+          ]
             .join(" ")
             .toLowerCase()
             .includes(q)
@@ -577,6 +591,39 @@ export function AdminSecurityNetworkActivityPage({ backLinkHref }: { backLinkHre
         emptyDescription="Adjust the filters and try again."
         emptyIcon={Globe}
         skeletonRows={8}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.category === "review" ? "bg-red-500" : r.category === "normal" ? "bg-emerald-500" : "bg-blue-500",
+          title: (r) => r.domain,
+          subtitle: (r) =>
+            `${whoName(r) || r.matched_identifier} · ${formatWATDate(r.visited_at, { hour: "2-digit", minute: "2-digit" })}`,
+          trailing: (r) => (
+            <Badge variant={r.category === "review" ? "destructive" : "outline"} className="text-[10px] capitalize">
+              {r.category || "General"}
+            </Badge>
+          ),
+        }}
+        cardRenderer={(r) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{r.domain}</p>
+                <p className="text-muted-foreground text-xs">{whoName(r) || r.matched_identifier}</p>
+              </div>
+              <Badge variant={r.category === "review" ? "destructive" : "outline"} className="capitalize">
+                {r.category || "General"}
+              </Badge>
+            </div>
+            <div className="text-muted-foreground flex justify-between border-t pt-2 text-[10px]">
+              <span>IP: {r.source_ip || "-"}</span>
+              <span>{formatWATDate(r.visited_at, { hour: "2-digit", minute: "2-digit" })}</span>
+            </div>
+          </div>
+        )}
         expandable={{
           render: (r) => (
             <div className="grid grid-cols-1 gap-3 p-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
@@ -608,7 +655,13 @@ export function AdminSecurityNetworkActivityPage({ backLinkHref }: { backLinkHre
                 </div>
                 {r.bandwidth && (
                   <div className="text-muted-foreground text-xs">
-                    as of {formatWATDate(r.bandwidth.snapshot_at, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+                    as of{" "}
+                    {formatWATDate(r.bandwidth.snapshot_at, {
+                      month: "short",
+                      day: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}
                   </div>
                 )}
               </div>
@@ -627,13 +680,13 @@ export function AdminSecurityNetworkActivityPage({ backLinkHref }: { backLinkHre
               {r.raw_url && (
                 <div className="sm:col-span-2 lg:col-span-3">
                   <div className="text-muted-foreground text-xs font-medium uppercase">Raw URL</div>
-                  <div className="break-all font-mono text-xs">{r.raw_url}</div>
+                  <div className="font-mono text-xs break-all">{r.raw_url}</div>
                 </div>
               )}
               {r.user_agent && (
                 <div className="sm:col-span-2 lg:col-span-3">
                   <div className="text-muted-foreground text-xs font-medium uppercase">User Agent</div>
-                  <div className="break-all font-mono text-xs">{r.user_agent}</div>
+                  <div className="font-mono text-xs break-all">{r.user_agent}</div>
                 </div>
               )}
             </div>

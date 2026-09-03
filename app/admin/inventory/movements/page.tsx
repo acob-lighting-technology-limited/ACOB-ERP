@@ -232,8 +232,9 @@ export default function MovementsPage() {
       icon={Boxes}
       backLink={{ href: "/admin/inventory", label: "Back to Inventory" }}
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total Movements"
             value={stats.total}
             icon={ArrowUpDown}
@@ -241,6 +242,7 @@ export default function MovementsPage() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Stock In"
             value={`+${stats.stockIn}`}
             icon={ArrowDown}
@@ -248,6 +250,7 @@ export default function MovementsPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Stock Out"
             value={`-${stats.stockOut}`}
             icon={ArrowUp}
@@ -255,11 +258,13 @@ export default function MovementsPage() {
             iconColor="text-red-500"
           />
           <StatCard
+            variant="compact"
             title="Transfers"
             value={stats.transfers}
             icon={ClipboardList}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
+            className="hidden sm:block"
           />
         </div>
       }
@@ -308,6 +313,33 @@ export default function MovementsPage() {
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (movement) =>
+            movement.movement_type === "in"
+              ? "bg-emerald-500"
+              : movement.movement_type === "out"
+                ? "bg-red-500"
+                : "bg-blue-500",
+          title: (movement) => movement.product_name || "Unknown product",
+          subtitle: (movement) =>
+            `${formatDate(movement.created_at)} · ${movement.created_by_name || "System"} · ${movement.reference_number || "No ref"}`,
+          trailing: (movement) => (
+            <span
+              className={`text-xs font-semibold ${
+                movement.movement_type === "in"
+                  ? "text-emerald-600"
+                  : movement.movement_type === "out"
+                    ? "text-red-600"
+                    : ""
+              }`}
+            >
+              {getQuantityLabel(movement)}
+            </span>
+          ),
+        }}
         cardRenderer={(movement) => {
           const Icon = typeIcons[movement.movement_type]
           return (

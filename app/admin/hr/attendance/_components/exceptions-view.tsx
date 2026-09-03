@@ -17,9 +17,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatCard } from "@/components/ui/stat-card"
-import { Clock, AlertTriangle, XCircle, FileText, Pencil } from "lucide-react"
+import { Clock, AlertTriangle, XCircle, FileText, Pencil, Building, MessageSquare, Calendar } from "lucide-react"
 import { toast } from "sonner"
 import { toLocalISODate, monthBounds, toLocalYearMonth, isLate } from "@/lib/hr/attendance-utils"
+import { formatWATDate } from "@/lib/utils/date"
 import {
   MANUAL_ATTENDANCE_STATUS_OPTIONS,
   isEarlyDeparture,
@@ -292,6 +293,34 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
 
   return (
     <>
+      {/* Stats */}
+      <div className="mb-4 grid grid-cols-3 gap-2 sm:gap-3">
+        <StatCard
+          variant="compact"
+          title="Late"
+          value={stats.late}
+          icon={Clock}
+          iconBgColor="bg-yellow-500/10"
+          iconColor="text-yellow-500"
+        />
+        <StatCard
+          variant="compact"
+          title="Missing Clock-Out"
+          value={stats.incomplete}
+          icon={AlertTriangle}
+          iconBgColor="bg-cyan-500/10"
+          iconColor="text-cyan-500"
+        />
+        <StatCard
+          variant="compact"
+          title="Absent"
+          value={stats.absent}
+          icon={XCircle}
+          iconBgColor="bg-red-500/10"
+          iconColor="text-red-500"
+        />
+      </div>
+
       {/* Date range controls */}
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
@@ -320,31 +349,6 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
         </Button>
       </div>
 
-      {/* Stats */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <StatCard
-          title="Late"
-          value={stats.late}
-          icon={Clock}
-          iconBgColor="bg-yellow-500/10"
-          iconColor="text-yellow-500"
-        />
-        <StatCard
-          title="Missing Clock-Out"
-          value={stats.incomplete}
-          icon={AlertTriangle}
-          iconBgColor="bg-cyan-500/10"
-          iconColor="text-cyan-500"
-        />
-        <StatCard
-          title="Absent"
-          value={stats.absent}
-          icon={XCircle}
-          iconBgColor="bg-red-500/10"
-          iconColor="text-red-500"
-        />
-      </div>
-
       <DataTable<AttendanceRecord>
         data={records}
         columns={columns}
@@ -354,6 +358,68 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
         searchPlaceholder="Search employee or department…"
         searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
         isLoading={loading}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.status === "late" ? "bg-amber-500" : r.status === "absent" ? "bg-red-500" : "bg-cyan-500",
+          title: (r) => `${r.user_name} · ${r.date}`,
+          subtitle: (r) => `${r.department} · In: ${formatTime(r.clock_in)} · Out: ${formatTime(r.clock_out)}`,
+          trailing: (r) => issueBadge(r),
+          detail: {
+            title: (r) => r.user_name,
+            subtitle: (r) =>
+              `${r.department} · ${formatWATDate(r.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}`,
+            badges: (r) => issueBadge(r),
+            fields: (r) => [
+              { icon: Building, label: "Department", value: r.department },
+              {
+                icon: Calendar,
+                label: "Date",
+                value: formatWATDate(r.date, { day: "numeric", month: "short", year: "numeric" }),
+              },
+              { icon: Clock, label: "Clock In", value: formatTime(r.clock_in) },
+              { icon: Clock, label: "Clock Out", value: formatTime(r.clock_out) },
+              ...(r.total_hours != null
+                ? [{ icon: Clock, label: "Total Hours", value: `${r.total_hours.toFixed(2)} hrs` }]
+                : []),
+              ...(r.source ? [{ icon: FileText, label: "Source", value: labelSource(r) }] : []),
+              ...(r.manual_comment ? [{ icon: MessageSquare, label: "Note", value: r.manual_comment }] : []),
+            ],
+            actions: (r) => [
+              {
+                label: "Edit Record",
+                icon: Pencil,
+                onClick: () => openEdit(r),
+              },
+            ],
+          },
+        }}
+        cardRenderer={(r) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{r.user_name}</p>
+                <p className="text-muted-foreground text-xs">{r.department}</p>
+              </div>
+              {issueBadge(r)}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-muted-foreground">Clock In:</span> {formatTime(r.clock_in)}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Clock Out:</span> {formatTime(r.clock_out)}
+              </div>
+            </div>
+            <div className="flex items-center justify-between border-t pt-2 text-[10px]">
+              <span>{r.date}</span>
+              <span>Source: {labelSource(r)}</span>
+            </div>
+          </div>
+        )}
         emptyTitle="No exceptions found"
         emptyDescription="No late, incomplete, or absent records for this period."
         emptyIcon={FileText}

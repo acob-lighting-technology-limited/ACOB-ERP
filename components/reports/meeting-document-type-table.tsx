@@ -415,9 +415,12 @@ export function MeetingDocumentTypeTable({
       description={description}
       icon={FileText}
       backLink={{ href: backHref, label: backLabel }}
+      spacing="tight"
+      actionsPlacement="inline-always"
       actions={
         readOnly ? null : (
           <Button
+            size="sm"
             onClick={() => {
               setEditingDoc(null)
               setWeekNumber(officeWeek.week)
@@ -427,14 +430,15 @@ export function MeetingDocumentTypeTable({
               setShowCreate(true)
             }}
           >
-            <Plus className="mr-2 h-4 w-4" />
-            Add
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Add</span>
           </Button>
         )
       }
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Documents"
             value={stats.total}
             icon={FileText}
@@ -442,6 +446,7 @@ export function MeetingDocumentTypeTable({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Locked"
             value={stats.locked}
             icon={Lock}
@@ -449,6 +454,7 @@ export function MeetingDocumentTypeTable({
             iconColor="text-red-500"
           />
           <StatCard
+            variant="compact"
             title="Downloadable"
             value={stats.downloadable}
             icon={Download}
@@ -456,6 +462,7 @@ export function MeetingDocumentTypeTable({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="This Year"
             value={stats.currentYear}
             icon={CalendarDays}
@@ -673,7 +680,31 @@ export function MeetingDocumentTypeTable({
             )
           },
         }}
+        stickyToolbar
         viewToggle
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (row) => `W${row.meeting_week} ${row.meeting_year}`,
+          subtitle: (row) => formatMeetingDate(row.meeting_date),
+          trailing: (row) => (row.is_locked ? <Badge variant="outline">Locked</Badge> : undefined),
+          detail: {
+            title: (row) => `W${row.meeting_week} ${row.meeting_year}`,
+            fields: (row) => [
+              { label: "Meeting Date", value: formatMeetingDate(row.meeting_date) },
+              {
+                label: "Submitted By",
+                value:
+                  row.uploaded_by && uploadedByNameMap.has(row.uploaded_by)
+                    ? (uploadedByNameMap.get(row.uploaded_by) ?? "-")
+                    : "-",
+              },
+              { label: "Submitted", value: formatWATTimeDate(row.created_at) },
+              { label: "File", value: row.file_name },
+              { label: "Status", value: row.is_locked ? "Locked" : "Active" },
+            ],
+          },
+        }}
         cardRenderer={(row) => {
           const submittedBy =
             row.uploaded_by && uploadedByNameMap.has(row.uploaded_by) ? uploadedByNameMap.get(row.uploaded_by) : "-"

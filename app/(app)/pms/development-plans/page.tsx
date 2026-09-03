@@ -240,11 +240,25 @@ export default function DevelopmentPlansPage() {
       description="Your personal development goals and action steps, set by your manager."
       icon={BookOpen}
       backLink={{ href: "/pms", label: "Back to PMS" }}
+      spacing="tight"
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatCard title="Active Plans" value={activePlans.length} icon={BookOpen} description="In progress" />
-          <StatCard title="Completed" value={completedPlans.length} icon={CheckCircle2} description="Finished plans" />
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <StatCard
+            variant="compact"
+            title="Active Plans"
+            value={activePlans.length}
+            icon={BookOpen}
+            description="In progress"
+          />
+          <StatCard
+            variant="compact"
+            title="Completed"
+            value={completedPlans.length}
+            icon={CheckCircle2}
+            description="Finished plans"
+          />
+          <StatCard
+            variant="compact"
             title="Total Actions"
             value={plans.reduce((sum, p) => sum + (p.actions?.length || 0), 0)}
             icon={Clock}
@@ -270,6 +284,75 @@ export default function DevelopmentPlansPage() {
         emptyTitle="No Development Plans Yet"
         emptyDescription="Your manager will create development plans linked to your performance reviews. Check back after your next review."
         emptyIcon={BookOpen}
+        viewToggle
+        stickyToolbar
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (plan) => plan.title,
+          subtitle: (plan) => FOCUS_LABELS[plan.focus_area] || plan.focus_area,
+          trailing: (plan) => (
+            <Badge variant={STATUS_VARIANTS[plan.status] || "outline"} className="text-[10px] capitalize">
+              {plan.status.replace("_", " ")}
+            </Badge>
+          ),
+          detail: {
+            title: (plan) => plan.title,
+            badges: (plan) => (
+              <Badge variant={STATUS_VARIANTS[plan.status] || "outline"} className="capitalize">
+                {plan.status.replace("_", " ")}
+              </Badge>
+            ),
+            fields: (plan) => [
+              { label: "Focus area", value: FOCUS_LABELS[plan.focus_area] || plan.focus_area },
+              { label: "Priority", value: plan.priority },
+              {
+                label: "Progress",
+                value: `${planProgress(plan)}% — ${(plan.actions || []).filter((a) => a.status === "completed").length}/${plan.actions?.length || 0} actions`,
+              },
+              { label: "Due date", value: formatDate(plan.target_date) },
+              { label: "Description", value: plan.description || null },
+            ],
+          },
+        }}
+        cardRenderer={(plan) => {
+          const totalActions = plan.actions?.length || 0
+          const doneActions = (plan.actions || []).filter((a) => a.status === "completed").length
+          return (
+            <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
+              <div className="flex items-start justify-between gap-2">
+                <h4 className="line-clamp-2 text-sm font-semibold">{plan.title}</h4>
+                <Badge variant={STATUS_VARIANTS[plan.status] || "outline"} className="shrink-0 text-[10px] capitalize">
+                  {plan.status.replace("_", " ")}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Focus</p>
+                  <p className="font-medium">{FOCUS_LABELS[plan.focus_area] || plan.focus_area}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Priority</p>
+                  <p className="font-medium capitalize">{plan.priority}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Progress</p>
+                  <p className="font-medium">{planProgress(plan)}%</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Actions</p>
+                  <p className="font-medium">
+                    {doneActions}/{totalActions}
+                  </p>
+                </div>
+              </div>
+              <div className="border-border/40 text-muted-foreground flex items-center justify-between border-t pt-2 text-xs">
+                <span>Due</span>
+                <span>{formatDate(plan.target_date)}</span>
+              </div>
+            </div>
+          )
+        }}
         expandable={{
           render: (plan) => (
             <div className="space-y-3">

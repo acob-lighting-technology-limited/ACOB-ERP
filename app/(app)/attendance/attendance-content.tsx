@@ -608,7 +608,7 @@ export function AttendanceContent({
         actionsPlacement="inline-always"
         stats={
           <TooltipProvider>
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
               <StatCard
                 variant="compact"
                 title="Today Status"
@@ -657,26 +657,26 @@ export function AttendanceContent({
                   </p>
                 </TooltipContent>
               </Tooltip>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="h-full cursor-help">
-                    <StatCard
-                      variant="compact"
-                      className="h-full"
-                      title="Missed Hours"
-                      value={`${totalMissedHours} hrs`}
-                      icon={AlertCircle}
-                      iconBgColor="bg-amber-500/10"
-                      iconColor="text-amber-500"
-                    />
-                  </div>
-                </TooltipTrigger>
-                <TooltipContent>
-                  <p className="max-w-xs text-xs">
-                    Total hours lost due to late arrival, early departure, or incomplete punches in this period.
-                  </p>
-                </TooltipContent>
-              </Tooltip>
+              <div className="hidden sm:block">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <div className="h-full cursor-help">
+                      <StatCard
+                        variant="compact"
+                        className="h-full"
+                        title="Missed Hours"
+                        value={`${totalMissedHours} hrs`}
+                        icon={AlertCircle}
+                        iconBgColor="bg-amber-500/10"
+                        iconColor="text-amber-500"
+                      />
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs text-xs">Total unworked hours deducted across expected workdays.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </div>
             </div>
           </TooltipProvider>
         }

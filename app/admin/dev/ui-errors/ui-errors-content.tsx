@@ -100,10 +100,10 @@ export function UiErrorsContent({ rows, stats, error }: UiErrorsContentProps) {
       icon={Bug}
       backLink={{ href: "/admin/dev", label: "Back to DEV" }}
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatCard title="Total Captured" value={stats.total} icon={Bug} />
-          <StatCard title="Last 24h" value={stats.last24h} icon={AlertTriangle} />
-          <StatCard title="Boundary Catches" value={stats.boundaries} icon={ShieldAlert} />
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <StatCard variant="compact" title="Total Captured" value={stats.total} icon={Bug} />
+          <StatCard variant="compact" title="Last 24h" value={stats.last24h} icon={AlertTriangle} />
+          <StatCard variant="compact" title="Boundary Catches" value={stats.boundaries} icon={ShieldAlert} />
         </div>
       }
     >
@@ -121,6 +121,35 @@ export function UiErrorsContent({ rows, stats, error }: UiErrorsContentProps) {
         filters={filters}
         error={error ? "Failed to load logs from backend storage" : null}
         pagination={{ pageSize: 50 }}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: () => "bg-red-500",
+          title: (r) => r.message,
+          subtitle: (r) => `${r.source} · ${r.route || "-"} · ${formatWATDateTime(r.created_at)}`,
+          trailing: (r) => (
+            <Badge variant="outline" className="text-[10px]">
+              {r.source}
+            </Badge>
+          ),
+        }}
+        cardRenderer={(r) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="line-clamp-2 text-sm font-semibold">{r.message}</p>
+                <p className="text-muted-foreground font-mono text-xs">{r.route || "-"}</p>
+              </div>
+              <Badge variant="outline">{r.source}</Badge>
+            </div>
+            <div className="text-muted-foreground flex justify-between border-t pt-2 text-[10px]">
+              <span>{r.user_name || "Anonymous"}</span>
+              <span>{formatWATDateTime(r.created_at)}</span>
+            </div>
+          </div>
+        )}
       />
     </DataTablePage>
   )

@@ -123,13 +123,29 @@ export function MyTicketsTable({ tickets, userId, onSetStatus, onRateTicket, onV
   return (
     <div className="space-y-3">
       <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as TicketTab)}>
-        <TabsList className="h-auto flex-wrap justify-start gap-1">
-          <TabsTrigger value="all">All ({counts.all})</TabsTrigger>
-          <TabsTrigger value="open">Open ({counts.open})</TabsTrigger>
-          <TabsTrigger value="pending">Pending ({counts.pending})</TabsTrigger>
-          <TabsTrigger value="resolved">Resolved ({counts.resolved})</TabsTrigger>
-          <TabsTrigger value="closed">Closed ({counts.closed})</TabsTrigger>
-        </TabsList>
+        <div className="sm:hidden">
+          <Select value={activeTab} onValueChange={(value) => setActiveTab(value as TicketTab)}>
+            <SelectTrigger className="bg-muted/60 w-full font-medium">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All ({counts.all})</SelectItem>
+              <SelectItem value="open">Open ({counts.open})</SelectItem>
+              <SelectItem value="pending">Pending ({counts.pending})</SelectItem>
+              <SelectItem value="resolved">Resolved ({counts.resolved})</SelectItem>
+              <SelectItem value="closed">Closed ({counts.closed})</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="hidden sm:block">
+          <TabsList className="h-auto flex-wrap justify-start gap-1">
+            <TabsTrigger value="all">All ({counts.all})</TabsTrigger>
+            <TabsTrigger value="open">Open ({counts.open})</TabsTrigger>
+            <TabsTrigger value="pending">Pending ({counts.pending})</TabsTrigger>
+            <TabsTrigger value="resolved">Resolved ({counts.resolved})</TabsTrigger>
+            <TabsTrigger value="closed">Closed ({counts.closed})</TabsTrigger>
+          </TabsList>
+        </div>
       </Tabs>
 
       <ListToolbar

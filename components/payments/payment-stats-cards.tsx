@@ -18,6 +18,7 @@ export function PaymentStatsCards({ stats, formatCurrency }: PaymentStatsCardsPr
   return (
     <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
       <StatCard
+        variant="compact"
         title="Total Outstanding"
         value={formatCurrency(stats.totalDue, "NGN")}
         icon={CreditCard}
@@ -25,6 +26,7 @@ export function PaymentStatsCards({ stats, formatCurrency }: PaymentStatsCardsPr
         iconColor="text-blue-500"
       />
       <StatCard
+        variant="compact"
         title="Total Paid"
         value={formatCurrency(stats.totalPaid, "NGN")}
         icon={Wallet}
@@ -32,6 +34,7 @@ export function PaymentStatsCards({ stats, formatCurrency }: PaymentStatsCardsPr
         iconColor="text-emerald-500"
       />
       <StatCard
+        variant="compact"
         title="Completed"
         value={stats.countCompleted}
         icon={CheckCircle}
@@ -39,6 +42,7 @@ export function PaymentStatsCards({ stats, formatCurrency }: PaymentStatsCardsPr
         iconColor="text-violet-500"
       />
       <StatCard
+        variant="compact"
         title="Overdue"
         value={stats.countOverdue}
         icon={TriangleAlert}
@@ -46,6 +50,7 @@ export function PaymentStatsCards({ stats, formatCurrency }: PaymentStatsCardsPr
         iconColor="text-red-500"
       />
       <StatCard
+        variant="compact"
         title="Due Soon"
         value={stats.countDue}
         icon={Calendar}

@@ -307,6 +307,7 @@ export function OnboardingContent() {
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Profiles"
             value={stats.total}
             icon={Users}
@@ -315,6 +316,7 @@ export function OnboardingContent() {
             description="All profile records, including not-yet-onboarded placeholders"
           />
           <StatCard
+            variant="compact"
             title="Onboardable"
             value={stats.onboardable}
             icon={UserCheck}
@@ -323,6 +325,7 @@ export function OnboardingContent() {
             description="Have an email and can sign in"
           />
           <StatCard
+            variant="compact"
             title="Signed In"
             value={stats.signedIn}
             icon={UserCheck}
@@ -331,6 +334,7 @@ export function OnboardingContent() {
             description={`${stats.rate}% of onboardable`}
           />
           <StatCard
+            variant="compact"
             title="Never Signed In"
             value={stats.neverSignedIn}
             icon={UserX}
@@ -414,6 +418,23 @@ export function OnboardingContent() {
             ),
           }}
           viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (row) => (row.has_signed_in ? "bg-emerald-500" : "bg-red-500"),
+            title: (row) => row.full_name,
+            subtitle: (row) =>
+              `${row.email || "No email"} · ${row.department || "No dept"} · ${row.employee_number || "No ID"}`,
+            trailing: (row) =>
+              row.has_signed_in ? (
+                <Badge className="border-emerald-500/20 bg-emerald-500/10 text-[10px] text-emerald-600">
+                  Signed in
+                </Badge>
+              ) : (
+                <Badge className="border-red-500/20 bg-red-500/10 text-[10px] text-red-600">Never</Badge>
+              ),
+          }}
           cardRenderer={(row) => (
             <div className="space-y-3 rounded-xl border p-4">
               <div className="flex items-start justify-between gap-3">

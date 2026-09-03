@@ -32,13 +32,15 @@ export async function POST(req: Request) {
 
     const body = (await req.json()) as {
       profileId: string
-      welcome: EmailBlock
-      internal: EmailBlock
+      welcome?: EmailBlock
+      internal?: EmailBlock
+      sendWelcome?: boolean
+      sendInternal?: boolean
     }
 
-    const { profileId, welcome, internal } = body
-    if (!profileId || !welcome || !internal) {
-      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
+    const { profileId, welcome, internal, sendWelcome = true, sendInternal = true } = body
+    if (!profileId) {
+      return NextResponse.json({ error: "Missing required profileId" }, { status: 400 })
     }
 
     const dataClient = getServiceRoleClientOrFallback(supabase)
@@ -48,7 +50,7 @@ export async function POST(req: Request) {
 
     if (onboardingMailEnabled) {
       // Welcome email to the new employee
-      if (welcome.recipients.length > 0) {
+      if (sendWelcome && welcome && welcome.recipients.length > 0) {
         try {
           const result = await sendNotificationEmailWithRetry({
             to: welcome.recipients,
@@ -66,7 +68,7 @@ export async function POST(req: Request) {
       }
 
       // Internal notification to leads
-      if (internal.recipients.length > 0) {
+      if (sendInternal && internal && internal.recipients.length > 0) {
         try {
           const result = await sendNotificationEmailsIndividuallyWithRetry({
             to: internal.recipients,

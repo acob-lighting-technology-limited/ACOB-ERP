@@ -260,14 +260,16 @@ export function AdminGoalsContent({
         canCreateGoal ? (
           <Button size="sm" onClick={() => setIsDialogOpen(true)} className="gap-1.5">
             <Plus className="h-4 w-4" />
-            Add Strategic Goal
+            <span className="hidden sm:inline">Add Strategic Goal</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         ) : undefined
       }
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <StatCard title="Total Goals" value={goals.length} icon={Target} />
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
+          <StatCard variant="compact" title="Total Goals" value={goals.length} icon={Target} />
           <StatCard
+            variant="compact"
             title="Active Review Cycles"
             value={cycles.length}
             icon={Clock}
@@ -275,6 +277,7 @@ export function AdminGoalsContent({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Departments with Goals"
             value={new Set(goals.map((g) => g.department).filter(Boolean)).size}
             icon={CheckCircle}
@@ -311,6 +314,49 @@ export function AdminGoalsContent({
               onClick: (row) => handleArchiveGoal(row),
             },
           ]}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: () => "bg-emerald-500",
+            title: (r) => r.title,
+            subtitle: (r) => `${r.department} · ${r.cycle?.name || "No cycle"}`,
+            trailing: (r) => (
+              <Badge variant="outline" className="text-[10px] capitalize">
+                {r.status || "Active"}
+              </Badge>
+            ),
+            onSelect: (r) =>
+              router.push(`${goalsBasePath ?? "/admin/hr/pms/goals"}/task?goal_id=${encodeURIComponent(r.id)}`),
+          }}
+          cardRenderer={(r) => (
+            <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{r.title}</p>
+                  <p className="text-muted-foreground text-xs">{r.department}</p>
+                </div>
+                <Badge variant="outline" className="text-[10px] capitalize">
+                  {r.status || "Active"}
+                </Badge>
+              </div>
+              <p className="text-muted-foreground line-clamp-2 text-xs">{r.description || "No description."}</p>
+              <div className="flex items-center justify-between border-t pt-2 text-[10px]">
+                <span>Cycle: {r.cycle?.name || "None"}</span>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-6 text-[10px]"
+                  onClick={() =>
+                    router.push(`${goalsBasePath ?? "/admin/hr/pms/goals"}/task?goal_id=${encodeURIComponent(r.id)}`)
+                  }
+                >
+                  <ListPlus className="mr-1 h-3 w-3" /> Add Task
+                </Button>
+              </div>
+            </div>
+          )}
         />
       ) : (
         <DataTable<(typeof cycleRows)[number]>
@@ -321,6 +367,28 @@ export function AdminGoalsContent({
           searchFn={(row, q) => [row.cycle, row.review_type].some((value) => String(value).toLowerCase().includes(q))}
           filters={cycleFilters}
           pagination={{ pageSize: 50 }}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: () => "bg-blue-500",
+            title: (r) => r.cycle,
+            subtitle: (r) => `${r.review_type} · ${r.departments} depts`,
+            trailing: (r) => <span className="text-xs font-semibold">{r.goals} goals</span>,
+          }}
+          cardRenderer={(r) => (
+            <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{r.cycle}</p>
+                  <p className="text-muted-foreground text-xs">{r.review_type}</p>
+                </div>
+                <Badge variant="outline">{r.goals} goals</Badge>
+              </div>
+              <div className="text-muted-foreground border-t pt-2 text-[10px]">Departments: {r.departments}</div>
+            </div>
+          )}
         />
       )}
 

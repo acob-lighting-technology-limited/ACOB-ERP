@@ -19,7 +19,18 @@ import { isAssignableProfile } from "@/lib/workforce/assignment-policy"
 import { ASSET_TYPES, ASSET_TYPE_MAP } from "@/lib/asset-types"
 import { getDepartmentForOffice } from "@/lib/rooms-and-offices"
 import { assignmentValidation } from "@/lib/validation"
-import { Package, AlertCircle, Plus, Download, History, Pencil, RefreshCw, Wrench, UserMinus } from "lucide-react"
+import {
+  Package,
+  AlertCircle,
+  Plus,
+  Download,
+  History,
+  Pencil,
+  RefreshCw,
+  Wrench,
+  UserMinus,
+  FileText,
+} from "lucide-react"
 import { StatCard } from "@/components/ui/stat-card"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
 import type { DataTableColumn, DataTableFilter, RowAction } from "@/components/ui/data-table"
@@ -36,6 +47,7 @@ import { AssetIssuesDialog } from "@/components/assets/AssetIssuesDialog"
 import { AssetTypeDialog } from "@/components/assets/AssetTypeDialog"
 import { AssetExportDialog } from "@/components/assets/AssetExportDialog"
 import { EmployeeAssetsReportDialog } from "@/components/assets/EmployeeAssetsReportDialog"
+import { AssetHandoverDialog } from "@/components/assets/AssetHandoverDialog"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import {
   buildAssetExportRows,
@@ -258,6 +270,8 @@ export function AdminAssetsContent({
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [isReleaseDialogOpen, setIsReleaseDialogOpen] = useState(false)
+  const [isHandoverDialogOpen, setIsHandoverDialogOpen] = useState(false)
+  const [selectedHandoverAsset, setSelectedHandoverAsset] = useState<Asset | null>(null)
   const [isHistoryOpen, setIsHistoryOpen] = useState(false)
   const [isIssuesDialogOpen, setIsIssuesDialogOpen] = useState(false)
   const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null)
@@ -1432,6 +1446,15 @@ export function AdminAssetsContent({
       onClick: (asset) => void loadAssetHistory(asset),
     },
     {
+      label: "Handover Policy",
+      icon: FileText,
+      onClick: (asset) => {
+        setSelectedHandoverAsset(asset)
+        setIsHandoverDialogOpen(true)
+      },
+      hidden: (asset) => Boolean(asset.deleted_at),
+    },
+    {
       label: "Archive",
       icon: AlertCircle,
       variant: "destructive",
@@ -1475,8 +1498,9 @@ export function AdminAssetsContent({
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total Assets"
             value={stats.total}
             icon={Package}
@@ -1484,6 +1508,7 @@ export function AdminAssetsContent({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Available"
             value={stats.available}
             icon={Package}
@@ -1491,6 +1516,7 @@ export function AdminAssetsContent({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Assigned"
             value={stats.assigned}
             icon={Package}
@@ -1498,18 +1524,22 @@ export function AdminAssetsContent({
             iconColor="text-violet-500"
           />
           <StatCard
+            variant="compact"
             title="Maintenance"
             value={stats.maintenance}
             icon={Wrench}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
+            className="hidden sm:block"
           />
           <StatCard
+            variant="compact"
             title="Open Issues"
             value={stats.unresolvedIssues}
             icon={AlertCircle}
             iconBgColor="bg-red-500/10"
             iconColor="text-red-500"
+            className="hidden sm:block"
           />
         </div>
       }
@@ -1568,6 +1598,83 @@ export function AdminAssetsContent({
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (asset) =>
+            asset.deleted_at
+              ? "bg-slate-400"
+              : asset.status === "maintenance" || (asset.unresolved_issues_count || 0) > 0
+                ? "bg-rose-500"
+                : asset.status === "assigned"
+                  ? "bg-blue-500"
+                  : "bg-emerald-500",
+          title: (asset) =>
+            `${asset.unique_code} · ${asset.asset_model || ASSET_TYPE_MAP[asset.asset_type]?.label || asset.asset_type}`,
+          subtitle: (asset) =>
+            `${getAssignedToLabel(asset, true)} · ${asset.office_location || asset.department || "HQ"}`,
+          trailing: (asset) => (
+            <Badge className={getStatusColor(asset.deleted_at ? "archived" : asset.status)} variant="outline">
+              {asset.deleted_at ? "archived" : asset.status}
+            </Badge>
+          ),
+          detail: {
+            title: (asset) => `${asset.unique_code} · ${asset.asset_model || asset.asset_type}`,
+            subtitle: (asset) =>
+              `${getAssignedToLabel(asset, true)} · ${asset.office_location || asset.department || "HQ"}`,
+            fields: (asset) => [
+              {
+                label: "Asset Type",
+                value: ASSET_TYPE_MAP[asset.asset_type]?.label || asset.asset_type,
+              },
+              {
+                label: "Status",
+                value: asset.deleted_at ? "Archived" : asset.status,
+              },
+              {
+                label: "Assigned To",
+                value: getAssignedToLabel(asset, false),
+              },
+              {
+                label: "Office / Room",
+                value: asset.office_location || "-",
+              },
+              {
+                label: "Department",
+                value: asset.department || "-",
+              },
+              {
+                label: "Serial Number",
+                value: asset.serial_number || "-",
+              },
+              {
+                label: "Acquisition Year",
+                value: String(asset.acquisition_year || "-"),
+              },
+              {
+                label: "Assignment Type",
+                value: asset.assignment_type ? asset.assignment_type.replace(/_/g, " ") : "-",
+              },
+              ...(asset.notes
+                ? [
+                    {
+                      label: "Notes",
+                      value: asset.notes,
+                      fullWidth: true,
+                    },
+                  ]
+                : []),
+            ],
+            actions: (asset) => [
+              {
+                label: "Edit / View Asset",
+                icon: Pencil,
+                onClick: () => void handleOpenAssetDialog(asset),
+              },
+            ],
+          },
+        }}
         cardRenderer={(asset) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">
@@ -1759,6 +1866,15 @@ export function AdminAssetsContent({
           if (id === "employee_pdf") return handleEmployeeReportClick("pdf")
           handleEmployeeReportClick("word")
         }}
+      />
+
+      {/* Asset Handover Policy PDF Dialog */}
+      <AssetHandoverDialog
+        open={isHandoverDialogOpen}
+        onOpenChange={setIsHandoverDialogOpen}
+        asset={selectedHandoverAsset as any}
+        userProfile={userProfile as any}
+        employees={employees as any}
       />
     </DataTablePage>
   )

@@ -93,7 +93,7 @@ const navigationSections: NavSectionDef[] = [
     items: [
       {
         name: "HR",
-        href: "/attendance",
+        href: "/hr",
         icon: UserCheck,
         children: [
           { name: "Attendance", href: "/attendance" },
@@ -119,7 +119,7 @@ const navigationSections: NavSectionDef[] = [
       },
       {
         name: "Accounts",
-        href: "/payments",
+        href: "/accounts",
         icon: Landmark,
         children: [
           { name: "Requisitions", href: "/requisition" },

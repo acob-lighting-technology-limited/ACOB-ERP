@@ -5,6 +5,7 @@ import { getRequestScope } from "@/lib/admin/api-scope"
 import { buildAccessContextV2 } from "@/lib/admin/policy-v2"
 import { enforceRouteAccessV2 } from "@/lib/admin/api-guard-v2"
 import { expandDepartmentScopeForQuery } from "@/lib/admin/rbac"
+import { getAvatarSignedUrls } from "@/lib/profile-photos"
 import { logger } from "@/lib/logger"
 
 const log = logger("admin-employees-list")
@@ -55,5 +56,16 @@ export async function GET() {
     return NextResponse.json({ error: "Failed to fetch employees" }, { status: 500 })
   }
 
-  return NextResponse.json({ data: data || [] })
+  const rows = (data || []) as (Record<string, unknown> & { avatar_path?: string | null })[]
+  const signedUrlsByPath = await getAvatarSignedUrls(
+    dataClient,
+    rows.map((r) => r.avatar_path).filter((path): path is string => Boolean(path))
+  )
+
+  const employees = rows.map((r) => ({
+    ...r,
+    avatar_url: r.avatar_path ? (signedUrlsByPath.get(r.avatar_path) ?? null) : null,
+  }))
+
+  return NextResponse.json({ data: employees })
 }

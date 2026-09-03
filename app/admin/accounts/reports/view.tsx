@@ -261,8 +261,9 @@ export function FinanceReportsPage({
         </Select>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total Revenue"
             value={formatCurrency(reportData.totalRevenue)}
             icon={TrendingUp}
@@ -270,6 +271,7 @@ export function FinanceReportsPage({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Total Expenses"
             value={formatCurrency(reportData.totalExpenses)}
             icon={TrendingDown}
@@ -277,6 +279,7 @@ export function FinanceReportsPage({
             iconColor="text-red-500"
           />
           <StatCard
+            variant="compact"
             title="Net Income"
             value={formatCurrency(reportData.netIncome)}
             icon={DollarSign}
@@ -284,11 +287,13 @@ export function FinanceReportsPage({
             iconColor={reportData.netIncome >= 0 ? "text-emerald-500" : "text-red-500"}
           />
           <StatCard
+            variant="compact"
             title="Entries"
             value={periodFilteredRows.length}
             icon={BarChart3}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
+            className="hidden sm:block"
           />
         </div>
       }
@@ -412,6 +417,18 @@ export function FinanceReportsPage({
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: () => "bg-blue-500",
+          title: (row) => row.title,
+          subtitle: (row) =>
+            `${row.department_name || "Unknown"} · ${row.category || "Other"} · ${formatMonth(getPeriodLabel(row.created_at))}`,
+          trailing: (row) => (
+            <span className="text-xs font-semibold">{formatCurrency(row.amount, row.currency || "NGN")}</span>
+          ),
+        }}
         cardRenderer={(row) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">

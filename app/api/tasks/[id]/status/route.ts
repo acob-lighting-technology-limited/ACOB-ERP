@@ -24,10 +24,10 @@ const StatusBodySchema = z.object({
 })
 
 const EMPLOYEE_TRANSITIONS: Record<string, TaskStatus[]> = {
-  pending: ["in_progress", "unable_to_complete", "cancelled"],
+  pending: ["in_progress", "submitted_for_review", "unable_to_complete", "cancelled"],
   in_progress: ["submitted_for_review", "unable_to_complete", "pending", "cancelled"],
   submitted_for_review: ["in_progress", "unable_to_complete"],
-  unable_to_complete: ["in_progress"],
+  unable_to_complete: ["in_progress", "submitted_for_review"],
   completed: [],
   reassigned: [],
   failed: [],

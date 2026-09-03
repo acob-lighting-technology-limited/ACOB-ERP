@@ -765,7 +765,8 @@ export function ActionTrackerContent({
               }}
             >
               <Plus className="h-4 w-4" />
-              Add Directive
+              <span className="hidden sm:inline">Add Directive</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           ) : null}
           {actionItemsForExport.length > 0 ? (
@@ -794,6 +795,7 @@ export function ActionTrackerContent({
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
           <StatCard
+            variant="compact"
             title={activeTab === "directives" ? "Total Directives" : "Total Action Points"}
             value={stats.total}
             icon={activeTab === "directives" ? Gavel : FileSpreadsheet}
@@ -801,6 +803,7 @@ export function ActionTrackerContent({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Completed"
             value={stats.completed}
             icon={CheckCircle2}
@@ -808,6 +811,7 @@ export function ActionTrackerContent({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Pending"
             value={stats.pending}
             icon={Clock}
@@ -815,6 +819,7 @@ export function ActionTrackerContent({
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Not Started"
             value={stats.notStarted}
             icon={Clock}
@@ -822,6 +827,7 @@ export function ActionTrackerContent({
             iconColor="text-red-500"
           />
           <StatCard
+            variant="compact"
             title="In Progress"
             value={stats.inProgress}
             icon={RefreshCw}
@@ -930,6 +936,23 @@ export function ActionTrackerContent({
             ),
           }}
           viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (row) =>
+              row.summaryStatus === "Finished"
+                ? "bg-emerald-500"
+                : row.summaryStatus === "Started"
+                  ? "bg-blue-500"
+                  : "bg-amber-500",
+            title: (row) => row.department,
+            subtitle: (row) => `${row.totalPoints} action points · ${row.completedPoints} completed`,
+            trailing: (row) => (
+              <Badge className={`${getSummaryBadgeClass(row.summaryStatus)} text-[10px]`}>{row.summaryStatus}</Badge>
+            ),
+            onSelect: (row) => setViewingDepartment(row),
+          }}
           cardRenderer={(row) => (
             <div className="space-y-3 rounded-xl border p-4">
               <div className="flex items-start justify-between gap-3">
@@ -996,6 +1019,26 @@ export function ActionTrackerContent({
             },
           ]}
           viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (row) =>
+              row.status === "completed"
+                ? "bg-emerald-500"
+                : row.status === "in_progress"
+                  ? "bg-blue-500"
+                  : "bg-amber-500",
+            title: (row) => row.title,
+            subtitle: (row) =>
+              `${(row.assignees || []).map((person) => person.name).join(", ") || row.department} · ${row.timeline_text || "No timeline"}`,
+            trailing: (row) => (
+              <Badge className={`${getItemStatusBadgeClass(row.status)} text-[10px] capitalize`}>
+                {row.status.replace(/_/g, " ")}
+              </Badge>
+            ),
+            onSelect: (row) => openDirectiveEditor(row),
+          }}
           cardRenderer={(row) => (
             <div className="space-y-3 rounded-xl border p-4">
               <div className="flex items-start justify-between gap-3">

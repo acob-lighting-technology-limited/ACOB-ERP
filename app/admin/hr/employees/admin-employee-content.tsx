@@ -25,6 +25,7 @@ import {
   Building2,
   Calendar,
   IdCard,
+  MapPin,
   Settings2,
   Tags,
   Cake,
@@ -39,6 +40,7 @@ import { getAssignableRolesForActor } from "@/lib/role-management"
 import { logger } from "@/lib/logger"
 import { ManageUsersDialog } from "@/components/hr/manage-users-dialog"
 import { ManageContractCategoriesDialog } from "@/components/hr/manage-contract-categories-dialog"
+import { DispatchCredentialsDialog } from "@/components/employees/DispatchCredentialsDialog"
 import { normalizeDepartmentName } from "@/shared/departments"
 import {
   EmployeeViewModal,
@@ -119,7 +121,10 @@ export interface Employee {
   employment_type?: "full_time" | "part_time" | "contract"
   contract_category_id?: string | null
   contract_categories?: { id: string; name: string; code: string } | null
+  avatar_path?: string | null
+  avatar_url?: string | null
   created_at: string
+  mailbox_credentials_sent_at?: string | null
 }
 
 export interface UserProfile {
@@ -136,6 +141,38 @@ interface AdminEmployeeContentProps {
 function deriveLeadDepartments(department: string, isDepartmentLead: boolean): string[] {
   const canonical = normalizeDepartmentName(department)
   return isDepartmentLead && canonical ? [canonical] : []
+}
+
+const AVATAR_SIZES = {
+  sm: "h-8 w-8 text-[10px]",
+  md: "h-10 w-10 text-xs",
+  lg: "h-12 w-12 text-sm",
+  xl: "h-16 w-16 text-lg",
+} as const
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return (name.slice(0, 2) || "AC").toUpperCase()
+}
+
+function EmployeeAvatar({ employee, size = "md" }: { employee: Employee; size?: keyof typeof AVATAR_SIZES }) {
+  const fullName = `${employee.first_name || ""} ${employee.last_name || ""}`.trim() || employee.company_email || "User"
+  return (
+    <span
+      className={cn(
+        "bg-primary/10 text-primary flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold",
+        AVATAR_SIZES[size]
+      )}
+    >
+      {employee.avatar_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={employee.avatar_url} alt={fullName} className="h-full w-full object-cover" />
+      ) : (
+        getInitials(fullName)
+      )}
+    </span>
+  )
 }
 
 const roleList: UserRole[] = ["visitor", "employee", "admin", "super_admin", "developer"]
@@ -162,6 +199,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [modalViewMode, setModalViewMode] = useState<"profile" | "employment" | "edit" | "signature">("profile")
+  const [dispatchingEmployee, setDispatchingEmployee] = useState<Employee | null>(null)
 
   // Export state
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false)
@@ -262,50 +300,39 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
   // sync via the DataTable's onProcessedDataChange so exports match what the user sees.
   const [processedEmployees, setProcessedEmployees] = useState<Employee[]>(initialEmployees)
 
-  // ── Lifecycle scope ────────────────────────────────────────────────────────
-  // Employment lifecycle is a scope, not a filter: the directory means current
-  // staff unless you deliberately ask for leavers. Keeping it in the tab row
-  // (rather than as a pre-ticked Status option) makes the exclusion visible and
-  // leaves the filter dropdowns free of values the user never chose.
-  const [lifecycleTab, setLifecycleTab] = useState<"current" | "former" | "all">("current")
+  // ── Unified Directory Scope (Single Tab Row) ──────────────────────────────
+  // Combines lifecycle (Current vs Former) and population (Regular vs Contract)
+  // into a single, clean 4-tab bar: Employees (current regular staff), Contract Staff
+  // (current contract personnel), Former Staff (all leavers), and All Staff.
+  type DirectoryTab = "employees" | "contract" | "former" | "all"
+  const [activeTab, setActiveTab] = useState<DirectoryTab>("employees")
 
-  const lifecycleEmployees = useMemo(() => {
-    if (lifecycleTab === "current") return employees.filter((e) => e.employment_status !== "exited")
-    if (lifecycleTab === "former") return employees.filter((e) => e.employment_status === "exited")
-    return employees
-  }, [employees, lifecycleTab])
-
-  const lifecycleTabs: DataTableTab[] = useMemo(() => {
+  const tabs: DataTableTab[] = useMemo(() => {
     const former = employees.filter((e) => e.employment_status === "exited").length
+    const current = employees.filter((e) => e.employment_status !== "exited")
+    const contract = current.filter(isContractStaff).length
+    const regular = current.length - contract
+
     return [
-      { key: "current", label: `Current (${employees.length - former})`, icon: UserCheck },
-      { key: "former", label: `Former (${former})`, icon: UserMinus },
-      { key: "all", label: `All (${employees.length})`, icon: Users },
+      { key: "employees", label: `Employees (${regular})`, icon: Briefcase },
+      { key: "contract", label: `Contract Staff (${contract})`, icon: FileSignature },
+      { key: "former", label: `Former Staff (${former})`, icon: UserMinus },
+      { key: "all", label: `All Staff (${employees.length})`, icon: Users },
     ]
   }, [employees])
 
-  // ── Population scope ───────────────────────────────────────────────────────
-  // ~47 contract staff sit alongside the ~48 regular employees. Both are real staff,
-  // but they are managed differently and are rarely wanted in the same list, so the
-  // page opens on regular employees. Like the lifecycle scope, this is a named tab
-  // carrying its own count — the excluded population is stated on screen rather than
-  // hidden behind a filter value the user never chose.
-  const [populationTab, setPopulationTab] = useState<"employees" | "contract" | "all">("employees")
-
-  const populationTabs: DataTableTab[] = useMemo(() => {
-    const contract = lifecycleEmployees.filter(isContractStaff).length
-    return [
-      { key: "employees", label: `Employees (${lifecycleEmployees.length - contract})`, icon: Briefcase },
-      { key: "contract", label: `Contract Staff (${contract})`, icon: FileSignature },
-      { key: "all", label: `All Staff (${lifecycleEmployees.length})`, icon: Users },
-    ]
-  }, [lifecycleEmployees])
-
   const scopedEmployees = useMemo(() => {
-    if (populationTab === "employees") return lifecycleEmployees.filter((e) => !isContractStaff(e))
-    if (populationTab === "contract") return lifecycleEmployees.filter(isContractStaff)
-    return lifecycleEmployees
-  }, [lifecycleEmployees, populationTab])
+    if (activeTab === "employees") {
+      return employees.filter((e) => e.employment_status !== "exited" && !isContractStaff(e))
+    }
+    if (activeTab === "contract") {
+      return employees.filter((e) => e.employment_status !== "exited" && isContractStaff(e))
+    }
+    if (activeTab === "former") {
+      return employees.filter((e) => e.employment_status === "exited")
+    }
+    return employees
+  }, [employees, activeTab])
 
   const loadData = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminEmployees() })
@@ -707,21 +734,24 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         label: "Name",
         sortable: true,
         resizable: true,
-        initialWidth: 200,
+        initialWidth: 230,
         accessor: (r) => `${r.last_name}, ${r.first_name}`,
         render: (r) => (
-          <div className="flex flex-col">
-            <span
-              className={cn("font-medium", r.employment_status === "exited" && "text-muted-foreground line-through")}
-            >
-              {formatName(r.last_name)}, {formatName(r.first_name)}
-            </span>
-            {r.is_department_lead && (
-              <div className="flex items-center gap-1 text-xs text-amber-600">
-                <Shield className="h-3 w-3" />
-                <span>Dept Lead</span>
-              </div>
-            )}
+          <div className="flex items-center gap-2.5">
+            <EmployeeAvatar employee={r} size="sm" />
+            <div className="flex min-w-0 flex-col">
+              <span
+                className={cn("font-medium", r.employment_status === "exited" && "text-muted-foreground line-through")}
+              >
+                {formatName(r.last_name)}, {formatName(r.first_name)}
+              </span>
+              {r.is_department_lead && (
+                <div className="flex items-center gap-1 text-xs text-amber-600">
+                  <Shield className="h-3 w-3" />
+                  <span>Dept Lead</span>
+                </div>
+              )}
+            </div>
           </div>
         ),
       },
@@ -784,20 +814,31 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         accessor: (r) => r.employment_type || "full_time",
         render: (r) => {
           const type = r.employment_type || "full_time"
-          const display =
-            type === "full_time"
-              ? "Full Time"
-              : type === "part_time"
-                ? "Part Time"
-                : r.contract_categories?.name
-                  ? `Contract (${r.contract_categories.name})`
-                  : "Contract"
-          const badgeColor =
-            type === "full_time"
-              ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/10 border-transparent shadow-none"
-              : type === "part_time"
-                ? "bg-purple-500/10 text-purple-500 hover:bg-purple-500/10 border-transparent shadow-none"
-                : "bg-orange-500/10 text-orange-500 hover:bg-orange-500/10 border-transparent shadow-none"
+          let display = "Full Time"
+          let badgeColor = "bg-blue-500/10 text-blue-500 hover:bg-blue-500/10 border-transparent shadow-none"
+
+          if (type === "part_time") {
+            display = "Part Time"
+            badgeColor = "bg-slate-500/10 text-slate-500 hover:bg-slate-500/10 border-transparent shadow-none"
+          } else if (r.contract_categories?.name) {
+            display = r.contract_categories.name
+            const catUpper = display.toUpperCase()
+            if (catUpper.includes("NYSC")) {
+              badgeColor =
+                "bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 border-transparent shadow-none"
+            } else if (catUpper.includes("SIWES") || catUpper.includes("INTERN")) {
+              badgeColor =
+                "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/10 border-transparent shadow-none"
+            } else if (catUpper.includes("NEXT") || catUpper.includes("GEN")) {
+              badgeColor =
+                "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 border-transparent shadow-none"
+            } else {
+              badgeColor = "bg-orange-500/10 text-orange-500 hover:bg-orange-500/10 border-transparent shadow-none"
+            }
+          } else if (type === "contract") {
+            display = "Contract Staff"
+            badgeColor = "bg-orange-500/10 text-orange-500 hover:bg-orange-500/10 border-transparent shadow-none"
+          }
           return <Badge className={badgeColor}>{display}</Badge>
         },
       },
@@ -805,7 +846,19 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         key: "status",
         label: "Status",
         accessor: (r) => r.employment_status || "active",
-        render: (r) => <EmployeeStatusBadge status={r.employment_status || "active"} size="sm" />,
+        render: (r) => (
+          <div className="flex flex-col items-start gap-1">
+            <EmployeeStatusBadge status={r.employment_status || "active"} size="sm" />
+            {r.employment_status === "active" && !r.mailbox_credentials_sent_at && (
+              <Badge
+                variant="outline"
+                className="border-amber-500/20 bg-amber-500/10 px-1.5 py-0 text-[10px] font-semibold text-amber-600 shadow-none dark:text-amber-400"
+              >
+                Mailbox Pending
+              </Badge>
+            )}
+          </div>
+        ),
       },
       {
         key: "actions",
@@ -842,6 +895,10 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setDispatchingEmployee(r)}>
+                    <Mail className="text-primary mr-2 h-4 w-4" />
+                    {r.mailbox_credentials_sent_at ? "Resend Webmail Credentials" : "Send Webmail Credentials"}
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => void handleConvertStaffType(r)}>
                     <ArrowRight className="mr-2 h-4 w-4" />
                     Convert Staff Type
@@ -908,11 +965,26 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         options: roleList.map((r) => ({ value: r, label: getRoleDisplayName(r) })),
         placeholder: "All Roles",
       },
+      {
+        key: "mailbox_status",
+        label: "Mailbox",
+        options: [
+          { value: "pending", label: "Mailbox Pending" },
+          { value: "ready", label: "Mailbox Ready" },
+        ],
+        placeholder: "All Mailboxes",
+        mode: "custom",
+        filterFn: (employee, selected) => {
+          const isPending = employee.employment_status === "active" && !employee.mailbox_credentials_sent_at
+          if (selected.includes("pending") && isPending) return true
+          if (selected.includes("ready") && !isPending) return true
+          return false
+        },
+      },
       // Status and Staff type are deliberately not filters. Both are scopes, and both are
-      // now owned by the tab rows above: lifecycle (Current / Former / All) and population
-      // (Employees / Contract Staff / All Staff). Duplicating them here is what produced the
-      // pre-ticked filter chips this page used to open with. The Status column remains
-      // visible and sortable for the states the tabs do not name.
+      // now owned by the unified 4-tab strip above: Employees (regular current) / Contract Staff
+      // (contract current) / Former Staff (all leavers) / All Staff (full directory).
+      // The Status column remains visible and sortable for individual employment states.
     ],
     [departments, offices]
   )
@@ -927,15 +999,15 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       leads: source.filter((s) => s.is_department_lead).length,
       currentEmployees: source.filter((s) => s.role !== "visitor").length,
     }
-  }, [scopedEmployees, processedEmployees])
+  }, [processedEmployees, scopedEmployees])
 
-  // Handle userId from search params (for edit dialog)
+  // Open edit dialog if employee ID is in URL
   useEffect(() => {
-    const userId = searchParams?.get("userId")
-    if (userId && employees.length > 0 && !isViewDialogOpen) {
-      const user = employees.find((e) => e.id === userId)
-      if (user) {
-        void handleEditEmployee(user)
+    const employeeId = searchParams.get("edit")
+    if (employeeId && employees.length > 0 && !isViewDialogOpen) {
+      const employee = employees.find((e) => e.id === employeeId)
+      if (employee) {
+        void handleEditEmployee(employee)
       }
     }
   }, [searchParams, employees, isViewDialogOpen, handleEditEmployee])
@@ -946,12 +1018,9 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       description="View and manage employee profiles, roles, and permissions."
       icon={Users}
       backLink={{ href: "/admin/hr", label: "Back to HR" }}
-      tabs={lifecycleTabs}
-      activeTab={lifecycleTab}
-      onTabChange={(tab) => setLifecycleTab(tab as "current" | "former" | "all")}
-      secondaryTabs={populationTabs}
-      secondaryActiveTab={populationTab}
-      onSecondaryTabChange={(tab) => setPopulationTab(tab as "employees" | "contract" | "all")}
+      tabs={tabs}
+      activeTab={activeTab}
+      onTabChange={(tab) => setActiveTab(tab as DirectoryTab)}
       actions={
         <div className="flex items-center gap-2">
           {(canManageUsers || canReviewApplications) && (
@@ -992,8 +1061,9 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total Staff"
             value={stats.total}
             icon={Users}
@@ -1001,6 +1071,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Admins"
             value={stats.admins}
             icon={Shield}
@@ -1008,6 +1079,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             iconColor="text-violet-500"
           />
           <StatCard
+            variant="compact"
             title="Dept Leads"
             value={stats.leads}
             icon={Shield}
@@ -1015,11 +1087,13 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Current Employees"
             value={stats.currentEmployees}
             icon={Users}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
+            className="hidden sm:block"
           />
         </div>
       }
@@ -1098,21 +1172,104 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.employment_status === "exited"
+              ? "bg-rose-500"
+              : r.employment_status === "suspended"
+                ? "bg-amber-500"
+                : r.employment_status === "on_leave"
+                  ? "bg-blue-500"
+                  : "bg-emerald-500",
+          leading: (r) => <EmployeeAvatar employee={r} size="sm" />,
+          title: (r) => `${formatName(r.first_name)} ${formatName(r.last_name)}`,
+          subtitle: (r) => `${r.designation || r.department || "Employee"} · ${r.office_location || r.company_email}`,
+          trailing: (r) => (
+            <div className="flex items-center gap-1.5">
+              <EmployeeStatusBadge status={r.employment_status || "active"} size="sm" />
+            </div>
+          ),
+          detail: {
+            title: (r) => `${formatName(r.first_name)} ${formatName(r.last_name)}`,
+            subtitle: (r) => r.designation || r.department || "Employee",
+            fields: (r) => [
+              {
+                icon: IdCard,
+                label: "Staff ID",
+                value: r.employee_number || "-",
+              },
+              {
+                icon: Phone,
+                label: "Phone",
+                value: r.phone_number || "-",
+              },
+              {
+                icon: Mail,
+                label: "Email",
+                value: r.company_email,
+                fullWidth: true,
+              },
+              {
+                icon: Building2,
+                label: "Department",
+                value: r.department || "-",
+              },
+              {
+                icon: MapPin,
+                label: "Office",
+                value: r.office_location || "-",
+              },
+              {
+                icon: Shield,
+                label: "Role",
+                value: getRoleDisplayName(r.role),
+              },
+              {
+                icon: UserCheck,
+                label: "Status",
+                value: r.employment_status || "Active",
+              },
+              {
+                icon: Calendar,
+                label: "Joined",
+                value: r.employment_date ? formatWATDate(r.employment_date) : "-",
+              },
+            ],
+            actions: (r) => [
+              {
+                label: "View Full Profile",
+                icon: Eye,
+                onClick: () => handleViewEmployeeDetails(r),
+              },
+              {
+                label: "Edit Staff",
+                icon: Pencil,
+                onClick: () => void handleEditEmployee(r),
+              },
+            ],
+          },
+        }}
         cardRenderer={(r) => (
           <Card className="group transition-shadow hover:shadow-md">
             <CardContent className="space-y-4 p-4">
               <div className="flex items-start justify-between">
-                <div className="min-w-0">
-                  <p className="truncate text-lg font-semibold">
-                    {formatName(r.first_name)} {formatName(r.last_name)}
-                  </p>
-                  <p className="text-muted-foreground truncate text-xs">{r.designation || r.department}</p>
-                  {r.is_department_lead && (
-                    <div className="mt-1 flex items-center gap-1 text-xs text-amber-600">
-                      <Shield className="h-3 w-3" />
-                      <span>Dept Lead</span>
-                    </div>
-                  )}
+                <div className="flex min-w-0 items-center gap-3">
+                  <EmployeeAvatar employee={r} size="md" />
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-semibold">
+                      {formatName(r.first_name)} {formatName(r.last_name)}
+                    </p>
+                    <p className="text-muted-foreground truncate text-xs">{r.designation || r.department}</p>
+                    {r.is_department_lead && (
+                      <div className="mt-1 flex items-center gap-1 text-xs text-amber-600">
+                        <Shield className="h-3 w-3" />
+                        <span>Dept Lead</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <EmployeeStatusBadge status={r.employment_status || "active"} size="sm" />
               </div>
@@ -1204,6 +1361,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         viewEmployeeData={viewEmployeeData}
         onEditEmployee={handleEditEmployee}
         onSignature={handleViewEmployeeSignature}
+        onDispatchCredentials={setDispatchingEmployee}
         canManageUsers={canManageUsers}
         getAvailableRoles={getAvailableRoles}
       />
@@ -1228,6 +1386,13 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         assignedItems={assignedItems}
         onDelete={() => toast.error("User deletion is disabled. Suspend or deactivate the employee instead.")}
         isDeleting={false}
+      />
+
+      <DispatchCredentialsDialog
+        employee={dispatchingEmployee}
+        open={Boolean(dispatchingEmployee)}
+        onOpenChange={(open) => !open && setDispatchingEmployee(null)}
+        onSuccess={() => void refetch()}
       />
     </DataTablePage>
   )

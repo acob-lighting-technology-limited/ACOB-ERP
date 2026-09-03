@@ -186,7 +186,7 @@ export default async function PmsKpiPage({ searchParams }: { searchParams: Promi
   return (
     <PmsTablePage
       title="PMS KPI"
-      description={`KPI score for ${score.cycle_name}: ${formatPercent(score.kpi_score)}. Approved goals: ${goalSummary.approved}. Completed goals: ${goalSummary.completed}.`}
+      description="Track your goal progress, task weights, and effective KPI attainment for the review cycle."
       backHref="/pms"
       backLabel="Back to PMS"
       icon="kpi"

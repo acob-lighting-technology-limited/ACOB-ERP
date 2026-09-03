@@ -347,7 +347,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
       backLink={{ href: "/profile", label: "Back to Home" }}
       spacing="tight"
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-6">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-6">
           <StatCard
             variant="compact"
             title="Total Tasks"
@@ -355,6 +355,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
             icon={ClipboardList}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
+            className="hidden sm:block"
           />
           <StatCard
             variant="compact"
@@ -379,6 +380,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
             icon={Send}
             iconBgColor="bg-purple-500/10"
             iconColor="text-purple-500"
+            className="hidden sm:block"
           />
           <StatCard
             variant="compact"
@@ -387,6 +389,7 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
             icon={CheckCircle2}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
+            className={stats.overdue > 0 ? "hidden sm:block" : undefined}
           />
           {/* Only when there is something to answer for — a permanent "Overdue 0"
               is noise, and the card is the page's one alarm. */}

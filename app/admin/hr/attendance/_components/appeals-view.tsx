@@ -183,8 +183,9 @@ export function AppealsView({ lockedDepartment }: AppealsViewProps) {
   return (
     <>
       {/* Stats */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="mb-4 grid grid-cols-3 gap-2 sm:gap-3">
         <StatCard
+          variant="compact"
           title="Total Pending"
           value={stats.pending}
           icon={Clock}
@@ -192,6 +193,7 @@ export function AppealsView({ lockedDepartment }: AppealsViewProps) {
           iconColor="text-amber-500"
         />
         <StatCard
+          variant="compact"
           title="Approved This Month"
           value={stats.approvedThisMonth}
           icon={CheckCircle2}
@@ -199,6 +201,7 @@ export function AppealsView({ lockedDepartment }: AppealsViewProps) {
           iconColor="text-emerald-500"
         />
         <StatCard
+          variant="compact"
           title="Rejected This Month"
           value={stats.rejectedThisMonth}
           icon={XCircle}
@@ -216,6 +219,40 @@ export function AppealsView({ lockedDepartment }: AppealsViewProps) {
         searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
         pagination={{ pageSize: 50 }}
         isLoading={loading}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.status === "approved" ? "bg-emerald-500" : r.status === "rejected" ? "bg-rose-500" : "bg-amber-500",
+          title: (r) => `${r.user_name} · ${r.department}`,
+          subtitle: (r) => `${formatWATDate(r.appeal_date)} · ${r.current_status} ➔ ${r.requested_status}`,
+          trailing: (r) => statusBadge(r.status),
+          onSelect: (r) => {
+            if (r.status === "pending") setReviewAppeal(r)
+          },
+        }}
+        cardRenderer={(r) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{r.user_name}</p>
+                <p className="text-muted-foreground text-xs">{r.department}</p>
+              </div>
+              {statusBadge(r.status)}
+            </div>
+            <div className="text-muted-foreground flex items-center justify-between text-xs">
+              <span>Date: {formatWATDate(r.appeal_date)}</span>
+              <span>
+                {r.current_status} ➔ {r.requested_status}
+              </span>
+            </div>
+            {r.appeal_reason && (
+              <p className="text-muted-foreground line-clamp-2 border-t pt-2 text-[11px]">{r.appeal_reason}</p>
+            )}
+          </div>
+        )}
         emptyTitle="No appeals found"
         emptyDescription="No attendance appeals match your current filters."
         emptyIcon={FileQuestion}

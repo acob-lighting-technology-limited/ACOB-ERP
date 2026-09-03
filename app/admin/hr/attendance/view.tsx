@@ -1075,27 +1075,36 @@ export function AttendanceReportsPage({
       onTabChange={(t) => setActiveTab(t as AttendanceTab)}
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setReportDialogOpen(true)} size="sm">
-            <Mail className="mr-1.5 h-4 w-4" />
+          <Button variant="outline" onClick={() => setReportDialogOpen(true)} size="sm" title="Reports">
+            <Mail className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline">Reports</span>
+            <span className="sr-only sm:hidden">Reports</span>
           </Button>
           {!lockedDepartment && (
-            <Button variant="outline" onClick={() => setManagerOpen(true)} size="sm">
-              <Settings2 className="mr-1.5 h-4 w-4" />
+            <Button variant="outline" onClick={() => setManagerOpen(true)} size="sm" title="Attendance Manager">
+              <Settings2 className="h-4 w-4 sm:mr-1.5" />
               <span className="hidden sm:inline">Attendance Manager</span>
-              <span className="sm:hidden">Manager</span>
+              <span className="sr-only sm:hidden">Attendance Manager</span>
             </Button>
           )}
-          <Button variant="outline" onClick={() => setIsExportOpen(true)} disabled={reports.length === 0} size="sm">
-            <Download className="mr-1.5 h-4 w-4" />
+          <Button
+            variant="outline"
+            onClick={() => setIsExportOpen(true)}
+            disabled={reports.length === 0}
+            size="sm"
+            title="Export"
+          >
+            <Download className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline">Export</span>
+            <span className="sr-only sm:hidden">Export</span>
           </Button>
         </div>
       }
       stats={
         activeTab === "summary" ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             <StatCard
+              variant="compact"
               title="Employees"
               value={stats.employees}
               icon={Users}
@@ -1103,6 +1112,7 @@ export function AttendanceReportsPage({
               iconColor="text-blue-500"
             />
             <StatCard
+              variant="compact"
               title="Total Work Hours"
               value={stats.totalHours}
               icon={Clock}
@@ -1110,6 +1120,7 @@ export function AttendanceReportsPage({
               iconColor="text-emerald-500"
             />
             <StatCard
+              variant="compact"
               title="Missed Hours"
               value={stats.totalMissedHours}
               icon={AlertCircle}
@@ -1152,6 +1163,32 @@ export function AttendanceReportsPage({
             ),
           }}
           viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (r) =>
+              r.attendance_exempt
+                ? "bg-slate-400"
+                : r.absent_days > 2
+                  ? "bg-rose-500"
+                  : r.late_days > 3
+                    ? "bg-amber-500"
+                    : "bg-emerald-500",
+            title: (r) => r.user_name,
+            subtitle: (r) =>
+              `${r.department} · ${r.present_days} present · ${r.late_days} late · ${r.absent_days} absent`,
+            trailing: (r) =>
+              r.attendance_exempt ? (
+                <Badge variant="outline" className="text-[10px]">
+                  Exempt
+                </Badge>
+              ) : (
+                <span className="font-mono text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+                  {r.total_hours} hrs
+                </span>
+              ),
+          }}
           cardRenderer={(r) => (
             <div className="space-y-3 rounded-xl border p-4">
               <div className="flex items-start justify-between gap-3">

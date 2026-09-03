@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Progress } from "@/components/ui/progress"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,7 +18,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { cn } from "@/lib/utils"
 import {
   Dialog,
   DialogContent,
@@ -37,8 +38,10 @@ import {
 } from "@/components/ui/alert-dialog"
 import {
   Search,
-  Grid3X3,
+  X,
   List,
+  LayoutGrid,
+  TableProperties,
   Download,
   Eye,
   MoreHorizontal,
@@ -249,7 +252,60 @@ export function DepartmentDocumentsBrowser({
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState("")
-  const [viewMode, setViewMode] = useState<"list" | "grid">("list")
+  const rawView = searchParams.get("view")
+  const initialView: "table" | "card" | "list" =
+    rawView === "list" || rawView === "card" || rawView === "table" ? rawView : rawView === "grid" ? "card" : "table"
+  const [viewMode, setViewMode] = useState<"table" | "card" | "list">(initialView)
+  const [typeFilter, setTypeFilter] = useState<string>("all")
+  const [sortOrder, setSortOrder] = useState<string>("name-asc")
+
+  const processedFiles = useMemo(() => {
+    let list = files
+    if (typeFilter !== "all") {
+      if (typeFilter === "folder") {
+        list = list.filter((f) => f.isFolder)
+      } else if (typeFilter === "files") {
+        list = list.filter((f) => !f.isFolder)
+      } else if (typeFilter === "document") {
+        list = list.filter((f) => {
+          const cat = getFileCategory(f.mimeType, f.name)
+          return cat === "document" || cat === "pdf"
+        })
+      } else if (typeFilter === "spreadsheet") {
+        list = list.filter((f) => getFileCategory(f.mimeType, f.name) === "spreadsheet")
+      } else if (typeFilter === "presentation") {
+        list = list.filter((f) => getFileCategory(f.mimeType, f.name) === "presentation")
+      } else if (typeFilter === "media") {
+        list = list.filter((f) => {
+          const cat = getFileCategory(f.mimeType, f.name)
+          return cat === "image" || cat === "video" || cat === "audio"
+        })
+      }
+    }
+    return [...list].sort((a, b) => {
+      if (sortOrder === "name-asc") {
+        if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1
+        return a.name.localeCompare(b.name)
+      }
+      if (sortOrder === "name-desc") {
+        if (a.isFolder !== b.isFolder) return a.isFolder ? -1 : 1
+        return b.name.localeCompare(a.name)
+      }
+      if (sortOrder === "date-desc") {
+        return new Date(b.lastModified).getTime() - new Date(a.lastModified).getTime()
+      }
+      if (sortOrder === "date-asc") {
+        return new Date(a.lastModified).getTime() - new Date(b.lastModified).getTime()
+      }
+      if (sortOrder === "size-desc") {
+        return (b.size ?? 0) - (a.size ?? 0)
+      }
+      if (sortOrder === "size-asc") {
+        return (a.size ?? 0) - (b.size ?? 0)
+      }
+      return 0
+    })
+  }, [files, typeFilter, sortOrder])
   const [isMutating, setIsMutating] = useState(false)
   const [newFolderOpen, setNewFolderOpen] = useState(false)
   const [newFolderName, setNewFolderName] = useState("")
@@ -360,11 +416,15 @@ export function DepartmentDocumentsBrowser({
   }
 
   const toggleSelectAll = (checked: boolean) => {
-    if (!checked) {
-      setSelectedPaths(new Set())
-      return
-    }
-    setSelectedPaths(new Set(files.map((file) => file.path)))
+    setSelectedPaths((prev) => {
+      const next = new Set(prev)
+      if (!checked) {
+        for (const file of processedFiles) next.delete(file.path)
+      } else {
+        for (const file of processedFiles) next.add(file.path)
+      }
+      return next
+    })
   }
 
   const fetchFolderContents = useCallback(
@@ -844,17 +904,45 @@ export function DepartmentDocumentsBrowser({
     </div>
   )
 
-  const renderEmptyState = () => (
-    <div className="flex flex-col items-center justify-center py-16 text-center">
-      <FolderOpen className="text-muted-foreground/50 mb-4 h-16 w-16" />
-      <h3 className="text-lg font-medium">This folder is empty</h3>
-      <p className="text-muted-foreground mt-1 text-sm">
-        {canAddContent
-          ? "No files or folders found yet. Use the upload tools above or drag items here."
-          : "No files or folders found in this location."}
-      </p>
-    </div>
-  )
+  const renderEmptyState = () => {
+    const isFiltered = files.length > 0 && processedFiles.length === 0
+    if (isFiltered) {
+      return (
+        <div className="flex flex-col items-center justify-center py-16 text-center">
+          <Search className="text-muted-foreground/50 mb-4 h-14 w-14" />
+          <h3 className="text-lg font-medium">No matching files found</h3>
+          <p className="text-muted-foreground mt-1 max-w-sm text-sm">
+            No files or folders matched your current filters or search query.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-4"
+            onClick={() => {
+              setTypeFilter("all")
+              setSortOrder("name-asc")
+              setSearchQuery("")
+              fetchFiles(currentPath, undefined)
+            }}
+          >
+            Reset filters
+          </Button>
+        </div>
+      )
+    }
+
+    return (
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <FolderOpen className="text-muted-foreground/50 mb-4 h-16 w-16" />
+        <h3 className="text-lg font-medium">This folder is empty</h3>
+        <p className="text-muted-foreground mt-1 text-sm">
+          {canAddContent
+            ? "No files or folders found yet. Use the upload tools above or drag items here."
+            : "No files or folders found in this location."}
+        </p>
+      </div>
+    )
+  }
 
   const renderErrorState = () => {
     const isSubFolder = currentPath !== "/" && currentPath !== normalizedInitialPath
@@ -919,13 +1007,13 @@ export function DepartmentDocumentsBrowser({
     )
   }
 
-  const renderListView = () => (
+  const renderTableView = () => (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead className="w-[44px]">
             <Checkbox
-              checked={files.length > 0 && selectedCount === files.length}
+              checked={processedFiles.length > 0 && processedFiles.every((f) => selectedPaths.has(f.path))}
               onCheckedChange={(value) => toggleSelectAll(Boolean(value))}
               aria-label="Select all items"
             />
@@ -939,7 +1027,7 @@ export function DepartmentDocumentsBrowser({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {files.map((file) => {
+        {processedFiles.map((file) => {
           const category = getFileCategory(file.mimeType, file.name)
           const extension = file.isFolder ? "" : getFileExtension(file.name)
 
@@ -1052,35 +1140,47 @@ export function DepartmentDocumentsBrowser({
     </Table>
   )
 
-  const renderGridView = () => (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-      {files.map((file) => {
+  const renderCardView = () => (
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+      {processedFiles.map((file) => {
         const category = getFileCategory(file.mimeType, file.name)
+        const isSelected = selectedPaths.has(file.path)
 
         return (
           <div
             key={file.id}
-            className="group bg-card hover:bg-accent/50 relative flex cursor-pointer flex-col items-center rounded-lg border p-4 transition-colors"
+            className={cn(
+              "group bg-card text-card-foreground border-border/60 hover:border-primary/40 relative flex cursor-pointer flex-col items-center justify-between rounded-xl border p-4 shadow-sm transition-all hover:shadow-md",
+              isSelected && "border-primary/60 ring-primary/20 ring-1"
+            )}
             onClick={() => handleFileClick(file)}
           >
             <div className="absolute top-2 left-2 z-10" onClick={(event) => event.stopPropagation()}>
               <Checkbox
-                checked={selectedPaths.has(file.path)}
+                checked={isSelected}
                 onCheckedChange={(value) => toggleSelectedPath(file.path, Boolean(value))}
                 aria-label={`Select ${file.name}`}
               />
             </div>
-            <FileIcon category={file.isFolder ? "folder" : category} size={48} className="mb-3" />
-            <span className="line-clamp-2 w-full text-center text-sm font-medium">{file.name}</span>
+            <FileIcon
+              category={file.isFolder ? "folder" : category}
+              size={48}
+              className="my-2 transition-transform group-hover:scale-105"
+            />
+            <span className="text-foreground group-hover:text-primary line-clamp-2 w-full text-center text-sm font-medium transition-colors">
+              {file.name}
+            </span>
             <span className="text-muted-foreground mt-1 text-xs">
               {file.isFolder ? `${file.childCount ?? 0} items` : formatFileSize(file.size)}
             </span>
-            <div className="text-muted-foreground mt-2 space-y-1 text-center text-[11px]">{renderActivity(file)}</div>
+            <div className="text-muted-foreground mt-1.5 space-y-0.5 text-center text-[11px]">
+              {renderActivity(file)}
+            </div>
 
             <div className="absolute top-2 right-2 opacity-0 transition-opacity group-hover:opacity-100">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                  <Button variant="secondary" size="icon" aria-label="More options" className="h-7 w-7">
+                  <Button variant="secondary" size="icon" aria-label="More options" className="h-7 w-7 shadow-xs">
                     <MoreHorizontal className="h-4 w-4" />
                   </Button>
                 </DropdownMenuTrigger>
@@ -1138,6 +1238,128 @@ export function DepartmentDocumentsBrowser({
                         void downloadSelection([file])
                       }}
                     >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download Folder
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+
+  const renderCompactListView = () => (
+    <div className="divide-border/60 border-border/60 bg-card divide-y overflow-hidden rounded-xl border shadow-xs">
+      {processedFiles.map((file) => {
+        const category = getFileCategory(file.mimeType, file.name)
+        const extension = file.isFolder ? "" : getFileExtension(file.name)
+        const isSelected = selectedPaths.has(file.path)
+
+        return (
+          <div
+            key={file.id}
+            className={cn(
+              "group hover:bg-accent/40 flex cursor-pointer items-center justify-between gap-3 p-3 transition-colors",
+              isSelected && "bg-primary/5"
+            )}
+            onClick={() => handleFileClick(file)}
+          >
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div onClick={(event) => event.stopPropagation()} className="shrink-0">
+                <Checkbox
+                  checked={isSelected}
+                  onCheckedChange={(value) => toggleSelectedPath(file.path, Boolean(value))}
+                  aria-label={`Select ${file.name}`}
+                />
+              </div>
+              <div className="shrink-0">
+                <FileIcon category={file.isFolder ? "folder" : category} size={24} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-foreground group-hover:text-primary truncate text-sm font-medium transition-colors">
+                    {file.name}
+                  </span>
+                  {file.isFolder ? (
+                    <span className="bg-muted text-muted-foreground shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium">
+                      Folder
+                    </span>
+                  ) : extension ? (
+                    <span
+                      className={cn(
+                        "shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium",
+                        getExtensionColor(extension)
+                      )}
+                    >
+                      {extension}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 text-xs">
+                  <span>{file.isFolder ? `${file.childCount ?? 0} items` : formatFileSize(file.size)}</span>
+                  <span>•</span>
+                  <span>{formatDate(file.lastModified)}</span>
+                  {file.lastModifiedBy && (
+                    <>
+                      <span>•</span>
+                      <span className="max-w-[140px] truncate">by {file.lastModifiedBy}</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex shrink-0 items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+              {!file.isFolder && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-foreground hidden h-8 px-2 text-xs sm:inline-flex"
+                  onClick={() => handleFileClick(file)}
+                >
+                  <Eye className="mr-1 h-3.5 w-3.5" />
+                  Preview
+                </Button>
+              )}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon" aria-label="More options" className="h-8 w-8">
+                    <MoreHorizontal className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {canManageCurrentFolder && (
+                    <>
+                      <DropdownMenuItem onClick={() => openRenameDialog(file)}>
+                        <Pencil className="mr-2 h-4 w-4" />
+                        Rename
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        onClick={() => setDeleteTarget(file)}
+                        className="text-red-600 focus:text-red-600"
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  )}
+                  {!file.isFolder ? (
+                    <>
+                      <DropdownMenuItem onClick={() => handleFileClick(file)}>
+                        <Eye className="mr-2 h-4 w-4" />
+                        Preview
+                      </DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => void downloadSelection([file])}>
+                        <Download className="mr-2 h-4 w-4" />
+                        Download
+                      </DropdownMenuItem>
+                    </>
+                  ) : (
+                    <DropdownMenuItem onClick={() => void downloadSelection([file])}>
                       <Download className="mr-2 h-4 w-4" />
                       Download Folder
                     </DropdownMenuItem>
@@ -1211,8 +1433,9 @@ export function DepartmentDocumentsBrowser({
         }
       />
 
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+      <div className="mb-4 grid grid-cols-3 gap-2 sm:gap-3">
         <StatCard
+          variant="compact"
           title="Files"
           value={fileCount}
           icon={FileText}
@@ -1220,6 +1443,7 @@ export function DepartmentDocumentsBrowser({
           iconColor="text-blue-500"
         />
         <StatCard
+          variant="compact"
           title="Folders"
           value={folderCount}
           icon={FolderOpen}
@@ -1227,18 +1451,12 @@ export function DepartmentDocumentsBrowser({
           iconColor="text-amber-500"
         />
         <StatCard
+          variant="compact"
           title="Selected"
           value={selectedCount}
           icon={Download}
           iconBgColor="bg-violet-500/10"
           iconColor="text-violet-500"
-        />
-        <StatCard
-          title="Library"
-          value={lockedDepartment || rootLabel}
-          icon={Cloud}
-          iconBgColor="bg-emerald-500/10"
-          iconColor="text-emerald-500"
         />
       </div>
 
@@ -1263,27 +1481,144 @@ export function DepartmentDocumentsBrowser({
           void handleDrop(event)
         }}
       >
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "list" | "grid")}>
-              <TabsList className="h-9">
-                <TabsTrigger value="list" className="px-3">
-                  <List className="h-4 w-4" />
-                </TabsTrigger>
-                <TabsTrigger value="grid" className="px-3">
-                  <Grid3X3 className="h-4 w-4" />
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+        <CardHeader className="space-y-3 p-4 pb-3">
+          {/* Row 1: Search bar (full width on mobile, fills space on desktop) + Refresh */}
+          <div className="flex items-center gap-2">
+            <form onSubmit={handleSearch} className="relative min-w-0 flex-1">
+              <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2" />
+              <Input
+                placeholder="Search files by name..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="h-9 pr-9 pl-10"
+                aria-label="Search files"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery("")
+                    fetchFiles(currentPath, undefined)
+                  }}
+                  className="text-muted-foreground hover:text-foreground absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
+                  aria-label="Clear search"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </form>
             <Button
               variant="outline"
               size="icon"
               aria-label="Refresh"
               onClick={handleRefresh}
               disabled={loading || isMutating}
+              className="h-9 w-9 shrink-0"
             >
               <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
             </Button>
+          </div>
+
+          {/* Row 2: Filter dropdowns on the left, View switcher pinned on the right */}
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="h-9 w-[130px] sm:w-[150px]">
+                  <SelectValue placeholder="All Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="folder">Folders</SelectItem>
+                  <SelectItem value="files">Files Only</SelectItem>
+                  <SelectItem value="document">Docs & PDFs</SelectItem>
+                  <SelectItem value="spreadsheet">Spreadsheets</SelectItem>
+                  <SelectItem value="presentation">Presentations</SelectItem>
+                  <SelectItem value="media">Media / Images</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={sortOrder} onValueChange={setSortOrder}>
+                <SelectTrigger className="h-9 w-[130px] sm:w-[150px]">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="name-asc">Name (A–Z)</SelectItem>
+                  <SelectItem value="name-desc">Name (Z–A)</SelectItem>
+                  <SelectItem value="date-desc">Newest first</SelectItem>
+                  <SelectItem value="date-asc">Oldest first</SelectItem>
+                  <SelectItem value="size-desc">Largest size</SelectItem>
+                  <SelectItem value="size-asc">Smallest size</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {(typeFilter !== "all" || searchQuery || sortOrder !== "name-asc") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-muted-foreground hover:text-foreground h-9 text-xs"
+                  onClick={() => {
+                    setTypeFilter("all")
+                    setSortOrder("name-asc")
+                    setSearchQuery("")
+                    fetchFiles(currentPath, undefined)
+                  }}
+                >
+                  Clear all
+                </Button>
+              )}
+            </div>
+
+            {/* Segmented view switcher pinned to the right */}
+            <div
+              className="border-input ml-auto inline-flex h-9 items-center rounded-lg border bg-transparent p-1"
+              role="group"
+              aria-label="View mode"
+            >
+              {[
+                { key: "list" as const, label: "List", Icon: List, hint: "Compact list view" },
+                { key: "card" as const, label: "Cards", Icon: LayoutGrid, hint: "Card grid" },
+                { key: "table" as const, label: "Table", Icon: TableProperties, hint: "Data table" },
+              ].map(({ key, label, Icon, hint }) => (
+                <button
+                  key={key}
+                  type="button"
+                  title={hint}
+                  onClick={() => setViewMode(key)}
+                  className={cn(
+                    "inline-flex h-7 items-center justify-center gap-1.5 rounded-md px-2.5 text-xs font-medium transition-colors",
+                    viewMode === key
+                      ? "bg-muted text-foreground font-semibold shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Icon className="h-3.5 w-3.5" />
+                  <span className="hidden sm:inline">{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Row 3: Active count summary */}
+          <div className="text-muted-foreground flex items-center justify-between pt-0.5 text-xs font-medium">
+            <span>
+              {loading ? (
+                "Loading items..."
+              ) : processedFiles.length === 0 ? (
+                "0 items"
+              ) : (
+                <>
+                  Showing <span className="text-foreground font-semibold">{processedFiles.length}</span>{" "}
+                  {processedFiles.length === 1 ? "item" : "items"}
+                  {files.length !== processedFiles.length && <span> (filtered from {files.length})</span>}
+                  {selectedPaths.size > 0 && (
+                    <>
+                      {" "}
+                      • <span className="text-primary font-semibold">{selectedPaths.size}</span> selected
+                    </>
+                  )}
+                </>
+              )}
+            </span>
           </div>
         </CardHeader>
 
@@ -1306,20 +1641,6 @@ export function DepartmentDocumentsBrowser({
               void handleFolderSelected(event.target.files)
             }}
           />
-
-          <div className="mb-4 flex flex-col gap-4 sm:flex-row">
-            <form onSubmit={handleSearch} className="flex-1">
-              <div className="relative">
-                <Search className="text-muted-foreground absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 transform" />
-                <Input
-                  placeholder="Search files..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </form>
-          </div>
 
           {!canAddContent && (
             <div className="bg-muted/50 text-muted-foreground mb-4 rounded-md border px-3 py-2 text-sm">
@@ -1353,12 +1674,14 @@ export function DepartmentDocumentsBrowser({
             </div>
           ) : error ? (
             renderErrorState()
-          ) : files.length === 0 ? (
+          ) : processedFiles.length === 0 ? (
             renderEmptyState()
-          ) : viewMode === "list" ? (
-            renderListView()
+          ) : viewMode === "table" ? (
+            renderTableView()
+          ) : viewMode === "card" ? (
+            renderCardView()
           ) : (
-            renderGridView()
+            renderCompactListView()
           )}
         </CardContent>
       </Card>

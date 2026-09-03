@@ -309,8 +309,9 @@ export function AssetIssuesPage({
       icon={AlertCircle}
       backLink={{ href: backLinkHref ?? "/admin/assets", label: "Back to Assets" }}
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total Issues"
             value={stats.total}
             icon={AlertCircle}
@@ -318,6 +319,7 @@ export function AssetIssuesPage({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Unresolved"
             value={stats.unresolved}
             icon={AlertCircle}
@@ -325,6 +327,7 @@ export function AssetIssuesPage({
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Resolved"
             value={stats.resolved}
             icon={CheckCircle2}
@@ -332,11 +335,13 @@ export function AssetIssuesPage({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Assigned Assets"
             value={stats.assigned}
             icon={Package}
             iconBgColor="bg-violet-500/10"
             iconColor="text-violet-500"
+            className="hidden sm:block"
           />
         </div>
       }
@@ -382,6 +387,20 @@ export function AssetIssuesPage({
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (issue) => (issue.resolved ? "bg-emerald-500" : "bg-amber-500"),
+          title: (issue) => `${issue.asset?.unique_code || "Asset"} · ${issue.description}`,
+          subtitle: (issue) => `Assigned: ${assignedTo(issue)} · Reported: ${formatWATDate(issue.created_at)}`,
+          trailing: (issue) => (
+            <Badge variant={issue.resolved ? "default" : "secondary"} className="text-[10px]">
+              {issue.resolved ? "Resolved" : "Unresolved"}
+            </Badge>
+          ),
+          onSelect: (issue) => void handleToggleResolved(issue),
+        }}
         cardRenderer={(issue) => (
           <IssueCard issue={issue} onToggle={(item) => void handleToggleResolved(item)} onDelete={setPendingDeleteId} />
         )}

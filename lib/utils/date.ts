@@ -192,3 +192,58 @@ export function formatWATTimeDate(date: string | Date | null | undefined): strin
   const dateStr = d.toLocaleDateString("en-GB", { timeZone: WAT, day: "numeric", month: "short", year: "numeric" })
   return `${time}, ${dateStr}`
 }
+
+/**
+ * Format a start and end timestamp as a concise date-time range in WAT.
+ * Examples:
+ * - Same day: "31 Aug 2026, 11:30 – 14:00"
+ * - Same year, different day: "31 Aug, 11:30 – 02 Sep 2026, 14:00"
+ * - Different years: "31 Dec 2026, 11:30 – 02 Jan 2027, 14:00"
+ */
+export function formatWATDateTimeRange(
+  start: string | Date | null | undefined,
+  end: string | Date | null | undefined
+): string {
+  if (!start) return end ? formatWATDateTime(end) : "-"
+  if (!end) return formatWATDateTime(start)
+
+  const startDate = new Date(start)
+  const endDate = new Date(end)
+
+  if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+    return `${start} - ${end}`
+  }
+
+  const startParts = getWATDateParts(startDate)
+  const endParts = getWATDateParts(endDate)
+  const startTime = startDate.toLocaleTimeString("en-GB", {
+    timeZone: WAT,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+  const endTime = endDate.toLocaleTimeString("en-GB", {
+    timeZone: WAT,
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  })
+
+  // Same calendar day in WAT
+  if (startParts.year === endParts.year && startParts.month === endParts.month && startParts.day === endParts.day) {
+    const dateLabel = formatWATDate(startDate, { day: "numeric", month: "short", year: "numeric" })
+    return `${dateLabel}, ${startTime} – ${endTime}`
+  }
+
+  // Same year
+  if (startParts.year === endParts.year) {
+    const startDateLabel = formatWATDate(startDate, { day: "numeric", month: "short" })
+    const endDateLabel = formatWATDate(endDate, { day: "numeric", month: "short", year: "numeric" })
+    return `${startDateLabel}, ${startTime} – ${endDateLabel}, ${endTime}`
+  }
+
+  // Cross year
+  const fullStart = formatWATDateTime(startDate, { day: "numeric", month: "short", year: "numeric" })
+  const fullEnd = formatWATDateTime(endDate, { day: "numeric", month: "short", year: "numeric" })
+  return `${fullStart} – ${fullEnd}`
+}

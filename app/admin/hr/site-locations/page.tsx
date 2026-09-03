@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { StatCard } from "@/components/ui/stat-card"
 import { Switch } from "@/components/ui/switch"
 import {
   Dialog,
@@ -246,25 +247,38 @@ export default function SiteLocationsPage() {
               Show inactive
             </label>
             <Button size="sm" onClick={openCreate}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Site
+              <Plus className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Add Site</span>
+              <span className="sm:hidden">Add</span>
             </Button>
           </div>
         }
         stats={
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <div className="rounded-xl border p-4">
-              <p className="text-muted-foreground text-xs">Total Sites</p>
-              <p className="text-2xl font-bold">{sites.length}</p>
-            </div>
-            <div className="rounded-xl border p-4">
-              <p className="text-muted-foreground text-xs">Active</p>
-              <p className="text-2xl font-bold text-green-600">{activeSites}</p>
-            </div>
-            <div className="rounded-xl border p-4">
-              <p className="text-muted-foreground text-xs">Inactive</p>
-              <p className="text-2xl font-bold text-gray-400">{sites.length - activeSites}</p>
-            </div>
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <StatCard
+              variant="compact"
+              title="Total Sites"
+              value={sites.length}
+              icon={MapPin}
+              iconBgColor="bg-blue-500/10"
+              iconColor="text-blue-500"
+            />
+            <StatCard
+              variant="compact"
+              title="Active"
+              value={activeSites}
+              icon={MapPin}
+              iconBgColor="bg-emerald-500/10"
+              iconColor="text-emerald-500"
+            />
+            <StatCard
+              variant="compact"
+              title="Inactive"
+              value={sites.length - activeSites}
+              icon={MapPin}
+              iconBgColor="bg-slate-500/10"
+              iconColor="text-slate-500"
+            />
           </div>
         }
       >
@@ -276,6 +290,44 @@ export default function SiteLocationsPage() {
           searchPlaceholder="Search by name or address…"
           searchFn={(s, q) => [s.name, s.address ?? ""].join(" ").toLowerCase().includes(q.toLowerCase())}
           isLoading={isLoading}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (s) => (s.is_active ? "bg-emerald-500" : "bg-slate-400"),
+            title: (s) => s.name,
+            subtitle: (s) => `${s.address || "No address"} · Radius: ${s.radius_metres}m`,
+            trailing: (s) => (
+              <Badge
+                className={`text-[10px] ${s.is_active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}
+              >
+                {s.is_active ? "Active" : "Inactive"}
+              </Badge>
+            ),
+            onSelect: (s) => openEdit(s),
+          }}
+          cardRenderer={(s) => (
+            <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{s.name}</p>
+                  <p className="text-muted-foreground text-xs">{s.address || "No address"}</p>
+                </div>
+                <Badge
+                  className={`text-[10px] ${s.is_active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}
+                >
+                  {s.is_active ? "Active" : "Inactive"}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between border-t pt-2 text-[10px]">
+                <span className="font-mono">
+                  {Number(s.latitude).toFixed(4)}, {Number(s.longitude).toFixed(4)}
+                </span>
+                <span>Radius: {s.radius_metres}m</span>
+              </div>
+            </div>
+          )}
           emptyTitle="No sites found"
           emptyDescription="Add your first site location to enable remote check-in."
           emptyIcon={MapPin}

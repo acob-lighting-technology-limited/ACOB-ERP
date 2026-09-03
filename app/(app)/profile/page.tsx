@@ -6,6 +6,12 @@ import { buildRecentActivity, normalizeToken } from "@/components/admin/dashboar
 import type { PersonalRecentActivityItem } from "@/components/profile/personal-recent-activity-feed"
 import { getAvatarSignedUrl } from "@/lib/profile-photos"
 import { getLeaveEntitlements } from "@/lib/hr/leave-entitlement"
+import { loadUserTasks } from "@/components/tasks/user-tasks-data"
+import type { Task, TaskUserProfile } from "@/types/task"
+
+export const dynamic = "force-dynamic"
+
+export type { Task }
 
 export interface UserProfile {
   id: string
@@ -29,18 +35,6 @@ export interface UserProfile {
   additional_email?: string | null
   birthday?: string | null
   avatar_path?: string | null
-}
-
-export interface Task {
-  id: string
-  title: string
-  description: string | null
-  status: string
-  priority: string
-  department: string | null
-  due_date: string | null
-  created_at: string
-  assignment_type?: "individual" | "multiple" | "department"
 }
 
 export interface Asset {
@@ -242,45 +236,25 @@ async function getProfileData() {
     resolvedDepartment = "Accounts"
   }
 
-  // Load tasks assigned to user (individual, multiple-user, and department tasks)
-  const { data: individualTasks, error: individualTasksError } = await dataClient
-    .from("tasks")
-    .select("*")
-    .eq("assigned_to", userId)
-    .order("created_at", { ascending: false })
-  if (individualTasksError) loadErrors.push("tasks")
-
-  // Load multiple-user tasks
-  const { data: taskAssignments, error: taskAssignmentsError } = await dataClient
-    .from("task_assignments")
-    .select("task_id")
-    .eq("user_id", userId)
-    .returns<TaskAssignmentRow[]>()
-  if (taskAssignmentsError) loadErrors.push("tasks")
-
-  let multipleUserTasks: Task[] = []
-  if (taskAssignments && taskAssignments.length > 0) {
-    const taskIds = taskAssignments.map((ta) => ta.task_id)
-    const { data: tasksData, error: tasksDataError } = await dataClient
-      .from("tasks")
-      .select("*")
-      .in("id", taskIds)
-      .eq("assignment_type", "multiple")
-      .order("created_at", { ascending: false })
-    if (tasksData) multipleUserTasks = tasksData
-    if (tasksDataError) loadErrors.push("tasks")
+  // Load tasks assigned to user using shared loader (individual, multiple-user, and department tasks)
+  const taskUserProfile: TaskUserProfile = {
+    id: userId,
+    department: resolvedDepartment,
+    role: profileData.role,
+    is_department_lead: profileData.is_department_lead,
+    lead_departments: profileData.lead_departments,
   }
 
-  // Load department tasks
-  const { data: departmentTasks, error: departmentTasksError } = await dataClient
-    .from("tasks")
-    .select("*")
-    .eq("department", resolvedDepartment)
-    .eq("assignment_type", "department")
-    .order("created_at", { ascending: false })
-  if (departmentTasksError) loadErrors.push("tasks")
-
-  const allTasks = [...(individualTasks || []), ...multipleUserTasks, ...(departmentTasks || [])]
+  let allTasks: Task[] = []
+  try {
+    allTasks = await loadUserTasks(
+      dataClient as unknown as Parameters<typeof loadUserTasks>[0],
+      userId,
+      taskUserProfile
+    )
+  } catch (tasksError) {
+    loadErrors.push("tasks")
+  }
 
   // Load assets assigned to user (individual)
   const { data: individualAssignments, error: individualAssignmentsError } = await dataClient

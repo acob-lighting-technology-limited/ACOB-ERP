@@ -213,6 +213,7 @@ export function AdminDocumentationContent({
         activeTab === "knowledge-docs" ? (
           <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
             <StatCard
+              variant="compact"
               title="Total Docs"
               value={stats.total}
               icon={FileText}
@@ -220,6 +221,7 @@ export function AdminDocumentationContent({
               iconColor="text-blue-500"
             />
             <StatCard
+              variant="compact"
               title="Published"
               value={stats.published}
               icon={FileText}
@@ -227,6 +229,7 @@ export function AdminDocumentationContent({
               iconColor="text-emerald-500"
             />
             <StatCard
+              variant="compact"
               title="Drafts"
               value={stats.drafts}
               icon={FileText}
@@ -234,6 +237,7 @@ export function AdminDocumentationContent({
               iconColor="text-amber-500"
             />
             <StatCard
+              variant="compact"
               title="This Month"
               value={stats.thisMonth}
               icon={FileText}
@@ -280,6 +284,21 @@ export function AdminDocumentationContent({
               ),
             }}
             viewToggle
+            contactsView
+            stickyToolbar
+            defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+            mobileRow={{
+              accentClass: (doc) => (doc.is_draft ? "bg-amber-500" : "bg-emerald-500"),
+              title: (doc) => doc.title,
+              subtitle: (doc) =>
+                `${doc.user ? `${doc.user.first_name} ${doc.user.last_name}` : "Unknown"} · ${doc.category || "General"} · ${formatDate(doc.updated_at)}`,
+              trailing: (doc) => (
+                <Badge className={`text-[10px] ${getStatusColor(doc.is_draft)}`}>
+                  {doc.is_draft ? "Draft" : "Published"}
+                </Badge>
+              ),
+              onSelect: (doc) => handleViewDocument(doc),
+            }}
             cardRenderer={(doc) => (
               <Card key={doc.id} className="border-2 transition-shadow hover:shadow-lg">
                 <CardHeader className="from-primary/5 to-background border-b bg-gradient-to-r p-4">

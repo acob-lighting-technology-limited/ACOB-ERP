@@ -1,4 +1,5 @@
 import { PmsTablePage } from "@/app/admin/hr/pms/_components/pms-table-page"
+import { getCadenceType } from "@/lib/pms/cadence"
 import { formatWATDate } from "@/lib/utils/date"
 import { getCurrentUserPmsData } from "../_lib"
 
@@ -6,24 +7,23 @@ function formatPercent(value: number | null | undefined) {
   return typeof value === "number" && Number.isFinite(value) ? `${value}%` : "-"
 }
 
-export default async function PmsAttendancePage({
-  searchParams,
-}: {
-  searchParams: Promise<{ cycle_id?: string }>
-}) {
+export default async function PmsAttendancePage({ searchParams }: { searchParams: Promise<{ cycle_id?: string }> }) {
   const { cycle_id } = await searchParams
   const { score, cycles, activeCycleId, attendance } = await getCurrentUserPmsData(cycle_id)
 
-  const getCadenceLabels = (dateValue: string) => {
+  const activeCycle = cycles.find((c) => c.id === activeCycleId)
+  const cadence = getCadenceType(activeCycle?.reviewType, activeCycle?.name)
+  const cycleColumnLabel = cadence === "biannual" || cadence === "annual" ? "Quarter" : "Cycle"
+
+  const getCycleLabel = (dateValue: string) => {
     const date = new Date(dateValue)
     const year = date.getFullYear()
     const quarter = Math.floor(date.getMonth() / 3) + 1
-    const half = date.getMonth() < 6 ? 1 : 2
-    return { cycle: `Q${quarter} ${year}`, half: `H${half} ${year}`, year: String(year) }
+    return `Q${quarter} ${year}`
   }
 
   const rows = attendance.recent.map((record) => ({
-    ...getCadenceLabels(record.date),
+    cycle: getCycleLabel(record.date),
     month: formatWATDate(record.date, { month: "long" }),
     date: formatWATDate(record.date),
     clock_in: record.clock_in || "-",
@@ -36,7 +36,7 @@ export default async function PmsAttendancePage({
   return (
     <PmsTablePage
       title="PMS Attendance"
-      description={`Attendance score: ${formatPercent(score.attendance_score)}. Present days: ${score.breakdown.attendance.present}. Tracked days: ${score.breakdown.attendance.total}.`}
+      description="Track your daily clock-in records, working hours, and attendance score for the review cycle."
       backHref="/pms"
       backLabel="Back to PMS"
       icon="attendance"
@@ -51,7 +51,7 @@ export default async function PmsAttendancePage({
       tableDescription={`Attendance entries for ${score.cycle_name || "the selected cycle"}.`}
       rows={rows}
       columns={[
-        { key: "cycle", label: "Cycle" },
+        { key: "cycle", label: cycleColumnLabel },
         { key: "date", label: "Date" },
         { key: "clock_in", label: "Clock In" },
         { key: "clock_out", label: "Clock Out" },
@@ -60,10 +60,6 @@ export default async function PmsAttendancePage({
       ]}
       searchPlaceholder="Search attendance records..."
       hideSecondaryFilter
-      extraFilters={[
-        { key: "half", label: "Biannual", allLabel: "All Halves" },
-        { key: "year", label: "Annual", allLabel: "All Years" },
-      ]}
     />
   )
 }

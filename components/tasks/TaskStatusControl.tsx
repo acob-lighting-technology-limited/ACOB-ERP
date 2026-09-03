@@ -99,25 +99,24 @@ export function TaskStatusControl({
   const isTerminal = current === "completed" || current === "reassigned"
 
   const options = useMemo<StatusOption[]>(() => {
+    if (isTerminal) return []
+
     const allowedForEmployee = EMPLOYEE_TRANSITIONS[current] || []
 
-    return ORDERED_STATUSES.filter((value) => value !== current).map((value) => {
-      const reviewerOnly = REVIEWER_ONLY.includes(value)
+    return ORDERED_STATUSES.filter((value) => value !== current)
+      .filter((value) => {
+        const reviewerOnly = REVIEWER_ONLY.includes(value)
+        if (!canReview && (reviewerOnly || !allowedForEmployee.includes(value))) {
+          return false
+        }
+        return true
+      })
+      .map((value) => {
+        const requires: StatusOption["requires"] =
+          value === "completed" ? "rating" : value === "failed" || value === "unable_to_complete" ? "reason" : undefined
 
-      let blockedReason: string | null = null
-      if (isTerminal) {
-        blockedReason = `This task is ${statusLabel(current).toLowerCase()} and cannot be moved`
-      } else if (reviewerOnly && !canReview) {
-        blockedReason = "Only the lead or project manager can do this"
-      } else if (!reviewerOnly && !canReview && !allowedForEmployee.includes(value)) {
-        blockedReason = `Not available from ${statusLabel(current)}`
-      }
-
-      const requires: StatusOption["requires"] =
-        value === "completed" ? "rating" : value === "failed" || value === "unable_to_complete" ? "reason" : undefined
-
-      return { value, blockedReason, requires }
-    })
+        return { value, blockedReason: null, requires }
+      })
   }, [canReview, current, isTerminal])
 
   async function submit(option: StatusOption, payloadExtras: Record<string, unknown> = {}) {
@@ -145,7 +144,7 @@ export function TaskStatusControl({
 
   function handleSelect(value: string) {
     const option = options.find((entry) => entry.value === value)
-    if (!option || option.blockedReason) return
+    if (!option) return
 
     // Rating and reason are collected in place; everything else applies at once.
     if (option.requires) {
@@ -162,7 +161,7 @@ export function TaskStatusControl({
 
   return (
     <>
-      <Select value={current} onValueChange={handleSelect} disabled={isSaving || isTerminal}>
+      <Select value={current} onValueChange={handleSelect} disabled={isSaving || isTerminal || options.length === 0}>
         <SelectTrigger
           className={cn(size === "sm" ? "h-8 text-xs" : "h-9 text-sm", "w-full min-w-[9.5rem]", className)}
           aria-label="Task status"
@@ -181,18 +180,8 @@ export function TaskStatusControl({
             <span className={cn("font-medium", config?.color)}>{statusLabel(current)}</span>
           </SelectItem>
           {options.map((option) => (
-            <SelectItem
-              key={option.value}
-              value={option.value}
-              disabled={Boolean(option.blockedReason)}
-              title={option.blockedReason ?? undefined}
-            >
-              <span className="flex w-full items-center justify-between gap-3">
-                <span>{statusLabel(option.value)}</span>
-                {option.blockedReason && (
-                  <span className="text-muted-foreground text-[10px] italic">{option.blockedReason}</span>
-                )}
-              </span>
+            <SelectItem key={option.value} value={option.value}>
+              <span>{statusLabel(option.value)}</span>
             </SelectItem>
           ))}
         </SelectContent>

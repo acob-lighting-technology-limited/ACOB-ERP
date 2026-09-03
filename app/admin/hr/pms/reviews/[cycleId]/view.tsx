@@ -577,8 +577,9 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
       activeTab={mode}
       onTabChange={handleTabChange}
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total"
             value={totalCount}
             icon={Users}
@@ -586,6 +587,7 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Submitted"
             value={submittedCount}
             icon={BarChart3}
@@ -593,6 +595,7 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Completed"
             value={completedCount}
             icon={CheckCircle2}
@@ -600,6 +603,7 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Departments"
             value={availableDepts.length}
             icon={Clock}
@@ -618,7 +622,7 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
             size="sm"
           >
             <Download className="h-4 w-4" />
-            Export
+            <span className="hidden sm:inline">Export</span>
           </Button>
           <Button
             onClick={() => {
@@ -629,7 +633,8 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
             size="sm"
           >
             <Plus className="h-4 w-4" />
-            Add Review
+            <span className="hidden sm:inline">Add Review</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </div>
       }
@@ -685,6 +690,45 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
             ),
             canExpand: (r) => !!(r.strengths || r.areas_for_improvement || r.manager_comments),
           }}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (r) =>
+              r.status === "completed" ? "bg-emerald-500" : r.status === "submitted" ? "bg-blue-500" : "bg-amber-500",
+            title: (r) => `${r.user?.first_name || ""} ${r.user?.last_name || ""}`.trim() || "Unknown",
+            subtitle: (r) =>
+              `${r.user?.department || "No dept"} · KPI: ${fmt(r.kpi_score)} · Final: ${fmt(r.final_score)}`,
+            trailing: (r) => statusBadge(r.status),
+            onSelect: (r) => {
+              setEditingTarget(r)
+              setIsDialogOpen(true)
+            },
+          }}
+          cardRenderer={(r) => (
+            <div
+              className="bg-card cursor-pointer space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md"
+              onClick={() => {
+                setEditingTarget(r)
+                setIsDialogOpen(true)
+              }}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">
+                    {`${r.user?.first_name || ""} ${r.user?.last_name || ""}`.trim() || "Unknown"}
+                  </p>
+                  <p className="text-muted-foreground text-xs">{r.user?.department || "No dept"}</p>
+                </div>
+                {statusBadge(r.status)}
+              </div>
+              <div className="grid grid-cols-2 gap-2 border-t pt-2 text-xs">
+                <div>KPI: {fmt(r.kpi_score)}</div>
+                <div>Final: {fmt(r.final_score)}</div>
+              </div>
+            </div>
+          )}
           emptyIcon={FileText}
           emptyTitle="No reviews found"
           emptyDescription="No reviews have been submitted for this cycle yet."
@@ -704,6 +748,44 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
           skeletonRows={4}
           rowActions={deptRowActions}
           searchPlaceholder="Search department…"
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: () => "bg-blue-500",
+            title: (r) => r.department,
+            subtitle: (r) => `Reviews: ${r.submitted}/${r.reviews} · Avg Final: ${r.final}`,
+            trailing: (r) => <span className="text-xs font-semibold">{r.final}</span>,
+            onSelect: (r) => {
+              const p = new URLSearchParams()
+              p.set("mode", "individual")
+              p.set("department", r.department)
+              router.replace(`/admin/hr/pms/reviews/${encodeURIComponent(cycleId)}?${p.toString()}`)
+            },
+          }}
+          cardRenderer={(r) => (
+            <div
+              className="bg-card cursor-pointer space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md"
+              onClick={() => {
+                const p = new URLSearchParams()
+                p.set("mode", "individual")
+                p.set("department", r.department)
+                router.replace(`/admin/hr/pms/reviews/${encodeURIComponent(cycleId)}?${p.toString()}`)
+              }}
+            >
+              <div className="flex items-start justify-between">
+                <p className="text-sm font-semibold">{r.department}</p>
+                <Badge variant="outline">{r.final}</Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-2 border-t pt-2 text-xs">
+                <div>
+                  Submitted: {r.submitted}/{r.reviews}
+                </div>
+                <div>KPI: {r.kpi}</div>
+              </div>
+            </div>
+          )}
           emptyIcon={FileText}
           emptyTitle="No departments found"
           emptyDescription="No reviews have been grouped by department yet."
@@ -720,6 +802,40 @@ export function AdminPmsQuarterReviewsPage({ backLinkHref }: { backLinkHref?: st
           onRetry={() => void loadReviews()}
           skeletonRows={1}
           searchDisabled
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: () => "bg-purple-500",
+            title: (r) => r.cycle,
+            subtitle: (r) => `${r.review_type} · ${r.employee_count} staff · Completed: ${r.completed}`,
+            trailing: (r) => (
+              <span className="text-xs font-medium text-emerald-600">
+                {r.employee_count > 0 ? Math.round((r.completed / r.employee_count) * 100) : 0}%
+              </span>
+            ),
+          }}
+          cardRenderer={(r) => (
+            <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{r.cycle}</p>
+                  <p className="text-muted-foreground text-xs">{r.review_type}</p>
+                </div>
+                <Badge variant="outline">{r.employee_count} staff</Badge>
+              </div>
+              <div className="space-y-1 border-t pt-2">
+                <div className="flex justify-between text-xs">
+                  <span>Completed</span>
+                  <span className="font-semibold text-emerald-600">
+                    {r.completed}/{r.employee_count} (
+                    {r.employee_count > 0 ? Math.round((r.completed / r.employee_count) * 100) : 0}%)
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
           emptyIcon={FileText}
           emptyTitle="No cycle data"
           emptyDescription="No reviews found for this cycle."

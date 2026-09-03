@@ -240,21 +240,25 @@ export function BillsPage({
       icon={Receipt}
       backLink={{ href: backLinkHref ?? "/admin", label: "Back" }}
       actions={
-        <Button onClick={() => setIsCreateOpen(true)}>
-          <Plus className="mr-2 h-4 w-4" />
-          Add Bill
+        <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+          <Plus className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Add Bill</span>
+          <span className="sm:hidden">Add</span>
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total Bills"
             value={stats.total}
             icon={Receipt}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
+            className="hidden sm:block"
           />
           <StatCard
+            variant="compact"
             title="Pending"
             value={stats.pending}
             icon={FileClock}
@@ -262,6 +266,7 @@ export function BillsPage({
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Paid Amount"
             value={formatCurrency(stats.totalPaid)}
             icon={CheckCircle}
@@ -269,6 +274,7 @@ export function BillsPage({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Outstanding"
             value={formatCurrency(stats.outstanding)}
             icon={Wallet}
@@ -336,6 +342,27 @@ export function BillsPage({
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (bill) =>
+            bill.status === "cancelled"
+              ? "bg-rose-500"
+              : bill.status === "paid"
+                ? "bg-emerald-500"
+                : bill.status === "overdue"
+                  ? "bg-red-500"
+                  : "bg-blue-500",
+          title: (bill) => `${bill.bill_number} · ${bill.supplier_name}`,
+          subtitle: (bill) => `${formatCurrency(bill.total_amount, bill.currency)} · Due ${formatDate(bill.due_date)}`,
+          trailing: (bill) => (
+            <Badge variant={statusColors[bill.status]} className="text-[10px] capitalize">
+              {bill.status}
+            </Badge>
+          ),
+          onSelect: (bill) => router.push(`${financeBasePath ?? "/admin/accounts"}/bills/${bill.id}`),
+        }}
         cardRenderer={(bill) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">

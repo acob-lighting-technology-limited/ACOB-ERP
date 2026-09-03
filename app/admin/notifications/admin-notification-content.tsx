@@ -333,6 +333,27 @@ export function AdminNotificationContent({ initialNotifications }: AdminNotifica
         rowActions={rowActions}
         pagination={{ pageSize: 50 }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (n) =>
+            n.type === "error"
+              ? "bg-red-500"
+              : n.type === "warning"
+                ? "bg-amber-500"
+                : n.type === "success"
+                  ? "bg-emerald-500"
+                  : "bg-blue-500",
+          title: (n) => n.title,
+          subtitle: (n) => `${n.category} · ${n.priority} · ${n.timestamp}`,
+          trailing: (n) => (
+            <Badge variant="outline" className={cn("text-[10px] capitalize", getPriorityBadgeClass(n.priority))}>
+              {n.priority}
+            </Badge>
+          ),
+          onSelect: (n) => handleNotificationClick(n),
+        }}
         cardRenderer={(n) => {
           const Icon = typeIcons[n.type]
           const isRead = readIds.has(n.id)

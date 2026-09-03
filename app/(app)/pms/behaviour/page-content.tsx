@@ -7,7 +7,7 @@ import type { DataTableColumn, DataTableFilter } from "@/components/ui/data-tabl
 import { StatCard } from "@/components/ui/stat-card"
 
 import type { ReviewCycleOption } from "../_lib"
-import { CycleSelector } from "../_components/cycle-selector"
+import { useCycleUrlFilters } from "../_components/cycle-selector"
 
 type BehaviourRow = {
   competency: string
@@ -71,16 +71,13 @@ export function BehaviourContent({
     []
   )
 
+  const cycleFilters = useCycleUrlFilters<BehaviourRow>({ cycles, activeCycleId })
+
   const filters = useMemo<DataTableFilter<BehaviourRow>[]>(() => {
     const list: DataTableFilter<BehaviourRow>[] = []
 
     if (cycles && cycles.length > 0) {
-      list.push({
-        key: "cycle_selector",
-        label: "Review Cycle",
-        options: cycles.map((c) => ({ value: c.id, label: c.name })),
-        render: () => <CycleSelector cycles={cycles} activeCycleId={activeCycleId} />,
-      })
+      list.push(...cycleFilters)
     }
 
     // The cycle selector above already scopes the page to one cycle; a second
@@ -92,7 +89,7 @@ export function BehaviourContent({
     })
 
     return list
-  }, [activeCycleId, cycles, rows])
+  }, [cycleFilters, cycles, rows])
 
   return (
     <DataTablePage
@@ -100,10 +97,12 @@ export function BehaviourContent({
       description="Your behaviour review by competency with manager notes."
       icon={ShieldCheck}
       backLink={{ href: "/pms", label: "Back to PMS" }}
+      spacing="tight"
       actions={headerActions}
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Competencies"
             value={rows.length}
             icon={ShieldCheck}
@@ -111,6 +110,7 @@ export function BehaviourContent({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Average"
             value={average === null ? "-" : `${average}%`}
             icon={ShieldCheck}
@@ -118,6 +118,7 @@ export function BehaviourContent({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Comments"
             value={[strengths, areasForImprovement, managerComments].filter(Boolean).length}
             icon={ShieldCheck}
@@ -135,9 +136,27 @@ export function BehaviourContent({
         pagination={{ pageSize: 50 }}
         searchPlaceholder="Search competency..."
         searchFn={(row, query) => row.competency.toLowerCase().includes(query)}
+        stickyToolbar
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (row) => row.competency,
+          subtitle: (row) => row.cycle,
+          trailing: (row) => (
+            <span className="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">{row.value}%</span>
+          ),
+          detail: {
+            title: (row) => row.competency,
+            fields: (_row) => [
+              { label: "Strengths", value: strengths || "-" },
+              { label: "Areas for Improvement", value: areasForImprovement || "-" },
+              { label: "Manager Comments", value: managerComments || "-" },
+            ],
+          },
+        }}
         viewToggle
         cardRenderer={(row) => (
-          <div className="space-y-3">
+          <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
             <div className="flex items-center justify-between gap-2">
               <span className="text-sm font-semibold">{row.competency}</span>
               <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">{row.value}%</span>
@@ -148,24 +167,6 @@ export function BehaviourContent({
             </div>
           </div>
         )}
-        expandable={{
-          render: () => (
-            <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">Strengths</p>
-                <p className="text-sm">{strengths || "-"}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">Areas for Improvement</p>
-                <p className="text-sm">{areasForImprovement || "-"}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">Manager Comments</p>
-                <p className="text-sm">{managerComments || "-"}</p>
-              </div>
-            </div>
-          ),
-        }}
         emptyTitle="No behaviour competencies"
         emptyDescription="No behaviour score entries available."
         emptyIcon={ShieldCheck}

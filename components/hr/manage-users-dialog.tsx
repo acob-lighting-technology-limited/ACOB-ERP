@@ -213,6 +213,28 @@ export function ManageUsersDialog({
     enabled: open,
   })
 
+  const currentTrackValue =
+    employmentTypeValue === "full_time"
+      ? "full_time"
+      : employmentTypeValue === "part_time"
+        ? "part_time"
+        : contractCategoryCodeValue
+          ? `cat:${contractCategoryCodeValue}`
+          : "cat:CTR"
+
+  const handleTrackChange = (val: string) => {
+    if (val === "full_time") {
+      setValue("employmentType", "full_time")
+      setValue("contractCategoryCode", "")
+    } else if (val === "part_time") {
+      setValue("employmentType", "part_time")
+      setValue("contractCategoryCode", "")
+    } else if (val.startsWith("cat:")) {
+      setValue("employmentType", "contract")
+      setValue("contractCategoryCode", val.replace("cat:", ""))
+    }
+  }
+
   const getPreviewId = () => {
     const currentYear = new Date().getFullYear()
     if (employmentTypeValue === "full_time") {
@@ -220,7 +242,7 @@ export function ManageUsersDialog({
     } else if (employmentTypeValue === "part_time") {
       return `ACOB/PT/${currentYear}/...`
     } else {
-      const catCode = contractCategoryCodeValue || "CATEGORY"
+      const catCode = contractCategoryCodeValue || "CTR"
       return `ACOB/${catCode}/${currentYear}/...`
     }
   }
@@ -275,8 +297,6 @@ export function ManageUsersDialog({
   const [employmentType, setEmploymentType] = useState<"full_time" | "part_time" | "contract">("full_time")
   const [contractCategoryCode, setContractCategoryCode] = useState("")
   const [hireDate, setHireDate] = useState(today)
-  const [pendingEmailDispatch, setPendingEmailDispatch] = useState<PendingEmailDispatch | null>(null)
-  const [isSendingEmails, setIsSendingEmails] = useState(false)
 
   // Edit fields states for Review Applications
   const [firstName, setFirstName] = useState("")
@@ -375,21 +395,17 @@ export function ManageUsersDialog({
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error || "Failed to approve")
-      toast.success("Account created successfully")
+      toast.success(
+        "Employee approved successfully. Staff ID generated. Mailbox status is set to 'Pending' for IT provisioning."
+      )
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pendingApplications() })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminEmployees() })
       const remaining = pendingUsers.filter((u) => u.id !== selectedUser.id)
       if (remaining.length > 0) handleUserSelect(remaining[0])
       else {
         setSelectedUser(null)
       }
       onSuccess()
-      if (result.profileId && result.pendingEmailPreview) {
-        setPendingEmailDispatch({
-          profileId: result.profileId as string,
-          welcome: result.pendingEmailPreview.welcome as PendingEmailDispatch["welcome"],
-          internal: result.pendingEmailPreview.internal as PendingEmailDispatch["internal"],
-        })
-      }
     } catch (err: any) {
       log.error({ err }, "Approval error")
       toast.error(err.message || "Failed to approve")
@@ -662,49 +678,22 @@ export function ManageUsersDialog({
                   </div>
                   <div className="grid gap-4 md:grid-cols-2">
                     <div>
-                      <Label htmlFor="cu_employment_type">Employment Type</Label>
-                      <Select
-                        value={employmentTypeValue}
-                        onValueChange={(value) => {
-                          setValue("employmentType", value as any)
-                          if (value !== "contract") {
-                            setValue("contractCategoryCode", "")
-                          } else if (contractCategories.length > 0) {
-                            setValue("contractCategoryCode", contractCategories[0].code)
-                          }
-                        }}
-                      >
+                      <Label htmlFor="cu_employment_type">Staff Classification / Track</Label>
+                      <Select value={currentTrackValue} onValueChange={handleTrackChange}>
                         <SelectTrigger id="cu_employment_type" className="mt-1.5">
-                          <SelectValue placeholder="Select type" />
+                          <SelectValue placeholder="Select classification" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="full_time">Full Time</SelectItem>
                           <SelectItem value="part_time">Part Time</SelectItem>
-                          <SelectItem value="contract">Contract</SelectItem>
+                          {contractCategories.map((cat) => (
+                            <SelectItem key={cat.id} value={`cat:${cat.code}`}>
+                              {cat.name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
-
-                    {employmentTypeValue === "contract" && (
-                      <div>
-                        <Label htmlFor="cu_contract_category">Contract Category</Label>
-                        <Select
-                          value={contractCategoryCodeValue}
-                          onValueChange={(value) => setValue("contractCategoryCode", value)}
-                        >
-                          <SelectTrigger id="cu_contract_category" className="mt-1.5">
-                            <SelectValue placeholder="Select category" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {contractCategories.map((cat) => (
-                              <SelectItem key={cat.id} value={cat.code}>
-                                {cat.name} ({cat.code})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    )}
                   </div>
 
                   <div className="bg-muted/30 rounded-lg border p-3">
@@ -964,50 +953,46 @@ export function ManageUsersDialog({
                                 />
                               </div>
                               <div className="flex flex-col items-start gap-1">
-                                <span className="text-muted-foreground text-[10px] font-bold uppercase">Type</span>
+                                <span className="text-muted-foreground text-[10px] font-bold uppercase">
+                                  Staff Classification
+                                </span>
                                 <Select
-                                  value={employmentType}
-                                  onValueChange={(value: any) => {
-                                    setEmploymentType(value)
-                                    if (value !== "contract") {
+                                  value={
+                                    employmentType === "full_time"
+                                      ? "full_time"
+                                      : employmentType === "part_time"
+                                        ? "part_time"
+                                        : contractCategoryCode
+                                          ? `cat:${contractCategoryCode}`
+                                          : "cat:CTR"
+                                  }
+                                  onValueChange={(value) => {
+                                    if (value === "full_time") {
+                                      setEmploymentType("full_time")
                                       setContractCategoryCode("")
-                                    } else if (contractCategories.length > 0) {
-                                      setContractCategoryCode(contractCategories[0].code)
+                                    } else if (value === "part_time") {
+                                      setEmploymentType("part_time")
+                                      setContractCategoryCode("")
+                                    } else if (value.startsWith("cat:")) {
+                                      setEmploymentType("contract")
+                                      setContractCategoryCode(value.replace("cat:", ""))
                                     }
                                   }}
                                 >
-                                  <SelectTrigger className="h-9 w-32 text-xs font-bold">
-                                    <SelectValue placeholder="Type" />
+                                  <SelectTrigger className="h-9 w-44 text-xs font-bold">
+                                    <SelectValue placeholder="Classification" />
                                   </SelectTrigger>
                                   <SelectContent>
                                     <SelectItem value="full_time">Full Time</SelectItem>
                                     <SelectItem value="part_time">Part Time</SelectItem>
-                                    <SelectItem value="contract">Contract</SelectItem>
+                                    {contractCategories.map((cat) => (
+                                      <SelectItem key={cat.id} value={`cat:${cat.code}`}>
+                                        {cat.name}
+                                      </SelectItem>
+                                    ))}
                                   </SelectContent>
                                 </Select>
                               </div>
-                              {employmentType === "contract" && (
-                                <div className="flex flex-col items-start gap-1">
-                                  <span className="text-muted-foreground text-[10px] font-bold uppercase">
-                                    Category
-                                  </span>
-                                  <Select
-                                    value={contractCategoryCode}
-                                    onValueChange={(value) => setContractCategoryCode(value)}
-                                  >
-                                    <SelectTrigger className="h-9 w-32 text-xs font-bold">
-                                      <SelectValue placeholder="Category" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {contractCategories.map((cat) => (
-                                        <SelectItem key={cat.id} value={cat.code}>
-                                          {cat.name}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                              )}
                               <Badge variant="outline" className="self-end text-[10px] font-bold">
                                 PENDING
                               </Badge>
@@ -1517,67 +1502,6 @@ export function ManageUsersDialog({
               }}
             >
               Yes, send notification
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {/* Onboarding email dispatch */}
-      <AlertDialog
-        open={Boolean(pendingEmailDispatch)}
-        onOpenChange={(v) => {
-          if (!v && !isSendingEmails) setPendingEmailDispatch(null)
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <Mail className="h-4 w-4" />
-              Send Onboarding Emails?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              Account created. Send onboarding emails to configured recipients?
-              {pendingEmailDispatch && (
-                <span className="mt-2 block text-xs">
-                  Welcome → {pendingEmailDispatch.welcome.recipients.join(", ") || "none"}.<br />
-                  Internal → {pendingEmailDispatch.internal.recipients.join(", ") || "none"}.
-                </span>
-              )}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSendingEmails} onClick={() => setPendingEmailDispatch(null)}>
-              No, skip
-            </AlertDialogCancel>
-            <Button
-              loading={isSendingEmails}
-              onClick={async () => {
-                if (!pendingEmailDispatch) return
-                setIsSendingEmails(true)
-                try {
-                  const res = await apiFetch("/api/admin/send-onboarding-emails", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(pendingEmailDispatch),
-                  })
-                  const data = await res.json()
-                  if (res.ok) {
-                    const warnings = Array.isArray(data.warnings) ? (data.warnings as string[]) : []
-                    warnings.length > 0
-                      ? toast.warning("Emails sent with issues", { description: warnings.join(" | ") })
-                      : toast.success("Onboarding emails sent successfully")
-                  } else {
-                    toast.error(data.error || "Failed to send emails")
-                  }
-                } catch {
-                  toast.error("Failed to send emails")
-                } finally {
-                  setIsSendingEmails(false)
-                  setPendingEmailDispatch(null)
-                }
-              }}
-            >
-              Yes, send emails
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

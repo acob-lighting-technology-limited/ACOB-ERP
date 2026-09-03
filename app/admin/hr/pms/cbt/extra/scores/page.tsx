@@ -148,8 +148,9 @@ export default function AdminPmsCbtExtraScoresPage() {
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Responses"
             value={rows.length}
             icon={Brain}
@@ -157,6 +158,7 @@ export default function AdminPmsCbtExtraScoresPage() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Correct"
             value={rows.filter((r) => r.bonus_score === 100).length}
             icon={Brain}
@@ -164,6 +166,7 @@ export default function AdminPmsCbtExtraScoresPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Wrong"
             value={rows.filter((r) => r.bonus_score !== null && r.bonus_score < 100).length}
             icon={Brain}
@@ -240,6 +243,39 @@ export default function AdminPmsCbtExtraScoresPage() {
             </div>
           ),
         }}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (row) =>
+            row.bonus_score === 100 ? "bg-emerald-500" : row.bonus_score !== null ? "bg-amber-500" : "bg-slate-400",
+          title: (row) => row.employee,
+          subtitle: (row) =>
+            `${row.department} · ${row.cycle} · Bonus: ${row.bonus_score !== null ? `${row.bonus_score}%` : "None"}`,
+          trailing: (row) => (
+            <Badge variant={row.bonus_score === 100 ? "default" : "secondary"} className="text-[10px]">
+              {row.bonus_score !== null ? `${row.bonus_score}%` : "None"}
+            </Badge>
+          ),
+        }}
+        cardRenderer={(row) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{row.employee}</p>
+                <p className="text-muted-foreground text-xs">{row.company_email}</p>
+              </div>
+              <Badge variant={row.bonus_score === 100 ? "default" : "secondary"}>
+                {row.bonus_score !== null ? `${row.bonus_score}%` : "None"}
+              </Badge>
+            </div>
+            <div className="text-muted-foreground flex items-center justify-between border-t pt-2 text-[10px]">
+              <span>{row.department}</span>
+              <span>{row.cycle}</span>
+            </div>
+          </div>
+        )}
         emptyTitle="No bonus question responses yet"
         emptyDescription="Scores will appear here once a targeted candidate answers a bonus question."
         emptyIcon={Brain}

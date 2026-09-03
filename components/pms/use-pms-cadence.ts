@@ -28,10 +28,14 @@ function isCadence(value: unknown): value is PmsCadence {
 function hydrate() {
   if (hydrated || typeof window === "undefined") return
   hydrated = true
-  const stored = window.localStorage.getItem(STORAGE_KEY)
-  if (isCadence(stored) && stored !== current) {
-    current = stored
-    for (const listener of listeners) listener()
+  try {
+    const stored = window.localStorage.getItem(STORAGE_KEY)
+    if (isCadence(stored) && stored !== current) {
+      current = stored
+      for (const listener of listeners) listener()
+    }
+  } catch {
+    // ignore
   }
 }
 
@@ -46,7 +50,21 @@ function subscribe(listener: () => void) {
 export function setPmsCadence(next: PmsCadence) {
   if (!isCadence(next) || next === current) return
   current = next
-  if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, next)
+  try {
+    if (typeof window !== "undefined") window.localStorage.setItem(STORAGE_KEY, next)
+  } catch {
+    // ignore
+  }
+  for (const listener of listeners) listener()
+}
+
+export function resetPmsCadence() {
+  current = DEFAULT_PMS_CADENCE
+  try {
+    if (typeof window !== "undefined") window.localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // ignore
+  }
   for (const listener of listeners) listener()
 }
 

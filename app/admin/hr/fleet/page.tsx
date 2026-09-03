@@ -373,8 +373,9 @@ export default function AdminFleetPage() {
       activeTab={tab}
       onTabChange={setTab}
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Pending Review"
             value={pendingCount}
             icon={CalendarCheck2}
@@ -382,6 +383,7 @@ export default function AdminFleetPage() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Approved"
             value={approvedCount}
             icon={CheckCircle2}
@@ -389,6 +391,7 @@ export default function AdminFleetPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Rejected"
             value={rejectedCount}
             icon={XCircle}
@@ -400,8 +403,9 @@ export default function AdminFleetPage() {
       actions={
         tab === "resources" ? (
           <Button size="sm" onClick={() => setIsResourceDialogOpen(true)}>
-            <Plus className="mr-2 h-4 w-4" />
-            Add Resource
+            <Plus className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Add Resource</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         ) : undefined
       }
@@ -420,6 +424,95 @@ export default function AdminFleetPage() {
           filters={bookingFilters}
           isLoading={loadingBookings}
           pagination={{ pageSize: 50 }}
+          expandable={{
+            render: (r) => (
+              <div className="grid gap-3 p-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+                <div className="bg-muted/20 rounded-lg border p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-medium">Trip Purpose & Reason</span>
+                  <p className="text-foreground mt-1 whitespace-pre-wrap">{r.reason || "No reason provided"}</p>
+                </div>
+                <div className="bg-muted/20 rounded-lg border p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-medium">Schedule Details</span>
+                  <p className="text-foreground mt-1">
+                    From: <span className="font-medium">{formatDateTime(r.start_at)}</span>
+                  </p>
+                  <p className="text-foreground mt-0.5">
+                    To: <span className="font-medium">{formatDateTime(r.end_at)}</span>
+                  </p>
+                </div>
+                <div className="bg-muted/20 rounded-lg border p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-medium">Review & Decision</span>
+                  {r.reviewer?.full_name ? (
+                    <div className="mt-1 space-y-0.5">
+                      <p className="text-foreground font-medium">{r.reviewer.full_name}</p>
+                      {r.reviewer.department && (
+                        <p className="text-muted-foreground text-[11px]">{r.reviewer.department}</p>
+                      )}
+                      {r.reviewed_at && (
+                        <p className="text-muted-foreground text-[11px]">{formatDateTime(r.reviewed_at)}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground mt-1 italic">Pending admin decision</p>
+                  )}
+                </div>
+              </div>
+            ),
+          }}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (r) =>
+              r.status === "rejected" ? "bg-rose-500" : r.status === "approved" ? "bg-emerald-500" : "bg-amber-500",
+            title: (r) => `${r.resource?.name || "Resource"} · ${r.requester?.full_name || "Employee"}`,
+            subtitle: (r) => `${formatDateTime(r.start_at)} - ${formatDateTime(r.end_at)} · ${r.reason || "No reason"}`,
+            trailing: (r) => (
+              <Badge
+                variant={
+                  r.status === "approved"
+                    ? "default"
+                    : r.status === "pending"
+                      ? "secondary"
+                      : r.status === "rejected"
+                        ? "destructive"
+                        : "outline"
+                }
+                className="text-[10px]"
+              >
+                {r.status}
+              </Badge>
+            ),
+            onSelect: (r) => openReview(r),
+          }}
+          cardRenderer={(r) => (
+            <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{r.resource?.name || "Resource"}</p>
+                  <p className="text-muted-foreground text-xs">{r.requester?.full_name || "Employee"}</p>
+                </div>
+                <Badge
+                  variant={
+                    r.status === "approved"
+                      ? "default"
+                      : r.status === "pending"
+                        ? "secondary"
+                        : r.status === "rejected"
+                          ? "destructive"
+                          : "outline"
+                  }
+                >
+                  {r.status}
+                </Badge>
+              </div>
+              <p className="text-muted-foreground line-clamp-2 text-xs">{r.reason}</p>
+              <div className="text-muted-foreground border-t pt-2 text-[10px]">
+                {formatDateTime(r.start_at)} – {formatDateTime(r.end_at)}
+              </div>
+            </div>
+          )}
           rowActions={[
             {
               label: "Review",
@@ -437,6 +530,32 @@ export default function AdminFleetPage() {
           filters={resourceFilters}
           isLoading={loadingResources}
           pagination={{ pageSize: 50 }}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (r) => (r.is_active ? "bg-emerald-500" : "bg-slate-400"),
+            title: (r) => r.name,
+            subtitle: (r) => `${r.resource_type} · ${r.description || "No description"}`,
+            trailing: (r) => (
+              <Badge variant={r.is_active ? "default" : "outline"} className="text-[10px]">
+                {r.is_active ? "Active" : "Inactive"}
+              </Badge>
+            ),
+          }}
+          cardRenderer={(r) => (
+            <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{r.name}</p>
+                  <p className="text-muted-foreground text-xs capitalize">{r.resource_type}</p>
+                </div>
+                <Badge variant={r.is_active ? "default" : "outline"}>{r.is_active ? "Active" : "Inactive"}</Badge>
+              </div>
+              <p className="text-muted-foreground text-xs">{r.description || "No description"}</p>
+            </div>
+          )}
           rowActions={[
             {
               label: "Activate",

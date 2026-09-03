@@ -305,8 +305,9 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
   }
 
   const stats = (
-    <div className="grid grid-cols-1 gap-2 sm:gap-3 lg:grid-cols-3">
+    <div className="grid grid-cols-3 gap-2 sm:gap-3">
       <StatCard
+        variant="compact"
         title="Total Payslips Issued"
         value={totalPayslips}
         icon={FileText}
@@ -314,6 +315,7 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
         iconColor="text-emerald-500"
       />
       <StatCard
+        variant="compact"
         title="Total Payroll Disbursed"
         value={`₦${totalAmount.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}
         icon={DollarSign}
@@ -321,6 +323,7 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
         iconColor="text-blue-500"
       />
       <StatCard
+        variant="compact"
         title="Total PAYE Tax Collected"
         value={`₦${totalTax.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}
         icon={FileText}
@@ -429,6 +432,41 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
           searchFn={(row, q) => row.name.toLowerCase().includes(q.toLowerCase())}
           filters={[]}
           isLoading={false}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (row) => (row.status === "completed" ? "bg-emerald-500" : "bg-amber-500"),
+            title: (row) => row.name,
+            subtitle: (row) => `${row.start_date} - ${row.end_date} · Pay: ${row.pay_date || "N/A"}`,
+            trailing: (row) => (
+              <Badge variant={row.status === "completed" ? "default" : "outline"} className="text-[10px]">
+                {row.status === "completed" ? "Completed" : "Draft"}
+              </Badge>
+            ),
+            onSelect: (row) => router.push(`/admin/payroll/${row.id}`),
+          }}
+          cardRenderer={(row) => (
+            <div
+              className="bg-card cursor-pointer space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md"
+              onClick={() => router.push(`/admin/payroll/${row.id}`)}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{row.name}</p>
+                  <p className="text-muted-foreground text-xs">Pay date: {row.pay_date || "N/A"}</p>
+                </div>
+                <Badge variant={row.status === "completed" ? "default" : "outline"}>
+                  {row.status === "completed" ? "Completed" : "Draft"}
+                </Badge>
+              </div>
+              <div className="text-muted-foreground flex justify-between border-t pt-2 text-[10px]">
+                <span>Start: {row.start_date}</span>
+                <span>End: {row.end_date}</span>
+              </div>
+            </div>
+          )}
         />
       ) : (
         <DataTable<DbPayrollEntry>
@@ -444,6 +482,38 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
           }
           filters={registerFilters}
           isLoading={false}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: () => "bg-emerald-500",
+            title: (row) => row.user?.full_name || "Unknown",
+            subtitle: (row) =>
+              `${row.user?.department || "General"} · ${row.payroll_periods?.name || "N/A"} · Net: ₦${Number(row.net_salary || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}`,
+            trailing: (row) => (
+              <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                ₦{Number(row.net_salary || 0).toLocaleString("en-US", { minimumFractionDigits: 0 })}
+              </span>
+            ),
+          }}
+          cardRenderer={(row) => (
+            <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{row.user?.full_name || "Unknown"}</p>
+                  <p className="text-muted-foreground text-xs">{row.user?.department || "General"}</p>
+                </div>
+                <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                  ₦{Number(row.net_salary || 0).toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 border-t pt-2 text-[11px]">
+                <div>Gross: ₦{Number(row.gross_salary || 0).toLocaleString("en-US")}</div>
+                <div>Tax: ₦{Number(row.tax_amount || 0).toLocaleString("en-US")}</div>
+              </div>
+            </div>
+          )}
           emptyIcon={FileText}
           emptyTitle="No payslips yet"
           emptyDescription="Payslips appear here once a payroll period has been saved or locked from its worksheet."

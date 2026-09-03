@@ -16,7 +16,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { UserCheck, Upload, Trash2, Camera, CheckCircle2, XCircle, AlertCircle } from "lucide-react"
+import { StatCard } from "@/components/ui/stat-card"
+import { UserCheck, Upload, Trash2, Camera, CheckCircle2, XCircle, AlertCircle, Users } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-client"
 
@@ -262,25 +263,40 @@ export default function RemoteAccessPage() {
         icon={UserCheck}
         backLink={{ href: "/admin/hr/attendance", label: "Back to Attendance" }}
         stats={
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-xl border p-4">
-              <p className="text-muted-foreground text-xs">Total Employees</p>
-              <p className="text-2xl font-bold">{employees.length}</p>
-            </div>
-            <div className="rounded-xl border p-4">
-              <p className="text-muted-foreground text-xs">Remote Enabled</p>
-              <p className="text-2xl font-bold text-green-600">{enabledCount}</p>
-            </div>
-            <div className="rounded-xl border p-4">
-              <p className="text-muted-foreground text-xs">Face Photo Set</p>
-              <p className="text-2xl font-bold text-blue-600">{photoSetCount}</p>
-            </div>
-            <div className="rounded-xl border p-4">
-              <p className="text-muted-foreground text-xs">Ready for Remote</p>
-              <p className="text-2xl font-bold text-purple-600">
-                {employees.filter((e) => e.remote_checkin_enabled && e.face_photo_set).length}
-              </p>
-            </div>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
+            <StatCard
+              variant="compact"
+              title="Total Employees"
+              value={employees.length}
+              icon={Users}
+              iconBgColor="bg-blue-500/10"
+              iconColor="text-blue-500"
+            />
+            <StatCard
+              variant="compact"
+              title="Remote Enabled"
+              value={enabledCount}
+              icon={UserCheck}
+              iconBgColor="bg-emerald-500/10"
+              iconColor="text-emerald-500"
+            />
+            <StatCard
+              variant="compact"
+              title="Face Photo Set"
+              value={photoSetCount}
+              icon={Camera}
+              iconBgColor="bg-violet-500/10"
+              iconColor="text-violet-500"
+            />
+            <StatCard
+              variant="compact"
+              title="Ready for Remote"
+              value={employees.filter((e) => e.remote_checkin_enabled && e.face_photo_set).length}
+              icon={CheckCircle2}
+              iconBgColor="bg-purple-500/10"
+              iconColor="text-purple-500"
+              className="hidden sm:block"
+            />
           </div>
         }
       >
@@ -295,6 +311,45 @@ export default function RemoteAccessPage() {
             [e.user_name, e.employee_number, e.department].join(" ").toLowerCase().includes(q.toLowerCase())
           }
           isLoading={isLoading}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (e) => (e.remote_checkin_enabled ? "bg-emerald-500" : "bg-slate-400"),
+            title: (e) => `${e.user_name} · ${e.employee_number}`,
+            subtitle: (e) =>
+              `${e.department} · Photo: ${e.face_photo_set ? "Set" : "Missing"} · Last: ${formatDate(e.last_remote_checkin)}`,
+            trailing: (e) => (
+              <Badge
+                className={`text-[10px] ${e.remote_checkin_enabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-800"}`}
+              >
+                {e.remote_checkin_enabled ? "Enabled" : "Disabled"}
+              </Badge>
+            ),
+            onSelect: (e) => openUploadDialog(e),
+          }}
+          cardRenderer={(e) => (
+            <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{e.user_name}</p>
+                  <p className="text-muted-foreground text-xs">
+                    {e.department} · {e.employee_number}
+                  </p>
+                </div>
+                <Badge
+                  className={`text-[10px] ${e.remote_checkin_enabled ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-800"}`}
+                >
+                  {e.remote_checkin_enabled ? "Enabled" : "Disabled"}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between border-t pt-2 text-[10px]">
+                <span>Photo: {e.face_photo_set ? "Set" : "Missing"}</span>
+                <span>Last: {formatDate(e.last_remote_checkin)}</span>
+              </div>
+            </div>
+          )}
           emptyTitle="No employees found"
           emptyDescription="No employees match the current filters."
           emptyIcon={UserCheck}

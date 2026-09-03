@@ -774,6 +774,7 @@ export function DevLoginLogsContent() {
       <div className="space-y-6">
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Events"
             value={stats.total}
             icon={ScrollText}
@@ -781,6 +782,7 @@ export function DevLoginLogsContent() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Unique Users"
             value={stats.uniqueUsers}
             icon={UserCheck}
@@ -788,6 +790,7 @@ export function DevLoginLogsContent() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Unique IPs"
             value={stats.uniqueIps}
             icon={Wifi}
@@ -795,6 +798,7 @@ export function DevLoginLogsContent() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Password Logins"
             value={stats.passwordLogins}
             icon={ShieldCheck}
@@ -1205,6 +1209,21 @@ export function DevLoginLogsContent() {
             ),
           }}
           viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: () => "bg-emerald-500",
+            title: (row) => row.full_name || row.email,
+            subtitle: (row) =>
+              `${row.department || "General"} · ${row.auth_method || "auth"} · ${formatWATDate(row.login_at)}`,
+            trailing: (row) => (
+              <Badge variant="outline" className="text-[10px]">
+                {row.role}
+              </Badge>
+            ),
+            onSelect: (row) => setSelectedRowForStats(row),
+          }}
           cardRenderer={(row) => (
             <div className="space-y-3 rounded-xl border p-4">
               <div className="flex items-start justify-between gap-3">

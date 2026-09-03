@@ -468,22 +468,25 @@ export default function AdminPmsCbtExtraQuestionPage() {
         <div className="flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => void loadPage()} disabled={isLoading}>
             <RefreshCw className="h-4 w-4" />
-            Refresh
+            <span className="hidden sm:inline">Refresh</span>
           </Button>
           <Link href="/admin/hr/pms/cbt/extra/scores">
             <Button variant="outline" size="sm">
-              View Scores
+              <span className="hidden sm:inline">View Scores</span>
+              <span className="sm:hidden">Scores</span>
             </Button>
           </Link>
           <Button size="sm" onClick={openCreateModal}>
             <Plus className="h-4 w-4" />
-            Add Bonus Question
+            <span className="hidden sm:inline">Add Bonus Question</span>
+            <span className="sm:hidden">Add</span>
           </Button>
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Selected Cycle"
             value={selectedCycle?.name || "None"}
             icon={Brain}
@@ -491,6 +494,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Bonus Questions"
             value={filteredQuestions.length}
             icon={Brain}
@@ -498,6 +502,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Active"
             value={activeQuestions}
             icon={Brain}
@@ -505,11 +510,13 @@ export default function AdminPmsCbtExtraQuestionPage() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Latest Update"
             value={latestQuestionDate}
             icon={Brain}
             iconBgColor="bg-violet-500/10"
             iconColor="text-violet-500"
+            className="hidden sm:block"
           />
         </div>
       }
@@ -578,6 +585,21 @@ export default function AdminPmsCbtExtraQuestionPage() {
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (q) => (q.is_active === false ? "bg-slate-400" : "bg-emerald-500"),
+          title: (q) => q.prompt,
+          subtitle: (q) =>
+            `${cycleNameById.get(q.review_cycle_id || "") || "No cycle"} · Targets: ${q.targeted_emails?.length || 0}`,
+          trailing: (q) => (
+            <Badge variant={q.is_active === false ? "secondary" : "default"} className="text-[10px]">
+              {q.is_active === false ? "Inactive" : "Active"}
+            </Badge>
+          ),
+          onSelect: (q) => openEditModal(q),
+        }}
         cardRenderer={(question) => (
           <QuestionCard
             question={question}

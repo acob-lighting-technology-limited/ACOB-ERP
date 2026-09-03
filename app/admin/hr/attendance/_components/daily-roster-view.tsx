@@ -16,9 +16,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatCard } from "@/components/ui/stat-card"
-import { Users, Clock, AlertCircle, FileText, Pencil, ChevronLeft, ChevronRight } from "lucide-react"
+import {
+  Users,
+  Clock,
+  AlertCircle,
+  FileText,
+  Pencil,
+  ChevronLeft,
+  ChevronRight,
+  Building,
+  MessageSquare,
+  Calendar,
+} from "lucide-react"
 import { toast } from "sonner"
 import { toLocalISODate, isLate } from "@/lib/hr/attendance-utils"
+import { formatWATDate } from "@/lib/utils/date"
 import { computeAttendanceDay, netDayHoursFor } from "@/lib/hr/attendance-ssot"
 import { type AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import {
@@ -425,6 +437,51 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
 
   return (
     <>
+      <div className="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3">
+        <StatCard
+          variant="compact"
+          title="Present"
+          value={stats.present}
+          icon={Users}
+          iconBgColor="bg-blue-500/10"
+          iconColor="text-blue-500"
+        />
+        <StatCard
+          variant="compact"
+          title="Early"
+          value={stats.early}
+          icon={Users}
+          iconBgColor="bg-green-500/10"
+          iconColor="text-green-500"
+          className="hidden sm:block"
+        />
+        <StatCard
+          variant="compact"
+          title="Late"
+          value={stats.late}
+          icon={Clock}
+          iconBgColor="bg-yellow-500/10"
+          iconColor="text-yellow-500"
+        />
+        <StatCard
+          variant="compact"
+          title="Incomplete"
+          value={stats.incomplete}
+          icon={AlertCircle}
+          iconBgColor="bg-cyan-500/10"
+          iconColor="text-cyan-500"
+          className="hidden sm:block"
+        />
+        <StatCard
+          variant="compact"
+          title="Absent"
+          value={stats.absent}
+          icon={AlertCircle}
+          iconBgColor="bg-red-500/10"
+          iconColor="text-red-500"
+        />
+      </div>
+
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <div className="flex items-center gap-2">
           <Label className="text-sm font-medium">Date</Label>
@@ -460,44 +517,6 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
         </Button>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-        <StatCard
-          title="Present"
-          value={stats.present}
-          icon={Users}
-          iconBgColor="bg-blue-500/10"
-          iconColor="text-blue-500"
-        />
-        <StatCard
-          title="Early"
-          value={stats.early}
-          icon={Users}
-          iconBgColor="bg-green-500/10"
-          iconColor="text-green-500"
-        />
-        <StatCard
-          title="Late"
-          value={stats.late}
-          icon={Clock}
-          iconBgColor="bg-yellow-500/10"
-          iconColor="text-yellow-500"
-        />
-        <StatCard
-          title="Incomplete"
-          value={stats.incomplete}
-          icon={AlertCircle}
-          iconBgColor="bg-cyan-500/10"
-          iconColor="text-cyan-500"
-        />
-        <StatCard
-          title="Absent"
-          value={stats.absent}
-          icon={AlertCircle}
-          iconBgColor="bg-red-500/10"
-          iconColor="text-red-500"
-        />
-      </div>
-
       <DataTable<AttendanceRecord>
         data={records}
         columns={columns}
@@ -507,6 +526,105 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
         searchPlaceholder="Search employee or department…"
         searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
         isLoading={loading}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.status === "present" || r.status === "early"
+              ? "bg-emerald-500"
+              : r.status === "late"
+                ? "bg-amber-500"
+                : r.status === "absent"
+                  ? "bg-red-500"
+                  : "bg-blue-500",
+          title: (r) => r.user_name,
+          subtitle: (r) => `${r.department} · In: ${formatTime(r.clock_in)} · Out: ${formatTime(r.clock_out)}`,
+          trailing: (r) => (
+            <StatusBadge
+              status={r.status}
+              record={r}
+              earlyClosure={r.early_closure_time ? { closeTime: r.early_closure_time } : null}
+            />
+          ),
+          detail: {
+            title: (r) => r.user_name,
+            subtitle: (r) =>
+              `${r.department} · ${formatWATDate(r.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}`,
+            badges: (r) => (
+              <StatusBadge
+                status={r.status}
+                record={r}
+                earlyClosure={r.early_closure_time ? { closeTime: r.early_closure_time } : null}
+              />
+            ),
+            fields: (r) => {
+              const hours = getHourBreakdown(r)
+              return [
+                { icon: Building, label: "Department", value: r.department },
+                {
+                  icon: Calendar,
+                  label: "Date",
+                  value: formatWATDate(r.date, { day: "numeric", month: "short", year: "numeric" }),
+                },
+                { icon: Clock, label: "Clock In", value: formatTime(r.clock_in) },
+                { icon: Clock, label: "Clock Out", value: formatTime(r.clock_out) },
+                {
+                  icon: Clock,
+                  label: "Work Hours",
+                  value: hours.work != null ? `${hours.work.toFixed(2)} hrs` : "-",
+                },
+                {
+                  icon: AlertCircle,
+                  label: "Missed Hours",
+                  value: (hours.missed ?? 0) > 0 ? `${hours.missed!.toFixed(2)} hrs` : "0.00 hrs",
+                  muted: (hours.missed ?? 0) === 0,
+                },
+                {
+                  icon: Clock,
+                  label: "Total Hours",
+                  value: hours.total != null ? `${hours.total.toFixed(2)} hrs` : "-",
+                },
+                ...(hours.overtime && hours.overtime > 0
+                  ? [{ icon: Clock, label: "Overtime", value: `${hours.overtime.toFixed(2)} hrs` }]
+                  : []),
+                ...(r.source ? [{ icon: FileText, label: "Source", value: labelSource(r.source) }] : []),
+                ...(r.manual_comment ? [{ icon: MessageSquare, label: "Note", value: r.manual_comment }] : []),
+              ]
+            },
+            actions: (r) => [
+              {
+                label: r.id.startsWith("missing-") ? "Add Record" : "Edit Record",
+                icon: Pencil,
+                onClick: () => openEdit(r),
+              },
+            ],
+          },
+        }}
+        cardRenderer={(r) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{r.user_name}</p>
+                <p className="text-muted-foreground text-xs">{r.department}</p>
+              </div>
+              <StatusBadge
+                status={r.status}
+                record={r}
+                earlyClosure={r.early_closure_time ? { closeTime: r.early_closure_time } : null}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-muted-foreground">Clock In:</span> {formatTime(r.clock_in)}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Clock Out:</span> {formatTime(r.clock_out)}
+              </div>
+            </div>
+          </div>
+        )}
         emptyTitle="No records for this date"
         emptyDescription="No attendance records found for the selected date."
         emptyIcon={FileText}

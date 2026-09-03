@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { formatWATDate } from "@/lib/utils/date"
 import { toast } from "sonner"
-import { Edit2, MessageSquare, Plus, Trash2 } from "lucide-react"
+import { Edit2, FileText, MessageSquare, Plus, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -194,16 +194,18 @@ export function FeedbackContent({ initialFeedback }: FeedbackContentProps) {
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={(tab) => setActiveTab(tab as "non_anonymous" | "anonymous")}
+      spacing="tight"
+      actionsPlacement="inline-always"
       actions={
-        <Button onClick={() => setIsSubmitOpen(true)} size="sm" className="gap-2">
-          <Plus className="h-4 w-4" />
+        <Button onClick={() => setIsSubmitOpen(true)} size="sm">
+          <Plus className="h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">Submit Feedback</span>
-          <span className="sm:hidden">Submit</span>
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total"
             value={userFeedback.length}
             icon={MessageSquare}
@@ -211,6 +213,7 @@ export function FeedbackContent({ initialFeedback }: FeedbackContentProps) {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Open"
             value={filteredFeedback.filter((item) => item.status === "open").length}
             icon={MessageSquare}
@@ -218,6 +221,7 @@ export function FeedbackContent({ initialFeedback }: FeedbackContentProps) {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Resolved"
             value={filteredFeedback.filter((item) => item.status === "resolved").length}
             icon={MessageSquare}
@@ -237,9 +241,52 @@ export function FeedbackContent({ initialFeedback }: FeedbackContentProps) {
         searchFn={(row, query) =>
           `${row.title} ${row.description || ""} ${row.feedback_type} ${row.status}`.toLowerCase().includes(query)
         }
+        stickyToolbar
         viewToggle
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (row) => row.title,
+          subtitle: (row) => `${row.feedback_type.replaceAll("_", " ")} · ${row.is_anonymous ? "anonymous" : "named"}`,
+          trailing: (row) => (
+            <Badge className={`${getStatusColor(row.status)} text-[10px] capitalize`}>
+              {row.status.replaceAll("_", " ")}
+            </Badge>
+          ),
+          detail: {
+            title: (row) => row.title,
+            subtitle: (row) => (
+              <span className="text-muted-foreground text-xs capitalize">{row.feedback_type.replaceAll("_", " ")}</span>
+            ),
+            badges: (row) => (
+              <Badge className={`${getStatusColor(row.status)} text-[10px] capitalize`}>
+                {row.status.replaceAll("_", " ")}
+              </Badge>
+            ),
+            fields: (row) => [
+              { icon: FileText, label: "Description", value: row.description || "No description provided." },
+            ],
+            actions: (row) => [
+              {
+                label: "Edit",
+                icon: Edit2,
+                variant: "outline" as const,
+                onClick: () => {
+                  setSelectedFeedback(row)
+                  setShowEditModal(true)
+                },
+              },
+              {
+                label: "Delete",
+                icon: Trash2,
+                variant: "destructive" as const,
+                onClick: () => setPendingDeleteId(row.id),
+              },
+            ],
+          },
+        }}
         cardRenderer={(row) => (
-          <div className="space-y-3">
+          <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
             <div className="flex items-center justify-between gap-2">
               <Badge variant="outline" className="text-xs font-semibold capitalize">
                 {row.feedback_type.replaceAll("_", " ")}
@@ -274,14 +321,6 @@ export function FeedbackContent({ initialFeedback }: FeedbackContentProps) {
             onClick: (item) => setPendingDeleteId(item.id),
           },
         ]}
-        expandable={{
-          render: (item) => (
-            <div className="space-y-2 text-sm">
-              <p className="text-muted-foreground text-xs uppercase">Description</p>
-              <p>{item.description || "No description provided."}</p>
-            </div>
-          ),
-        }}
         emptyTitle="No feedback yet"
         emptyDescription="Submit your first feedback to get started."
         emptyIcon={MessageSquare}

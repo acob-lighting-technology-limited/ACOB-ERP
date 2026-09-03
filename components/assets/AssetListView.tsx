@@ -24,6 +24,7 @@ import {
   Calendar,
   ClipboardList,
   MapPin,
+  FileText,
 } from "lucide-react"
 import { ASSET_TYPE_MAP } from "@/lib/asset-types"
 import { cn } from "@/lib/utils"
@@ -42,6 +43,7 @@ interface AssetListViewProps {
   onHistory: (asset: Asset) => void
   onDelete: (asset: Asset) => void
   onRestore: (asset: Asset) => void
+  onHandoverPolicy?: (asset: Asset) => void
   getStatusColor: (status: string) => string
   getEffectiveAssignmentType: (asset: Asset) => string
   getAssignedPersonName: (asset: Asset) => string | null
@@ -75,6 +77,7 @@ export function AssetListView({
   onHistory,
   onDelete,
   onRestore,
+  onHandoverPolicy,
   getStatusColor,
   getEffectiveAssignmentType,
   getAssignedPersonName,
@@ -325,6 +328,17 @@ export function AssetListView({
                           >
                             <Eye className="h-3 w-3" />
                           </Button>
+                          {onHandoverPolicy && !asset.deleted_at && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => onHandoverPolicy(asset)}
+                              title="Generate & Print Handover Policy PDF"
+                              className="h-8 w-8 p-0 text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+                            >
+                              <FileText className="h-3 w-3" />
+                            </Button>
+                          )}
                           {!userProfile?.is_department_lead && asset.deleted_at ? (
                             <Button
                               variant="outline"
@@ -604,6 +618,17 @@ export function AssetListView({
               <Button variant="outline" size="sm" onClick={() => onHistory(asset)} title="View assignment history">
                 <Eye className="h-3 w-3" />
               </Button>
+              {onHandoverPolicy && !asset.deleted_at && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onHandoverPolicy(asset)}
+                  title="Generate & Print Handover Policy PDF"
+                  className="text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
+                >
+                  <FileText className="h-3 w-3" />
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

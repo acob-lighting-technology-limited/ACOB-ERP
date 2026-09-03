@@ -228,6 +228,7 @@ export function DevImpersonationContent() {
     <div className="space-y-6">
       <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
         <StatCard
+          variant="compact"
           title="Users"
           value={stats.total}
           icon={Users}
@@ -235,6 +236,7 @@ export function DevImpersonationContent() {
           iconColor="text-blue-500"
         />
         <StatCard
+          variant="compact"
           title="Active"
           value={stats.active}
           icon={ShieldCheck}
@@ -242,6 +244,7 @@ export function DevImpersonationContent() {
           iconColor="text-emerald-500"
         />
         <StatCard
+          variant="compact"
           title="Departments"
           value={stats.departments}
           icon={Building2}
@@ -249,6 +252,7 @@ export function DevImpersonationContent() {
           iconColor="text-amber-500"
         />
         <StatCard
+          variant="compact"
           title="Privileged Roles"
           value={stats.privileged}
           icon={UserRoundCog}
@@ -279,6 +283,20 @@ export function DevImpersonationContent() {
           void refetch()
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (row) =>
+            String(row.employment_status).toLowerCase() === "active" ? "bg-emerald-500" : "bg-slate-400",
+          title: (row) => row.full_name,
+          subtitle: (row) => `${row.department} · ${row.role}`,
+          trailing: (row) => (
+            <Badge variant="outline" className="text-[10px]">
+              {row.role}
+            </Badge>
+          ),
+        }}
         cardRenderer={(row) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div>

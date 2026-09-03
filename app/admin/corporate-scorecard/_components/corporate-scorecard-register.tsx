@@ -181,8 +181,9 @@ export function CorporateScorecardRegister() {
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total KPIs"
             value={stats.total}
             icon={ClipboardList}
@@ -192,6 +193,7 @@ export function CorporateScorecardRegister() {
           {PERSPECTIVES.map((p) => (
             <StatCard
               key={p}
+              variant="compact"
               title={p}
               value={stats.byPerspective.get(p) || 0}
               icon={p === "Organizational Capacity" ? Users : Target}
@@ -252,6 +254,42 @@ export function CorporateScorecardRegister() {
             </div>
           ),
         }}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: () => "bg-blue-500",
+          title: (r) => r.measure,
+          subtitle: (r) => `${r.perspective} · ${r.strategic_objective}`,
+          trailing: (r) => (
+            <Badge variant="outline" className="text-[10px]">
+              {r.core_departments.length} depts
+            </Badge>
+          ),
+          onSelect: (r) => setManagingRow(r),
+        }}
+        cardRenderer={(r) => (
+          <div
+            className="bg-card cursor-pointer space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md"
+            onClick={() => setManagingRow(r)}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{r.measure}</p>
+                <p className="text-muted-foreground text-xs">{r.perspective}</p>
+              </div>
+              <Badge variant="outline">{r.core_departments.length} depts</Badge>
+            </div>
+            <p className="text-muted-foreground line-clamp-2 text-xs">{r.strategic_objective}</p>
+            <div className="flex items-center justify-between border-t pt-2 text-[10px]">
+              <span>Target: {r.target_text}</span>
+              <Button size="sm" variant="ghost" className="h-6 text-[10px]" onClick={() => setManagingRow(r)}>
+                <UserCog className="mr-1 h-3 w-3" /> Manage
+              </Button>
+            </div>
+          </div>
+        )}
         urlSync
       />
 

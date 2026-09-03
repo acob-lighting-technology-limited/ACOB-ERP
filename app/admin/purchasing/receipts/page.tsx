@@ -184,8 +184,9 @@ export default function ReceiptsPage() {
       icon={Package}
       backLink={{ href: "/admin/purchasing", label: "Back to Purchasing" }}
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Receipts"
             value={stats.total}
             icon={ReceiptText}
@@ -193,6 +194,7 @@ export default function ReceiptsPage() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Total Items"
             value={stats.items}
             icon={PackageCheck}
@@ -200,6 +202,7 @@ export default function ReceiptsPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Linked Orders"
             value={stats.linkedOrders}
             icon={ShoppingBag}
@@ -207,11 +210,13 @@ export default function ReceiptsPage() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Suppliers"
             value={stats.uniqueSuppliers}
             icon={CalendarDays}
             iconBgColor="bg-violet-500/10"
             iconColor="text-violet-500"
+            className="hidden sm:block"
           />
         </div>
       }
@@ -259,6 +264,19 @@ export default function ReceiptsPage() {
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: () => "bg-emerald-500",
+          title: (receipt) => `${receipt.receipt_number} · ${receipt.supplier_name || "Supplier"}`,
+          subtitle: (receipt) => `PO: ${receipt.po_number || "None"} · Received ${formatDate(receipt.received_date)}`,
+          trailing: (receipt) => (
+            <Badge variant="secondary" className="text-[10px]">
+              {receipt.total_items} items
+            </Badge>
+          ),
+        }}
         cardRenderer={(receipt) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">

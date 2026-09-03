@@ -13,6 +13,7 @@ type SelectChildProps = {
   placeholder?: string
   className?: string
   value?: string
+  textValue?: string
 }
 type SelectLikeElement = React.ReactElement<SelectChildProps>
 type DisplayNameType = { displayName?: string }
@@ -24,7 +25,18 @@ function isSelectElement(node: React.ReactNode): node is SelectLikeElement {
 function getNodeText(node: React.ReactNode): string {
   if (node === null || node === undefined || typeof node === "boolean") return ""
   if (typeof node === "string" || typeof node === "number") return String(node)
-  if (Array.isArray(node)) return node.map(getNodeText).join("")
+  if (Array.isArray(node)) {
+    return node
+      .map((child, i) => {
+        const text = getNodeText(child)
+        const nextChild = node[i + 1]
+        const needsSpace = Boolean(text && React.isValidElement(child) && nextChild && !text.endsWith(" "))
+        return needsSpace ? `${text} ` : text
+      })
+      .join("")
+      .replace(/\s+/g, " ")
+      .trim()
+  }
   if (isSelectElement(node)) return getNodeText(node.props.children)
   return ""
 }
@@ -103,7 +115,9 @@ const Select = ({
   const triggerClassName = findTriggerClassName(children)
   const items = findSelectItems(children)
   const options = items.map((item) => {
-    const labelText = getNodeText(item.props.children)
+    const textValue = item.props?.textValue
+    const rawText = textValue || getNodeText(item.props.children)
+    const labelText = rawText.replace(/\s+/g, " ").trim()
     return {
       value: item.props.value as string,
       label: labelText || String(item.props.value),

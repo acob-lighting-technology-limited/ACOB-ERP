@@ -1,5 +1,5 @@
 import { requireDeptScope } from "@/lib/dept/require-dept-scope"
-import { AccountsDashboardContent } from "@/app/admin/accounts/accounts-dashboard-content"
+import { AdminAccountsPage } from "@/app/admin/accounts/view"
 
 interface Props {
   params: Promise<{ dept_id: string }>
@@ -8,5 +8,5 @@ interface Props {
 export default async function DeptAccountsPage({ params }: Props) {
   const { dept_id } = await params
   await requireDeptScope(dept_id)
-  return <AccountsDashboardContent basePath={`/dept/${dept_id}`} lockedDepartmentId={dept_id} />
+  return <AdminAccountsPage basePath={`/dept/${dept_id}`} lockedDepartmentId={dept_id} />
 }

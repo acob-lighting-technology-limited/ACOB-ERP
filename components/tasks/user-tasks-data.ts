@@ -91,7 +91,7 @@ export async function loadUserTasks(
     if (task.goal_id) goalIds.add(task.goal_id)
   }
 
-  const [profilesRes, goalsRes, commentsRes] = await Promise.all([
+  const [profilesRes, goalsRes, commentsRes, userCompletionsRes] = await Promise.all([
     userIds.size > 0
       ? supabase.from("profiles").select("id, first_name, last_name, department").in("id", Array.from(userIds))
       : { data: [] },
@@ -101,6 +101,9 @@ export async function loadUserTasks(
     taskIds.length > 0
       ? supabase.from("task_updates").select("task_id").in("task_id", taskIds).eq("update_type", "comment")
       : { data: [] },
+    taskIds.length > 0
+      ? supabase.from("task_user_completion").select("task_id").in("task_id", taskIds).eq("user_id", userId)
+      : { data: [] },
   ])
 
   const profileMap = new Map<string, TaskPersonSummary>(
@@ -108,6 +111,9 @@ export async function loadUserTasks(
   )
   const goalMap = new Map<string, string>(
     ((goalsRes.data || []) as Array<{ id: string; title: string }>).map((g) => [g.id, g.title])
+  )
+  const completedTaskIds = new Set(
+    (userCompletionsRes.data || []).map((row: { task_id?: string | null }) => String(row?.task_id || ""))
   )
 
   const commentCountMap = new Map<string, number>()
@@ -143,6 +149,7 @@ export async function loadUserTasks(
     if (task.created_by) taskData.created_by_user = profileMap.get(task.created_by)
     if (task.reviewed_by) taskData.reviewed_by_user = profileMap.get(task.reviewed_by)
     if (task.goal_id) taskData.goal_title = goalMap.get(task.goal_id) || null
+    taskData.user_completed = task.status === "completed" || completedTaskIds.has(task.id)
 
     return taskData
   })

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { Plus, Loader2, Trash2, FolderTree, Scale, Star } from "lucide-react"
+import { Plus, Loader2, Trash2, FolderTree, Scale, Star, Pencil } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,6 +15,7 @@ import { TASK_STATUS_CONFIG, type TaskStatus } from "@/lib/tasks/constants"
 import { TASK_WEIGHT_DEFAULT, computeProjectProgress } from "@/lib/tasks/scoring"
 import { TaskFormDialog, type TaskFormState } from "@/components/tasks/TaskFormDialog"
 import type { employee } from "@/app/admin/tasks/management/admin-tasks-content"
+import type { Task } from "@/types/task"
 import type { Project } from "./project-admin-content"
 
 type Plan = {
@@ -28,12 +29,21 @@ type Plan = {
 type ProjectTask = {
   id: string
   title: string
+  description?: string | null
+  priority?: string | null
   status: string
   weight: number | null
   rating: number | null
   plan_id: string | null
   due_date: string | null
-  task_end_date: string | null
+  task_start_date?: string | null
+  task_end_date?: string | null
+  work_item_number?: string | null
+  assigned_to?: string | null
+  department?: string | null
+  goal_id?: string | null
+  kpi_id?: string | null
+  assignment_type?: "individual" | "multiple" | "department" | null
   is_archived: boolean | null
   assigned_user?: { first_name: string | null; last_name: string | null } | null
 }
@@ -68,6 +78,8 @@ export function ProjectPlanBoard({ project, profiles }: { project: Project; prof
   const queryClient = useQueryClient()
   const [newPlanName, setNewPlanName] = useState("")
   const [taskDialogPlan, setTaskDialogPlan] = useState<Plan | null>(null)
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [isTaskDialogOpen, setIsTaskDialogOpen] = useState(false)
   const [taskForm, setTaskForm] = useState<TaskFormState>(EMPTY_TASK_FORM)
   const [isSavingTask, setIsSavingTask] = useState(false)
 
@@ -144,59 +156,140 @@ export function ProjectPlanBoard({ project, profiles }: { project: Project; prof
     if (isSavingTask) return
     setIsSavingTask(true)
     try {
-      const res = await apiFetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: form.title,
-          description: form.description || null,
-          priority: form.priority,
-          status: "pending",
-          due_date: form.due_date || null,
-          department: form.department || null,
-          assignment_type: form.assignment_type,
-          assigned_to: form.assigned_to || null,
-          assigned_users: form.assigned_users || [],
-          goal_id: form.goal_id || null,
-          kpi_id: form.kpi_id || null,
-          project_id: project.id,
-          plan_id: form.plan_id || null,
-          weight: form.weight,
-          task_start_date: form.task_start_date || null,
-          task_end_date: form.task_end_date || null,
-          source_type: "manual",
-        }),
-      })
-      const payload = await res.json()
-      if (!res.ok) throw new Error(payload.error || "Failed to create task")
-      toast.success("Task added to the plan")
+      if (editingTask) {
+        const res = await apiFetch(`/api/tasks/${editingTask.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: form.title,
+            description: form.description || null,
+            priority: form.priority,
+            due_date: form.due_date || null,
+            department: form.department || null,
+            assignment_type: form.assignment_type,
+            assigned_to: form.assigned_to || null,
+            goal_id: form.goal_id || null,
+            kpi_id: form.kpi_id || null,
+            project_id: project.id,
+            plan_id: form.plan_id || null,
+            weight: form.weight,
+            task_start_date: form.task_start_date || null,
+            task_end_date: form.task_end_date || null,
+          }),
+        })
+        const payload = await res.json()
+        if (!res.ok) throw new Error(payload.error || "Failed to update task")
+        toast.success("Task updated")
+      } else {
+        const res = await apiFetch("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            title: form.title,
+            description: form.description || null,
+            priority: form.priority,
+            status: "pending",
+            due_date: form.due_date || null,
+            department: form.department || null,
+            assignment_type: form.assignment_type,
+            assigned_to: form.assigned_to || null,
+            assigned_users: form.assigned_users || [],
+            goal_id: form.goal_id || null,
+            kpi_id: form.kpi_id || null,
+            project_id: project.id,
+            plan_id: form.plan_id || null,
+            weight: form.weight,
+            task_start_date: form.task_start_date || null,
+            task_end_date: form.task_end_date || null,
+            source_type: "manual",
+          }),
+        })
+        const payload = await res.json()
+        if (!res.ok) throw new Error(payload.error || "Failed to create task")
+        toast.success("Task added to the plan")
+      }
+      setIsTaskDialogOpen(false)
+      setEditingTask(null)
       setTaskDialogPlan(null)
       void queryClient.invalidateQueries({ queryKey: tasksKey })
       void queryClient.invalidateQueries({ queryKey: ["projects"] })
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to create task")
+      toast.error(err instanceof Error ? err.message : "Failed to save task")
     } finally {
       setIsSavingTask(false)
     }
   }
 
   function openTaskDialog(plan: Plan | null) {
+    setEditingTask(null)
     setTaskForm({ ...EMPTY_TASK_FORM, project_id: project.id, plan_id: plan?.id ?? "" })
-    setTaskDialogPlan(plan ?? { id: "", project_id: project.id, name: "", description: null, sort_order: 0 })
+    setTaskDialogPlan(plan)
+    setIsTaskDialogOpen(true)
   }
 
-  function renderTaskRow(task: ProjectTask) {
+  function openEditTaskDialog(task: ProjectTask) {
+    const plan = plans.find((p) => p.id === task.plan_id) || null
+    setEditingTask(task as unknown as Task)
+    setTaskDialogPlan(plan)
+    setTaskForm({
+      title: task.title,
+      description: task.description || "",
+      priority: task.priority || "medium",
+      status: task.status || "pending",
+      assigned_to: task.assigned_to || "",
+      department: task.department || "",
+      due_date: task.due_date || "",
+      assignment_type: (task.assignment_type as "individual" | "multiple" | "department") || "individual",
+      assigned_users: task.assigned_to ? [task.assigned_to] : [],
+      project_id: project.id,
+      plan_id: task.plan_id || "",
+      goal_id: task.goal_id || "",
+      kpi_id: task.kpi_id || "",
+      weight: task.weight ?? TASK_WEIGHT_DEFAULT,
+      task_start_date: task.task_start_date || "",
+      task_end_date: task.task_end_date || "",
+    })
+    setIsTaskDialogOpen(true)
+  }
+
+  function renderTaskRow(task: ProjectTask, index: number) {
     const config = TASK_STATUS_CONFIG[task.status as TaskStatus]
     return (
-      <div key={task.id} className="flex flex-wrap items-center justify-between gap-2 border-t px-3 py-2 text-sm">
-        <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{task.title}</p>
-          <p className="text-muted-foreground text-xs">
-            {task.assigned_user
-              ? formatFullName(task.assigned_user.first_name, task.assigned_user.last_name)
-              : "Unassigned"}
-            {task.task_end_date || task.due_date ? ` · due ${formatWATDate(task.task_end_date || task.due_date!)}` : ""}
-          </p>
+      <div
+        key={task.id}
+        onClick={() => openEditTaskDialog(task)}
+        className="group hover:bg-muted/40 flex cursor-pointer flex-wrap items-center justify-between gap-2 border-t px-3 py-2 text-sm transition-colors"
+        role="button"
+        tabIndex={0}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            openEditTaskDialog(task)
+          }
+        }}
+      >
+        <div className="flex min-w-0 flex-1 items-start gap-2.5">
+          <span className="text-muted-foreground w-6 shrink-0 pt-0.5 font-mono text-xs font-semibold">
+            {index + 1}.
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <p className="group-hover:text-primary truncate font-medium transition-colors">{task.title}</p>
+              {task.work_item_number && (
+                <Badge variant="outline" className="text-muted-foreground shrink-0 px-1.5 py-0 font-mono text-[10px]">
+                  {task.work_item_number}
+                </Badge>
+              )}
+            </div>
+            <p className="text-muted-foreground text-xs">
+              {task.assigned_user
+                ? formatFullName(task.assigned_user.first_name, task.assigned_user.last_name)
+                : "Unassigned"}
+              {task.task_end_date || task.due_date
+                ? ` · due ${formatWATDate(task.task_end_date || task.due_date!)}`
+                : ""}
+            </p>
+          </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <Badge variant="outline" className="gap-1 text-[10px]">
@@ -210,6 +303,18 @@ export function ProjectPlanBoard({ project, profiles }: { project: Project; prof
           <Badge variant={config?.badgeVariant ?? "outline"} className="text-[10px] capitalize">
             {config?.label ?? task.status.replaceAll("_", " ")}
           </Badge>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="text-muted-foreground hover:text-foreground h-7 gap-1 px-2 text-xs"
+            onClick={(e) => {
+              e.stopPropagation()
+              openEditTaskDialog(task)
+            }}
+          >
+            <Pencil className="h-3 w-3" />
+            <span className="hidden sm:inline">Edit</span>
+          </Button>
         </div>
       </div>
     )
@@ -259,7 +364,7 @@ export function ProjectPlanBoard({ project, profiles }: { project: Project; prof
         {groupTasks.length === 0 ? (
           <p className="text-muted-foreground border-t px-3 py-3 text-xs">No tasks in this plan yet.</p>
         ) : (
-          groupTasks.map(renderTaskRow)
+          groupTasks.map((task, idx) => renderTaskRow(task, idx))
         )}
       </div>
     )
@@ -315,9 +420,15 @@ export function ProjectPlanBoard({ project, profiles }: { project: Project; prof
       )}
 
       <TaskFormDialog
-        isOpen={taskDialogPlan !== null}
-        onOpenChange={(open) => !open && setTaskDialogPlan(null)}
-        selectedTask={null}
+        isOpen={isTaskDialogOpen}
+        onOpenChange={(open) => {
+          setIsTaskDialogOpen(open)
+          if (!open) {
+            setEditingTask(null)
+            setTaskDialogPlan(null)
+          }
+        }}
+        selectedTask={editingTask}
         taskForm={taskForm}
         setTaskForm={setTaskForm}
         onSave={handleSaveTask}
@@ -326,8 +437,8 @@ export function ProjectPlanBoard({ project, profiles }: { project: Project; prof
         scopedAssignableDepartments={Array.from(new Set(profiles.map((p) => p.department).filter(Boolean) as string[]))}
         lockedProjectId={project.id}
         lockedProjectName={project.project_name}
-        lockedPlanId={taskDialogPlan?.id || null}
-        lockedPlanName={taskDialogPlan?.name || null}
+        lockedPlanId={editingTask ? null : taskDialogPlan?.id || null}
+        lockedPlanName={editingTask ? null : taskDialogPlan?.name || null}
       />
     </div>
   )

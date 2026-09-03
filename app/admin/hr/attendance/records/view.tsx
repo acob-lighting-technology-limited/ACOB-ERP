@@ -16,7 +16,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatCard } from "@/components/ui/stat-card"
-import { Clock, Calendar, Pencil, AlertCircle, Download, MapPin, Camera, ShieldCheck, ShieldX } from "lucide-react"
+import {
+  Clock,
+  Calendar,
+  Pencil,
+  AlertCircle,
+  Download,
+  MapPin,
+  Camera,
+  ShieldCheck,
+  ShieldX,
+  Building,
+  FileText,
+  MessageSquare,
+} from "lucide-react"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
@@ -31,7 +44,7 @@ import {
 import { isLate } from "@/lib/hr/attendance-utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiFetch } from "@/lib/api-client"
-import { StatusBadge } from "../_components/status-badge"
+import { StatusBadge, labelSource } from "../_components/status-badge"
 
 const log = logger("admin-attendance-records")
 
@@ -370,16 +383,17 @@ export function AdminAttendanceRecordsPage({
           </Button>
         }
         stats={
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <StatCard title="Total Records" value={records.length} icon={Calendar} />
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
+            <StatCard variant="compact" title="Total Records" value={records.length} icon={Calendar} />
             <StatCard
+              variant="compact"
               title="Missing Clock-Out"
               value={incomplete}
               icon={AlertCircle}
               iconBgColor="bg-orange-500/10"
               iconColor="text-orange-500"
             />
-            <StatCard title="Total Hours" value={totalHours.toFixed(1)} icon={Clock} />
+            <StatCard variant="compact" title="Total Hours" value={totalHours.toFixed(1)} icon={Clock} />
           </div>
         }
       >
@@ -417,6 +431,162 @@ export function AdminAttendanceRecordsPage({
           searchPlaceholder="Search employee or department..."
           searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
           isLoading={loading}
+          expandable={{
+            render: (r) => (
+              <div className="grid gap-3 p-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                <div className="bg-muted/20 rounded-lg border p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-medium">Source & Verification</span>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    <Badge variant="outline" className="text-[10px]">
+                      {r.source || "Unknown"}
+                    </Badge>
+                    {r.face_verified != null && (
+                      <Badge variant={r.face_verified ? "default" : "destructive"} className="text-[10px]">
+                        {r.face_verified
+                          ? `Face: ${r.face_match_confidence ? `${Math.round(r.face_match_confidence * 100)}%` : "Verified"}`
+                          : "Face Failed"}
+                      </Badge>
+                    )}
+                    {r.location_verified != null && (
+                      <Badge variant={r.location_verified ? "default" : "secondary"} className="text-[10px]">
+                        {r.location_verified ? "Location OK" : "Unverified Location"}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-muted/20 rounded-lg border p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-medium">Coordinates & Device</span>
+                  <p className="text-foreground mt-1 font-mono">
+                    {r.latitude && r.longitude ? `${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}` : "No GPS data"}
+                  </p>
+                </div>
+
+                <div className="bg-muted/20 rounded-lg border p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-medium">Hours & Edits</span>
+                  <p className="text-foreground mt-1">
+                    Total: {r.total_hours != null ? `${r.total_hours.toFixed(1)}h` : "-"}
+                    {r.editor_first_name && ` · Edited by ${r.editor_first_name}`}
+                  </p>
+                  {r.manual_comment && (
+                    <p className="text-muted-foreground mt-1 italic">&ldquo;{r.manual_comment}&rdquo;</p>
+                  )}
+                </div>
+
+                {(r.selfie_url || r.selfie_out_url) && (
+                  <div className="bg-muted/20 rounded-lg border p-2.5">
+                    <span className="text-muted-foreground block text-[11px] font-medium">Verification Photos</span>
+                    <div className="mt-1 flex items-center gap-2">
+                      {r.selfie_url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={r.selfie_url}
+                          alt="Check-in selfie"
+                          className="h-12 w-12 rounded border object-cover"
+                        />
+                      )}
+                      {r.selfie_out_url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={r.selfie_out_url}
+                          alt="Check-out selfie"
+                          className="h-12 w-12 rounded border object-cover"
+                        />
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ),
+          }}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (r) =>
+              r.status === "present"
+                ? "bg-emerald-500"
+                : r.status === "late"
+                  ? "bg-amber-500"
+                  : r.status === "absent"
+                    ? "bg-red-500"
+                    : "bg-blue-500",
+            title: (r) => `${r.user_name} · ${formatDate(r.date)}`,
+            subtitle: (r) =>
+              `${r.department} · In: ${formatTime(r.clock_in)} · Out: ${formatTime(r.clock_out)} · ${r.total_hours?.toFixed(1) ?? 0}h`,
+            trailing: (r) => <StatusBadge status={r.status} record={r} />,
+            detail: {
+              title: (r) => r.user_name,
+              subtitle: (r) =>
+                `${r.department} · ${formatWATDate(r.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}`,
+              badges: (r) => <StatusBadge status={r.status} record={r} />,
+              fields: (r) => [
+                { icon: Building, label: "Department", value: r.department },
+                {
+                  icon: Calendar,
+                  label: "Date",
+                  value: formatWATDate(r.date, { day: "numeric", month: "short", year: "numeric" }),
+                },
+                { icon: Clock, label: "Clock In", value: formatTime(r.clock_in) },
+                { icon: Clock, label: "Clock Out", value: formatTime(r.clock_out) },
+                ...(r.total_hours != null
+                  ? [{ icon: Clock, label: "Total Hours", value: `${r.total_hours.toFixed(2)} hrs` }]
+                  : []),
+                ...(r.source ? [{ icon: FileText, label: "Source", value: labelSource(r.source) }] : []),
+                ...(r.location_verified != null
+                  ? [
+                      {
+                        icon: r.location_verified ? ShieldCheck : ShieldX,
+                        label: "Location Verified",
+                        value: r.location_verified ? "Yes (On-site / Geofenced)" : "No",
+                      },
+                    ]
+                  : []),
+                ...(r.face_verified != null
+                  ? [
+                      {
+                        icon: r.face_verified ? ShieldCheck : ShieldX,
+                        label: "Face Verified",
+                        value: r.face_verified
+                          ? `Yes${r.face_match_confidence ? ` (${Math.round(r.face_match_confidence * 100)}% match)` : ""}`
+                          : "No",
+                      },
+                    ]
+                  : []),
+              ],
+              actions: (r) => [
+                {
+                  label: "Edit Record",
+                  icon: Pencil,
+                  onClick: () => openEdit(r),
+                },
+              ],
+            },
+          }}
+          cardRenderer={(r) => (
+            <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{r.user_name}</p>
+                  <p className="text-muted-foreground text-xs">{r.department}</p>
+                </div>
+                <StatusBadge status={r.status} record={r} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-muted-foreground">Clock In:</span> {formatTime(r.clock_in)}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Clock Out:</span> {formatTime(r.clock_out)}
+                </div>
+              </div>
+              <div className="flex items-center justify-between border-t pt-2 text-[10px]">
+                <span>{formatDate(r.date)}</span>
+                <span className="font-semibold">{r.total_hours?.toFixed(1) ?? 0} hrs</span>
+              </div>
+            </div>
+          )}
           emptyTitle="No records found"
           emptyDescription="Adjust the date range and try again."
           emptyIcon={Calendar}

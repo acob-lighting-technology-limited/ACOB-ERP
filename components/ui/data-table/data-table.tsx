@@ -766,16 +766,14 @@ export function DataTable<TData>({
         rows[idx - 1]?.focus()
       } else if (e.key === "Enter" || e.key === " ") {
         const targetRow = paginatedData.find((r) => getRowId(r) === rowId)
-        if (expandable) {
-          toggleExpand(rowId)
-        } else if (detailConfig) {
-          if (targetRow) setDetailRow(targetRow)
-        } else if (onRowSelect && targetRow) {
+        if (onRowSelect && targetRow) {
           onRowSelect(targetRow)
+        } else if (mobileRow?.onSelect && targetRow) {
+          mobileRow.onSelect(targetRow)
         }
       }
     },
-    [expandable, toggleExpand, detailConfig, onRowSelect, paginatedData, getRowId]
+    [onRowSelect, mobileRow, paginatedData, getRowId]
   )
 
   // Where the pointer went down on a row, so a click that was really a text-selection
@@ -1259,24 +1257,18 @@ export function DataTable<TData>({
                         ) {
                           return
                         }
-                        // Highlighting text inside a row must not expand it.
+                        // Highlighting text inside a row must not trigger selection.
                         if (clickWasTextSelection(e)) return
-                        if (canExpand) {
-                          toggleExpand(rowId)
-                        } else if (detailConfig) {
-                          setDetailRow(row)
-                        } else if (onRowSelect) {
-                          // A page whose detail lives in its own dialog opens it from
-                          // the table row too, so "click the row" means the same thing
-                          // in every view rather than only in the list.
+                        if (onRowSelect) {
                           onRowSelect(row)
+                        } else if (mobileRow?.onSelect) {
+                          mobileRow.onSelect(row)
                         }
                       }}
                       className={cn(
                         isExpanded && "border-b-0",
                         selectedRows.has(rowId) && "bg-muted/50",
-                        (canExpand || Boolean(detailConfig) || Boolean(onRowSelect)) &&
-                          "hover:bg-muted/30 cursor-pointer",
+                        (Boolean(onRowSelect) || Boolean(mobileRow?.onSelect)) && "hover:bg-muted/30 cursor-pointer",
                         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
                       )}
                     >
@@ -1582,30 +1574,47 @@ export function DataTable<TData>({
               )}
             </SheetHeader>
 
-            <div className="space-y-1">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {detailConfig.fields(detailRow).map((field) => {
                 if (!field.value) return null
                 const canOpen = Boolean(field.href)
                 const canCopy = !canOpen && field.copyable !== false
                 const Icon = field.icon
-                const body = (
-                  <>
-                    {Icon && <Icon className="text-muted-foreground h-4 w-4 shrink-0" />}
-                    <span className="min-w-0 flex-1">
-                      <span className="text-muted-foreground block text-[11px]">{field.label}</span>
-                      <span
-                        className={cn(
-                          "block text-sm leading-relaxed break-words whitespace-pre-wrap",
-                          field.muted && "text-muted-foreground",
-                          canOpen && "text-primary font-medium"
-                        )}
-                      >
-                        {field.value}
-                      </span>
+                const strValue = String(field.value)
+                const isLong =
+                  Boolean(field.fullWidth) ||
+                  (field.colSpan != null && field.colSpan > 1) ||
+                  strValue.length > 35 ||
+                  strValue.includes("\n") ||
+                  canOpen
+                const spanClass =
+                  field.fullWidth || (isLong && !field.colSpan)
+                    ? "col-span-2 sm:col-span-3"
+                    : field.colSpan === 3
+                      ? "col-span-2 sm:col-span-3"
+                      : field.colSpan === 2
+                        ? "col-span-2"
+                        : "col-span-1"
+
+                const tileContent = (
+                  <div className="flex h-full min-w-0 flex-col justify-between">
+                    <div className="text-muted-foreground flex items-center gap-1.5">
+                      {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
+                      <span className="truncate text-[11px] font-medium tracking-tight">{field.label}</span>
+                      {canOpen && <ExternalLink className="text-primary/70 ml-auto h-3 w-3 shrink-0" />}
+                      {canCopy && <Copy className="text-muted-foreground/60 ml-auto h-3 w-3 shrink-0" />}
+                    </div>
+                    <span
+                      className={cn(
+                        "mt-1.5 block text-xs leading-snug font-medium break-words",
+                        field.muted && "text-muted-foreground font-normal",
+                        canOpen && "text-primary font-medium hover:underline",
+                        isLong && "text-xs font-normal whitespace-pre-wrap"
+                      )}
+                    >
+                      {field.value}
                     </span>
-                    {canOpen && <ExternalLink className="text-primary/70 h-3.5 w-3.5 shrink-0" />}
-                    {canCopy && <Copy className="text-muted-foreground/60 h-3.5 w-3.5 shrink-0" />}
-                  </>
+                  </div>
                 )
 
                 if (canOpen) {
@@ -1615,9 +1624,12 @@ export function DataTable<TData>({
                       href={field.href}
                       target="_blank"
                       rel="noreferrer"
-                      className="hover:bg-muted/40 flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors"
+                      className={cn(
+                        "hover:bg-muted/40 bg-muted/20 focus-visible:ring-ring rounded-lg border p-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
+                        spanClass
+                      )}
                     >
-                      {body}
+                      {tileContent}
                     </a>
                   )
                 }
@@ -1626,14 +1638,17 @@ export function DataTable<TData>({
                   <button
                     key={field.label}
                     type="button"
-                    onClick={() => copyField(String(field.value), field.label)}
-                    className="hover:bg-muted/40 flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors"
+                    onClick={() => copyField(strValue, field.label)}
+                    className={cn(
+                      "hover:bg-muted/40 bg-muted/20 focus-visible:ring-ring rounded-lg border p-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
+                      spanClass
+                    )}
                   >
-                    {body}
+                    {tileContent}
                   </button>
                 ) : (
-                  <div key={field.label} className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5">
-                    {body}
+                  <div key={field.label} className={cn("bg-muted/20 rounded-lg border p-2.5 text-left", spanClass)}>
+                    {tileContent}
                   </div>
                 )
               })}
@@ -1740,14 +1755,39 @@ export function DataTable<TData>({
           {statusBar}
 
           {isLoading ? (
-            /* Skeleton rows — no top border since statusBar has border-t */
+            /* Skeleton rows — responsive contacts list below md, table above md */
             <div className="border-t">
-              <TableSkeleton
-                rows={skeletonRows}
-                cols={visibleColumns.length + (showRowNumbers ? 1 : 0) + (rowActions?.length ? 1 : 0)}
-                headerClassName={headerClassName}
-                borderless
-              />
+              {responsivePair ? (
+                <>
+                  <div className="divide-y md:hidden">
+                    {Array.from({ length: Math.min(skeletonRows, 6) }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3">
+                        <Skeleton className="h-9 w-9 shrink-0 rounded-full" />
+                        <div className="min-w-0 flex-1 space-y-1.5">
+                          <Skeleton className="h-4 w-36 max-w-full" />
+                          <Skeleton className="h-3 w-48 max-w-full" />
+                        </div>
+                        <Skeleton className="h-5 w-14 shrink-0 rounded-full" />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="hidden md:block">
+                    <TableSkeleton
+                      rows={skeletonRows}
+                      cols={visibleColumns.length + (showRowNumbers ? 1 : 0) + (rowActions?.length ? 1 : 0)}
+                      headerClassName={headerClassName}
+                      borderless
+                    />
+                  </div>
+                </>
+              ) : (
+                <TableSkeleton
+                  rows={skeletonRows}
+                  cols={visibleColumns.length + (showRowNumbers ? 1 : 0) + (rowActions?.length ? 1 : 0)}
+                  headerClassName={headerClassName}
+                  borderless
+                />
+              )}
             </div>
           ) : error ? (
             <div className="space-y-3 border-t py-12 text-center">

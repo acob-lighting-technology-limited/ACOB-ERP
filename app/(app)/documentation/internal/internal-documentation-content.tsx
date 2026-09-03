@@ -367,16 +367,18 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
       tabs={tabs}
       activeTab={activeTab}
       onTabChange={setActiveTab}
+      spacing="tight"
+      actionsPlacement="inline-always"
       actions={
         <Button onClick={openCreateDialog} size="sm" className="gap-2">
-          <Plus className="h-4 w-4" />
+          <Plus className="h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">New Document</span>
-          <span className="sm:hidden">New</span>
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total Docs"
             value={stats.total}
             icon={FileText}
@@ -384,6 +386,7 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Published"
             value={stats.published}
             icon={FileText}
@@ -391,6 +394,7 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Draft"
             value={stats.draft}
             icon={FileText}
@@ -447,9 +451,41 @@ export function InternalDocumentationContent({ initialDocs, userId }: InternalDo
           ),
         }}
         viewToggle
+        stickyToolbar
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (doc) => doc.title,
+          subtitle: (doc) =>
+            [doc.category, doc.visibility === "general" ? "General" : "Private"].filter(Boolean).join(" · "),
+          trailing: (doc) => (
+            <Badge className={getStatusColor(doc.is_draft)}>{doc.is_draft ? "Draft" : "Published"}</Badge>
+          ),
+          detail: {
+            title: (doc) => doc.title,
+            fields: (doc) => [
+              { label: "Category", value: doc.category || null },
+              { label: "Status", value: doc.is_draft ? "Draft" : "Published" },
+              { label: "Visibility", value: doc.visibility === "general" ? "General" : "Private" },
+              { label: "Author", value: doc.author_name || null },
+              { label: "Updated", value: formatDate(doc.updated_at) },
+            ],
+            actions: (doc) => [
+              {
+                label: "View",
+                icon: Eye,
+                variant: "outline" as const,
+                onClick: () => {
+                  setSelectedDoc(doc)
+                  setIsViewDialogOpen(true)
+                },
+              },
+            ],
+          },
+        }}
         cardRenderer={(doc) => (
           <div
-            className="bg-card hover:border-primary cursor-pointer rounded-xl border-2 p-4 transition-all"
+            className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full cursor-pointer space-y-3 rounded-xl border p-4 shadow-sm transition-all"
             onClick={() => {
               setSelectedDoc(doc)
               setIsViewDialogOpen(true)

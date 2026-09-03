@@ -355,8 +355,9 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
   const totalDeductions = rows.reduce((acc, r) => acc + r.breakdown.totalDeductions, 0)
 
   const stats = (
-    <div className="grid grid-cols-1 gap-2 sm:gap-3 lg:grid-cols-4">
+    <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
       <StatCard
+        variant="compact"
         title="Cumulative Gross Pay"
         value={`₦${totalGross.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
         icon={DollarSign}
@@ -364,6 +365,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
         iconColor="text-purple-500"
       />
       <StatCard
+        variant="compact"
         title="Cumulative Net Disbursement"
         value={`₦${totalNet.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
         icon={DollarSign}
@@ -371,6 +373,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
         iconColor="text-emerald-500"
       />
       <StatCard
+        variant="compact"
         title="Total PAYE Tax Collected"
         value={`₦${totalTax.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
         icon={FileText}
@@ -378,6 +381,7 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
         iconColor="text-blue-500"
       />
       <StatCard
+        variant="compact"
         title="Total Deductions Applied"
         value={`₦${totalDeductions.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
         icon={Clock}
@@ -657,6 +661,42 @@ export function PayrollWorksheetPage({ initialData }: WorksheetPageProps) {
           const nextPeriod = selected.period?.[0]
           if (nextPeriod && nextPeriod !== period.id) router.push(`/admin/payroll/${nextPeriod}`)
         }}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: () => "bg-emerald-500",
+          title: (r) => formatEmployeeName(r),
+          subtitle: (r) =>
+            `${r.department || "General"} · Gross: ${money(r.breakdown.monthlyGross)} · Net: ${money(r.breakdown.netPay)}`,
+          trailing: (r) => (
+            <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+              {money(r.breakdown.netPay)}
+            </span>
+          ),
+          onSelect: (r) => setViewRow(r),
+        }}
+        cardRenderer={(r) => (
+          <div
+            className="bg-card cursor-pointer space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md"
+            onClick={() => setViewRow(r)}
+          >
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{formatEmployeeName(r)}</p>
+                <p className="text-muted-foreground text-xs">{r.department || "General"}</p>
+              </div>
+              <span className="font-mono text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                {money(r.breakdown.netPay)}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 border-t pt-2 text-[11px]">
+              <div>Gross: {money(r.breakdown.monthlyGross)}</div>
+              <div>Tax: {money(r.breakdown.monthlyTax)}</div>
+            </div>
+          </div>
+        )}
         emptyIcon={FileText}
         emptyTitle="No employees to calculate"
         emptyDescription="No active employees were found for this payroll period."

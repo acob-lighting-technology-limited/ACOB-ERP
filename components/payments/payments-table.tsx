@@ -771,6 +771,7 @@ export function PaymentsTable({
       description="Manage and track department payments and recurring subscriptions."
       icon={CreditCard}
       backLink={backLink}
+      spacing="tight"
       stats={<PaymentStatsCards stats={stats} formatCurrency={formatCurrency} />}
       actions={
         <div className="flex flex-wrap items-center gap-2">
@@ -808,6 +809,38 @@ export function PaymentsTable({
         }}
         pagination={{ pageSize: 12 }}
         viewToggle
+        stickyToolbar
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (row) => row.title,
+          subtitle: (row) => row.departmentName,
+          trailing: (row) => (
+            <Badge className={getStatusColor(row.status)} variant="outline">
+              {row.status}
+            </Badge>
+          ),
+          detail: {
+            title: (row) => row.title,
+            fields: (row) => [
+              { label: "Department", value: row.departmentName },
+              { label: "Type", value: row.paymentTypeLabel },
+              { label: "Amount", value: formatCurrency(row.amount, row.currency) },
+              { label: "Amount Due", value: formatCurrency(row.amountDue, row.currency) },
+              { label: "Date / Next Due", value: row.dateLabel },
+              { label: "Issuer", value: row.issuerDisplay || null },
+              { label: "Reference", value: row.payment_reference || null },
+            ],
+            actions: (row) => [
+              {
+                label: "View Details",
+                icon: Eye,
+                variant: "outline" as const,
+                onClick: () => router.push(`${basePath}/${row.id}`, { scroll: false }),
+              },
+            ],
+          },
+        }}
         urlSync
         skeletonRows={6}
         emptyIcon={CreditCard}
