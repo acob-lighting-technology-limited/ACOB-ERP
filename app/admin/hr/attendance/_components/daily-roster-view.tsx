@@ -425,41 +425,6 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
 
   return (
     <>
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <Label className="text-sm font-medium">Date</Label>
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8 shrink-0"
-            onClick={() => shiftDate(-1)}
-            title="Previous day"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <input
-            type="date"
-            value={rosterDate}
-            max={todayIso}
-            onChange={(e) => setRosterDate(e.target.value)}
-            className="border-input bg-background rounded-md border px-3 py-1.5 text-sm"
-          />
-          <Button
-            variant="outline"
-            size="icon"
-            className="h-8 w-8 shrink-0"
-            onClick={() => shiftDate(1)}
-            disabled={rosterDate >= todayIso}
-            title="Next day"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-        <Button variant="outline" size="sm" onClick={() => void load()}>
-          Refresh
-        </Button>
-      </div>
-
       <div className="mb-4 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
         <StatCard
           variant="compact"
@@ -501,6 +466,41 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           iconBgColor="bg-red-500/10"
           iconColor="text-red-500"
         />
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <Label className="text-sm font-medium">Date</Label>
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={() => shiftDate(-1)}
+            title="Previous day"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <input
+            type="date"
+            value={rosterDate}
+            max={todayIso}
+            onChange={(e) => setRosterDate(e.target.value)}
+            className="border-input bg-background rounded-md border px-3 py-1.5 text-sm"
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            className="h-8 w-8 shrink-0"
+            onClick={() => shiftDate(1)}
+            disabled={rosterDate >= todayIso}
+            title="Next day"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => void load()}>
+          Refresh
+        </Button>
       </div>
 
       <DataTable<AttendanceRecord>

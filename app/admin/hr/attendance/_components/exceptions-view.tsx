@@ -292,34 +292,6 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
 
   return (
     <>
-      {/* Date range controls */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <div className="flex items-center gap-2">
-          <Label className="text-sm font-medium">From</Label>
-          <input
-            type="date"
-            value={startDate}
-            max={endDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className="border-input bg-background rounded-md border px-3 py-1.5 text-sm"
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Label className="text-sm font-medium">To</Label>
-          <input
-            type="date"
-            value={endDate}
-            min={startDate}
-            max={toLocalISODate()}
-            onChange={(e) => setEndDate(e.target.value)}
-            className="border-input bg-background rounded-md border px-3 py-1.5 text-sm"
-          />
-        </div>
-        <Button variant="outline" size="sm" onClick={() => void load()}>
-          Refresh
-        </Button>
-      </div>
-
       {/* Stats */}
       <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
         <StatCard
@@ -346,6 +318,34 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
           iconBgColor="bg-red-500/10"
           iconColor="text-red-500"
         />
+      </div>
+
+      {/* Date range controls */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="flex items-center gap-2">
+          <Label className="text-sm font-medium">From</Label>
+          <input
+            type="date"
+            value={startDate}
+            max={endDate}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="border-input bg-background rounded-md border px-3 py-1.5 text-sm"
+          />
+        </div>
+        <div className="flex items-center gap-2">
+          <Label className="text-sm font-medium">To</Label>
+          <input
+            type="date"
+            value={endDate}
+            min={startDate}
+            max={toLocalISODate()}
+            onChange={(e) => setEndDate(e.target.value)}
+            className="border-input bg-background rounded-md border px-3 py-1.5 text-sm"
+          />
+        </div>
+        <Button variant="outline" size="sm" onClick={() => void load()}>
+          Refresh
+        </Button>
       </div>
 
       <DataTable<AttendanceRecord>

@@ -1075,20 +1075,28 @@ export function AttendanceReportsPage({
       onTabChange={(t) => setActiveTab(t as AttendanceTab)}
       actions={
         <div className="flex items-center gap-2">
-          <Button variant="outline" onClick={() => setReportDialogOpen(true)} size="sm">
-            <Mail className="mr-1.5 h-4 w-4" />
+          <Button variant="outline" onClick={() => setReportDialogOpen(true)} size="sm" title="Reports">
+            <Mail className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline">Reports</span>
+            <span className="sr-only sm:hidden">Reports</span>
           </Button>
           {!lockedDepartment && (
-            <Button variant="outline" onClick={() => setManagerOpen(true)} size="sm">
-              <Settings2 className="mr-1.5 h-4 w-4" />
+            <Button variant="outline" onClick={() => setManagerOpen(true)} size="sm" title="Attendance Manager">
+              <Settings2 className="h-4 w-4 sm:mr-1.5" />
               <span className="hidden sm:inline">Attendance Manager</span>
-              <span className="sm:hidden">Manager</span>
+              <span className="sr-only sm:hidden">Attendance Manager</span>
             </Button>
           )}
-          <Button variant="outline" onClick={() => setIsExportOpen(true)} disabled={reports.length === 0} size="sm">
-            <Download className="mr-1.5 h-4 w-4" />
+          <Button
+            variant="outline"
+            onClick={() => setIsExportOpen(true)}
+            disabled={reports.length === 0}
+            size="sm"
+            title="Export"
+          >
+            <Download className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline">Export</span>
+            <span className="sr-only sm:hidden">Export</span>
           </Button>
         </div>
       }
