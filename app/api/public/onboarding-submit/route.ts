@@ -1,9 +1,11 @@
-import { createClient } from "@supabase/supabase-js"
+import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { getClientId, rateLimit } from "@/lib/rate-limit"
 import { checkRequestSize } from "@/lib/api/request-size"
 import { sendNotificationEmail } from "@/lib/notifications/email-gateway"
+import { ORG_EMAIL_SENDERS, ORG_MAIL_ROUTING, ORG_HR_EMAIL } from "@/lib/org-config"
+import { renderOnboardingSubmissionEmail } from "@/lib/email-templates/onboarding-submission"
 import { formatName } from "@/lib/utils"
 
 const OnboardingSubmitSchema = z.object({
@@ -125,8 +127,8 @@ export async function POST(req: Request) {
     if (updateError) {
       return NextResponse.json({ error: updateError.message }, { status: 500 })
     }
-    // Notify Admin and HR lead of the updated submission in the background
-    void notifyAdminsOfSubmission(supabase, parsed, personalEmail)
+    // Notify HR department of the updated submission in the background
+    void notifyHROfSubmission(supabase, parsed.data, personalEmail)
     return NextResponse.json({ success: true, reused: true })
   }
 
@@ -140,107 +142,53 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: insertError.message }, { status: 500 })
   }
 
-  // Notify Admin and HR lead of the new submission in the background
-  void notifyAdminsOfSubmission(supabase, parsed, personalEmail)
+  // Notify HR department of the new submission in the background
+  void notifyHROfSubmission(supabase, parsed.data, personalEmail)
   return NextResponse.json({ success: true, reused: false })
 }
 
-async function notifyAdminsOfSubmission(supabase: any, parsed: any, personalEmail: string) {
+interface DepartmentEmailRow {
+  email: string | null
+}
+
+async function notifyHROfSubmission(
+  supabase: SupabaseClient<any, any, any>,
+  applicant: z.infer<typeof OnboardingSubmitSchema>,
+  personalEmail: string
+) {
   try {
-    const { data: adminProfiles } = await supabase
-      .from("profiles")
-      .select("company_email, additional_email")
-      .in("role", ["admin", "super_admin"])
-      .eq("employment_status", "active")
+    // Resolve HR department official email, falling back to ORG_HR_EMAIL
+    const { data: hrDept } = (await supabase
+      .from("departments")
+      .select("email")
+      .or("name.eq.Admin and HR,department_code.eq.HR")
+      .eq("is_active", true)
+      .maybeSingle()) as { data: DepartmentEmailRow | null }
 
-    const { data: hrProfiles } = await supabase
-      .from("profiles")
-      .select("company_email, additional_email")
-      .contains("admin_domains", ["hr"])
-      .eq("employment_status", "active")
+    const hrEmail = (hrDept?.email || ORG_HR_EMAIL || "").trim().toLowerCase()
+    if (!hrEmail || !hrEmail.includes("@")) return
 
-    const { data: hrDeptLeads } = await supabase
-      .from("profiles")
-      .select("company_email, additional_email")
-      .eq("is_department_lead", true)
-      .eq("employment_status", "active")
-      .or("department.ilike.%hr%,department.ilike.%human resources%,department.ilike.%people%")
+    const subject = `Onboarding Form Submitted — ${applicant.first_name} ${applicant.last_name}`
+    const html = renderOnboardingSubmissionEmail({
+      applicant: {
+        first_name: applicant.first_name,
+        last_name: applicant.last_name,
+        department: applicant.department,
+        designation: applicant.designation,
+        personal_email: personalEmail,
+        phone_number: applicant.phone_number,
+        employment_type: applicant.employment_type,
+      },
+    })
 
-    const recipientEmails = new Set<string>()
-    const addEmails = (list: any[] | null) => {
-      if (!list) return
-      list.forEach((p) => {
-        if (p.company_email) recipientEmails.add(p.company_email.trim().toLowerCase())
-        if (p.additional_email) recipientEmails.add(p.additional_email.trim().toLowerCase())
-      })
-    }
-
-    addEmails(adminProfiles)
-    addEmails(hrProfiles)
-    addEmails(hrDeptLeads)
-
-    const toList = Array.from(recipientEmails).filter((email) => email.includes("@"))
-
-    if (toList.length > 0) {
-      const htmlBody = `
-        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-          <h2 style="color: #0f172a; margin-top: 0;">New Onboarding Submission</h2>
-          <p>A new employee onboarding form has been submitted and is pending review.</p>
-          
-          <div style="background-color: #f8fafc; padding: 15px; border-radius: 6px; margin: 20px 0;">
-            <h3 style="margin-top: 0; color: #1e293b; font-size: 14px; text-transform: uppercase; letter-spacing: 0.05em;">Applicant Details</h3>
-            <table style="width: 100%; border-collapse: collapse;">
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-size: 14px; width: 140px;"><strong>Name:</strong></td>
-                <td style="padding: 6px 0; color: #0f172a; font-size: 14px;">${parsed.data.first_name} ${parsed.data.last_name}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-size: 14px;"><strong>Department:</strong></td>
-                <td style="padding: 6px 0; color: #0f172a; font-size: 14px;">${parsed.data.department || "N/A"}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-size: 14px;"><strong>Designation:</strong></td>
-                <td style="padding: 6px 0; color: #0f172a; font-size: 14px;">${parsed.data.designation}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-size: 14px;"><strong>Personal Email:</strong></td>
-                <td style="padding: 6px 0; color: #0f172a; font-size: 14px;">${personalEmail}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-size: 14px;"><strong>Phone Number:</strong></td>
-                <td style="padding: 6px 0; color: #0f172a; font-size: 14px;">${parsed.data.phone_number}</td>
-              </tr>
-              <tr>
-                <td style="padding: 6px 0; color: #64748b; font-size: 14px;"><strong>Employment Type:</strong></td>
-                <td style="padding: 6px 0; color: #0f172a; font-size: 14px;">${parsed.data.employment_type.replace("_", " ").replace(/\b\w/g, (c: string) => c.toUpperCase())}</td>
-              </tr>
-            </table>
-          </div>
-          
-          <p>Please log in to the admin console to review and approve the candidate.</p>
-          
-          <div style="margin-top: 25px; border-top: 1px solid #e2e8f0; padding-top: 15px;">
-            <a href="${process.env.NEXT_PUBLIC_PORTAL_URL || "https://matrix.acoblighting.com"}/admin/hr/employees"
-               style="display: inline-block; background-color: #0284c7; color: #ffffff; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 14px;">
-              Review Application
-            </a>
-          </div>
-        </div>
-      `
-
-      for (const recipient of toList) {
-        try {
-          await sendNotificationEmail({
-            to: [recipient],
-            subject: `New Onboarding Form Submitted - ${parsed.data.first_name} ${parsed.data.last_name}`,
-            html: htmlBody,
-          })
-        } catch (emailErr) {
-          console.error(`Failed to send onboarding notification to ${recipient}:`, emailErr)
-        }
-      }
-    }
+    await sendNotificationEmail({
+      from: ORG_EMAIL_SENDERS.system,
+      ...ORG_MAIL_ROUTING.Onboarding,
+      to: [hrEmail],
+      subject,
+      html,
+    })
   } catch (err) {
-    console.error("Failed to notify admins of onboarding submission:", err)
+    console.error("Failed to notify HR of onboarding submission:", err)
   }
 }
