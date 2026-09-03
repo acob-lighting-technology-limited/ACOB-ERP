@@ -235,8 +235,9 @@ export function AdminAuditLogsContent({
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total logs"
             value={stats.total}
             icon={ScrollText}
@@ -244,6 +245,7 @@ export function AdminAuditLogsContent({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Creates"
             value={stats.creates}
             icon={Plus}
@@ -251,6 +253,7 @@ export function AdminAuditLogsContent({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Updates"
             value={stats.updates}
             icon={Pencil}
@@ -258,6 +261,7 @@ export function AdminAuditLogsContent({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Deletes"
             value={stats.deletes}
             icon={Trash2}
@@ -374,6 +378,23 @@ export function AdminAuditLogsContent({
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.action === "delete" ? "bg-rose-500" : r.action === "create" ? "bg-emerald-500" : "bg-blue-500",
+          title: (r) => getAuditLogSummary(r),
+          subtitle: (r) =>
+            `${r.user ? `${r.user.first_name} ${r.user.last_name}` : "System"} · ${r.entity_type} · ${new Date(r.created_at).toLocaleTimeString("en-US", { timeZone: "Africa/Lagos", hour: "2-digit", minute: "2-digit" })}`,
+          trailing: (r) => (
+            <Badge className={getAuditActionColor(r.action || "update")}>{formatName(r.action || "update")}</Badge>
+          ),
+          onSelect: (r) => {
+            setSelectedLog(r)
+            setIsDetailsOpen(true)
+          },
+        }}
         cardRenderer={(r) => (
           <div
             className="bg-card group relative cursor-pointer rounded-xl border p-4 transition-all hover:shadow-md"

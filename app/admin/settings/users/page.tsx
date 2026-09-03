@@ -258,8 +258,9 @@ export default function UsersPage() {
         </div>
       }
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total Users"
             value={stats.total}
             icon={Users}
@@ -267,6 +268,7 @@ export default function UsersPage() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Active"
             value={stats.active}
             icon={Users}
@@ -274,6 +276,7 @@ export default function UsersPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Admins"
             value={stats.admins}
             icon={Shield}
@@ -306,6 +309,21 @@ export default function UsersPage() {
           },
         ]}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (u) =>
+            u.employment_status === "exited" ? "bg-rose-500" : u.is_active ? "bg-emerald-500" : "bg-slate-400",
+          title: (u) => (u.first_name || u.last_name ? `${u.first_name} ${u.last_name}` : u.email || "User"),
+          subtitle: (u) => `${u.role.replace(/_/g, " ")} · ${u.department || "No department"} · ${u.email}`,
+          trailing: (u) => (
+            <Badge variant={u.is_active ? "default" : "secondary"} className="text-[10px]">
+              {u.employment_status === "exited" ? "Exited" : u.is_active ? "Active" : "Inactive"}
+            </Badge>
+          ),
+          onSelect: (u) => openEdit(u),
+        }}
         cardRenderer={(u) => (
           <Card className="transition-shadow hover:shadow-md">
             <CardContent className="space-y-3 p-4">

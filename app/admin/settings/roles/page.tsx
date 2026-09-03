@@ -12,7 +12,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Lock, Shield, Users } from "lucide-react"
+import { Lock, Shield, ShieldAlert, Users } from "lucide-react"
 import { toast } from "sonner"
 import { DepartmentLeadsManager } from "@/components/admin/department-leads-manager"
 import { DataTable, DataTablePage } from "@/components/ui/data-table"
@@ -286,6 +286,7 @@ export default function RolesPage() {
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total Roles"
             value={stats.total}
             icon={Shield}
@@ -293,13 +294,15 @@ export default function RolesPage() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="System Roles"
             value={stats.system}
-            icon={Lock}
+            icon={ShieldAlert}
             iconBgColor="bg-red-500/10"
             iconColor="text-red-500"
           />
           <StatCard
+            variant="compact"
             title="Custom Roles"
             value={stats.custom}
             icon={Users}
@@ -307,6 +310,7 @@ export default function RolesPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Visible Roles"
             value={visibleRoles.length}
             icon={Shield}
@@ -368,16 +372,38 @@ export default function RolesPage() {
               </div>
               <div className="rounded-lg border p-4">
                 <p className="text-muted-foreground text-xs tracking-wide uppercase">Permissions</p>
-                <p className="mt-2 text-sm">{(role.permissions || []).join(", ") || "No explicit permissions"}</p>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {role.permissions?.map((p) => (
+                    <Badge key={p} variant="secondary" className="text-xs">
+                      {p}
+                    </Badge>
+                  ))}
+                </div>
               </div>
               <div className="rounded-lg border p-4">
-                <p className="text-muted-foreground text-xs tracking-wide uppercase">Users Assigned</p>
-                <p className="mt-2 text-sm">{role.user_count || 0}</p>
+                <p className="text-muted-foreground text-xs tracking-wide uppercase">Assigned Users</p>
+                <p className="mt-2 text-sm">
+                  {role.user_count} {role.user_count === 1 ? "user" : "users"}
+                </p>
               </div>
             </div>
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (role) => (role.is_system ? "bg-rose-500" : "bg-emerald-500"),
+          title: (role) => role.name.replace(/_/g, " "),
+          subtitle: (role) => `${role.user_count || 0} users · ${role.permissions?.length || 0} permissions`,
+          trailing: (role) => (
+            <Badge variant={role.is_system ? "destructive" : "outline"} className="text-[10px]">
+              {role.is_system ? "System" : "Custom"}
+            </Badge>
+          ),
+          onSelect: (role) => openEdit(role),
+        }}
         cardRenderer={(role) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">
