@@ -100,7 +100,7 @@ export function UiErrorsContent({ rows, stats, error }: UiErrorsContentProps) {
       icon={Bug}
       backLink={{ href: "/admin/dev", label: "Back to DEV" }}
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <StatCard variant="compact" title="Total Captured" value={stats.total} icon={Bug} />
           <StatCard variant="compact" title="Last 24h" value={stats.last24h} icon={AlertTriangle} />
           <StatCard variant="compact" title="Boundary Catches" value={stats.boundaries} icon={ShieldAlert} />

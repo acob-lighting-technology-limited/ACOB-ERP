@@ -373,7 +373,7 @@ export default function AdminFleetPage() {
       activeTab={tab}
       onTabChange={setTab}
       stats={
-        <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <StatCard
             variant="compact"
             title="Pending Review"

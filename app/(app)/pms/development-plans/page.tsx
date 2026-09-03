@@ -242,7 +242,7 @@ export default function DevelopmentPlansPage() {
       backLink={{ href: "/pms", label: "Back to PMS" }}
       spacing="tight"
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <StatCard
             variant="compact"
             title="Active Plans"

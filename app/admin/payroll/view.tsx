@@ -305,7 +305,7 @@ export function PayrollPeriodsPage({ initialData }: PayrollPeriodsPageProps) {
   }
 
   const stats = (
-    <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
+    <div className="grid grid-cols-3 gap-2 sm:gap-3">
       <StatCard
         variant="compact"
         title="Total Payslips Issued"

@@ -183,7 +183,7 @@ export function AppealsView({ lockedDepartment }: AppealsViewProps) {
   return (
     <>
       {/* Stats */}
-      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+      <div className="mb-4 grid grid-cols-3 gap-2 sm:gap-3">
         <StatCard
           variant="compact"
           title="Total Pending"

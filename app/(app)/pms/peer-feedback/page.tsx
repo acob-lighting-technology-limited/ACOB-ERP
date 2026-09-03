@@ -267,7 +267,7 @@ export default function PeerFeedbackPage() {
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <StatCard variant="compact" title="Given by You" value={myFeedback.length} icon={Send} />
           <StatCard variant="compact" title="Received" value={receivedFeedback.length} icon={Users} />
           <StatCard

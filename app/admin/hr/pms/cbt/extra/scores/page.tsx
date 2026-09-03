@@ -148,7 +148,7 @@ export default function AdminPmsCbtExtraScoresPage() {
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <StatCard
             variant="compact"
             title="Responses"

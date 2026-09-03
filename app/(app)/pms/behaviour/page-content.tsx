@@ -100,7 +100,7 @@ export function BehaviourContent({
       spacing="tight"
       actions={headerActions}
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3">
           <StatCard
             variant="compact"
             title="Competencies"
