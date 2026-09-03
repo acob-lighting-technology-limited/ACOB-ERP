@@ -558,10 +558,53 @@ export function AdminHelpDeskContent({
           title: (r) => r.title,
           subtitle: (r) => `${r.ticket_number} · ${r.service_department} · ${r.requester_department || "Staff"}`,
           trailing: (r) => (
-            <div className="flex items-center gap-1.5">
+            <div className="flex flex-col items-end gap-1">
+              <PriorityBadge priority={r.priority} />
               <TicketStatusBadge status={r.status} />
             </div>
           ),
+          detail: {
+            title: (r) => r.title,
+            subtitle: (r) => `${r.ticket_number} · ${r.service_department}`,
+            fields: (r) => [
+              {
+                label: "Ticket Number",
+                value: r.ticket_number,
+              },
+              {
+                label: "Priority",
+                value: r.priority,
+              },
+              {
+                label: "Status",
+                value: r.status.replace(/_/g, " "),
+              },
+              {
+                label: "Service Dept",
+                value: r.service_department,
+              },
+              {
+                label: "Requester Dept",
+                value: r.requester_department || "Staff",
+              },
+              {
+                label: "Request Type",
+                value: r.request_type || "-",
+              },
+              {
+                label: "Approval Stage",
+                value: r.current_approval_stage ? r.current_approval_stage.replace(/_/g, " ") : "Direct Handling",
+              },
+              {
+                label: "Handling Mode",
+                value: r.handling_mode || "Individual",
+              },
+              {
+                label: "SLA Target",
+                value: r.sla_target_at ? formatWATDateTime(r.sla_target_at) : "-",
+              },
+            ],
+          },
         }}
         cardRenderer={(r) => (
           <div className="bg-card space-y-4 rounded-xl border p-4 transition-shadow hover:shadow-md">

@@ -1596,7 +1596,61 @@ export function AdminAssetsContent({
               {asset.deleted_at ? "archived" : asset.status}
             </Badge>
           ),
-          onSelect: (asset) => void handleOpenAssetDialog(asset),
+          detail: {
+            title: (asset) => `${asset.unique_code} · ${asset.asset_model || asset.asset_type}`,
+            subtitle: (asset) =>
+              `${getAssignedToLabel(asset, true)} · ${asset.office_location || asset.department || "HQ"}`,
+            fields: (asset) => [
+              {
+                label: "Asset Type",
+                value: ASSET_TYPE_MAP[asset.asset_type]?.label || asset.asset_type,
+              },
+              {
+                label: "Status",
+                value: asset.deleted_at ? "Archived" : asset.status,
+              },
+              {
+                label: "Assigned To",
+                value: getAssignedToLabel(asset, false),
+              },
+              {
+                label: "Office / Room",
+                value: asset.office_location || "-",
+              },
+              {
+                label: "Department",
+                value: asset.department || "-",
+              },
+              {
+                label: "Serial Number",
+                value: asset.serial_number || "-",
+              },
+              {
+                label: "Acquisition Year",
+                value: String(asset.acquisition_year || "-"),
+              },
+              {
+                label: "Assignment Type",
+                value: asset.assignment_type ? asset.assignment_type.replace(/_/g, " ") : "-",
+              },
+              ...(asset.notes
+                ? [
+                    {
+                      label: "Notes",
+                      value: asset.notes,
+                      fullWidth: true,
+                    },
+                  ]
+                : []),
+            ],
+            actions: (asset) => [
+              {
+                label: "Edit / View Asset",
+                icon: Pencil,
+                onClick: () => void handleOpenAssetDialog(asset),
+              },
+            ],
+          },
         }}
         cardRenderer={(asset) => (
           <div className="space-y-3 rounded-xl border p-4">

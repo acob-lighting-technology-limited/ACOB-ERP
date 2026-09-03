@@ -25,6 +25,7 @@ import {
   Building2,
   Calendar,
   IdCard,
+  MapPin,
   Settings2,
   Tags,
   Cake,
@@ -1191,7 +1192,65 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
               <EmployeeStatusBadge status={r.employment_status || "active"} size="sm" />
             </div>
           ),
-          onSelect: (r) => handleViewEmployeeDetails(r),
+          detail: {
+            title: (r) => `${formatName(r.first_name)} ${formatName(r.last_name)}`,
+            subtitle: (r) => r.designation || r.department || "Employee",
+            fields: (r) => [
+              {
+                icon: IdCard,
+                label: "Staff ID",
+                value: r.employee_number || "-",
+              },
+              {
+                icon: Phone,
+                label: "Phone",
+                value: r.phone_number || "-",
+              },
+              {
+                icon: Mail,
+                label: "Email",
+                value: r.company_email,
+                fullWidth: true,
+              },
+              {
+                icon: Building2,
+                label: "Department",
+                value: r.department || "-",
+              },
+              {
+                icon: MapPin,
+                label: "Office",
+                value: r.office_location || "-",
+              },
+              {
+                icon: Shield,
+                label: "Role",
+                value: getRoleDisplayName(r.role),
+              },
+              {
+                icon: UserCheck,
+                label: "Status",
+                value: r.employment_status || "Active",
+              },
+              {
+                icon: Calendar,
+                label: "Joined",
+                value: r.employment_date ? formatWATDate(r.employment_date) : "-",
+              },
+            ],
+            actions: (r) => [
+              {
+                label: "View Full Profile",
+                icon: Eye,
+                onClick: () => handleViewEmployeeDetails(r),
+              },
+              {
+                label: "Edit Staff",
+                icon: Pencil,
+                onClick: () => void handleEditEmployee(r),
+              },
+            ],
+          },
         }}
         cardRenderer={(r) => (
           <Card className="group transition-shadow hover:shadow-md">

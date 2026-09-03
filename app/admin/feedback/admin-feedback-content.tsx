@@ -384,9 +384,54 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
               {formatName(r.status)}
             </Badge>
           ),
-          onSelect: (r) => {
-            setSelectedFeedback(r)
-            setIsModalOpen(true)
+          detail: {
+            title: (r) => r.title,
+            subtitle: (r) => `${r.feedback_type.replace(/_/g, " ")} · ${formatWATDate(r.created_at)}`,
+            fields: (r) => [
+              {
+                label: "Feedback Type",
+                value: r.feedback_type.replace(/_/g, " "),
+              },
+              {
+                label: "Status",
+                value: formatName(r.status),
+              },
+              {
+                label: "Submitter",
+                value: r.is_anonymous
+                  ? "Anonymous Staff"
+                  : r.profiles
+                    ? `${r.profiles.first_name || ""} ${r.profiles.last_name || ""}`.trim() || "Unknown"
+                    : "Unknown",
+              },
+              {
+                label: "Department",
+                value: r.profiles?.department || r.target_department || "-",
+              },
+              {
+                label: "Date Submitted",
+                value: formatWATDate(r.created_at),
+              },
+              ...(r.description
+                ? [
+                    {
+                      label: "Description",
+                      value: r.description,
+                      fullWidth: true,
+                    },
+                  ]
+                : []),
+            ],
+            actions: (r) => [
+              {
+                label: "Comprehensive Review",
+                icon: Eye,
+                onClick: () => {
+                  setSelectedFeedback(r)
+                  setIsModalOpen(true)
+                },
+              },
+            ],
           },
         }}
         cardRenderer={(r) => (
