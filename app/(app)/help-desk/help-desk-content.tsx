@@ -573,13 +573,6 @@ export function HelpDeskContent({
           />
         </div>
       }
-      statBadgeStyle="line"
-      statBadges={[
-        { icon: LifeBuoy, label: `${myOpenTickets} open` },
-        { icon: CheckCircle2, label: `${resolvedCount} resolved` },
-        ...(pendingReviewCount > 0 ? [{ icon: ShieldCheck, label: `${pendingReviewCount} to review` }] : []),
-        { icon: Star, label: `${avgCsat} avg CSAT` },
-      ]}
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard

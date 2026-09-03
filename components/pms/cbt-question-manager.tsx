@@ -94,7 +94,7 @@ function QuestionCard({
   deletingId: string | null
 }) {
   return (
-    <div className="space-y-3 rounded-xl border p-4">
+    <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
       <div className="flex items-start justify-between gap-3">
         <div className="space-y-1">
           <p className="font-semibold">{question.prompt}</p>
@@ -488,6 +488,7 @@ export function CbtQuestionManager({ basePath, lockDepartment }: CbtQuestionMana
       stats={
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Selected Cycle"
             value={selectedCycle?.name || "None"}
             icon={Brain}
@@ -495,6 +496,7 @@ export function CbtQuestionManager({ basePath, lockDepartment }: CbtQuestionMana
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Questions"
             value={filteredQuestions.length}
             icon={Brain}
@@ -502,6 +504,7 @@ export function CbtQuestionManager({ basePath, lockDepartment }: CbtQuestionMana
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Active"
             value={activeQuestions}
             icon={Brain}
@@ -509,6 +512,7 @@ export function CbtQuestionManager({ basePath, lockDepartment }: CbtQuestionMana
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Latest Update"
             value={latestQuestionDate}
             icon={Brain}

@@ -231,8 +231,6 @@ export function GoalsContent({
           </Button>
         ) : undefined
       }
-      statBadgeStyle="line"
-      statBadges={summaryCards.map((card) => ({ icon: Target, label: `${card.value} ${card.label.toLowerCase()}` }))}
       stats={
         summaryCards.length > 0 ? (
           <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3">

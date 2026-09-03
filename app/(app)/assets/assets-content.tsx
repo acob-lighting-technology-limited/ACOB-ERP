@@ -158,13 +158,6 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
       icon={Package}
       backLink={{ href: "/profile", label: "Back to Dashboard" }}
       spacing="tight"
-      statBadgeStyle="line"
-      statBadges={[
-        { icon: Package, label: `${rows.length} assets` },
-        { icon: User, label: `${activeCount} active` },
-        ...(maintenanceCount > 0 ? [{ icon: Wrench, label: `${maintenanceCount} in maintenance` }] : []),
-        { icon: Layers, label: `${uniqueTypesCount} ${uniqueTypesCount === 1 ? "type" : "types"}` },
-      ]}
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard

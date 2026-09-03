@@ -298,12 +298,6 @@ export function ReviewsContent({ initialReviews, currentUserId }: ReviewsContent
       icon={FileText}
       backLink={{ href: "/profile", label: "Back to Dashboard" }}
       spacing="tight"
-      statBadgeStyle="line"
-      statBadges={[
-        { icon: ClipboardList, label: `${stats.total} reviews` },
-        { icon: TrendingUp, label: `${stats.avgScore} avg` },
-        { icon: CheckCircle, label: `${stats.completed} completed` },
-      ]}
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
           <StatCard

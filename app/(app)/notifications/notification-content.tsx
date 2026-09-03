@@ -432,12 +432,6 @@ export function NotificationContent({ initialNotifications, userId }: Notificati
       activeTab={activeTab}
       onTabChange={setActiveTab}
       spacing="tight"
-      statBadgeStyle="line"
-      statBadges={[
-        { icon: Bell, label: `${counts.all} total` },
-        ...(counts.unread > 0 ? [{ icon: Clock, label: `${counts.unread} unread` }] : []),
-        ...(counts.critical > 0 ? [{ icon: AlertTriangle, label: `${counts.critical} critical` }] : []),
-      ]}
       actions={
         <div className="flex gap-1.5">
           <Link href="/notifications/settings">

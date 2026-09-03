@@ -486,13 +486,6 @@ export function FleetContent() {
           <span className="hidden sm:inline">New Application</span>
         </Button>
       }
-      statBadgeStyle="line"
-      statBadges={[
-        { icon: Car, label: `${stats.total} applications` },
-        { icon: Clock, label: `${stats.pending} pending` },
-        { icon: CheckCircle2, label: `${stats.approved} approved` },
-        { icon: CalendarClock, label: `${stats.occupiedSlots} slots booked` },
-      ]}
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard

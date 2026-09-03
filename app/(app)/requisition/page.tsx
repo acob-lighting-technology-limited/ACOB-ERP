@@ -250,13 +250,6 @@ export default function RequisitionListPage() {
       onTabChange={setActiveTab}
       spacing="tight"
       actionsPlacement="inline-always"
-      statBadgeStyle="line"
-      statBadges={[
-        { icon: FileCheck2, label: `${totalCount} total` },
-        { icon: Clock, label: `${pendingCount} pending` },
-        { icon: CheckCircle2, label: `${approvedCount} approved` },
-        { icon: Wallet, label: formatNaira(totalAmount, 0) },
-      ]}
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard

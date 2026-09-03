@@ -202,15 +202,6 @@ export function FeedbackContent({ initialFeedback }: FeedbackContentProps) {
           <span className="hidden sm:inline">Submit Feedback</span>
         </Button>
       }
-      statBadgeStyle="line"
-      statBadges={[
-        { icon: MessageSquare, label: `${userFeedback.length} total` },
-        { icon: MessageSquare, label: `${filteredFeedback.filter((item) => item.status === "open").length} open` },
-        {
-          icon: MessageSquare,
-          label: `${filteredFeedback.filter((item) => item.status === "resolved").length} resolved`,
-        },
-      ]}
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-3">
           <StatCard

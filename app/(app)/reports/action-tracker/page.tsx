@@ -681,17 +681,6 @@ export default function ActionTrackerPortal() {
           </Button>
         </div>
       }
-      statBadgeStyle="line"
-      statBadges={[
-        {
-          icon: activeTab === "directives" ? Gavel : FileSpreadsheet,
-          label: `${stats.total} total`,
-        },
-        { icon: CheckCircle2, label: `${stats.completed} completed` },
-        { icon: RefreshCw, label: `${stats.inProgress} in progress` },
-        { icon: CircleDashed, label: `${stats.notStarted} not started` },
-        { icon: Clock, label: `${stats.pending} pending` },
-      ]}
       stats={
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
           <StatCard

@@ -246,13 +246,6 @@ export function ProjectContent() {
           <span className="hidden sm:inline">Refresh</span>
         </Button>
       }
-      statBadgeStyle="line"
-      statBadges={[
-        { icon: FolderKanban, label: `${stats.total} assigned` },
-        { icon: Wrench, label: `${stats.active} active` },
-        { icon: ShieldCheck, label: `${stats.completed} completed` },
-        { icon: FolderGit2, label: stats.totalCapacity },
-      ]}
       stats={
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard

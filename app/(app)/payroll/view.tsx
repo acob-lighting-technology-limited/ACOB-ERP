@@ -185,12 +185,6 @@ export function UserPayrollPage({ initialData }: UserPayrollPageProps) {
       description="View and print your monthly payslips, tax assessments, and pension contributions."
       icon={FileText}
       spacing="tight"
-      statBadgeStyle="line"
-      statBadges={[
-        { icon: DollarSign, label: `Latest ${latestNet ? fmt(latestNet) : "₦0.00"}` },
-        { icon: DollarSign, label: `YTD ${fmt(ytdNet)}` },
-        { icon: Receipt, label: `${payslipsCount} payslip${payslipsCount === 1 ? "" : "s"}` },
-      ]}
       stats={stats}
     >
       <DataTable
