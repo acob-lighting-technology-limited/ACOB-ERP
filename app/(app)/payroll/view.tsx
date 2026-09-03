@@ -6,7 +6,7 @@ import { DataTablePage, DataTable } from "@/components/ui/data-table"
 import { StatCard } from "@/components/ui/stat-card"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { FileText, Eye, Printer, DollarSign, Calendar } from "lucide-react"
+import { FileText, Eye, Printer, DollarSign, Calendar, Receipt } from "lucide-react"
 import { printPayslip, type PayslipLine } from "@/lib/hr/payslip-print"
 import type { UserPayrollEntry } from "./page"
 
@@ -89,27 +89,29 @@ export function UserPayrollPage({ initialData }: UserPayrollPageProps) {
   const ytdNet = entries.reduce((acc, e) => acc + Number(e.net_salary), 0)
   const payslipsCount = entries.length
 
+  const fmt = (v: number) => `₦${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const fmtEntry = (v: number | string) => fmt(Number(v))
+
   const stats = (
     <div className="grid grid-cols-1 gap-2 sm:gap-3 lg:grid-cols-3">
       <StatCard
+        variant="compact"
         title="Latest Net Pay"
-        value={
-          latestNet
-            ? `₦${latestNet.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-            : "₦0.00"
-        }
+        value={latestNet ? fmt(latestNet) : "₦0.00"}
         icon={DollarSign}
         iconBgColor="bg-emerald-500/10"
         iconColor="text-emerald-500"
       />
       <StatCard
+        variant="compact"
         title="Year-to-Date (YTD) Net"
-        value={`₦${ytdNet.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+        value={fmt(ytdNet)}
         icon={DollarSign}
         iconBgColor="bg-blue-500/10"
         iconColor="text-blue-500"
       />
       <StatCard
+        variant="compact"
         title="Available Payslips"
         value={payslipsCount}
         icon={Calendar}
@@ -182,20 +184,60 @@ export function UserPayrollPage({ initialData }: UserPayrollPageProps) {
       title="My Payroll & Payslips"
       description="View and print your monthly payslips, tax assessments, and pension contributions."
       icon={FileText}
+      spacing="tight"
+      statBadgeStyle="line"
+      statBadges={[
+        { icon: DollarSign, label: `Latest ${latestNet ? fmt(latestNet) : "₦0.00"}` },
+        { icon: DollarSign, label: `YTD ${fmt(ytdNet)}` },
+        { icon: Receipt, label: `${payslipsCount} payslip${payslipsCount === 1 ? "" : "s"}` },
+      ]}
+      stats={stats}
     >
-      {stats}
-
-      <div className="mt-6">
-        <DataTable
-          data={entries}
-          columns={columns}
-          getRowId={(e) => e.id}
-          searchPlaceholder="Search by period name..."
-          searchFn={(row, q) => (row.payroll_periods?.name || "").toLowerCase().includes(q.toLowerCase())}
-          filters={[]}
-          isLoading={false}
-        />
-      </div>
+      <DataTable
+        data={entries}
+        columns={columns}
+        getRowId={(e) => e.id}
+        searchPlaceholder="Search by period name..."
+        searchFn={(row, q) => (row.payroll_periods?.name || "").toLowerCase().includes(q.toLowerCase())}
+        filters={[]}
+        isLoading={false}
+        viewToggle
+        stickyToolbar
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (e) => e.payroll_periods?.name || "—",
+          subtitle: (e) => (e.payroll_periods?.pay_date ? `Paid ${e.payroll_periods.pay_date}` : "—"),
+          trailing: (e) => (
+            <span className="font-mono text-sm font-semibold text-emerald-600">{fmt(Number(e.net_salary))}</span>
+          ),
+          detail: {
+            title: (e) => e.payroll_periods?.name || "Payslip",
+            subtitle: (e) => (
+              <span className="text-muted-foreground text-xs">
+                {e.payroll_periods?.pay_date ? `Paid ${e.payroll_periods.pay_date}` : ""}
+              </span>
+            ),
+            fields: (e) => [
+              {
+                icon: DollarSign,
+                label: "Gross cash pay",
+                value: fmt(Number(e.gross_salary) + Number(e.bonus)),
+              },
+              { icon: DollarSign, label: "Total deductions", value: fmtEntry(e.total_deductions) },
+              { icon: DollarSign, label: "Net pay", value: fmtEntry(e.net_salary) },
+            ],
+            actions: (e) => [
+              {
+                label: "View Payslip",
+                icon: Eye,
+                variant: "default" as const,
+                onClick: () => setSelectedEntry(e),
+              },
+            ],
+          },
+        }}
+      />
 
       <Dialog open={selectedEntry !== null} onOpenChange={(o) => !o && setSelectedEntry(null)}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">

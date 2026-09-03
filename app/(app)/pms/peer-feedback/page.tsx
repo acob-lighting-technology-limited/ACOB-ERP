@@ -292,6 +292,7 @@ export default function PeerFeedbackPage() {
           emptyTitle="No Feedback Given Yet"
           emptyDescription={'No peer feedback submitted yet. Use the "Give Feedback" button to start.'}
           emptyIcon={Send}
+          viewToggle
           stickyToolbar
           contactsView
           defaultViewMode={{ mobile: "contacts", desktop: "list" }}
@@ -322,6 +323,7 @@ export default function PeerFeedbackPage() {
           emptyTitle="No Feedback Received Yet"
           emptyDescription="No peer feedback received yet for the current cycle."
           emptyIcon={Users}
+          viewToggle
           stickyToolbar
           contactsView
           defaultViewMode={{ mobile: "contacts", desktop: "list" }}

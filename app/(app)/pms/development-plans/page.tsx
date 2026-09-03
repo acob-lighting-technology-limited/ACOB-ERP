@@ -284,6 +284,7 @@ export default function DevelopmentPlansPage() {
         emptyTitle="No Development Plans Yet"
         emptyDescription="Your manager will create development plans linked to your performance reviews. Check back after your next review."
         emptyIcon={BookOpen}
+        viewToggle
         stickyToolbar
         contactsView
         defaultViewMode={{ mobile: "contacts", desktop: "list" }}
