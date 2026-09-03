@@ -1574,30 +1574,47 @@ export function DataTable<TData>({
               )}
             </SheetHeader>
 
-            <div className="space-y-1">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
               {detailConfig.fields(detailRow).map((field) => {
                 if (!field.value) return null
                 const canOpen = Boolean(field.href)
                 const canCopy = !canOpen && field.copyable !== false
                 const Icon = field.icon
-                const body = (
-                  <>
-                    {Icon && <Icon className="text-muted-foreground h-4 w-4 shrink-0" />}
-                    <span className="min-w-0 flex-1">
-                      <span className="text-muted-foreground block text-[11px]">{field.label}</span>
-                      <span
-                        className={cn(
-                          "block text-sm leading-relaxed break-words whitespace-pre-wrap",
-                          field.muted && "text-muted-foreground",
-                          canOpen && "text-primary font-medium"
-                        )}
-                      >
-                        {field.value}
-                      </span>
+                const strValue = String(field.value)
+                const isLong =
+                  Boolean(field.fullWidth) ||
+                  (field.colSpan != null && field.colSpan > 1) ||
+                  strValue.length > 35 ||
+                  strValue.includes("\n") ||
+                  canOpen
+                const spanClass =
+                  field.fullWidth || (isLong && !field.colSpan)
+                    ? "col-span-2 sm:col-span-3"
+                    : field.colSpan === 3
+                      ? "col-span-2 sm:col-span-3"
+                      : field.colSpan === 2
+                        ? "col-span-2"
+                        : "col-span-1"
+
+                const tileContent = (
+                  <div className="flex h-full min-w-0 flex-col justify-between">
+                    <div className="text-muted-foreground flex items-center gap-1.5">
+                      {Icon && <Icon className="h-3.5 w-3.5 shrink-0" />}
+                      <span className="truncate text-[11px] font-medium tracking-tight">{field.label}</span>
+                      {canOpen && <ExternalLink className="text-primary/70 ml-auto h-3 w-3 shrink-0" />}
+                      {canCopy && <Copy className="text-muted-foreground/60 ml-auto h-3 w-3 shrink-0" />}
+                    </div>
+                    <span
+                      className={cn(
+                        "mt-1.5 block text-xs leading-snug font-medium break-words",
+                        field.muted && "text-muted-foreground font-normal",
+                        canOpen && "text-primary font-medium hover:underline",
+                        isLong && "text-xs font-normal whitespace-pre-wrap"
+                      )}
+                    >
+                      {field.value}
                     </span>
-                    {canOpen && <ExternalLink className="text-primary/70 h-3.5 w-3.5 shrink-0" />}
-                    {canCopy && <Copy className="text-muted-foreground/60 h-3.5 w-3.5 shrink-0" />}
-                  </>
+                  </div>
                 )
 
                 if (canOpen) {
@@ -1607,9 +1624,12 @@ export function DataTable<TData>({
                       href={field.href}
                       target="_blank"
                       rel="noreferrer"
-                      className="hover:bg-muted/40 flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors"
+                      className={cn(
+                        "hover:bg-muted/40 bg-muted/20 focus-visible:ring-ring rounded-lg border p-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
+                        spanClass
+                      )}
                     >
-                      {body}
+                      {tileContent}
                     </a>
                   )
                 }
@@ -1618,14 +1638,17 @@ export function DataTable<TData>({
                   <button
                     key={field.label}
                     type="button"
-                    onClick={() => copyField(String(field.value), field.label)}
-                    className="hover:bg-muted/40 flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors"
+                    onClick={() => copyField(strValue, field.label)}
+                    className={cn(
+                      "hover:bg-muted/40 bg-muted/20 focus-visible:ring-ring rounded-lg border p-2.5 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none",
+                      spanClass
+                    )}
                   >
-                    {body}
+                    {tileContent}
                   </button>
                 ) : (
-                  <div key={field.label} className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5">
-                    {body}
+                  <div key={field.label} className={cn("bg-muted/20 rounded-lg border p-2.5 text-left", spanClass)}>
+                    {tileContent}
                   </div>
                 )
               })}

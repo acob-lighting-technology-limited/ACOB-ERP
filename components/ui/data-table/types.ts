@@ -20,6 +20,8 @@ export interface DataTableDetailField {
   /** Set false for values that make no sense to copy (a computed total, say). */
   copyable?: boolean
   muted?: boolean
+  colSpan?: 1 | 2 | 3
+  fullWidth?: boolean
 }
 
 /** A primary action button in the detail sheet footer (call, email, open…). */
