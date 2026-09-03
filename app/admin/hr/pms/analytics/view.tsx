@@ -343,8 +343,9 @@ export function PmsAnalyticsPage({ backLinkHref }: { backLinkHref?: string } = {
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Employees"
             value={rows.length}
             icon={Users}
@@ -352,6 +353,7 @@ export function PmsAnalyticsPage({ backLinkHref }: { backLinkHref?: string } = {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Mean Score"
             value={mean !== null ? `${mean}%` : "-"}
             icon={BarChart3}
@@ -359,6 +361,7 @@ export function PmsAnalyticsPage({ backLinkHref }: { backLinkHref?: string } = {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="High Performers"
             value={highPerformers}
             icon={TrendingUp}
@@ -366,6 +369,7 @@ export function PmsAnalyticsPage({ backLinkHref }: { backLinkHref?: string } = {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="At Risk"
             value={atRisk}
             icon={TrendingDown}
@@ -375,11 +379,26 @@ export function PmsAnalyticsPage({ backLinkHref }: { backLinkHref?: string } = {
         </div>
       }
     >
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard title="Active Cycles" value={activeCycles} icon={BarChart3} />
-        <StatCard title="Reviewed" value={rows.filter((row) => row.status === "completed").length} icon={Users} />
-        <StatCard title="Drafts" value={rows.filter((row) => row.status === "draft").length} icon={TrendingDown} />
-        <StatCard title="Submitted" value={rows.filter((row) => row.status === "submitted").length} icon={TrendingUp} />
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        <StatCard variant="compact" title="Active Cycles" value={activeCycles} icon={BarChart3} />
+        <StatCard
+          variant="compact"
+          title="Reviewed"
+          value={rows.filter((row) => row.status === "completed").length}
+          icon={Users}
+        />
+        <StatCard
+          variant="compact"
+          title="Drafts"
+          value={rows.filter((row) => row.status === "draft").length}
+          icon={TrendingDown}
+        />
+        <StatCard
+          variant="compact"
+          title="Submitted"
+          value={rows.filter((row) => row.status === "submitted").length}
+          icon={TrendingUp}
+        />
       </div>
 
       <DataTable<AnalyticsRow>
@@ -426,6 +445,23 @@ export function PmsAnalyticsPage({ backLinkHref }: { backLinkHref?: string } = {
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (row) =>
+            (row.final ?? 0) >= 80 ? "bg-emerald-500" : (row.final ?? 0) >= 60 ? "bg-amber-500" : "bg-red-500",
+          title: (row) => row.employee,
+          subtitle: (row) => `${row.department} · ${row.cycle} · Final: ${row.final !== null ? `${row.final}%` : "-"}`,
+          trailing: (row) => {
+            const tier = scoreToTier(row.final)
+            return (
+              <Badge variant={tier.variant} className="text-[10px]">
+                {tier.label}
+              </Badge>
+            )
+          },
+        }}
         cardRenderer={(row) => <AnalyticsCard row={row} />}
         emptyTitle="No analytics rows found"
         emptyDescription="Performance analytics will appear here once reviews have been created and scored."

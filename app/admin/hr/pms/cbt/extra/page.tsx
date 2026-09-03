@@ -482,8 +482,9 @@ export default function AdminPmsCbtExtraQuestionPage() {
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Selected Cycle"
             value={selectedCycle?.name || "None"}
             icon={Brain}
@@ -491,6 +492,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Bonus Questions"
             value={filteredQuestions.length}
             icon={Brain}
@@ -498,6 +500,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Active"
             value={activeQuestions}
             icon={Brain}
@@ -505,6 +508,7 @@ export default function AdminPmsCbtExtraQuestionPage() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Latest Update"
             value={latestQuestionDate}
             icon={Brain}
@@ -578,6 +582,21 @@ export default function AdminPmsCbtExtraQuestionPage() {
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (q) => (q.is_active === false ? "bg-slate-400" : "bg-emerald-500"),
+          title: (q) => q.prompt,
+          subtitle: (q) =>
+            `${cycleNameById.get(q.review_cycle_id || "") || "No cycle"} · Targets: ${q.targeted_emails?.length || 0}`,
+          trailing: (q) => (
+            <Badge variant={q.is_active === false ? "secondary" : "default"} className="text-[10px]">
+              {q.is_active === false ? "Inactive" : "Active"}
+            </Badge>
+          ),
+          onSelect: (q) => openEditModal(q),
+        }}
         cardRenderer={(question) => (
           <QuestionCard
             question={question}

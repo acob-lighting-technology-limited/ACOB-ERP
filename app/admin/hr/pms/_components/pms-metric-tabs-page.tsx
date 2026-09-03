@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { BarChart3, CheckCircle2, Clock3, Download, Loader2, Plus, ShieldCheck, Target, Users } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -672,8 +673,9 @@ export function PmsMetricTabsPage({
       activeTab={tab}
       onTabChange={(value) => setTab(value as TabKey)}
       stats={
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total Records"
             value={rawRows.length}
             icon={Users}
@@ -681,6 +683,7 @@ export function PmsMetricTabsPage({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title={tab === "individual" ? "Average Value" : "Submitted"}
             value={tab === "individual" ? String(valueAverage ?? "-") : submittedTotal}
             icon={BarChart3}
@@ -688,6 +691,7 @@ export function PmsMetricTabsPage({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Active Cycle"
             value={data?.cycles.find((c) => c.id === cycleId)?.name || "Current"}
             icon={Icon}
@@ -795,6 +799,47 @@ export function PmsMetricTabsPage({
             )
           },
         }}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: () => "bg-blue-500",
+          title: (row) => asString(row.employee || row.department || row.cycle),
+          subtitle: (row) => {
+            if (tab === "individual") {
+              return `${asString(row.department)} · ${asString(row.cycle)}`
+            }
+            if (tab === "department") {
+              return `${asString(row.cycle)} · Headcount: ${asString(row.employee_count)}`
+            }
+            return `${asString(row.review_type)} · Depts: ${asString(row.department_count)}`
+          },
+          trailing: (row) => (
+            <span className="text-xs font-semibold">{asString(row.metric_value ?? row.average_score ?? "-")}</span>
+          ),
+        }}
+        cardRenderer={(row) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{asString(row.employee || row.department || row.cycle)}</p>
+                <p className="text-muted-foreground text-xs">
+                  {tab === "individual"
+                    ? `${asString(row.department)} · ${asString(row.cycle)}`
+                    : tab === "department"
+                      ? `${asString(row.cycle)}`
+                      : `${asString(row.review_type)}`}
+                </p>
+              </div>
+              <Badge variant="outline">{asString(row.metric_value ?? row.average_score ?? "-")}</Badge>
+            </div>
+            <div className="text-muted-foreground flex justify-between border-t pt-2 text-[10px]">
+              <span>Status: {asString(row.status ?? "recorded")}</span>
+              <span>Cadence: {asString(row.cadence ?? "Quarterly")}</span>
+            </div>
+          </div>
+        )}
       />
 
       {metric === "behaviour" ? (
