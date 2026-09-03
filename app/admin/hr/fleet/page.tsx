@@ -424,6 +424,41 @@ export default function AdminFleetPage() {
           filters={bookingFilters}
           isLoading={loadingBookings}
           pagination={{ pageSize: 50 }}
+          expandable={{
+            render: (r) => (
+              <div className="grid gap-3 p-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
+                <div className="bg-muted/20 rounded-lg border p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-medium">Trip Purpose & Reason</span>
+                  <p className="text-foreground mt-1 whitespace-pre-wrap">{r.reason || "No reason provided"}</p>
+                </div>
+                <div className="bg-muted/20 rounded-lg border p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-medium">Schedule Details</span>
+                  <p className="text-foreground mt-1">
+                    From: <span className="font-medium">{formatDateTime(r.start_at)}</span>
+                  </p>
+                  <p className="text-foreground mt-0.5">
+                    To: <span className="font-medium">{formatDateTime(r.end_at)}</span>
+                  </p>
+                </div>
+                <div className="bg-muted/20 rounded-lg border p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-medium">Review & Decision</span>
+                  {r.reviewer?.full_name ? (
+                    <div className="mt-1 space-y-0.5">
+                      <p className="text-foreground font-medium">{r.reviewer.full_name}</p>
+                      {r.reviewer.department && (
+                        <p className="text-muted-foreground text-[11px]">{r.reviewer.department}</p>
+                      )}
+                      {r.reviewed_at && (
+                        <p className="text-muted-foreground text-[11px]">{formatDateTime(r.reviewed_at)}</p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-muted-foreground mt-1 italic">Pending admin decision</p>
+                  )}
+                </div>
+              </div>
+            ),
+          }}
           viewToggle
           contactsView
           stickyToolbar

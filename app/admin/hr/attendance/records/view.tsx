@@ -431,6 +431,74 @@ export function AdminAttendanceRecordsPage({
           searchPlaceholder="Search employee or department..."
           searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
           isLoading={loading}
+          expandable={{
+            render: (r) => (
+              <div className="grid gap-3 p-3 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                <div className="bg-muted/20 rounded-lg border p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-medium">Source & Verification</span>
+                  <div className="mt-1 flex flex-wrap gap-1">
+                    <Badge variant="outline" className="text-[10px]">
+                      {r.source || "Unknown"}
+                    </Badge>
+                    {r.face_verified != null && (
+                      <Badge variant={r.face_verified ? "default" : "destructive"} className="text-[10px]">
+                        {r.face_verified
+                          ? `Face: ${r.face_match_confidence ? `${Math.round(r.face_match_confidence * 100)}%` : "Verified"}`
+                          : "Face Failed"}
+                      </Badge>
+                    )}
+                    {r.location_verified != null && (
+                      <Badge variant={r.location_verified ? "default" : "secondary"} className="text-[10px]">
+                        {r.location_verified ? "Location OK" : "Unverified Location"}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-muted/20 rounded-lg border p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-medium">Coordinates & Device</span>
+                  <p className="text-foreground mt-1 font-mono">
+                    {r.latitude && r.longitude ? `${r.latitude.toFixed(4)}, ${r.longitude.toFixed(4)}` : "No GPS data"}
+                  </p>
+                </div>
+
+                <div className="bg-muted/20 rounded-lg border p-2.5">
+                  <span className="text-muted-foreground block text-[11px] font-medium">Hours & Edits</span>
+                  <p className="text-foreground mt-1">
+                    Total: {r.total_hours != null ? `${r.total_hours.toFixed(1)}h` : "-"}
+                    {r.editor_first_name && ` · Edited by ${r.editor_first_name}`}
+                  </p>
+                  {r.manual_comment && (
+                    <p className="text-muted-foreground mt-1 italic">&ldquo;{r.manual_comment}&rdquo;</p>
+                  )}
+                </div>
+
+                {(r.selfie_url || r.selfie_out_url) && (
+                  <div className="bg-muted/20 rounded-lg border p-2.5">
+                    <span className="text-muted-foreground block text-[11px] font-medium">Verification Photos</span>
+                    <div className="mt-1 flex items-center gap-2">
+                      {r.selfie_url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={r.selfie_url}
+                          alt="Check-in selfie"
+                          className="h-12 w-12 rounded border object-cover"
+                        />
+                      )}
+                      {r.selfie_out_url && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={r.selfie_out_url}
+                          alt="Check-out selfie"
+                          className="h-12 w-12 rounded border object-cover"
+                        />
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ),
+          }}
           viewToggle
           contactsView
           stickyToolbar
