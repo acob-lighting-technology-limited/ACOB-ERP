@@ -68,6 +68,7 @@ export interface Task {
   assigned_users?: TaskPersonSummary[]
   can_change_status?: boolean
   comment_count?: number
+  user_completed?: boolean
 }
 
 export interface TaskUserProfile {

@@ -2,12 +2,23 @@ import type { Task, HelpDeskItem, CorrespondenceItem, PaymentItem } from "@/app/
 
 export const DUE_SOON_WINDOW_DAYS = 3
 
-export const OPEN_TASK_STATUSES = new Set(["pending", "in_progress"])
+export const OPEN_TASK_STATUSES = new Set(["pending", "in_progress", "submitted_for_review", "unable_to_complete"])
+export const TERMINAL_TASK_STATUSES = new Set(["completed", "reassigned", "cancelled", "failed"])
 const TERMINAL_HELP_DESK_STATUSES = new Set(["resolved", "closed", "cancelled", "rejected"])
 const TERMINAL_CORRESPONDENCE_STATUSES = new Set(["filed", "closed", "cancelled"])
 const PENDING_PAYMENT_STATUSES = new Set(["due", "overdue"])
 
+export function isTaskTerminal(taskOrStatus: Task | string | null | undefined): boolean {
+  if (!taskOrStatus) return false
+  if (typeof taskOrStatus === "object") {
+    if (taskOrStatus.user_completed) return true
+    return isTaskTerminal(taskOrStatus.status)
+  }
+  return TERMINAL_TASK_STATUSES.has(taskOrStatus)
+}
+
 export function isOpenTask(task: Task): boolean {
+  if (task.user_completed || TERMINAL_TASK_STATUSES.has(task.status)) return false
   return OPEN_TASK_STATUSES.has(task.status)
 }
 
@@ -33,6 +44,7 @@ const DAY_MS = 24 * 60 * 60 * 1000
 
 export function getTaskUrgency(task: Task, now: Date): TaskUrgency {
   if (!task.due_date) return { kind: "no_date" }
+  if (isTaskTerminal(task)) return { kind: "scheduled", dueDate: task.due_date }
   const dueAt = new Date(task.due_date).getTime()
   const diff = dueAt - now.getTime()
   if (diff < 0) return { kind: "overdue", days: Math.max(1, Math.floor(-diff / DAY_MS)) }
