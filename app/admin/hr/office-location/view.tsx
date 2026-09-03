@@ -478,8 +478,9 @@ export function OfficeLocationsPage({
         ) : null
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total Spaces"
             value={locations.length}
             icon={MapPin}
@@ -487,6 +488,7 @@ export function OfficeLocationsPage({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Active"
             value={locations.filter((location) => location.is_active).length}
             icon={MapPin}
@@ -494,6 +496,7 @@ export function OfficeLocationsPage({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Employees"
             value={locations.reduce((sum, location) => sum + (location.employee_count || 0), 0)}
             icon={Users}
@@ -501,6 +504,7 @@ export function OfficeLocationsPage({
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Linked Depts"
             value={locations.filter((location) => Boolean(location.department)).length}
             icon={MapPin}
@@ -582,6 +586,21 @@ export function OfficeLocationsPage({
           },
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (location) => (location.is_active ? "bg-emerald-500" : "bg-slate-400"),
+          title: (location) => location.name,
+          subtitle: (location) =>
+            `${OFFICE_TYPE_OPTIONS.find((item) => item.value === location.type)?.label || location.type} · ${location.department || "All Departments"} · ${location.employee_count || 0} employees`,
+          trailing: (location) => (
+            <Badge variant={location.is_active ? "default" : "secondary"} className="text-[10px]">
+              {location.is_active ? "Active" : "Inactive"}
+            </Badge>
+          ),
+          onSelect: (location) => openEditDialog(location),
+        }}
         cardRenderer={(location) => (
           <LocationCard
             location={location}

@@ -640,8 +640,9 @@ export function DepartmentsPage({
       activeTab={activeTab}
       onTabChange={setActiveTab}
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total Departments"
             value={departments.length}
             icon={Building}
@@ -649,6 +650,7 @@ export function DepartmentsPage({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Active"
             value={departments.filter((department) => department.is_active).length}
             icon={Building}
@@ -656,6 +658,7 @@ export function DepartmentsPage({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Inactive"
             value={departments.filter((department) => !department.is_active).length}
             icon={Building}
@@ -663,6 +666,7 @@ export function DepartmentsPage({
             iconColor="text-slate-500"
           />
           <StatCard
+            variant="compact"
             title="Total Employees"
             value={departments.reduce((sum, department) => sum + (department.employee_count || 0), 0)}
             icon={Users}
@@ -738,6 +742,17 @@ export function DepartmentsPage({
           },
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (d) => (d.is_active ? "bg-emerald-500" : "bg-slate-400"),
+          title: (d) => d.name,
+          subtitle: (d) =>
+            `${d.department_code || "No code"} · ${d.employee_count || 0} employees · ${d.email || "No email"}`,
+          trailing: (d) => <DepartmentStatusBadge isActive={d.is_active} />,
+          onSelect: (d) => openEditDialog(d),
+        }}
         cardRenderer={(department) => (
           <DepartmentCard
             department={department}

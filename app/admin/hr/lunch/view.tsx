@@ -1259,8 +1259,9 @@ export function LunchRegisterPage({
       onTabChange={(t) => setActiveTab(t as LunchTab)}
       stats={
         activeTab === "summary" ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
             <StatCard
+              variant="compact"
               title="Total Meals Registered"
               value={totalMealsRegisteredMonth}
               icon={Utensils}
@@ -1268,6 +1269,7 @@ export function LunchRegisterPage({
               iconColor="text-blue-500"
             />
             <StatCard
+              variant="compact"
               title="Meal Cost (Unit)"
               value={`₦${cost.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
               icon={Settings}
@@ -1275,6 +1277,7 @@ export function LunchRegisterPage({
               iconColor="text-violet-500"
             />
             <StatCard
+              variant="compact"
               title="Surcharge (Unit)"
               value={`₦${employeeSurcharge.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
               icon={Utensils}
@@ -1282,6 +1285,7 @@ export function LunchRegisterPage({
               iconColor="text-amber-500"
             />
             <StatCard
+              variant="compact"
               title="Total Surcharges"
               value={`₦${totalDeductionsMonth.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
               icon={Utensils}
@@ -1427,8 +1431,9 @@ export function LunchRegisterPage({
     >
       {activeTab === "menus" && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
             <StatCard
+              variant="compact"
               title="Menus Published"
               value={menus.filter((m) => m.status !== "draft").length}
               icon={Utensils}
@@ -1436,6 +1441,7 @@ export function LunchRegisterPage({
               iconColor="text-blue-500"
             />
             <StatCard
+              variant="compact"
               title="Open for Voting"
               value={menus.filter((m) => m.votingOpen).length}
               icon={Vote}
@@ -1443,6 +1449,7 @@ export function LunchRegisterPage({
               iconColor="text-emerald-500"
             />
             <StatCard
+              variant="compact"
               title="Drafts"
               value={menus.filter((m) => m.status === "draft").length}
               icon={CalendarDays}
@@ -1450,6 +1457,7 @@ export function LunchRegisterPage({
               iconColor="text-amber-500"
             />
             <StatCard
+              variant="compact"
               title="Votes Cast"
               value={menus.reduce((sum, m) => sum + m.votes.length, 0)}
               icon={Users}
@@ -1471,6 +1479,46 @@ export function LunchRegisterPage({
             isLoading={fetchingMenus}
             error={menusError}
             onRetry={() => void loadMenus()}
+            viewToggle
+            contactsView
+            stickyToolbar
+            defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+            mobileRow={{
+              accentClass: (row) =>
+                row.archived_at ? "bg-slate-400" : row.votingOpen ? "bg-emerald-500" : "bg-blue-500",
+              title: (row) => formatWATDate(row.date),
+              subtitle: (row) => `${row.groups.map((g) => g.options.map((o) => o.name).join(", ")).join(" | ")}`,
+              trailing: (row) => (
+                <Badge variant={row.votingOpen ? "default" : "secondary"} className="text-[10px]">
+                  {row.votingOpen ? "Voting Open" : row.status}
+                </Badge>
+              ),
+              onSelect: (row) => {
+                setEditingMenu(row)
+                setOpenMenuBuilder(true)
+              },
+            }}
+            cardRenderer={(row) => (
+              <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">{formatWATDate(row.date)}</p>
+                  </div>
+                  <Badge variant={row.votingOpen ? "default" : "secondary"}>
+                    {row.votingOpen ? "Voting Open" : row.status}
+                  </Badge>
+                </div>
+                <div className="text-muted-foreground line-clamp-2 text-xs">
+                  {row.groups.map((g) => g.options.map((o) => o.name).join(", ")).join(" | ")}
+                </div>
+                <div className="flex items-center justify-between border-t pt-2 text-[10px]">
+                  <span className="text-muted-foreground">{row.votes.length} votes cast</span>
+                  <Button size="sm" variant="outline" className="h-7 text-[10px]" onClick={() => setEditingMenu(row)}>
+                    Edit
+                  </Button>
+                </div>
+              </div>
+            )}
             expandable={{ render: (row) => <MenuVotesPanel menu={row} totalStaff={employees.length} /> }}
             rowActions={[
               {
@@ -1537,8 +1585,9 @@ export function LunchRegisterPage({
       {activeTab === "daily" && (
         <div className="space-y-4">
           {/* Daily Stats Cards (Always Visible) */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
             <StatCard
+              variant="compact"
               title="Total Meals Registered"
               value={ateUserIds.length}
               icon={Utensils}
@@ -1546,6 +1595,7 @@ export function LunchRegisterPage({
               iconColor="text-blue-500"
             />
             <StatCard
+              variant="compact"
               title="Meal Cost (Unit)"
               value={`₦${cost.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
               icon={Settings}
@@ -1553,6 +1603,7 @@ export function LunchRegisterPage({
               iconColor="text-violet-500"
             />
             <StatCard
+              variant="compact"
               title="Surcharge (Unit)"
               value={`₦${employeeSurcharge.toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
               icon={Utensils}
@@ -1560,6 +1611,7 @@ export function LunchRegisterPage({
               iconColor="text-amber-500"
             />
             <StatCard
+              variant="compact"
               title="Total Surcharges"
               value={`₦${(ateUserIds.length * employeeSurcharge).toLocaleString("en-US", { minimumFractionDigits: 2 })}`}
               icon={Utensils}
@@ -1660,6 +1712,36 @@ export function LunchRegisterPage({
                 />
               ),
             }}
+            viewToggle
+            contactsView
+            stickyToolbar
+            defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+            mobileRow={{
+              title: (row) => row.full_name,
+              subtitle: (row) => `${row.department || "No department"} · Meals: ${row.lunch_count}`,
+              trailing: (row) => (
+                <span className="text-xs font-semibold">
+                  ₦{row.total_deduction.toLocaleString("en-US", { minimumFractionDigits: 0 })}
+                </span>
+              ),
+            }}
+            cardRenderer={(row) => (
+              <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-sm font-semibold">{row.full_name}</p>
+                    <p className="text-muted-foreground text-xs">{row.department || "No department"}</p>
+                  </div>
+                  <Badge variant="outline">{row.lunch_count} meals</Badge>
+                </div>
+                <div className="flex items-center justify-between border-t pt-2">
+                  <span className="text-muted-foreground">Surcharge</span>
+                  <span className="text-sm font-semibold">
+                    ₦{row.total_deduction.toLocaleString("en-US", { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+            )}
             isLoading={false}
           />
         ))}
@@ -2186,6 +2268,34 @@ export function LunchRegisterPage({
             isLoading={reviewsLoading}
             error={reviewsError}
             onRetry={() => void loadReviews()}
+            viewToggle
+            contactsView
+            stickyToolbar
+            defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+            mobileRow={{
+              title: (row) => formatWATDate(row.date),
+              subtitle: (row) =>
+                `${row.review_count} reviews · Avg Rating: ${row.average_rating ? row.average_rating.toFixed(1) : "N/A"} ★`,
+              trailing: (row) => (
+                <Badge variant="outline" className="text-[10px]">
+                  {row.average_rating ? `${row.average_rating.toFixed(1)} ★` : "No rating"}
+                </Badge>
+              ),
+            }}
+            cardRenderer={(row) => (
+              <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+                <div className="flex items-start justify-between">
+                  <p className="text-sm font-semibold">{formatWATDate(row.date)}</p>
+                  <Badge variant="outline">
+                    {row.average_rating ? `${row.average_rating.toFixed(1)} ★` : "No rating"}
+                  </Badge>
+                </div>
+                <div className="flex items-center justify-between border-t pt-2 text-[10px]">
+                  <span className="text-muted-foreground">{row.review_count} reviews</span>
+                  <span className="text-muted-foreground">{row.comments.length} comments</span>
+                </div>
+              </div>
+            )}
             expandable={{
               render: (row) => <FeedbackExpandPanel entry={row} />,
             }}
