@@ -4,20 +4,10 @@ import { useCallback, useEffect, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import {
-  AlertDialog,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
-import { Checkbox } from "@/components/ui/checkbox"
 import { PromptDialog } from "@/components/ui/prompt-dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, CheckCircle, UserPlus, ChevronRight, ShieldCheck, Hash, Mail } from "lucide-react"
@@ -101,10 +91,6 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
   const [pendingReject, setPendingReject] = useState(false)
   const [employmentType, setEmploymentType] = useState<"full_time" | "part_time" | "contract">("full_time")
   const [contractCategoryCode, setContractCategoryCode] = useState("")
-  const [pendingEmailDispatch, setPendingEmailDispatch] = useState<PendingEmailDispatch | null>(null)
-  const [isSendingEmails, setIsSendingEmails] = useState(false)
-  const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true)
-  const [sendInternalEmail, setSendInternalEmail] = useState(false)
 
   // Edit fields states
   const [firstName, setFirstName] = useState("")
@@ -242,9 +228,12 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
         throw new Error(result.error || "Failed to approve user")
       }
 
-      toast.success("Account created successfully")
+      toast.success(
+        "Employee approved successfully. Staff ID generated. Mailbox status is set to 'Pending' for IT provisioning."
+      )
 
       queryClient.invalidateQueries({ queryKey: QUERY_KEYS.pendingApplications() })
+      queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminEmployees() })
       const remaining = pendingUsers.filter((u) => u.id !== selectedUser.id)
       if (remaining.length > 0) {
         handleUserSelect(remaining[0])
@@ -252,17 +241,6 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
         setSelectedUser(null)
       }
       onEmployeeCreated()
-
-      // Prompt admin to send onboarding emails
-      if (result.profileId && result.pendingEmailPreview) {
-        setSendWelcomeEmail(true)
-        setSendInternalEmail(false)
-        setPendingEmailDispatch({
-          profileId: result.profileId as string,
-          welcome: result.pendingEmailPreview.welcome as PendingEmailDispatch["welcome"],
-          internal: result.pendingEmailPreview.internal as PendingEmailDispatch["internal"],
-        })
-      }
     } catch (error: unknown) {
       log.error("Approval error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to approve user")
@@ -747,120 +725,6 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
           </main>
         </div>
       </DialogContent>
-
-      <AlertDialog
-        open={Boolean(pendingEmailDispatch)}
-        onOpenChange={(open) => {
-          if (!open && !isSendingEmails) setPendingEmailDispatch(null)
-        }}
-      >
-        <AlertDialogContent className="max-w-md">
-          <AlertDialogHeader>
-            <AlertDialogTitle className="flex items-center gap-2">
-              <Mail className="text-primary h-5 w-5" />
-              Send Onboarding Emails?
-            </AlertDialogTitle>
-            <AlertDialogDescription>
-              The employee account has been created. Select which notification emails to send:
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-
-          {pendingEmailDispatch && (
-            <div className="space-y-3 py-2">
-              <label className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors">
-                <Checkbox
-                  className="mt-0.5"
-                  checked={sendWelcomeEmail}
-                  onCheckedChange={(checked) => setSendWelcomeEmail(Boolean(checked))}
-                />
-                <div className="space-y-0.5 text-xs">
-                  <div className="text-foreground font-semibold">Welcome & Setup Email to Employee</div>
-                  <div className="text-muted-foreground">
-                    Sends username, temporary password, and portal setup instructions to{" "}
-                    <span className="text-foreground font-mono font-medium">
-                      {pendingEmailDispatch.welcome.recipients.join(", ") || "employee"}
-                    </span>
-                    .
-                  </div>
-                </div>
-              </label>
-
-              <label className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors">
-                <Checkbox
-                  className="mt-0.5"
-                  checked={sendInternalEmail}
-                  onCheckedChange={(checked) => setSendInternalEmail(Boolean(checked))}
-                />
-                <div className="space-y-0.5 text-xs">
-                  <div className="text-foreground font-semibold">Internal Notice to Department Leads</div>
-                  <div className="text-muted-foreground">
-                    Broadcasts new employee announcement to{" "}
-                    <span className="text-foreground font-medium">
-                      {pendingEmailDispatch.internal.recipients.length} lead(s)
-                    </span>
-                    .
-                  </div>
-                </div>
-              </label>
-            </div>
-          )}
-
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isSendingEmails} onClick={() => setPendingEmailDispatch(null)}>
-              Skip all
-            </AlertDialogCancel>
-            <Button
-              loading={isSendingEmails}
-              disabled={!sendWelcomeEmail && !sendInternalEmail}
-              onClick={async () => {
-                if (!pendingEmailDispatch) return
-                setIsSendingEmails(true)
-                try {
-                  const res = await apiFetch("/api/admin/send-onboarding-emails", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      ...pendingEmailDispatch,
-                      sendWelcome: sendWelcomeEmail,
-                      sendInternal: sendInternalEmail,
-                    }),
-                  })
-                  const data = await res.json()
-                  if (res.ok) {
-                    const warnings = Array.isArray(data.warnings) ? (data.warnings as string[]) : []
-                    if (warnings.length > 0) {
-                      toast.warning("Emails sent with some issues", { description: warnings.join(" | ") })
-                    } else {
-                      toast.success(
-                        sendWelcomeEmail && sendInternalEmail
-                          ? "Onboarding emails sent successfully"
-                          : sendWelcomeEmail
-                            ? "Welcome email sent to employee"
-                            : "Internal notice sent to leads"
-                      )
-                    }
-                  } else {
-                    toast.error(data.error || "Failed to send onboarding emails")
-                  }
-                } catch {
-                  toast.error("Failed to send onboarding emails")
-                } finally {
-                  setIsSendingEmails(false)
-                  setPendingEmailDispatch(null)
-                }
-              }}
-            >
-              {sendWelcomeEmail && sendInternalEmail
-                ? "Send both emails"
-                : sendWelcomeEmail
-                  ? "Send welcome email"
-                  : sendInternalEmail
-                    ? "Send lead notice"
-                    : "None selected"}
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <PromptDialog
         open={pendingReject}

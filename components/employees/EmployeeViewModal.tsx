@@ -105,6 +105,7 @@ export interface EmployeeViewModalProps {
   viewEmployeeData: EmployeeViewData
   onEditEmployee: (employee: EmployeeProfile) => void
   onSignature: (employee: EmployeeProfile) => void
+  onDispatchCredentials?: (employee: EmployeeProfile) => void
   canManageUsers: boolean
   getAvailableRoles: () => UserRole[]
 }
@@ -212,6 +213,7 @@ export function EmployeeViewModal({
   viewEmployeeData,
   onEditEmployee,
   onSignature,
+  onDispatchCredentials,
   canManageUsers,
   getAvailableRoles,
 }: EmployeeViewModalProps) {
@@ -486,6 +488,15 @@ export function EmployeeViewModal({
                           status={(viewEmployeeProfile.employment_status as EmploymentStatus) || "active"}
                           size="lg"
                         />
+                        {viewEmployeeProfile.employment_status === "active" &&
+                          !viewEmployeeProfile.mailbox_credentials_sent_at && (
+                            <Badge
+                              variant="outline"
+                              className="border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-600 shadow-none dark:text-amber-400"
+                            >
+                              Mailbox Pending
+                            </Badge>
+                          )}
                         <StaffTypeBadge
                           type={viewEmployeeProfile.employment_type}
                           categoryName={viewEmployeeProfile.contract_categories?.name}
@@ -494,16 +505,33 @@ export function EmployeeViewModal({
                       </div>
                     </div>
                     {canManageUsers && (
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          if (viewEmployeeProfile) onEditEmployee(viewEmployeeProfile)
-                        }}
-                        className="h-8 gap-1.5 text-xs"
-                      >
-                        <Edit className="h-3.5 w-3.5" />
-                        Edit Employment & Status
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        {onDispatchCredentials && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => {
+                              if (viewEmployeeProfile) onDispatchCredentials(viewEmployeeProfile)
+                            }}
+                            className="text-primary hover:text-primary h-8 gap-1.5 text-xs"
+                          >
+                            <Mail className="h-3.5 w-3.5" />
+                            {viewEmployeeProfile.mailbox_credentials_sent_at
+                              ? "Resend Credentials"
+                              : "Send Webmail Credentials"}
+                          </Button>
+                        )}
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            if (viewEmployeeProfile) onEditEmployee(viewEmployeeProfile)
+                          }}
+                          className="h-8 gap-1.5 text-xs"
+                        >
+                          <Edit className="h-3.5 w-3.5" />
+                          Edit Employment & Status
+                        </Button>
+                      </div>
                     )}
                   </div>
                 </div>

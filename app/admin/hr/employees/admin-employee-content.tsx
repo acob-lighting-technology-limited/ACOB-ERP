@@ -39,6 +39,7 @@ import { getAssignableRolesForActor } from "@/lib/role-management"
 import { logger } from "@/lib/logger"
 import { ManageUsersDialog } from "@/components/hr/manage-users-dialog"
 import { ManageContractCategoriesDialog } from "@/components/hr/manage-contract-categories-dialog"
+import { DispatchCredentialsDialog } from "@/components/employees/DispatchCredentialsDialog"
 import { normalizeDepartmentName } from "@/shared/departments"
 import {
   EmployeeViewModal,
@@ -122,6 +123,7 @@ export interface Employee {
   avatar_path?: string | null
   avatar_url?: string | null
   created_at: string
+  mailbox_credentials_sent_at?: string | null
 }
 
 export interface UserProfile {
@@ -196,6 +198,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [modalViewMode, setModalViewMode] = useState<"profile" | "employment" | "edit" | "signature">("profile")
+  const [dispatchingEmployee, setDispatchingEmployee] = useState<Employee | null>(null)
 
   // Export state
   const [exportOptionsOpen, setExportOptionsOpen] = useState(false)
@@ -842,7 +845,19 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         key: "status",
         label: "Status",
         accessor: (r) => r.employment_status || "active",
-        render: (r) => <EmployeeStatusBadge status={r.employment_status || "active"} size="sm" />,
+        render: (r) => (
+          <div className="flex flex-col items-start gap-1">
+            <EmployeeStatusBadge status={r.employment_status || "active"} size="sm" />
+            {r.employment_status === "active" && !r.mailbox_credentials_sent_at && (
+              <Badge
+                variant="outline"
+                className="border-amber-500/20 bg-amber-500/10 px-1.5 py-0 text-[10px] font-semibold text-amber-600 shadow-none dark:text-amber-400"
+              >
+                Mailbox Pending
+              </Badge>
+            )}
+          </div>
+        ),
       },
       {
         key: "actions",
@@ -879,6 +894,10 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setDispatchingEmployee(r)}>
+                    <Mail className="text-primary mr-2 h-4 w-4" />
+                    {r.mailbox_credentials_sent_at ? "Resend Webmail Credentials" : "Send Webmail Credentials"}
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => void handleConvertStaffType(r)}>
                     <ArrowRight className="mr-2 h-4 w-4" />
                     Convert Staff Type
@@ -944,6 +963,22 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         label: "Role",
         options: roleList.map((r) => ({ value: r, label: getRoleDisplayName(r) })),
         placeholder: "All Roles",
+      },
+      {
+        key: "mailbox_status",
+        label: "Mailbox",
+        options: [
+          { value: "pending", label: "Mailbox Pending" },
+          { value: "ready", label: "Mailbox Ready" },
+        ],
+        placeholder: "All Mailboxes",
+        mode: "custom",
+        filterFn: (employee, selected) => {
+          const isPending = employee.employment_status === "active" && !employee.mailbox_credentials_sent_at
+          if (selected.includes("pending") && isPending) return true
+          if (selected.includes("ready") && !isPending) return true
+          return false
+        },
       },
       // Status and Staff type are deliberately not filters. Both are scopes, and both are
       // now owned by the unified 4-tab strip above: Employees (regular current) / Contract Staff
@@ -1266,6 +1301,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         viewEmployeeData={viewEmployeeData}
         onEditEmployee={handleEditEmployee}
         onSignature={handleViewEmployeeSignature}
+        onDispatchCredentials={setDispatchingEmployee}
         canManageUsers={canManageUsers}
         getAvailableRoles={getAvailableRoles}
       />
@@ -1290,6 +1326,13 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         assignedItems={assignedItems}
         onDelete={() => toast.error("User deletion is disabled. Suspend or deactivate the employee instead.")}
         isDeleting={false}
+      />
+
+      <DispatchCredentialsDialog
+        employee={dispatchingEmployee}
+        open={Boolean(dispatchingEmployee)}
+        onOpenChange={(open) => !open && setDispatchingEmployee(null)}
+        onSuccess={() => void refetch()}
       />
     </DataTablePage>
   )
