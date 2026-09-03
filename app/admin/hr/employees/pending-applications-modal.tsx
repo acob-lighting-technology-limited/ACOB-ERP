@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
+import { Checkbox } from "@/components/ui/checkbox"
 import { PromptDialog } from "@/components/ui/prompt-dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Loader2, CheckCircle, UserPlus, ChevronRight, ShieldCheck, Hash, Mail } from "lucide-react"
@@ -102,6 +103,8 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
   const [contractCategoryCode, setContractCategoryCode] = useState("")
   const [pendingEmailDispatch, setPendingEmailDispatch] = useState<PendingEmailDispatch | null>(null)
   const [isSendingEmails, setIsSendingEmails] = useState(false)
+  const [sendWelcomeEmail, setSendWelcomeEmail] = useState(true)
+  const [sendInternalEmail, setSendInternalEmail] = useState(false)
 
   // Edit fields states
   const [firstName, setFirstName] = useState("")
@@ -252,6 +255,8 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
 
       // Prompt admin to send onboarding emails
       if (result.profileId && result.pendingEmailPreview) {
+        setSendWelcomeEmail(true)
+        setSendInternalEmail(false)
         setPendingEmailDispatch({
           profileId: result.profileId as string,
           welcome: result.pendingEmailPreview.welcome as PendingEmailDispatch["welcome"],
@@ -749,30 +754,64 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
           if (!open && !isSendingEmails) setPendingEmailDispatch(null)
         }}
       >
-        <AlertDialogContent>
+        <AlertDialogContent className="max-w-md">
           <AlertDialogHeader>
             <AlertDialogTitle className="flex items-center gap-2">
-              <Mail className="h-4 w-4" />
+              <Mail className="text-primary h-5 w-5" />
               Send Onboarding Emails?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              The account has been created. Do you want to send the onboarding notification emails to the configured
-              recipients?
-              {pendingEmailDispatch && (
-                <span className="mt-2 block text-xs">
-                  Welcome email → {pendingEmailDispatch.welcome.recipients.join(", ") || "no recipients"}.
-                  <br />
-                  Internal notice → {pendingEmailDispatch.internal.recipients.join(", ") || "no recipients"}.
-                </span>
-              )}
+              The employee account has been created. Select which notification emails to send:
             </AlertDialogDescription>
           </AlertDialogHeader>
+
+          {pendingEmailDispatch && (
+            <div className="space-y-3 py-2">
+              <label className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={sendWelcomeEmail}
+                  onCheckedChange={(checked) => setSendWelcomeEmail(Boolean(checked))}
+                />
+                <div className="space-y-0.5 text-xs">
+                  <div className="text-foreground font-semibold">Welcome & Setup Email to Employee</div>
+                  <div className="text-muted-foreground">
+                    Sends username, temporary password, and portal setup instructions to{" "}
+                    <span className="text-foreground font-mono font-medium">
+                      {pendingEmailDispatch.welcome.recipients.join(", ") || "employee"}
+                    </span>
+                    .
+                  </div>
+                </div>
+              </label>
+
+              <label className="hover:bg-muted/50 flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors">
+                <Checkbox
+                  className="mt-0.5"
+                  checked={sendInternalEmail}
+                  onCheckedChange={(checked) => setSendInternalEmail(Boolean(checked))}
+                />
+                <div className="space-y-0.5 text-xs">
+                  <div className="text-foreground font-semibold">Internal Notice to Department Leads</div>
+                  <div className="text-muted-foreground">
+                    Broadcasts new employee announcement to{" "}
+                    <span className="text-foreground font-medium">
+                      {pendingEmailDispatch.internal.recipients.length} lead(s)
+                    </span>
+                    .
+                  </div>
+                </div>
+              </label>
+            </div>
+          )}
+
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isSendingEmails} onClick={() => setPendingEmailDispatch(null)}>
-              No, skip
+              Skip all
             </AlertDialogCancel>
             <Button
               loading={isSendingEmails}
+              disabled={!sendWelcomeEmail && !sendInternalEmail}
               onClick={async () => {
                 if (!pendingEmailDispatch) return
                 setIsSendingEmails(true)
@@ -780,7 +819,11 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                   const res = await apiFetch("/api/admin/send-onboarding-emails", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(pendingEmailDispatch),
+                    body: JSON.stringify({
+                      ...pendingEmailDispatch,
+                      sendWelcome: sendWelcomeEmail,
+                      sendInternal: sendInternalEmail,
+                    }),
                   })
                   const data = await res.json()
                   if (res.ok) {
@@ -788,7 +831,13 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                     if (warnings.length > 0) {
                       toast.warning("Emails sent with some issues", { description: warnings.join(" | ") })
                     } else {
-                      toast.success("Onboarding emails sent successfully")
+                      toast.success(
+                        sendWelcomeEmail && sendInternalEmail
+                          ? "Onboarding emails sent successfully"
+                          : sendWelcomeEmail
+                            ? "Welcome email sent to employee"
+                            : "Internal notice sent to leads"
+                      )
                     }
                   } else {
                     toast.error(data.error || "Failed to send onboarding emails")
@@ -801,7 +850,13 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                 }
               }}
             >
-              Yes, send emails
+              {sendWelcomeEmail && sendInternalEmail
+                ? "Send both emails"
+                : sendWelcomeEmail
+                  ? "Send welcome email"
+                  : sendInternalEmail
+                    ? "Send lead notice"
+                    : "None selected"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
