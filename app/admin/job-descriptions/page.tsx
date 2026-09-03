@@ -189,8 +189,9 @@ export default function AdminJobDescriptionsPage() {
       icon={Briefcase}
       backLink={{ href: "/admin", label: "Back to Admin" }}
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total Staff"
             value={stats.total}
             icon={User}
@@ -198,6 +199,7 @@ export default function AdminJobDescriptionsPage() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Completed"
             value={stats.completed}
             icon={CheckCircle}
@@ -205,6 +207,7 @@ export default function AdminJobDescriptionsPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Pending"
             value={stats.pending}
             icon={XCircle}
@@ -212,6 +215,7 @@ export default function AdminJobDescriptionsPage() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Updated Recently"
             value={stats.thisMonth}
             icon={Calendar}
@@ -267,6 +271,28 @@ export default function AdminJobDescriptionsPage() {
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) => (r.job_description ? "bg-emerald-500" : "bg-amber-500"),
+          title: (r) => `${r.first_name} ${r.last_name}`,
+          subtitle: (r) => `${r.department} · ${r.designation || "No designation"} · ${r.company_email}`,
+          trailing: (r) =>
+            r.job_description ? (
+              <Badge variant="outline" className="border-transparent bg-emerald-500/10 text-[9px] text-emerald-500">
+                Completed
+              </Badge>
+            ) : (
+              <Badge variant="outline" className="border-transparent bg-amber-500/10 text-[9px] text-amber-500">
+                Pending
+              </Badge>
+            ),
+          onSelect: (r) => {
+            setSelectedProfile(r)
+            setIsViewDialogOpen(true)
+          },
+        }}
         cardRenderer={(r) => (
           <div
             className="bg-card cursor-pointer rounded-xl border p-4 transition-all hover:shadow-md"

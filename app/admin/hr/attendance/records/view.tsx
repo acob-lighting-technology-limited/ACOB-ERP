@@ -370,16 +370,17 @@ export function AdminAttendanceRecordsPage({
           </Button>
         }
         stats={
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            <StatCard title="Total Records" value={records.length} icon={Calendar} />
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
+            <StatCard variant="compact" title="Total Records" value={records.length} icon={Calendar} />
             <StatCard
+              variant="compact"
               title="Missing Clock-Out"
               value={incomplete}
               icon={AlertCircle}
               iconBgColor="bg-orange-500/10"
               iconColor="text-orange-500"
             />
-            <StatCard title="Total Hours" value={totalHours.toFixed(1)} icon={Clock} />
+            <StatCard variant="compact" title="Total Hours" value={totalHours.toFixed(1)} icon={Clock} />
           </div>
         }
       >
@@ -417,6 +418,48 @@ export function AdminAttendanceRecordsPage({
           searchPlaceholder="Search employee or department..."
           searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
           isLoading={loading}
+          viewToggle
+          contactsView
+          stickyToolbar
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            accentClass: (r) =>
+              r.status === "present"
+                ? "bg-emerald-500"
+                : r.status === "late"
+                  ? "bg-amber-500"
+                  : r.status === "absent"
+                    ? "bg-red-500"
+                    : "bg-blue-500",
+            title: (r) => `${r.user_name} · ${formatDate(r.date)}`,
+            subtitle: (r) =>
+              `${r.department} · In: ${formatTime(r.clock_in)} · Out: ${formatTime(r.clock_out)} · ${r.total_hours?.toFixed(1) ?? 0}h`,
+            trailing: (r) => <StatusBadge status={r.status} record={r} />,
+            onSelect: (r) => openEdit(r),
+          }}
+          cardRenderer={(r) => (
+            <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+              <div className="flex items-start justify-between">
+                <div>
+                  <p className="text-sm font-semibold">{r.user_name}</p>
+                  <p className="text-muted-foreground text-xs">{r.department}</p>
+                </div>
+                <StatusBadge status={r.status} record={r} />
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="text-muted-foreground">Clock In:</span> {formatTime(r.clock_in)}
+                </div>
+                <div>
+                  <span className="text-muted-foreground">Clock Out:</span> {formatTime(r.clock_out)}
+                </div>
+              </div>
+              <div className="flex items-center justify-between border-t pt-2 text-[10px]">
+                <span>{formatDate(r.date)}</span>
+                <span className="font-semibold">{r.total_hours?.toFixed(1) ?? 0} hrs</span>
+              </div>
+            </div>
+          )}
           emptyTitle="No records found"
           emptyDescription="Adjust the date range and try again."
           emptyIcon={Calendar}

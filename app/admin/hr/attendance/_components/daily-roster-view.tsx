@@ -460,8 +460,9 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
         </Button>
       </div>
 
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
         <StatCard
+          variant="compact"
           title="Present"
           value={stats.present}
           icon={Users}
@@ -469,6 +470,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           iconColor="text-blue-500"
         />
         <StatCard
+          variant="compact"
           title="Early"
           value={stats.early}
           icon={Users}
@@ -476,6 +478,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           iconColor="text-green-500"
         />
         <StatCard
+          variant="compact"
           title="Late"
           value={stats.late}
           icon={Clock}
@@ -483,6 +486,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           iconColor="text-yellow-500"
         />
         <StatCard
+          variant="compact"
           title="Incomplete"
           value={stats.incomplete}
           icon={AlertCircle}
@@ -490,6 +494,7 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
           iconColor="text-cyan-500"
         />
         <StatCard
+          variant="compact"
           title="Absent"
           value={stats.absent}
           icon={AlertCircle}
@@ -507,6 +512,53 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
         searchPlaceholder="Search employee or department…"
         searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
         isLoading={loading}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.status === "present" || r.status === "early"
+              ? "bg-emerald-500"
+              : r.status === "late"
+                ? "bg-amber-500"
+                : r.status === "absent"
+                  ? "bg-red-500"
+                  : "bg-blue-500",
+          title: (r) => r.user_name,
+          subtitle: (r) => `${r.department} · In: ${formatTime(r.clock_in)} · Out: ${formatTime(r.clock_out)}`,
+          trailing: (r) => (
+            <StatusBadge
+              status={r.status}
+              record={r}
+              earlyClosure={r.early_closure_time ? { closeTime: r.early_closure_time } : null}
+            />
+          ),
+          onSelect: (r) => openEdit(r),
+        }}
+        cardRenderer={(r) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{r.user_name}</p>
+                <p className="text-muted-foreground text-xs">{r.department}</p>
+              </div>
+              <StatusBadge
+                status={r.status}
+                record={r}
+                earlyClosure={r.early_closure_time ? { closeTime: r.early_closure_time } : null}
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-muted-foreground">Clock In:</span> {formatTime(r.clock_in)}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Clock Out:</span> {formatTime(r.clock_out)}
+              </div>
+            </div>
+          </div>
+        )}
         emptyTitle="No records for this date"
         emptyDescription="No attendance records found for the selected date."
         emptyIcon={FileText}

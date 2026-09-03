@@ -321,8 +321,9 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
       </div>
 
       {/* Stats */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+      <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3">
         <StatCard
+          variant="compact"
           title="Late"
           value={stats.late}
           icon={Clock}
@@ -330,6 +331,7 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
           iconColor="text-yellow-500"
         />
         <StatCard
+          variant="compact"
           title="Missing Clock-Out"
           value={stats.incomplete}
           icon={AlertTriangle}
@@ -337,6 +339,7 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
           iconColor="text-cyan-500"
         />
         <StatCard
+          variant="compact"
           title="Absent"
           value={stats.absent}
           icon={XCircle}
@@ -354,6 +357,41 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
         searchPlaceholder="Search employee or department…"
         searchFn={(r, q) => [r.user_name, r.department].join(" ").toLowerCase().includes(q)}
         isLoading={loading}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.status === "late" ? "bg-amber-500" : r.status === "absent" ? "bg-red-500" : "bg-cyan-500",
+          title: (r) => `${r.user_name} · ${r.date}`,
+          subtitle: (r) => `${r.department} · In: ${formatTime(r.clock_in)} · Out: ${formatTime(r.clock_out)}`,
+          trailing: (r) => issueBadge(r),
+          onSelect: (r) => openEdit(r),
+        }}
+        cardRenderer={(r) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{r.user_name}</p>
+                <p className="text-muted-foreground text-xs">{r.department}</p>
+              </div>
+              {issueBadge(r)}
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-muted-foreground">Clock In:</span> {formatTime(r.clock_in)}
+              </div>
+              <div>
+                <span className="text-muted-foreground">Clock Out:</span> {formatTime(r.clock_out)}
+              </div>
+            </div>
+            <div className="flex items-center justify-between border-t pt-2 text-[10px]">
+              <span>{r.date}</span>
+              <span>Source: {labelSource(r)}</span>
+            </div>
+          </div>
+        )}
         emptyTitle="No exceptions found"
         emptyDescription="No late, incomplete, or absent records for this period."
         emptyIcon={FileText}
