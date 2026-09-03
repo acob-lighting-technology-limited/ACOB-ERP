@@ -20,7 +20,10 @@ export default {
     ],
     "type-case": [2, "always", "lower-case"],
     "type-empty": [2, "never"],
-    "subject-case": [2, "always", "lower-case"],
+    // Forbid Sentence case, Start Case and ALL CAPS subjects, but allow capitals
+    // inside one -- otherwise a subject naming an identifier or proper noun
+    // (e.g. "renumber TSK-000001", "bump Supabase client") is rejected.
+    "subject-case": [2, "never", ["upper-case", "pascal-case", "start-case"]],
     "subject-empty": [2, "never"],
     "subject-full-stop": [2, "never", "."],
     "header-max-length": [2, "always", 72],

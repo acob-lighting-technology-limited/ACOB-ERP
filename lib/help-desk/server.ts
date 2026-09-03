@@ -345,10 +345,12 @@ export async function syncHelpDeskTicketTask(params: {
     source_type: "help_desk" as const,
     source_id: params.ticket.id,
     assignment_type: assignmentType,
-    work_item_number: params.ticket.ticket_number?.startsWith("TSK-") ? params.ticket.ticket_number : null,
     goal_id: null,
   }
 
+  // work_item_number is insert-only. The assign trigger is BEFORE INSERT, so
+  // including this key on the update path would blank an existing task's
+  // number with no way to restore it.
   const { data: syncedTask, error } = existingTask
     ? await dataClient
         .from("tasks")
@@ -356,22 +358,30 @@ export async function syncHelpDeskTicketTask(params: {
         .eq("id", existingTask.id)
         .select("id, work_item_number")
         .single<SyncedTaskRow>()
-    : await dataClient.from("tasks").insert(taskPayload).select("id, work_item_number").single<SyncedTaskRow>()
+    : await dataClient
+        .from("tasks")
+        .insert({
+          ...taskPayload,
+          work_item_number: params.ticket.ticket_number?.startsWith("TSK-") ? params.ticket.ticket_number : null,
+        })
+        .select("id, work_item_number")
+        .single<SyncedTaskRow>()
 
   if (error || !syncedTask) {
     throw error || new Error("Failed to sync help desk task")
   }
 
-  const ticketUpdates: Record<string, unknown> = {}
+  // Tickets keep their own HD- identity; only the link is written back. The
+  // task carries the TSK number.
   if (params.ticket.task_id !== syncedTask.id) {
-    ticketUpdates.task_id = syncedTask.id
-  }
-  if (syncedTask.work_item_number && params.ticket.ticket_number !== syncedTask.work_item_number) {
-    ticketUpdates.ticket_number = syncedTask.work_item_number
-  }
+    const { error: linkError } = await dataClient
+      .from("help_desk_tickets")
+      .update({ task_id: syncedTask.id })
+      .eq("id", params.ticket.id)
 
-  if (Object.keys(ticketUpdates).length > 0) {
-    await dataClient.from("help_desk_tickets").update(ticketUpdates).eq("id", params.ticket.id)
+    if (linkError) {
+      throw linkError
+    }
   }
 
   return {
