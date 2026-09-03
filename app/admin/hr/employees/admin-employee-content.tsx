@@ -119,6 +119,8 @@ export interface Employee {
   employment_type?: "full_time" | "part_time" | "contract"
   contract_category_id?: string | null
   contract_categories?: { id: string; name: string; code: string } | null
+  avatar_path?: string | null
+  avatar_url?: string | null
   created_at: string
 }
 
@@ -136,6 +138,38 @@ interface AdminEmployeeContentProps {
 function deriveLeadDepartments(department: string, isDepartmentLead: boolean): string[] {
   const canonical = normalizeDepartmentName(department)
   return isDepartmentLead && canonical ? [canonical] : []
+}
+
+const AVATAR_SIZES = {
+  sm: "h-8 w-8 text-[10px]",
+  md: "h-10 w-10 text-xs",
+  lg: "h-12 w-12 text-sm",
+  xl: "h-16 w-16 text-lg",
+} as const
+
+function getInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return (name.slice(0, 2) || "AC").toUpperCase()
+}
+
+function EmployeeAvatar({ employee, size = "md" }: { employee: Employee; size?: keyof typeof AVATAR_SIZES }) {
+  const fullName = `${employee.first_name || ""} ${employee.last_name || ""}`.trim() || employee.company_email || "User"
+  return (
+    <span
+      className={cn(
+        "bg-primary/10 text-primary flex shrink-0 items-center justify-center overflow-hidden rounded-full font-bold",
+        AVATAR_SIZES[size]
+      )}
+    >
+      {employee.avatar_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={employee.avatar_url} alt={fullName} className="h-full w-full object-cover" />
+      ) : (
+        getInitials(fullName)
+      )}
+    </span>
+  )
 }
 
 const roleList: UserRole[] = ["visitor", "employee", "admin", "super_admin", "developer"]
@@ -696,21 +730,24 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         label: "Name",
         sortable: true,
         resizable: true,
-        initialWidth: 200,
+        initialWidth: 230,
         accessor: (r) => `${r.last_name}, ${r.first_name}`,
         render: (r) => (
-          <div className="flex flex-col">
-            <span
-              className={cn("font-medium", r.employment_status === "exited" && "text-muted-foreground line-through")}
-            >
-              {formatName(r.last_name)}, {formatName(r.first_name)}
-            </span>
-            {r.is_department_lead && (
-              <div className="flex items-center gap-1 text-xs text-amber-600">
-                <Shield className="h-3 w-3" />
-                <span>Dept Lead</span>
-              </div>
-            )}
+          <div className="flex items-center gap-2.5">
+            <EmployeeAvatar employee={r} size="sm" />
+            <div className="flex min-w-0 flex-col">
+              <span
+                className={cn("font-medium", r.employment_status === "exited" && "text-muted-foreground line-through")}
+              >
+                {formatName(r.last_name)}, {formatName(r.first_name)}
+              </span>
+              {r.is_department_lead && (
+                <div className="flex items-center gap-1 text-xs text-amber-600">
+                  <Shield className="h-3 w-3" />
+                  <span>Dept Lead</span>
+                </div>
+              )}
+            </div>
           </div>
         ),
       },
@@ -1110,6 +1147,7 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
                 : r.employment_status === "on_leave"
                   ? "bg-blue-500"
                   : "bg-emerald-500",
+          leading: (r) => <EmployeeAvatar employee={r} size="sm" />,
           title: (r) => `${formatName(r.first_name)} ${formatName(r.last_name)}`,
           subtitle: (r) => `${r.designation || r.department || "Employee"} · ${r.office_location || r.company_email}`,
           trailing: (r) => (
@@ -1123,17 +1161,20 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           <Card className="group transition-shadow hover:shadow-md">
             <CardContent className="space-y-4 p-4">
               <div className="flex items-start justify-between">
-                <div className="min-w-0">
-                  <p className="truncate text-lg font-semibold">
-                    {formatName(r.first_name)} {formatName(r.last_name)}
-                  </p>
-                  <p className="text-muted-foreground truncate text-xs">{r.designation || r.department}</p>
-                  {r.is_department_lead && (
-                    <div className="mt-1 flex items-center gap-1 text-xs text-amber-600">
-                      <Shield className="h-3 w-3" />
-                      <span>Dept Lead</span>
-                    </div>
-                  )}
+                <div className="flex min-w-0 items-center gap-3">
+                  <EmployeeAvatar employee={r} size="md" />
+                  <div className="min-w-0">
+                    <p className="truncate text-base font-semibold">
+                      {formatName(r.first_name)} {formatName(r.last_name)}
+                    </p>
+                    <p className="text-muted-foreground truncate text-xs">{r.designation || r.department}</p>
+                    {r.is_department_lead && (
+                      <div className="mt-1 flex items-center gap-1 text-xs text-amber-600">
+                        <Shield className="h-3 w-3" />
+                        <span>Dept Lead</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <EmployeeStatusBadge status={r.employment_status || "active"} size="sm" />
               </div>
