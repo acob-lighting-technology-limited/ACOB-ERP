@@ -232,7 +232,7 @@ export default function MovementsPage() {
       icon={Boxes}
       backLink={{ href: "/admin/inventory", label: "Back to Inventory" }}
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             variant="compact"
             title="Total Movements"
@@ -264,6 +264,7 @@ export default function MovementsPage() {
             icon={ClipboardList}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
+            className="hidden sm:block"
           />
         </div>
       }

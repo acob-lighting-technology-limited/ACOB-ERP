@@ -422,7 +422,7 @@ export function AdminHelpDeskContent({
       activeTab={activeTab}
       onTabChange={setActiveTab}
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
             variant="compact"
             title="Total Tickets"
@@ -430,6 +430,7 @@ export function AdminHelpDeskContent({
             icon={Headset}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
+            className="hidden sm:block"
           />
           <StatCard
             variant="compact"

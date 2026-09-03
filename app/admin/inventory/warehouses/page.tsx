@@ -322,7 +322,7 @@ export default function WarehousesPage() {
         </Dialog>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             variant="compact"
             title="Warehouses"
@@ -354,6 +354,7 @@ export default function WarehousesPage() {
             icon={MapPin}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
+            className="hidden sm:block"
           />
         </div>
       }

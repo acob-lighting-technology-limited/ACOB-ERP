@@ -267,7 +267,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
       activeTab={hasLeadFeedback ? activeTab : undefined}
       onTabChange={(tab) => setActiveTab(tab as "general" | "leads")}
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3">
           <StatCard
             variant="compact"
             title="Total"
@@ -275,6 +275,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
             icon={MessageSquare}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
+            className="hidden sm:block"
           />
           <StatCard
             variant="compact"
@@ -307,6 +308,7 @@ export function AdminFeedbackContent({ initialFeedback, initialStats }: AdminFee
             icon={XCircle}
             iconBgColor="bg-gray-500/10"
             iconColor="text-gray-500"
+            className="hidden sm:block"
           />
         </div>
       }

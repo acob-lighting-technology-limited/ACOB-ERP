@@ -236,7 +236,7 @@ export default function ProductsPage() {
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             variant="compact"
             title="Total Products"
@@ -252,6 +252,7 @@ export default function ProductsPage() {
             icon={Tags}
             iconBgColor="bg-emerald-500/10"
             iconColor="text-emerald-500"
+            className="hidden sm:block"
           />
           <StatCard
             variant="compact"

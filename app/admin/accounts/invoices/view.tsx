@@ -258,7 +258,7 @@ export function InvoicesPage({
         </Button>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             variant="compact"
             title="Total Invoices"
@@ -266,6 +266,7 @@ export function InvoicesPage({
             icon={FileText}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
+            className="hidden sm:block"
           />
           <StatCard
             variant="compact"

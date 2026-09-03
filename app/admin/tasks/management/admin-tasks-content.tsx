@@ -516,7 +516,7 @@ export function AdminTasksContent({
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3">
           <StatCard
             variant="compact"
             title="Total Tasks"
@@ -524,6 +524,7 @@ export function AdminTasksContent({
             icon={ClipboardList}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
+            className="hidden sm:block"
           />
           <StatCard
             variant="compact"
@@ -548,6 +549,7 @@ export function AdminTasksContent({
             icon={Send}
             iconBgColor="bg-purple-500/10"
             iconColor="text-purple-500"
+            className="hidden sm:block"
           />
           <StatCard
             variant="compact"

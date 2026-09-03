@@ -1475,7 +1475,7 @@ export function AdminAssetsContent({
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5 sm:gap-3">
           <StatCard
             variant="compact"
             title="Total Assets"
@@ -1507,6 +1507,7 @@ export function AdminAssetsContent({
             icon={Wrench}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
+            className="hidden sm:block"
           />
           <StatCard
             variant="compact"
@@ -1515,6 +1516,7 @@ export function AdminAssetsContent({
             icon={AlertCircle}
             iconBgColor="bg-red-500/10"
             iconColor="text-red-500"
+            className="hidden sm:block"
           />
         </div>
       }
