@@ -477,13 +477,6 @@ export function DataTable<TData>({
   // ─── Expanded rows ─────────────────────────────────────────────────────────
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
-  // Single row expanded inline in table/list view via detailConfig — only one
-  // open at a time; clicking the same row again collapses it.
-  const [expandedDetailRow, setExpandedDetailRow] = useState<string | null>(null)
-  const toggleDetailExpand = useCallback((id: string) => {
-    setExpandedDetailRow((prev) => (prev === id ? null : id))
-  }, [])
-
   // ─── Selected rows ─────────────────────────────────────────────────────────
   const [selectedRows, setSelectedRows] = useState<Set<string>>(new Set())
 
@@ -773,16 +766,14 @@ export function DataTable<TData>({
         rows[idx - 1]?.focus()
       } else if (e.key === "Enter" || e.key === " ") {
         const targetRow = paginatedData.find((r) => getRowId(r) === rowId)
-        if (expandable) {
-          toggleExpand(rowId)
-        } else if (detailConfig) {
-          toggleDetailExpand(rowId)
-        } else if (onRowSelect && targetRow) {
+        if (onRowSelect && targetRow) {
           onRowSelect(targetRow)
+        } else if (mobileRow?.onSelect && targetRow) {
+          mobileRow.onSelect(targetRow)
         }
       }
     },
-    [expandable, toggleExpand, detailConfig, toggleDetailExpand, onRowSelect, paginatedData, getRowId]
+    [onRowSelect, mobileRow, paginatedData, getRowId]
   )
 
   // Where the pointer went down on a row, so a click that was really a text-selection
@@ -1266,24 +1257,18 @@ export function DataTable<TData>({
                         ) {
                           return
                         }
-                        // Highlighting text inside a row must not expand it.
+                        // Highlighting text inside a row must not trigger selection.
                         if (clickWasTextSelection(e)) return
-                        if (canExpand) {
-                          toggleExpand(rowId)
-                        } else if (detailConfig) {
-                          toggleDetailExpand(rowId)
-                        } else if (onRowSelect) {
-                          // A page whose detail lives in its own dialog opens it from
-                          // the table row too, so "click the row" means the same thing
-                          // in every view rather than only in the list.
+                        if (onRowSelect) {
                           onRowSelect(row)
+                        } else if (mobileRow?.onSelect) {
+                          mobileRow.onSelect(row)
                         }
                       }}
                       className={cn(
-                        (isExpanded || expandedDetailRow === rowId) && "border-b-0",
+                        isExpanded && "border-b-0",
                         selectedRows.has(rowId) && "bg-muted/50",
-                        (canExpand || Boolean(detailConfig) || Boolean(onRowSelect)) &&
-                          "hover:bg-muted/30 cursor-pointer",
+                        (Boolean(onRowSelect) || Boolean(mobileRow?.onSelect)) && "hover:bg-muted/30 cursor-pointer",
                         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
                       )}
                     >
@@ -1438,76 +1423,6 @@ export function DataTable<TData>({
                       <TableRow className="bg-muted/30 hover:bg-muted/30">
                         <TableCell colSpan={totalCols} className="p-4">
                           {expandable.render(row)}
-                        </TableCell>
-                      </TableRow>
-                    )}
-
-                    {detailConfig && expandedDetailRow === rowId && (
-                      <TableRow className="bg-muted/20 hover:bg-muted/20">
-                        <TableCell colSpan={totalCols} className="px-4 py-3">
-                          <div className="grid grid-cols-2 gap-x-6 gap-y-1 md:grid-cols-3">
-                            {detailConfig
-                              .fields(row)
-                              .filter((f) => f.value != null && f.value !== "")
-                              .map((field) => {
-                                const Icon = field.icon
-                                const canCopy = field.copyable !== false && !field.href
-                                return (
-                                  <div key={field.label} className="flex items-start gap-2 py-1">
-                                    {Icon && <Icon className="text-muted-foreground mt-0.5 h-3.5 w-3.5 shrink-0" />}
-                                    <div className="min-w-0">
-                                      <p className="text-muted-foreground text-[10px] leading-none">{field.label}</p>
-                                      {canCopy ? (
-                                        <button
-                                          type="button"
-                                          onClick={(e) => {
-                                            e.stopPropagation()
-                                            copyField(String(field.value), field.label)
-                                          }}
-                                          className="hover:text-primary text-left text-xs leading-snug break-words"
-                                        >
-                                          {field.value}
-                                        </button>
-                                      ) : field.href ? (
-                                        <a
-                                          href={field.href}
-                                          target="_blank"
-                                          rel="noreferrer"
-                                          onClick={(e) => e.stopPropagation()}
-                                          className="text-primary text-xs hover:underline"
-                                        >
-                                          {field.value}
-                                        </a>
-                                      ) : (
-                                        <p className="text-xs leading-snug break-words">{field.value}</p>
-                                      )}
-                                    </div>
-                                  </div>
-                                )
-                              })}
-                          </div>
-                          {detailConfig.actions && detailConfig.actions(row).length > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-2 border-t pt-3">
-                              {detailConfig.actions(row).map((action) => {
-                                const Icon = action.icon
-                                return (
-                                  <Button
-                                    key={action.label}
-                                    size="sm"
-                                    variant={action.variant ?? "default"}
-                                    className="gap-1.5"
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      action.onClick?.()
-                                    }}
-                                  >
-                                    {Icon && <Icon className="h-3.5 w-3.5" />}
-                                    {action.label}
-                                  </Button>
-                                )
-                              })}
-                            </div>
-                          )}
                         </TableCell>
                       </TableRow>
                     )}
