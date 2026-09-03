@@ -219,6 +219,7 @@ export default function PurchaseOrdersPage() {
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total Orders"
             value={stats.total}
             icon={ShoppingCart}
@@ -226,6 +227,7 @@ export default function PurchaseOrdersPage() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Pending"
             value={stats.pending}
             icon={CalendarClock}
@@ -233,6 +235,7 @@ export default function PurchaseOrdersPage() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Approved"
             value={stats.approved}
             icon={BadgeCheck}
@@ -240,6 +243,7 @@ export default function PurchaseOrdersPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Total Value"
             value={formatCurrency(stats.totalValue)}
             icon={Wallet}
@@ -300,6 +304,28 @@ export default function PurchaseOrdersPage() {
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (order) =>
+            order.status === "cancelled"
+              ? "bg-rose-500"
+              : order.status === "approved" || order.status === "received"
+                ? "bg-emerald-500"
+                : "bg-amber-500",
+          title: (order) => `${order.po_number} · ${order.supplier_name || "Supplier"}`,
+          subtitle: (order) =>
+            `${formatCurrency(order.total_amount, order.currency)} · Expected ${order.expected_date ? formatDate(order.expected_date) : "Not set"}`,
+          trailing: (order) => (
+            <Badge variant={statusColors[order.status]} className="text-[10px] capitalize">
+              {order.status}
+            </Badge>
+          ),
+          onSelect: (order) => {
+            router.push(`/admin/purchasing/orders/${order.id}`)
+          },
+        }}
         cardRenderer={(order) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">

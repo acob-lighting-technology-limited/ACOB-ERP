@@ -289,6 +289,7 @@ export default function CategoriesPage() {
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Categories"
             value={stats.totalCategories}
             icon={Boxes}
@@ -296,6 +297,7 @@ export default function CategoriesPage() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Mapped Products"
             value={stats.mappedProducts}
             icon={Layers3}
@@ -303,6 +305,7 @@ export default function CategoriesPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Active Categories"
             value={stats.activeCategories}
             icon={Tag}
@@ -310,6 +313,7 @@ export default function CategoriesPage() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Empty Categories"
             value={stats.emptyCategories}
             icon={FolderOpen}
@@ -360,6 +364,21 @@ export default function CategoriesPage() {
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (category) => ((category.product_count || 0) > 0 ? "bg-emerald-500" : "bg-slate-400"),
+          title: (category) => category.name,
+          subtitle: (category) =>
+            `${category.product_count || 0} products · ${category.description || "No description"}`,
+          trailing: (category) => (
+            <Badge variant="secondary" className="text-[10px]">
+              {category.product_count || 0} items
+            </Badge>
+          ),
+          onSelect: (category) => openEdit(category),
+        }}
         cardRenderer={(category) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">

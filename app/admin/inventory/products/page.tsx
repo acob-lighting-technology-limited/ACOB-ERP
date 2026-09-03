@@ -237,6 +237,7 @@ export default function ProductsPage() {
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total Products"
             value={stats.total}
             icon={Package}
@@ -244,6 +245,7 @@ export default function ProductsPage() {
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Active"
             value={stats.active}
             icon={Tags}
@@ -251,6 +253,7 @@ export default function ProductsPage() {
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Low Stock"
             value={stats.lowStock}
             icon={AlertTriangle}
@@ -258,6 +261,7 @@ export default function ProductsPage() {
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Stock Value"
             value={formatCurrency(stats.totalValue)}
             icon={Wallet}
@@ -322,6 +326,26 @@ export default function ProductsPage() {
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (product) =>
+            product.quantity_on_hand <= 0
+              ? "bg-rose-500"
+              : product.status === "active"
+                ? "bg-emerald-500"
+                : "bg-slate-400",
+          title: (product) => product.name,
+          subtitle: (product) =>
+            `${product.sku} · ${product.category_name || "Uncategorized"} · Stock: ${product.quantity_on_hand}`,
+          trailing: (product) => (
+            <Badge variant={statusColors[product.status]} className="text-[10px] capitalize">
+              {product.status}
+            </Badge>
+          ),
+          onSelect: (product) => setEditingProduct(product),
+        }}
         cardRenderer={(product) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">
