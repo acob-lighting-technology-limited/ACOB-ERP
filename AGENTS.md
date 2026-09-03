@@ -8,6 +8,7 @@ Do not treat a task as complete until all required checks pass:
 
 - `npx eslint . --ext .ts,.tsx`
 - `npx tsc --noEmit`
+- **Commit Every Good Work Done**: Once changes satisfy all required checks (`npx eslint`, `npx tsc --noEmit`) and migrations are verified, **always commit the verified work promptly** following the [Commit Grouping Strategy](#commit-grouping-strategy--mandatory-before-any-commit). Never leave completed, verified work uncommitted in the working tree across conversational turns or user requests. Do not wait for the user to prompt you to commit good work.
 - **Database Migration Execution**: If any new `.sql` migrations were created or modified under `supabase/migrations/`:
   - **Always run `npx supabase migration list` to determine actual deployment status.** This is the sole source of truth — not `git status`.
   - A migration file that is untracked or unstaged in git is **not** automatically pending. Check the output of `migration list`: if the `remote` column is populated for that version, it has already been applied. Only flag a migration as pending if its `remote` field is empty.
@@ -46,6 +47,7 @@ re-litigate it, do not quietly implement a different thing, and do not sandbag t
 
 ## Git and Hook Policy
 
+- Always commit every good, verified work done promptly. Never leave completed tasks unstaged or uncommitted.
 - Never use `git commit --no-verify`.
 - Never use `git push --no-verify`.
 - Do not bypass failing hooks. Fix the underlying issue.
@@ -55,7 +57,7 @@ re-litigate it, do not quietly implement a different thing, and do not sandbag t
 
 ## Commit Grouping Strategy — Mandatory Before Any Commit
 
-**Never commit all uncommitted changes in a single `git add -A && git commit`.** When the user asks you to commit (or when committing as part of completing a task), you MUST follow this workflow:
+**Never commit all uncommitted changes in a single `git add -A && git commit`.** You MUST commit every good unit of work done upon completing a task, feature, or fix. Always follow this workflow before committing:
 
 ### Step 1 — Analyse before staging
 Run `git diff --stat HEAD` and `git status --short` to get the full list of modified and untracked files. Do **not** stage anything yet.
