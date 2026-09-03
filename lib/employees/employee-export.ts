@@ -74,7 +74,12 @@ export function buildEmployeeExportRows(employees: Employee[], opts: ExportOptio
     if (selectedColumns["Employment Date"]) row["Employment Date"] = member.employment_date || "-"
     if (selectedColumns["Employment Type"]) {
       const type = member.employment_type || "full_time"
-      row["Employment Type"] = type === "full_time" ? "Full Time" : type === "part_time" ? "Part Time" : "Contract"
+      row["Employment Type"] =
+        type === "full_time"
+          ? "Full Time"
+          : type === "part_time"
+            ? "Part Time"
+            : member.contract_categories?.name || "Contract Staff"
     }
     if (selectedColumns["Contract Category"]) {
       row["Contract Category"] = member.contract_categories?.name
@@ -229,7 +234,13 @@ export async function exportEmployeesToPDF(
       }
       if (selectedColumns["Employment Type"]) {
         const type = member.employment_type || "full_time"
-        row.push(type === "full_time" ? "Full Time" : type === "part_time" ? "Part Time" : "Contract")
+        row.push(
+          type === "full_time"
+            ? "Full Time"
+            : type === "part_time"
+              ? "Part Time"
+              : member.contract_categories?.name || "Contract Staff"
+        )
         headers.push("Employment Type")
       }
       if (selectedColumns["Contract Category"]) {

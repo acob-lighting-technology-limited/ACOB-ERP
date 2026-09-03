@@ -784,20 +784,31 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         accessor: (r) => r.employment_type || "full_time",
         render: (r) => {
           const type = r.employment_type || "full_time"
-          const display =
-            type === "full_time"
-              ? "Full Time"
-              : type === "part_time"
-                ? "Part Time"
-                : r.contract_categories?.name
-                  ? `Contract (${r.contract_categories.name})`
-                  : "Contract"
-          const badgeColor =
-            type === "full_time"
-              ? "bg-blue-500/10 text-blue-500 hover:bg-blue-500/10 border-transparent shadow-none"
-              : type === "part_time"
-                ? "bg-purple-500/10 text-purple-500 hover:bg-purple-500/10 border-transparent shadow-none"
-                : "bg-orange-500/10 text-orange-500 hover:bg-orange-500/10 border-transparent shadow-none"
+          let display = "Full Time"
+          let badgeColor = "bg-blue-500/10 text-blue-500 hover:bg-blue-500/10 border-transparent shadow-none"
+
+          if (type === "part_time") {
+            display = "Part Time"
+            badgeColor = "bg-slate-500/10 text-slate-500 hover:bg-slate-500/10 border-transparent shadow-none"
+          } else if (r.contract_categories?.name) {
+            display = r.contract_categories.name
+            const catUpper = display.toUpperCase()
+            if (catUpper.includes("NYSC")) {
+              badgeColor =
+                "bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-500/10 border-transparent shadow-none"
+            } else if (catUpper.includes("SIWES") || catUpper.includes("INTERN")) {
+              badgeColor =
+                "bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 hover:bg-cyan-500/10 border-transparent shadow-none"
+            } else if (catUpper.includes("NEXT") || catUpper.includes("GEN")) {
+              badgeColor =
+                "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 border-transparent shadow-none"
+            } else {
+              badgeColor = "bg-orange-500/10 text-orange-500 hover:bg-orange-500/10 border-transparent shadow-none"
+            }
+          } else if (type === "contract") {
+            display = "Contract Staff"
+            badgeColor = "bg-orange-500/10 text-orange-500 hover:bg-orange-500/10 border-transparent shadow-none"
+          }
           return <Badge className={badgeColor}>{display}</Badge>
         },
       },

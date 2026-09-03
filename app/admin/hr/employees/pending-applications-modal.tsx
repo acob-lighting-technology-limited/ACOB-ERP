@@ -398,48 +398,46 @@ export function PendingApplicationsModal({ onEmployeeCreated }: PendingApplicati
                           />
                         </div>
                         <div className="flex flex-col items-start gap-1">
-                          <span className="text-muted-foreground text-[10px] font-bold uppercase">Employment Type</span>
+                          <span className="text-muted-foreground text-[10px] font-bold uppercase">
+                            Staff Classification
+                          </span>
                           <Select
-                            value={employmentType}
-                            onValueChange={(value: any) => {
-                              setEmploymentType(value)
-                              if (value !== "contract") {
+                            value={
+                              employmentType === "full_time"
+                                ? "full_time"
+                                : employmentType === "part_time"
+                                  ? "part_time"
+                                  : contractCategoryCode
+                                    ? `cat:${contractCategoryCode}`
+                                    : "cat:CTR"
+                            }
+                            onValueChange={(value) => {
+                              if (value === "full_time") {
+                                setEmploymentType("full_time")
                                 setContractCategoryCode("")
-                              } else if (contractCategories.length > 0) {
-                                setContractCategoryCode(contractCategories[0].code)
+                              } else if (value === "part_time") {
+                                setEmploymentType("part_time")
+                                setContractCategoryCode("")
+                              } else if (value.startsWith("cat:")) {
+                                setEmploymentType("contract")
+                                setContractCategoryCode(value.replace("cat:", ""))
                               }
                             }}
                           >
-                            <SelectTrigger className="bg-primary/5 border-primary/20 h-9 w-32 text-xs font-bold">
-                              <SelectValue placeholder="Type" />
+                            <SelectTrigger className="bg-primary/5 border-primary/20 h-9 w-44 text-xs font-bold">
+                              <SelectValue placeholder="Classification" />
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="full_time">Full Time</SelectItem>
                               <SelectItem value="part_time">Part Time</SelectItem>
-                              <SelectItem value="contract">Contract</SelectItem>
+                              {contractCategories.map((cat) => (
+                                <SelectItem key={cat.id} value={`cat:${cat.code}`}>
+                                  {cat.name}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </div>
-                        {employmentType === "contract" && (
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="text-muted-foreground text-[10px] font-bold uppercase">Category</span>
-                            <Select
-                              value={contractCategoryCode}
-                              onValueChange={(value) => setContractCategoryCode(value)}
-                            >
-                              <SelectTrigger className="bg-primary/5 border-primary/20 h-9 w-32 text-xs font-bold">
-                                <SelectValue placeholder="Category" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {contractCategories.map((cat) => (
-                                  <SelectItem key={cat.id} value={cat.code}>
-                                    {cat.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
-                        )}
                         <Badge variant="outline" className="mb-1 self-end py-0.5 text-[10px] font-bold">
                           PENDING APPROVAL
                         </Badge>

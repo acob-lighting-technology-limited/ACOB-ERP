@@ -9,6 +9,7 @@ export interface OnboardingSubmissionEmailProps {
     personal_email: string
     phone_number: string
     employment_type?: string | null
+    contract_category_code?: string | null
   }
   reviewUrl?: string
 }
@@ -21,7 +22,16 @@ export function renderOnboardingSubmissionEmail({ applicant, reviewUrl }: Onboar
   const personalEmail = escapeHtml(applicant.personal_email)
   const phoneNumber = escapeHtml(applicant.phone_number)
   const rawType = applicant.employment_type || "full_time"
-  const employmentType = escapeHtml(rawType.replace("_", " ").replace(/\b\w/g, (c: string) => c.toUpperCase()))
+  let displayType = rawType.replace("_", " ").replace(/\b\w/g, (c: string) => c.toUpperCase())
+  if (rawType === "contract" && applicant.contract_category_code) {
+    const codeUpper = applicant.contract_category_code.toUpperCase()
+    if (codeUpper === "NYSC") displayType = "NYSC"
+    else if (codeUpper === "SIWES") displayType = "SIWES"
+    else if (codeUpper === "CTR") displayType = "Contract Staff"
+    else if (codeUpper === "NEXTGEN") displayType = "Next-Gen"
+    else displayType = applicant.contract_category_code
+  }
+  const employmentType = escapeHtml(displayType)
   const actionUrl =
     reviewUrl || `${process.env.NEXT_PUBLIC_PORTAL_URL || "https://matrix.acoblighting.com"}/admin/hr/employees`
 

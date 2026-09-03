@@ -178,6 +178,7 @@ async function notifyHROfSubmission(
         personal_email: personalEmail,
         phone_number: applicant.phone_number,
         employment_type: applicant.employment_type,
+        contract_category_code: applicant.contract_category_code,
       },
     })
 

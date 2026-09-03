@@ -164,21 +164,34 @@ function StaffTypeBadge({
   const isPartTime = normType === "part_time"
   const isContract = normType === "contract"
 
-  const label = isContract && categoryName ? `Contract (${categoryName})` : normType.replace(/_/g, " ")
+  let label = normType.replace(/_/g, " ")
+  let colorClasses = "border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800"
+
+  if (isPartTime) {
+    label = "Part Time"
+    colorClasses = "border-slate-200 bg-slate-500/10 text-slate-600 dark:border-slate-800"
+  } else if (categoryName) {
+    label = categoryName
+    const catUpper = categoryName.toUpperCase()
+    if (catUpper.includes("NYSC")) {
+      colorClasses = "border-purple-200 bg-purple-500/10 text-purple-600 dark:border-purple-800"
+    } else if (catUpper.includes("SIWES") || catUpper.includes("INTERN")) {
+      colorClasses = "border-cyan-200 bg-cyan-500/10 text-cyan-600 dark:border-cyan-800"
+    } else if (catUpper.includes("NEXT") || catUpper.includes("GEN")) {
+      colorClasses = "border-emerald-200 bg-emerald-500/10 text-emerald-600 dark:border-emerald-800"
+    } else {
+      colorClasses = "border-orange-200 bg-orange-500/10 text-orange-600 dark:border-orange-800"
+    }
+  } else if (isContract) {
+    label = "Contract Staff"
+    colorClasses = "border-orange-200 bg-orange-500/10 text-orange-600 dark:border-orange-800"
+  } else {
+    label = "Full Time"
+    colorClasses = "border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800"
+  }
 
   return (
-    <Badge
-      variant="outline"
-      className={cn(
-        "text-xs font-medium capitalize",
-        isPartTime
-          ? "border-purple-200 bg-purple-500/10 text-purple-600 dark:border-purple-800"
-          : isContract
-            ? "border-orange-200 bg-orange-500/10 text-orange-600 dark:border-orange-800"
-            : "border-blue-200 bg-blue-500/10 text-blue-600 dark:border-blue-800",
-        className
-      )}
-    >
+    <Badge variant="outline" className={cn("text-xs font-medium", colorClasses, className)}>
       {label}
     </Badge>
   )

@@ -147,6 +147,29 @@ export default function EmployeeOnboardingForm() {
   const companyEmail =
     safeFirst && safeLast ? `${safeLast.charAt(0)}.${safeFirst}@org.acoblighting.com` : "Wait for name input..."
 
+  const currentTrackValue =
+    selectedEmploymentType === "full_time"
+      ? "full_time"
+      : selectedEmploymentType === "part_time"
+        ? "part_time"
+        : selectedContractCategory
+          ? `cat:${selectedContractCategory}`
+          : "cat:CTR"
+
+  const handleTrackChange = (val: string) => {
+    if (val === "full_time") {
+      setValue("employment_type", "full_time")
+      setValue("contract_category_code", "")
+    } else if (val === "part_time") {
+      setValue("employment_type", "part_time")
+      setValue("contract_category_code", "")
+    } else if (val.startsWith("cat:")) {
+      const code = val.replace("cat:", "")
+      setValue("employment_type", "contract")
+      setValue("contract_category_code", code)
+    }
+  }
+
   const getPreviewId = () => {
     const currentYear = new Date().getFullYear()
     if (selectedEmploymentType === "full_time") {
@@ -154,7 +177,7 @@ export default function EmployeeOnboardingForm() {
     } else if (selectedEmploymentType === "part_time") {
       return `ACOB/PT/${currentYear}/...`
     } else {
-      const catCode = selectedContractCategory || "CATEGORY"
+      const catCode = selectedContractCategory || "CTR"
       return `ACOB/${catCode}/${currentYear}/...`
     }
   }
@@ -421,54 +444,26 @@ export default function EmployeeOnboardingForm() {
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-foreground text-sm font-medium">
-                      Employment Type <span className="text-destructive">*</span>
+                      Employment Track / Classification <span className="text-destructive">*</span>
                     </label>
-                    <Select
-                      onValueChange={(val) => {
-                        setValue("employment_type", val as any)
-                        if (val !== "contract") {
-                          setValue("contract_category_code", "")
-                        } else if (contractCategories.length > 0) {
-                          setValue("contract_category_code", contractCategories[0].code)
-                        }
-                      }}
-                      value={selectedEmploymentType || "full_time"}
-                    >
+                    <Select onValueChange={handleTrackChange} value={currentTrackValue}>
                       <SelectTrigger className="h-11">
-                        <SelectValue placeholder="Select Type" />
+                        <SelectValue placeholder="Select Classification" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="full_time">Full Time</SelectItem>
                         <SelectItem value="part_time">Part Time</SelectItem>
-                        <SelectItem value="contract">Contract</SelectItem>
+                        {contractCategories.map((cat: any) => (
+                          <SelectItem key={cat.code} value={`cat:${cat.code}`}>
+                            {cat.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     {errors.employment_type && (
                       <p className="text-destructive mt-1 text-sm">{errors.employment_type.message}</p>
                     )}
                   </div>
-                  {selectedEmploymentType === "contract" && (
-                    <div className="space-y-2">
-                      <label className="text-foreground text-sm font-medium">
-                        Contract Category <span className="text-destructive">*</span>
-                      </label>
-                      <Select
-                        onValueChange={(val) => setValue("contract_category_code", val)}
-                        value={selectedContractCategory}
-                      >
-                        <SelectTrigger className="h-11">
-                          <SelectValue placeholder="Select Category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {contractCategories.map((cat: any) => (
-                            <SelectItem key={cat.code} value={cat.code}>
-                              {cat.name} ({cat.code})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  )}
                 </div>
 
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
