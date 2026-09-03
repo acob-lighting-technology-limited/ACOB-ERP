@@ -262,50 +262,39 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
   // sync via the DataTable's onProcessedDataChange so exports match what the user sees.
   const [processedEmployees, setProcessedEmployees] = useState<Employee[]>(initialEmployees)
 
-  // ── Lifecycle scope ────────────────────────────────────────────────────────
-  // Employment lifecycle is a scope, not a filter: the directory means current
-  // staff unless you deliberately ask for leavers. Keeping it in the tab row
-  // (rather than as a pre-ticked Status option) makes the exclusion visible and
-  // leaves the filter dropdowns free of values the user never chose.
-  const [lifecycleTab, setLifecycleTab] = useState<"current" | "former" | "all">("current")
+  // ── Unified Directory Scope (Single Tab Row) ──────────────────────────────
+  // Combines lifecycle (Current vs Former) and population (Regular vs Contract)
+  // into a single, clean 4-tab bar: Employees (current regular staff), Contract Staff
+  // (current contract personnel), Former Staff (all leavers), and All Staff.
+  type DirectoryTab = "employees" | "contract" | "former" | "all"
+  const [activeTab, setActiveTab] = useState<DirectoryTab>("employees")
 
-  const lifecycleEmployees = useMemo(() => {
-    if (lifecycleTab === "current") return employees.filter((e) => e.employment_status !== "exited")
-    if (lifecycleTab === "former") return employees.filter((e) => e.employment_status === "exited")
-    return employees
-  }, [employees, lifecycleTab])
-
-  const lifecycleTabs: DataTableTab[] = useMemo(() => {
+  const tabs: DataTableTab[] = useMemo(() => {
     const former = employees.filter((e) => e.employment_status === "exited").length
+    const current = employees.filter((e) => e.employment_status !== "exited")
+    const contract = current.filter(isContractStaff).length
+    const regular = current.length - contract
+
     return [
-      { key: "current", label: `Current (${employees.length - former})`, icon: UserCheck },
-      { key: "former", label: `Former (${former})`, icon: UserMinus },
-      { key: "all", label: `All (${employees.length})`, icon: Users },
+      { key: "employees", label: `Employees (${regular})`, icon: Briefcase },
+      { key: "contract", label: `Contract Staff (${contract})`, icon: FileSignature },
+      { key: "former", label: `Former Staff (${former})`, icon: UserMinus },
+      { key: "all", label: `All Staff (${employees.length})`, icon: Users },
     ]
   }, [employees])
 
-  // ── Population scope ───────────────────────────────────────────────────────
-  // ~47 contract staff sit alongside the ~48 regular employees. Both are real staff,
-  // but they are managed differently and are rarely wanted in the same list, so the
-  // page opens on regular employees. Like the lifecycle scope, this is a named tab
-  // carrying its own count — the excluded population is stated on screen rather than
-  // hidden behind a filter value the user never chose.
-  const [populationTab, setPopulationTab] = useState<"employees" | "contract" | "all">("employees")
-
-  const populationTabs: DataTableTab[] = useMemo(() => {
-    const contract = lifecycleEmployees.filter(isContractStaff).length
-    return [
-      { key: "employees", label: `Employees (${lifecycleEmployees.length - contract})`, icon: Briefcase },
-      { key: "contract", label: `Contract Staff (${contract})`, icon: FileSignature },
-      { key: "all", label: `All Staff (${lifecycleEmployees.length})`, icon: Users },
-    ]
-  }, [lifecycleEmployees])
-
   const scopedEmployees = useMemo(() => {
-    if (populationTab === "employees") return lifecycleEmployees.filter((e) => !isContractStaff(e))
-    if (populationTab === "contract") return lifecycleEmployees.filter(isContractStaff)
-    return lifecycleEmployees
-  }, [lifecycleEmployees, populationTab])
+    if (activeTab === "employees") {
+      return employees.filter((e) => e.employment_status !== "exited" && !isContractStaff(e))
+    }
+    if (activeTab === "contract") {
+      return employees.filter((e) => e.employment_status !== "exited" && isContractStaff(e))
+    }
+    if (activeTab === "former") {
+      return employees.filter((e) => e.employment_status === "exited")
+    }
+    return employees
+  }, [employees, activeTab])
 
   const loadData = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: QUERY_KEYS.adminEmployees() })
@@ -920,10 +909,9 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         placeholder: "All Roles",
       },
       // Status and Staff type are deliberately not filters. Both are scopes, and both are
-      // now owned by the tab rows above: lifecycle (Current / Former / All) and population
-      // (Employees / Contract Staff / All Staff). Duplicating them here is what produced the
-      // pre-ticked filter chips this page used to open with. The Status column remains
-      // visible and sortable for the states the tabs do not name.
+      // now owned by the unified 4-tab strip above: Employees (regular current) / Contract Staff
+      // (contract current) / Former Staff (all leavers) / All Staff (full directory).
+      // The Status column remains visible and sortable for individual employment states.
     ],
     [departments, offices]
   )
@@ -938,15 +926,15 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       leads: source.filter((s) => s.is_department_lead).length,
       currentEmployees: source.filter((s) => s.role !== "visitor").length,
     }
-  }, [scopedEmployees, processedEmployees])
+  }, [processedEmployees, scopedEmployees])
 
-  // Handle userId from search params (for edit dialog)
+  // Open edit dialog if employee ID is in URL
   useEffect(() => {
-    const userId = searchParams?.get("userId")
-    if (userId && employees.length > 0 && !isViewDialogOpen) {
-      const user = employees.find((e) => e.id === userId)
-      if (user) {
-        void handleEditEmployee(user)
+    const employeeId = searchParams.get("edit")
+    if (employeeId && employees.length > 0 && !isViewDialogOpen) {
+      const employee = employees.find((e) => e.id === employeeId)
+      if (employee) {
+        void handleEditEmployee(employee)
       }
     }
   }, [searchParams, employees, isViewDialogOpen, handleEditEmployee])
@@ -957,12 +945,9 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
       description="View and manage employee profiles, roles, and permissions."
       icon={Users}
       backLink={{ href: "/admin/hr", label: "Back to HR" }}
-      tabs={lifecycleTabs}
-      activeTab={lifecycleTab}
-      onTabChange={(tab) => setLifecycleTab(tab as "current" | "former" | "all")}
-      secondaryTabs={populationTabs}
-      secondaryActiveTab={populationTab}
-      onSecondaryTabChange={(tab) => setPopulationTab(tab as "employees" | "contract" | "all")}
+      tabs={tabs}
+      activeTab={activeTab}
+      onTabChange={(tab) => setActiveTab(tab as DirectoryTab)}
       actions={
         <div className="flex items-center gap-2">
           {(canManageUsers || canReviewApplications) && (
