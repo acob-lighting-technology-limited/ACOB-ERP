@@ -16,7 +16,20 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatCard } from "@/components/ui/stat-card"
-import { Clock, Calendar, Pencil, AlertCircle, Download, MapPin, Camera, ShieldCheck, ShieldX } from "lucide-react"
+import {
+  Clock,
+  Calendar,
+  Pencil,
+  AlertCircle,
+  Download,
+  MapPin,
+  Camera,
+  ShieldCheck,
+  ShieldX,
+  Building,
+  FileText,
+  MessageSquare,
+} from "lucide-react"
 import { ExportOptionsDialog } from "@/components/admin/export-options-dialog"
 import { toast } from "sonner"
 import { logger } from "@/lib/logger"
@@ -31,7 +44,7 @@ import {
 import { isLate } from "@/lib/hr/attendance-utils"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiFetch } from "@/lib/api-client"
-import { StatusBadge } from "../_components/status-badge"
+import { StatusBadge, labelSource } from "../_components/status-badge"
 
 const log = logger("admin-attendance-records")
 
@@ -435,7 +448,53 @@ export function AdminAttendanceRecordsPage({
             subtitle: (r) =>
               `${r.department} · In: ${formatTime(r.clock_in)} · Out: ${formatTime(r.clock_out)} · ${r.total_hours?.toFixed(1) ?? 0}h`,
             trailing: (r) => <StatusBadge status={r.status} record={r} />,
-            onSelect: (r) => openEdit(r),
+            detail: {
+              title: (r) => r.user_name,
+              subtitle: (r) =>
+                `${r.department} · ${formatWATDate(r.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}`,
+              badges: (r) => <StatusBadge status={r.status} record={r} />,
+              fields: (r) => [
+                { icon: Building, label: "Department", value: r.department },
+                {
+                  icon: Calendar,
+                  label: "Date",
+                  value: formatWATDate(r.date, { day: "numeric", month: "short", year: "numeric" }),
+                },
+                { icon: Clock, label: "Clock In", value: formatTime(r.clock_in) },
+                { icon: Clock, label: "Clock Out", value: formatTime(r.clock_out) },
+                ...(r.total_hours != null
+                  ? [{ icon: Clock, label: "Total Hours", value: `${r.total_hours.toFixed(2)} hrs` }]
+                  : []),
+                ...(r.source ? [{ icon: FileText, label: "Source", value: labelSource(r.source) }] : []),
+                ...(r.location_verified != null
+                  ? [
+                      {
+                        icon: r.location_verified ? ShieldCheck : ShieldX,
+                        label: "Location Verified",
+                        value: r.location_verified ? "Yes (On-site / Geofenced)" : "No",
+                      },
+                    ]
+                  : []),
+                ...(r.face_verified != null
+                  ? [
+                      {
+                        icon: r.face_verified ? ShieldCheck : ShieldX,
+                        label: "Face Verified",
+                        value: r.face_verified
+                          ? `Yes${r.face_match_confidence ? ` (${Math.round(r.face_match_confidence * 100)}% match)` : ""}`
+                          : "No",
+                      },
+                    ]
+                  : []),
+              ],
+              actions: (r) => [
+                {
+                  label: "Edit Record",
+                  icon: Pencil,
+                  onClick: () => openEdit(r),
+                },
+              ],
+            },
           }}
           cardRenderer={(r) => (
             <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">

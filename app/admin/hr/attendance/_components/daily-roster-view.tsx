@@ -16,9 +16,21 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatCard } from "@/components/ui/stat-card"
-import { Users, Clock, AlertCircle, FileText, Pencil, ChevronLeft, ChevronRight } from "lucide-react"
+import {
+  Users,
+  Clock,
+  AlertCircle,
+  FileText,
+  Pencil,
+  ChevronLeft,
+  ChevronRight,
+  Building,
+  MessageSquare,
+  Calendar,
+} from "lucide-react"
 import { toast } from "sonner"
 import { toLocalISODate, isLate } from "@/lib/hr/attendance-utils"
+import { formatWATDate } from "@/lib/utils/date"
 import { computeAttendanceDay, netDayHoursFor } from "@/lib/hr/attendance-ssot"
 import { type AttendancePolicy, DEFAULT_ATTENDANCE_POLICY } from "@/lib/org-config"
 import {
@@ -536,7 +548,59 @@ export function DailyRosterView({ departments, lockedDepartment }: DailyRosterVi
               earlyClosure={r.early_closure_time ? { closeTime: r.early_closure_time } : null}
             />
           ),
-          onSelect: (r) => openEdit(r),
+          detail: {
+            title: (r) => r.user_name,
+            subtitle: (r) =>
+              `${r.department} · ${formatWATDate(r.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}`,
+            badges: (r) => (
+              <StatusBadge
+                status={r.status}
+                record={r}
+                earlyClosure={r.early_closure_time ? { closeTime: r.early_closure_time } : null}
+              />
+            ),
+            fields: (r) => {
+              const hours = getHourBreakdown(r)
+              return [
+                { icon: Building, label: "Department", value: r.department },
+                {
+                  icon: Calendar,
+                  label: "Date",
+                  value: formatWATDate(r.date, { day: "numeric", month: "short", year: "numeric" }),
+                },
+                { icon: Clock, label: "Clock In", value: formatTime(r.clock_in) },
+                { icon: Clock, label: "Clock Out", value: formatTime(r.clock_out) },
+                {
+                  icon: Clock,
+                  label: "Work Hours",
+                  value: hours.work != null ? `${hours.work.toFixed(2)} hrs` : "-",
+                },
+                {
+                  icon: AlertCircle,
+                  label: "Missed Hours",
+                  value: (hours.missed ?? 0) > 0 ? `${hours.missed!.toFixed(2)} hrs` : "0.00 hrs",
+                  muted: (hours.missed ?? 0) === 0,
+                },
+                {
+                  icon: Clock,
+                  label: "Total Hours",
+                  value: hours.total != null ? `${hours.total.toFixed(2)} hrs` : "-",
+                },
+                ...(hours.overtime && hours.overtime > 0
+                  ? [{ icon: Clock, label: "Overtime", value: `${hours.overtime.toFixed(2)} hrs` }]
+                  : []),
+                ...(r.source ? [{ icon: FileText, label: "Source", value: labelSource(r.source) }] : []),
+                ...(r.manual_comment ? [{ icon: MessageSquare, label: "Note", value: r.manual_comment }] : []),
+              ]
+            },
+            actions: (r) => [
+              {
+                label: r.id.startsWith("missing-") ? "Add Record" : "Edit Record",
+                icon: Pencil,
+                onClick: () => openEdit(r),
+              },
+            ],
+          },
         }}
         cardRenderer={(r) => (
           <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">

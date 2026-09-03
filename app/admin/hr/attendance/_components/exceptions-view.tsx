@@ -17,9 +17,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { StatCard } from "@/components/ui/stat-card"
-import { Clock, AlertTriangle, XCircle, FileText, Pencil } from "lucide-react"
+import { Clock, AlertTriangle, XCircle, FileText, Pencil, Building, MessageSquare, Calendar } from "lucide-react"
 import { toast } from "sonner"
 import { toLocalISODate, monthBounds, toLocalYearMonth, isLate } from "@/lib/hr/attendance-utils"
+import { formatWATDate } from "@/lib/utils/date"
 import {
   MANUAL_ATTENDANCE_STATUS_OPTIONS,
   isEarlyDeparture,
@@ -367,7 +368,34 @@ export function ExceptionsView({ departments, lockedDepartment }: ExceptionsView
           title: (r) => `${r.user_name} · ${r.date}`,
           subtitle: (r) => `${r.department} · In: ${formatTime(r.clock_in)} · Out: ${formatTime(r.clock_out)}`,
           trailing: (r) => issueBadge(r),
-          onSelect: (r) => openEdit(r),
+          detail: {
+            title: (r) => r.user_name,
+            subtitle: (r) =>
+              `${r.department} · ${formatWATDate(r.date, { weekday: "short", day: "numeric", month: "short", year: "numeric" })}`,
+            badges: (r) => issueBadge(r),
+            fields: (r) => [
+              { icon: Building, label: "Department", value: r.department },
+              {
+                icon: Calendar,
+                label: "Date",
+                value: formatWATDate(r.date, { day: "numeric", month: "short", year: "numeric" }),
+              },
+              { icon: Clock, label: "Clock In", value: formatTime(r.clock_in) },
+              { icon: Clock, label: "Clock Out", value: formatTime(r.clock_out) },
+              ...(r.total_hours != null
+                ? [{ icon: Clock, label: "Total Hours", value: `${r.total_hours.toFixed(2)} hrs` }]
+                : []),
+              ...(r.source ? [{ icon: FileText, label: "Source", value: labelSource(r) }] : []),
+              ...(r.manual_comment ? [{ icon: MessageSquare, label: "Note", value: r.manual_comment }] : []),
+            ],
+            actions: (r) => [
+              {
+                label: "Edit Record",
+                icon: Pencil,
+                onClick: () => openEdit(r),
+              },
+            ],
+          },
         }}
         cardRenderer={(r) => (
           <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
