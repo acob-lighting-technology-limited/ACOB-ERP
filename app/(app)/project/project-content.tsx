@@ -339,6 +339,43 @@ export function ProjectContent() {
             },
           },
         }}
+        cardRenderer={(r) => {
+          const info = getProgressInfo(r)
+          return (
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <h4 className="line-clamp-2 text-sm font-semibold">{r.project_name}</h4>
+                {renderStatusBadge(r.status)}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Location</p>
+                  <p className="font-medium">{r.location || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Technology</p>
+                  <p className="font-medium">{r.technology_type || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Capacity</p>
+                  <p className="font-medium">{formatCapacity(r.capacity_w)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Progress</p>
+                  <p className="font-medium">{info.percent}%</p>
+                </div>
+              </div>
+              <div className="border-border/40 text-muted-foreground flex items-center justify-between border-t pt-2 text-xs">
+                <span>
+                  {r.project_manager?.full_name ||
+                    [r.project_manager?.first_name, r.project_manager?.last_name].filter(Boolean).join(" ") ||
+                    "Unassigned"}
+                </span>
+                <span>{info.text}</span>
+              </div>
+            </div>
+          )
+        }}
         expandable={{
           render: (r) => (
             <div className="bg-muted/20 rounded-lg border p-2">

@@ -237,6 +237,28 @@ export function UserPayrollPage({ initialData }: UserPayrollPageProps) {
             ],
           },
         }}
+        cardRenderer={(e) => (
+          <div className="space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <h4 className="text-sm font-semibold">{e.payroll_periods?.name || "—"}</h4>
+              <span className="font-mono text-sm font-bold text-emerald-600">{fmt(Number(e.net_salary))}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 text-xs">
+              <div>
+                <p className="text-muted-foreground text-[10px] font-medium uppercase">Gross</p>
+                <p className="font-medium">{fmt(Number(e.gross_salary) + Number(e.bonus))}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-[10px] font-medium uppercase">Deductions</p>
+                <p className="font-medium">{fmtEntry(e.total_deductions)}</p>
+              </div>
+            </div>
+            <div className="border-border/40 text-muted-foreground flex items-center justify-between border-t pt-2 text-xs">
+              <span>Pay date</span>
+              <span>{e.payroll_periods?.pay_date || "—"}</span>
+            </div>
+          </div>
+        )}
       />
 
       <Dialog open={selectedEntry !== null} onOpenChange={(o) => !o && setSelectedEntry(null)}>

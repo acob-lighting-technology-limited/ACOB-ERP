@@ -317,6 +317,30 @@ export function GoalsContent({
                 : [],
           },
         }}
+        cardRenderer={(row) => (
+          <div className="space-y-3">
+            <div className="flex items-start justify-between gap-2">
+              <h4 className="line-clamp-2 text-sm font-semibold">{row.title}</h4>
+              <Badge variant="secondary" className="shrink-0 text-[10px] capitalize">
+                {String(row.status || "in_progress").replace("_", " ")}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-1.5 text-xs">
+              <div>
+                <p className="text-muted-foreground text-[10px] font-medium uppercase">Priority</p>
+                <p className="font-medium capitalize">{row.priority}</p>
+              </div>
+              <div>
+                <p className="text-muted-foreground text-[10px] font-medium uppercase">Cycle</p>
+                <p className="font-medium">{row.cycleLabel !== "-" ? row.cycleLabel : "—"}</p>
+              </div>
+            </div>
+            <div className="border-border/40 text-muted-foreground flex items-center justify-between border-t pt-2 text-xs">
+              <span>{row.department || "—"}</span>
+              <span>{row.due_date ? formatWATDate(row.due_date) : "No due date"}</span>
+            </div>
+          </div>
+        )}
         rowActions={
           canCreateGoal
             ? [

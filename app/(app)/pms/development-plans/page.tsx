@@ -315,6 +315,44 @@ export default function DevelopmentPlansPage() {
             ],
           },
         }}
+        cardRenderer={(plan) => {
+          const totalActions = plan.actions?.length || 0
+          const doneActions = (plan.actions || []).filter((a) => a.status === "completed").length
+          return (
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <h4 className="line-clamp-2 text-sm font-semibold">{plan.title}</h4>
+                <Badge variant={STATUS_VARIANTS[plan.status] || "outline"} className="shrink-0 text-[10px] capitalize">
+                  {plan.status.replace("_", " ")}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Focus</p>
+                  <p className="font-medium">{FOCUS_LABELS[plan.focus_area] || plan.focus_area}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Priority</p>
+                  <p className="font-medium capitalize">{plan.priority}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Progress</p>
+                  <p className="font-medium">{planProgress(plan)}%</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-[10px] font-medium uppercase">Actions</p>
+                  <p className="font-medium">
+                    {doneActions}/{totalActions}
+                  </p>
+                </div>
+              </div>
+              <div className="border-border/40 text-muted-foreground flex items-center justify-between border-t pt-2 text-xs">
+                <span>Due</span>
+                <span>{formatDate(plan.target_date)}</span>
+              </div>
+            </div>
+          )
+        }}
         expandable={{
           render: (plan) => (
             <div className="space-y-3">

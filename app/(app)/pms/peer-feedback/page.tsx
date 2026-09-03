@@ -308,6 +308,19 @@ export default function PeerFeedbackPage() {
               ],
             },
           }}
+          cardRenderer={(f) => (
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-sm font-semibold">{formatName(f.subject)}</span>
+                <Badge variant="secondary">{f.score}%</Badge>
+              </div>
+              {f.comments && <p className="text-muted-foreground line-clamp-2 text-xs">{f.comments}</p>}
+              <div className="border-border/40 text-muted-foreground flex items-center justify-between border-t pt-2 text-xs">
+                <span>Submitted</span>
+                <span>{new Date(f.created_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+          )}
           urlSync
         />
       ) : (
@@ -343,6 +356,32 @@ export default function PeerFeedbackPage() {
               ],
             },
           }}
+          cardRenderer={(f) => (
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-muted-foreground text-sm">Anonymous Peer</span>
+                <Badge variant="secondary">{f.score}%</Badge>
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 text-xs">
+                {f.collaboration !== null && (
+                  <div>
+                    <p className="text-muted-foreground text-[10px] font-medium uppercase">Collaboration</p>
+                    <p className="font-medium">{f.collaboration}%</p>
+                  </div>
+                )}
+                {f.teamwork !== null && (
+                  <div>
+                    <p className="text-muted-foreground text-[10px] font-medium uppercase">Teamwork</p>
+                    <p className="font-medium">{f.teamwork}%</p>
+                  </div>
+                )}
+              </div>
+              <div className="border-border/40 text-muted-foreground flex items-center justify-between border-t pt-2 text-xs">
+                <span>Received</span>
+                <span>{new Date(f.created_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+          )}
           urlSync
         />
       )}
