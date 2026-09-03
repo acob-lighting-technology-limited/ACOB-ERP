@@ -422,8 +422,9 @@ export function AdminHelpDeskContent({
       activeTab={activeTab}
       onTabChange={setActiveTab}
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total Tickets"
             value={stats.total}
             icon={Headset}
@@ -431,6 +432,7 @@ export function AdminHelpDeskContent({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="In Progress"
             value={stats.inProgress}
             icon={Clock}
@@ -438,6 +440,7 @@ export function AdminHelpDeskContent({
             iconColor="text-violet-500"
           />
           <StatCard
+            variant="compact"
             title="Pending Review"
             value={stats.pendingApproval}
             icon={AlertCircle}
@@ -445,6 +448,7 @@ export function AdminHelpDeskContent({
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="SLA Breached"
             value={stats.breached}
             icon={ShieldCheck}
@@ -544,6 +548,20 @@ export function AdminHelpDeskContent({
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (r) =>
+            r.priority === "urgent" ? "bg-rose-500" : r.priority === "high" ? "bg-amber-500" : "bg-blue-500",
+          title: (r) => r.title,
+          subtitle: (r) => `${r.ticket_number} · ${r.service_department} · ${r.requester_department || "Staff"}`,
+          trailing: (r) => (
+            <div className="flex items-center gap-1.5">
+              <TicketStatusBadge status={r.status} />
+            </div>
+          ),
+        }}
         cardRenderer={(r) => (
           <div className="bg-card space-y-4 rounded-xl border p-4 transition-shadow hover:shadow-md">
             <div className="flex items-start justify-between">

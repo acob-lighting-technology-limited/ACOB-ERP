@@ -400,6 +400,7 @@ export function WeeklyReportsContent({
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Reports"
             value={stats.total}
             icon={FileBarChart}
@@ -407,6 +408,7 @@ export function WeeklyReportsContent({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Tracker Started"
             value={stats.withTrackerStarted}
             icon={CalendarDays}
@@ -414,6 +416,7 @@ export function WeeklyReportsContent({
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Finished"
             value={stats.finished}
             icon={FileSpreadsheet}
@@ -421,6 +424,7 @@ export function WeeklyReportsContent({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Locked Week"
             value={stats.locked}
             icon={Download}
@@ -547,6 +551,25 @@ export function WeeklyReportsContent({
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (report) => report.department,
+          subtitle: (report) => {
+            const profile = Array.isArray(report.profiles) ? report.profiles[0] : report.profiles
+            const submitterName = profile ? `${profile.first_name} ${profile.last_name}` : "Unknown"
+            return `${submitterName} (W${report.week_number}) · ${report.year}`
+          },
+          trailing: (report) => {
+            const trackerStatus = getActionTrackerStatus(report.department, trackingData)
+            return <Badge className={trackerStatus.color}>{trackerStatus.label}</Badge>
+          },
+          onSelect: (report) => {
+            setEditingReport(report)
+            setIsAdminDialogOpen(true)
+          },
+        }}
         cardRenderer={(report) => {
           const profile = Array.isArray(report.profiles) ? report.profiles[0] : report.profiles
           const submitterName = profile ? `${profile.first_name} ${profile.last_name}` : "Unknown"

@@ -1475,8 +1475,9 @@ export function AdminAssetsContent({
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 sm:gap-3">
           <StatCard
+            variant="compact"
             title="Total Assets"
             value={stats.total}
             icon={Package}
@@ -1484,6 +1485,7 @@ export function AdminAssetsContent({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Available"
             value={stats.available}
             icon={Package}
@@ -1491,6 +1493,7 @@ export function AdminAssetsContent({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Assigned"
             value={stats.assigned}
             icon={Package}
@@ -1498,6 +1501,7 @@ export function AdminAssetsContent({
             iconColor="text-violet-500"
           />
           <StatCard
+            variant="compact"
             title="Maintenance"
             value={stats.maintenance}
             icon={Wrench}
@@ -1505,6 +1509,7 @@ export function AdminAssetsContent({
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Open Issues"
             value={stats.unresolvedIssues}
             icon={AlertCircle}
@@ -1568,6 +1573,29 @@ export function AdminAssetsContent({
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (asset) =>
+            asset.deleted_at
+              ? "bg-slate-400"
+              : asset.status === "maintenance" || (asset.unresolved_issues_count || 0) > 0
+                ? "bg-rose-500"
+                : asset.status === "assigned"
+                  ? "bg-blue-500"
+                  : "bg-emerald-500",
+          title: (asset) =>
+            `${asset.unique_code} · ${asset.asset_model || ASSET_TYPE_MAP[asset.asset_type]?.label || asset.asset_type}`,
+          subtitle: (asset) =>
+            `${getAssignedToLabel(asset, true)} · ${asset.office_location || asset.department || "HQ"}`,
+          trailing: (asset) => (
+            <Badge className={getStatusColor(asset.deleted_at ? "archived" : asset.status)} variant="outline">
+              {asset.deleted_at ? "archived" : asset.status}
+            </Badge>
+          ),
+          onSelect: (asset) => void handleOpenAssetDialog(asset),
+        }}
         cardRenderer={(asset) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">
