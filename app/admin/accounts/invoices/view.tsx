@@ -259,6 +259,7 @@ export function InvoicesPage({
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
+            variant="compact"
             title="Total Invoices"
             value={stats.total}
             icon={FileText}
@@ -266,6 +267,7 @@ export function InvoicesPage({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Drafts"
             value={stats.draft}
             icon={FileClock}
@@ -273,6 +275,7 @@ export function InvoicesPage({
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Collected"
             value={formatCurrency(stats.totalPaid)}
             icon={CircleDollarSign}
@@ -280,6 +283,7 @@ export function InvoicesPage({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Outstanding"
             value={formatCurrency(stats.outstanding)}
             icon={Wallet}
@@ -349,6 +353,28 @@ export function InvoicesPage({
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (invoice) =>
+            invoice.status === "cancelled"
+              ? "bg-rose-500"
+              : invoice.status === "paid"
+                ? "bg-emerald-500"
+                : invoice.status === "overdue"
+                  ? "bg-red-500"
+                  : "bg-blue-500",
+          title: (invoice) => `${invoice.invoice_number} · ${invoice.customer_name}`,
+          subtitle: (invoice) =>
+            `${formatCurrency(invoice.total_amount, invoice.currency)} · Due ${formatDate(invoice.due_date)}`,
+          trailing: (invoice) => (
+            <Badge variant={statusColors[invoice.status]} className="text-[10px] capitalize">
+              {invoice.status}
+            </Badge>
+          ),
+          onSelect: (invoice) => router.push(`${financeBasePath ?? "/admin/accounts"}/invoices/${invoice.id}`),
+        }}
         cardRenderer={(invoice) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">
