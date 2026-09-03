@@ -346,7 +346,7 @@ export function DirectoryContent() {
       // where there is room. `compact` keeps them to a slim band rather than the
       // full-height cards that used to push search off a small screen.
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
             variant="compact"
             title="Colleagues"
@@ -393,6 +393,7 @@ export function DirectoryContent() {
               icon={MapPin}
               iconBgColor="bg-amber-500/10"
               iconColor="text-amber-500"
+              className="hidden sm:block"
             />
           )}
         </div>

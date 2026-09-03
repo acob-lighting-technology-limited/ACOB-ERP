@@ -159,7 +159,7 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
       backLink={{ href: "/profile", label: "Back to Dashboard" }}
       spacing="tight"
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
             variant="compact"
             title="Total Personal Assets"
@@ -194,6 +194,7 @@ export function AssetsContent({ initialAssignments, initialError }: AssetsConten
             icon={Layers}
             iconBgColor="bg-violet-500/10"
             iconColor="text-violet-500"
+            className={maintenanceCount > 0 ? "hidden sm:block" : undefined}
           />
         </div>
       }

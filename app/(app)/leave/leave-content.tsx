@@ -793,7 +793,7 @@ export function LeaveContent({
       spacing="tight"
       actionsPlacement="inline-always"
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
           <StatCard
             variant="compact"
             title="Taken (Days)"
@@ -809,6 +809,7 @@ export function LeaveContent({
             icon={Clock}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
+            className={stats.waitingReviews > 0 ? "hidden sm:block" : undefined}
           />
           <StatCard
             variant="compact"

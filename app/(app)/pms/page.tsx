@@ -128,7 +128,7 @@ export default async function PmsPage({ searchParams }: { searchParams: Promise<
         actions={<CycleSelector cycles={cycles} activeCycleId={activeCycleId} />}
       />
 
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-5">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-5">
         <StatCard
           variant="compact"
           title="Overall PMS"
@@ -156,6 +156,7 @@ export default async function PmsPage({ searchParams }: { searchParams: Promise<
           value={formatPercent(score.cbt_score)}
           icon={Brain}
           description="Learning score in PMS"
+          className="hidden sm:block"
         />
         <StatCard
           variant="compact"
@@ -163,6 +164,7 @@ export default async function PmsPage({ searchParams }: { searchParams: Promise<
           value={formatPercent(score.behaviour_score)}
           icon={ShieldCheck}
           description="Manager and peer feedback blend"
+          className="hidden sm:block"
         />
       </div>
 
