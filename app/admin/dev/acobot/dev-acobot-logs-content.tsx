@@ -249,6 +249,7 @@ export function DevAcobotLogsContent() {
   const statsRow = (
     <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
       <StatCard
+        variant="compact"
         title="Conversations"
         value={stats.total}
         icon={MessageSquare}
@@ -256,6 +257,7 @@ export function DevAcobotLogsContent() {
         iconColor="text-blue-500"
       />
       <StatCard
+        variant="compact"
         title={isWebsite ? "Unique Visitors" : "Unique Users"}
         value={stats.uniques}
         icon={Users}
@@ -263,6 +265,7 @@ export function DevAcobotLogsContent() {
         iconColor="text-emerald-500"
       />
       <StatCard
+        variant="compact"
         title="Answered with Data"
         value={stats.withData}
         icon={Database}
@@ -270,6 +273,7 @@ export function DevAcobotLogsContent() {
         iconColor="text-violet-500"
       />
       <StatCard
+        variant="compact"
         title="Today"
         value={stats.todayCount}
         icon={isWebsite ? Globe : Bot}
@@ -345,6 +349,37 @@ export function DevAcobotLogsContent() {
             </div>
           ),
         }}
+        viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (row) => (row.had_context ? "bg-violet-500" : "bg-blue-500"),
+          title: (row) => row.question,
+          subtitle: (row) => `${isWebsite ? "Visitor" : row.full_name || "Unknown"} · ${formatWATDate(row.created_at)}`,
+          trailing: (row) =>
+            row.had_context ? (
+              <Badge variant="outline" className="text-[10px]">
+                Live data
+              </Badge>
+            ) : null,
+        }}
+        cardRenderer={(row) => (
+          <div className="bg-card space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">
+            <div className="flex items-start justify-between">
+              <div>
+                <p className="text-sm font-semibold">{isWebsite ? "Website Visitor" : row.full_name || "Unknown"}</p>
+                <p className="text-muted-foreground text-xs">{formatWATDate(row.created_at)}</p>
+              </div>
+              {row.had_context ? (
+                <Badge variant="outline">Live data</Badge>
+              ) : (
+                <Badge variant="secondary">General</Badge>
+              )}
+            </div>
+            <p className="line-clamp-2 text-xs">{row.question}</p>
+          </div>
+        )}
         emptyTitle={isWebsite ? "No website conversations yet" : "No ERP conversations yet"}
         emptyDescription={
           isWebsite

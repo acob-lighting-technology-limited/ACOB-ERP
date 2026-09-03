@@ -131,13 +131,15 @@ export function RoleEscalationsContent({ rows, error }: { rows: AuditLogRow[]; e
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
           <StatCard
-            title="Escalations"
+            variant="compact"
+            title="Total Events"
             value={stats.total}
             icon={ShieldEllipsis}
             iconBgColor="bg-blue-500/10"
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Super Admin"
             value={stats.superAdmin}
             icon={TriangleAlert}
@@ -145,6 +147,7 @@ export function RoleEscalationsContent({ rows, error }: { rows: AuditLogRow[]; e
             iconColor="text-red-500"
           />
           <StatCard
+            variant="compact"
             title="Developer"
             value={stats.developer}
             icon={UserCog}
@@ -152,6 +155,7 @@ export function RoleEscalationsContent({ rows, error }: { rows: AuditLogRow[]; e
             iconColor="text-amber-500"
           />
           <StatCard
+            variant="compact"
             title="Admin"
             value={stats.adminRelated}
             icon={ShieldCheck}
@@ -209,6 +213,24 @@ export function RoleEscalationsContent({ rows, error }: { rows: AuditLogRow[]; e
           ),
         }}
         viewToggle
+        contactsView
+        stickyToolbar
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          accentClass: (row) =>
+            getRoleTier(row) === "Super Admin"
+              ? "bg-red-500"
+              : getRoleTier(row) === "Admin"
+                ? "bg-amber-500"
+                : "bg-blue-500",
+          title: (row) => row.action || row.operation || "Unknown action",
+          subtitle: (row) => `${row.entity_type || "Role"} · ${formatWATDateTime(row.created_at)}`,
+          trailing: (row) => (
+            <Badge variant="outline" className="text-[10px]">
+              {getRoleTier(row)}
+            </Badge>
+          ),
+        }}
         cardRenderer={(row) => (
           <div className="space-y-3 rounded-xl border p-4">
             <div className="flex items-start justify-between gap-3">
