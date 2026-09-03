@@ -252,6 +252,8 @@ export default function PeerFeedbackPage() {
       description="Give feedback to colleagues and view feedback you've received this cycle."
       icon={MessageSquare}
       backLink={{ href: "/pms", label: "Back to PMS" }}
+      spacing="tight"
+      actionsPlacement="inline-always"
       tabs={[
         { key: "received", label: "Feedback Received", icon: Users },
         { key: "given", label: "Feedback Given", icon: Send },
@@ -259,16 +261,17 @@ export default function PeerFeedbackPage() {
       activeTab={activeTab}
       onTabChange={(tab) => setActiveTab(tab as "received" | "given")}
       actions={
-        <Button onClick={() => setIsDialogOpen(true)} className="gap-2" size="sm">
-          <Send className="h-4 w-4" />
-          Give Feedback
+        <Button onClick={() => setIsDialogOpen(true)} size="sm">
+          <Send className="h-4 w-4 sm:mr-2" />
+          <span className="hidden sm:inline">Give Feedback</span>
         </Button>
       }
       stats={
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-          <StatCard title="Given by You" value={myFeedback.length} icon={Send} />
-          <StatCard title="Received" value={receivedFeedback.length} icon={Users} />
+          <StatCard variant="compact" title="Given by You" value={myFeedback.length} icon={Send} />
+          <StatCard variant="compact" title="Received" value={receivedFeedback.length} icon={Users} />
           <StatCard
+            variant="compact"
             title="Avg Received Score"
             value={avgReceived !== null ? `${avgReceived}%` : "-"}
             icon={MessageSquare}
@@ -289,8 +292,20 @@ export default function PeerFeedbackPage() {
           emptyTitle="No Feedback Given Yet"
           emptyDescription={'No peer feedback submitted yet. Use the "Give Feedback" button to start.'}
           emptyIcon={Send}
-          expandable={{
-            render: (f) => <p className="text-muted-foreground text-sm">{f.comments || "No comments left."}</p>,
+          stickyToolbar
+          contactsView
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            title: (f) => formatName(f.subject),
+            trailing: (f) => <Badge variant="secondary">{f.score}%</Badge>,
+            detail: {
+              title: (f) => formatName(f.subject),
+              fields: (f) => [
+                { label: "Overall score", value: `${f.score}%` },
+                { label: "Comments", value: f.comments || "No comments left." },
+                { label: "Submitted", value: new Date(f.created_at).toLocaleDateString() },
+              ],
+            },
           }}
           urlSync
         />
@@ -307,18 +322,24 @@ export default function PeerFeedbackPage() {
           emptyTitle="No Feedback Received Yet"
           emptyDescription="No peer feedback received yet for the current cycle."
           emptyIcon={Users}
-          expandable={{
-            render: (f) => (
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {f.communication !== null && (
-                  <span className="text-muted-foreground">Communication: {f.communication}%</span>
-                )}
-                {f.professionalism !== null && (
-                  <span className="text-muted-foreground">Professionalism: {f.professionalism}%</span>
-                )}
-                {f.comments && <p className="text-muted-foreground col-span-2 mt-1">{f.comments}</p>}
-              </div>
-            ),
+          stickyToolbar
+          contactsView
+          defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+          mobileRow={{
+            title: () => "Anonymous Peer",
+            trailing: (f) => <Badge variant="secondary">{f.score}%</Badge>,
+            detail: {
+              title: () => "Anonymous Peer",
+              fields: (f) => [
+                { label: "Overall score", value: `${f.score}%` },
+                { label: "Collaboration", value: f.collaboration !== null ? `${f.collaboration}%` : null },
+                { label: "Teamwork", value: f.teamwork !== null ? `${f.teamwork}%` : null },
+                { label: "Communication", value: f.communication !== null ? `${f.communication}%` : null },
+                { label: "Professionalism", value: f.professionalism !== null ? `${f.professionalism}%` : null },
+                { label: "Comments", value: f.comments || null },
+                { label: "Received", value: new Date(f.created_at).toLocaleDateString() },
+              ],
+            },
           }}
           urlSync
         />

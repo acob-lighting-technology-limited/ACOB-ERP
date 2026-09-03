@@ -130,25 +130,35 @@ export default async function PmsPage({ searchParams }: { searchParams: Promise<
 
       <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3 md:gap-4 lg:grid-cols-5">
         <StatCard
+          variant="compact"
           title="Overall PMS"
           value={formatPercent(score.final_score)}
           icon={Award}
           description="Live overall score"
         />
         <StatCard
+          variant="compact"
           title="KPI"
           value={formatPercent(score.kpi_score)}
           icon={Target}
           description={`${goalSummary.approved} approved goals`}
         />
         <StatCard
+          variant="compact"
           title="Attendance"
           value={formatPercent(score.attendance_score)}
           icon={Clock3}
           description={`${attendance.presentDays}/${attendance.trackedDays || 0} recent days positive`}
         />
-        <StatCard title="CBT" value={formatPercent(score.cbt_score)} icon={Brain} description="Learning score in PMS" />
         <StatCard
+          variant="compact"
+          title="CBT"
+          value={formatPercent(score.cbt_score)}
+          icon={Brain}
+          description="Learning score in PMS"
+        />
+        <StatCard
+          variant="compact"
           title="Behaviour"
           value={formatPercent(score.behaviour_score)}
           icon={ShieldCheck}

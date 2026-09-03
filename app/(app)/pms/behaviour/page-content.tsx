@@ -100,10 +100,12 @@ export function BehaviourContent({
       description="Your behaviour review by competency with manager notes."
       icon={ShieldCheck}
       backLink={{ href: "/pms", label: "Back to PMS" }}
+      spacing="tight"
       actions={headerActions}
       stats={
         <div className="grid grid-cols-2 gap-2 sm:gap-3 md:grid-cols-3">
           <StatCard
+            variant="compact"
             title="Competencies"
             value={rows.length}
             icon={ShieldCheck}
@@ -111,6 +113,7 @@ export function BehaviourContent({
             iconColor="text-blue-500"
           />
           <StatCard
+            variant="compact"
             title="Average"
             value={average === null ? "-" : `${average}%`}
             icon={ShieldCheck}
@@ -118,6 +121,7 @@ export function BehaviourContent({
             iconColor="text-emerald-500"
           />
           <StatCard
+            variant="compact"
             title="Comments"
             value={[strengths, areasForImprovement, managerComments].filter(Boolean).length}
             icon={ShieldCheck}
@@ -135,6 +139,24 @@ export function BehaviourContent({
         pagination={{ pageSize: 50 }}
         searchPlaceholder="Search competency..."
         searchFn={(row, query) => row.competency.toLowerCase().includes(query)}
+        stickyToolbar
+        contactsView
+        defaultViewMode={{ mobile: "contacts", desktop: "list" }}
+        mobileRow={{
+          title: (row) => row.competency,
+          subtitle: (row) => row.cycle,
+          trailing: (row) => (
+            <span className="font-mono text-sm font-bold text-emerald-600 dark:text-emerald-400">{row.value}%</span>
+          ),
+          detail: {
+            title: (row) => row.competency,
+            fields: (_row) => [
+              { label: "Strengths", value: strengths || "-" },
+              { label: "Areas for Improvement", value: areasForImprovement || "-" },
+              { label: "Manager Comments", value: managerComments || "-" },
+            ],
+          },
+        }}
         viewToggle
         cardRenderer={(row) => (
           <div className="space-y-3">
@@ -148,24 +170,6 @@ export function BehaviourContent({
             </div>
           </div>
         )}
-        expandable={{
-          render: () => (
-            <div className="grid gap-4 md:grid-cols-3">
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">Strengths</p>
-                <p className="text-sm">{strengths || "-"}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">Areas for Improvement</p>
-                <p className="text-sm">{areasForImprovement || "-"}</p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs uppercase">Manager Comments</p>
-                <p className="text-sm">{managerComments || "-"}</p>
-              </div>
-            </div>
-          ),
-        }}
         emptyTitle="No behaviour competencies"
         emptyDescription="No behaviour score entries available."
         emptyIcon={ShieldCheck}
