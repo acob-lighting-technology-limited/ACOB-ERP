@@ -257,7 +257,10 @@ export default function CbtDetailsLogPage() {
         mobileRow={{
           accentClass: (row) => (row.status === "submitted" ? "bg-emerald-500" : "bg-amber-500"),
           title: (row) => (row.profiles ? `${row.profiles.first_name} ${row.profiles.last_name}` : row.company_email),
-          subtitle: (row) => `${row.profiles?.department || "No dept"} · ${row.review_cycles?.name || "No cycle"}`,
+          subtitle: (row) =>
+            `${row.profiles?.department || "No dept"} · ${row.review_cycles?.name || "No cycle"}${
+              row.status === "submitted" && typeof row.score === "number" ? ` · Score: ${row.score}%` : ""
+            }`,
           trailing: (row) => (
             <Badge variant={row.status === "submitted" ? "default" : "secondary"} className="text-[10px]">
               {row.status === "submitted" && typeof row.score === "number" ? `${row.score}%` : row.status}

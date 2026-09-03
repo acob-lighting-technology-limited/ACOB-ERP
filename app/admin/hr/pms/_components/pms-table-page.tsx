@@ -327,11 +327,33 @@ export function PmsTablePage({
           title: (row) => normalizeCell(row[firstColumnKey]),
           subtitle: (row) => {
             const second = columns[1]?.key ? normalizeCell(row[columns[1].key]) : null
-            return second && second !== "-" ? second : undefined
+            const scoreCol = columns.find((c) => ["cbt_score", "score", "rating", "metric_value"].includes(c.key))
+            const scoreVal = scoreCol ? normalizeCell(row[scoreCol.key]) : null
+            const parts = [
+              second && second !== "-" ? second : null,
+              scoreVal && scoreVal !== "-" ? `${scoreCol?.label || "Score"}: ${scoreVal}` : null,
+            ].filter(Boolean)
+            return parts.length > 0 ? parts.join(" · ") : undefined
           },
           trailing: (row) => {
             const statusVal = row.__rawStatus || row.status
-            return statusVal && statusVal !== "-" ? renderStatusBadge(statusVal) : undefined
+            const scoreCol = columns.find((c) => ["cbt_score", "score"].includes(c.key))
+            const scoreVal = scoreCol ? normalizeCell(row[scoreCol.key]) : null
+            const hasScore = Boolean(scoreVal && scoreVal !== "-")
+            const hasStatus = Boolean(statusVal && statusVal !== "-")
+
+            if (!hasScore && !hasStatus) return undefined
+
+            return (
+              <div className="flex flex-col items-end gap-1">
+                {scoreVal && scoreVal !== "-" && (
+                  <span className="text-foreground font-mono text-xs font-bold">
+                    {scoreVal.includes("%") ? scoreVal : `${scoreVal}%`}
+                  </span>
+                )}
+                {hasStatus ? renderStatusBadge(statusVal) : null}
+              </div>
+            )
           },
           detail: {
             title: (row) => normalizeCell(row[firstColumnKey]),

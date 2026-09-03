@@ -298,6 +298,8 @@ export default function PeerFeedbackPage() {
           defaultViewMode={{ mobile: "contacts", desktop: "list" }}
           mobileRow={{
             title: (f) => formatName(f.subject),
+            subtitle: (f) =>
+              [f.subject?.department, new Date(f.created_at).toLocaleDateString()].filter(Boolean).join(" · "),
             trailing: (f) => <Badge variant="secondary">{f.score}%</Badge>,
             detail: {
               title: (f) => formatName(f.subject),
@@ -342,6 +344,7 @@ export default function PeerFeedbackPage() {
           defaultViewMode={{ mobile: "contacts", desktop: "list" }}
           mobileRow={{
             title: () => "Anonymous Peer",
+            subtitle: (f) => `Received ${new Date(f.created_at).toLocaleDateString()}`,
             trailing: (f) => <Badge variant="secondary">{f.score}%</Badge>,
             detail: {
               title: () => "Anonymous Peer",
