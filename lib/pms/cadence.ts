@@ -19,38 +19,37 @@ export type CadenceCycle = {
   end_date?: string | null
 }
 
-const HALF_YEAR_MARKERS = ["biannual", "semiannual", "midyear", "halfyear", "h1", "h2", "half1", "half2", "mid-year"]
-const QUARTERLY_MARKERS = ["quarter", "quarterly", "q1", "q2", "q3", "q4"]
+export function isQuarterlyCycle(reviewType: string | null | undefined, name?: string | null): boolean {
+  const t = (reviewType || "").trim().toLowerCase()
+  if (t === "quarterly" || t === "quarter") return true
+  if (t === "biannual" || t === "annual" || t === "mid_year") return false
+  const n = (name || "").trim().toLowerCase()
+  return /^q[1-4]\b/i.test(n) || n.includes("quarter")
+}
 
-function normalize(text: string | null | undefined) {
-  return (text || "").toLowerCase().replace(/[\s_-]/g, "")
+export function isBiannualCycle(reviewType: string | null | undefined, name?: string | null): boolean {
+  const t = (reviewType || "").trim().toLowerCase()
+  if (t === "biannual" || t === "mid_year" || t === "half_year" || t === "semiannual") return true
+  if (t === "quarterly" || t === "annual") return false
+  const n = (name || "").trim().toLowerCase()
+  return /^h[1-2]\b/i.test(n) || n.includes("half") || n.includes("biannual") || n.includes("mid-year")
+}
+
+export function isAnnualCycle(reviewType: string | null | undefined, name?: string | null): boolean {
+  const t = (reviewType || "").trim().toLowerCase()
+  if (t === "annual" || t === "year" || t === "full_year") return true
+  if (t === "quarterly" || t === "biannual" || t === "mid_year") return false
+  const n = (name || "").trim().toLowerCase()
+  return (n.includes("annual") && !n.includes("biannual")) || /^fy\b/i.test(n) || n.includes("full year")
 }
 
 /** Does a cycle's review_type or name belong to the chosen cadence? */
 export function matchesCadence(cadence: string, reviewType: string | null | undefined, name?: string | null): boolean {
   if (cadence === "all") return true
-  const value = normalize(`${reviewType || ""} ${name || ""}`)
-  const isHalfYear = HALF_YEAR_MARKERS.some((marker) => value.includes(marker))
-  const isQuarterly = QUARTERLY_MARKERS.some((marker) => value.includes(marker)) && !isHalfYear
-
-  if (cadence === "quarterly") return isQuarterly
-  if (cadence === "biannual") return isHalfYear
-  // Annual must not swallow "Bi-Annual" / "Mid-Year" / "Quarterly".
-  if (cadence === "annual")
-    return !isHalfYear && !isQuarterly && (value.includes("annual") || value.includes("fullyear"))
+  if (cadence === "quarterly") return isQuarterlyCycle(reviewType, name)
+  if (cadence === "biannual") return isBiannualCycle(reviewType, name)
+  if (cadence === "annual") return isAnnualCycle(reviewType, name)
   return true
-}
-
-export function isQuarterlyCycle(reviewType: string | null | undefined, name?: string | null): boolean {
-  return matchesCadence("quarterly", reviewType, name)
-}
-
-export function isBiannualCycle(reviewType: string | null | undefined, name?: string | null): boolean {
-  return matchesCadence("biannual", reviewType, name)
-}
-
-export function isAnnualCycle(reviewType: string | null | undefined, name?: string | null): boolean {
-  return matchesCadence("annual", reviewType, name)
 }
 
 export function getCadenceType(reviewType: string | null | undefined, name?: string | null): PmsCadence {
@@ -124,12 +123,12 @@ export const DEFAULT_PMS_CADENCE: PmsCadence = "quarterly"
 /** Value used by the cycle pickers to mean "every cycle in the current cadence". */
 export const ALL_CYCLES_VALUE = "__all__"
 
-/** The one cadence option list. Every PMS picker renders these, in this order. */
+/** Options for cycle frequency/type filter. Defaults to Quarterly. */
 export const CADENCE_OPTIONS: { value: PmsCadence; label: string }[] = [
   { value: "quarterly", label: "Quarterly" },
   { value: "biannual", label: "Biannual" },
   { value: "annual", label: "Annual" },
-  { value: "all", label: "All cadences" },
+  { value: "all", label: "All" },
 ]
 
 /** Cycle labels drop the boilerplate "Performance Review" so the picker stays readable. */
@@ -150,4 +149,18 @@ export function cycleOptionLabel<T extends CadenceCycle & { status?: string | nu
   if (!duplicated) return base
   const status = (cycle.status || "").trim()
   return status ? `${base} (${status})` : base
+}
+
+/** Human-readable period label matching the active cadence. */
+export function cadencePeriodLabel(cadence: PmsCadence): string {
+  switch (cadence) {
+    case "quarterly":
+      return "Quarter"
+    case "biannual":
+      return "Half"
+    case "annual":
+      return "Year"
+    default:
+      return "Cycle"
+  }
 }
