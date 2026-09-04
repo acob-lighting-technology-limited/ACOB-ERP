@@ -434,7 +434,6 @@ export default function AdminRequisitionsPage() {
           >
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">New Funding Category</span>
-            <span className="sm:hidden">New</span>
           </Button>
         ) : (
           <Button variant="outline" size="sm" onClick={fetchRequisitions} className="gap-1 text-xs">

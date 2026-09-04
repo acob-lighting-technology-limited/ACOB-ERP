@@ -491,7 +491,6 @@ export function AdminDevelopmentPlansPage({ backLinkHref }: { backLinkHref?: str
         <Button onClick={openCreate} size="sm" className="gap-2">
           <Plus className="h-4 w-4" />
           <span className="hidden sm:inline">New Plan</span>
-          <span className="sm:hidden">New</span>
         </Button>
       }
       stats={
