@@ -793,7 +793,7 @@ export function ActionTrackerContent({
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-5">
+        <div className="grid grid-cols-3 gap-2 sm:gap-3 lg:grid-cols-5">
           <StatCard
             variant="compact"
             title={activeTab === "directives" ? "Total Directives" : "Total Action Points"}
@@ -812,11 +812,20 @@ export function ActionTrackerContent({
           />
           <StatCard
             variant="compact"
+            title="In Progress"
+            value={stats.inProgress}
+            icon={RefreshCw}
+            iconBgColor="bg-violet-500/10"
+            iconColor="text-violet-500"
+          />
+          <StatCard
+            variant="compact"
             title="Pending"
             value={stats.pending}
             icon={Clock}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
+            className="hidden sm:block"
           />
           <StatCard
             variant="compact"
@@ -825,14 +834,7 @@ export function ActionTrackerContent({
             icon={Clock}
             iconBgColor="bg-red-500/10"
             iconColor="text-red-500"
-          />
-          <StatCard
-            variant="compact"
-            title="In Progress"
-            value={stats.inProgress}
-            icon={RefreshCw}
-            iconBgColor="bg-violet-500/10"
-            iconColor="text-violet-500"
+            className="hidden sm:block"
           />
         </div>
       }
@@ -951,7 +953,25 @@ export function ActionTrackerContent({
             trailing: (row) => (
               <Badge className={`${getSummaryBadgeClass(row.summaryStatus)} text-[10px]`}>{row.summaryStatus}</Badge>
             ),
-            onSelect: (row) => setViewingDepartment(row),
+            detail: {
+              title: (row) => row.department,
+              subtitle: (row) => `${row.totalPoints} total action point${row.totalPoints === 1 ? "" : "s"}`,
+              badges: (row) => (
+                <Badge className={`${getSummaryBadgeClass(row.summaryStatus)} text-[10px]`}>{row.summaryStatus}</Badge>
+              ),
+              fields: (row) => [
+                { label: "Department", value: row.department },
+                { label: "Status", value: row.summaryStatus },
+                { label: "Completed", value: `${row.completedPoints} / ${row.totalPoints}` },
+                { label: "Total Points", value: String(row.totalPoints) },
+              ],
+              actions: (row) => [
+                {
+                  label: "View Action Points",
+                  onClick: () => setViewingDepartment(row),
+                },
+              ],
+            },
           }}
           cardRenderer={(row) => (
             <div className="space-y-3 rounded-xl border p-4">
@@ -1037,7 +1057,35 @@ export function ActionTrackerContent({
                 {row.status.replace(/_/g, " ")}
               </Badge>
             ),
-            onSelect: (row) => openDirectiveEditor(row),
+            detail: {
+              title: (row) => row.title,
+              subtitle: (row) =>
+                [(row.assignees || []).map((person) => person.name).join(", ") || row.department, row.timeline_text]
+                  .filter(Boolean)
+                  .join(" · "),
+              badges: (row) => (
+                <Badge className={`${getItemStatusBadgeClass(row.status)} text-[10px] capitalize`}>
+                  {row.status.replace(/_/g, " ")}
+                </Badge>
+              ),
+              fields: (row) => [
+                { label: "Title", value: row.title },
+                {
+                  label: "Responsible",
+                  value: (row.assignees || []).map((person) => person.name).join(", ") || row.department,
+                },
+                { label: "Timeline", value: row.timeline_text || "No timeline" },
+                { label: "Status", value: row.status.replace(/_/g, " ") },
+                { label: "Description", value: row.description || null, fullWidth: true },
+              ],
+              actions: (row) => [
+                {
+                  label: "Edit Directive",
+                  icon: Pencil,
+                  onClick: () => openDirectiveEditor(row),
+                },
+              ],
+            },
           }}
           cardRenderer={(row) => (
             <div className="space-y-3 rounded-xl border p-4">
