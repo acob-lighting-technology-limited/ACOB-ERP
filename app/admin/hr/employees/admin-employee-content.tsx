@@ -965,22 +965,6 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
         options: roleList.map((r) => ({ value: r, label: getRoleDisplayName(r) })),
         placeholder: "All Roles",
       },
-      {
-        key: "mailbox_status",
-        label: "Mailbox",
-        options: [
-          { value: "pending", label: "Mailbox Pending" },
-          { value: "ready", label: "Mailbox Ready" },
-        ],
-        placeholder: "All Mailboxes",
-        mode: "custom",
-        filterFn: (employee, selected) => {
-          const isPending = employee.employment_status === "active" && !employee.mailbox_credentials_sent_at
-          if (selected.includes("pending") && isPending) return true
-          if (selected.includes("ready") && !isPending) return true
-          return false
-        },
-      },
       // Status and Staff type are deliberately not filters. Both are scopes, and both are
       // now owned by the unified 4-tab strip above: Employees (regular current) / Contract Staff
       // (contract current) / Former Staff (all leavers) / All Staff (full directory).
