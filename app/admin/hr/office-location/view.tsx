@@ -601,7 +601,36 @@ export function OfficeLocationsPage({
               {location.is_active ? "Active" : "Inactive"}
             </Badge>
           ),
-          onSelect: (location) => openEditDialog(location),
+          detail: {
+            title: (location) => location.name,
+            subtitle: (location) =>
+              OFFICE_TYPE_OPTIONS.find((item) => item.value === location.type)?.label || location.type,
+            badges: (location) => (
+              <Badge variant={location.is_active ? "default" : "secondary"} className="text-[10px]">
+                {location.is_active ? "Active" : "Inactive"}
+              </Badge>
+            ),
+            fields: (location) => [
+              {
+                label: "Type",
+                value: OFFICE_TYPE_OPTIONS.find((item) => item.value === location.type)?.label || location.type,
+              },
+              { label: "Department", value: location.department || "All Departments" },
+              { label: "Employees", value: String(location.employee_count ?? 0) },
+              { label: "Status", value: location.is_active ? "Active" : "Inactive" },
+              { label: "Description", value: location.description || null, fullWidth: true },
+            ],
+            actions: (location) =>
+              canManageLocations
+                ? [
+                    {
+                      label: "Edit Office / Room",
+                      icon: Pencil,
+                      onClick: () => openEditDialog(location),
+                    },
+                  ]
+                : [],
+          },
         }}
         cardRenderer={(location) => (
           <LocationCard

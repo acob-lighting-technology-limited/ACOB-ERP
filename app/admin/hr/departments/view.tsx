@@ -753,7 +753,29 @@ export function DepartmentsPage({
           subtitle: (d) =>
             `${d.department_code || "No code"} · ${d.employee_count || 0} employees · ${d.email || "No email"}`,
           trailing: (d) => <DepartmentStatusBadge isActive={d.is_active} />,
-          onSelect: (d) => openEditDialog(d),
+          detail: {
+            title: (d) => d.name,
+            subtitle: (d) => (d.department_code ? `Code: ${d.department_code}` : undefined),
+            badges: (d) => <DepartmentStatusBadge isActive={d.is_active} />,
+            fields: (d) => [
+              { label: "Code", value: d.department_code || "-", copyable: true },
+              { label: "Employees", value: String(d.employee_count ?? 0) },
+              { label: "Email", value: d.email || "-", fullWidth: true, copyable: true },
+              { label: "Office Location", value: d.office_location || "-" },
+              { label: "Status", value: d.is_active ? "Active" : "Inactive" },
+              { label: "Description", value: d.description || null, fullWidth: true },
+            ],
+            actions: (d) =>
+              canManageDepartments
+                ? [
+                    {
+                      label: "Edit Department",
+                      icon: Pencil,
+                      onClick: () => openEditDialog(d),
+                    },
+                  ]
+                : [],
+          },
         }}
         cardRenderer={(department) => (
           <DepartmentCard

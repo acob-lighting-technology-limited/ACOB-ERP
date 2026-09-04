@@ -1179,22 +1179,26 @@ export function AdminEmployeeContent({ initialEmployees, userProfile }: AdminEmp
           detail: {
             title: (r) => `${formatName(r.first_name)} ${formatName(r.last_name)}`,
             subtitle: (r) => r.designation || r.department || "Employee",
+            avatar: (r) => <EmployeeAvatar employee={r} size="xl" />,
             fields: (r) => [
               {
                 icon: IdCard,
                 label: "Staff ID",
                 value: r.employee_number || "-",
+                copyable: true,
               },
               {
                 icon: Phone,
                 label: "Phone",
                 value: r.phone_number || "-",
+                copyable: true,
               },
               {
                 icon: Mail,
                 label: "Email",
                 value: r.company_email,
                 fullWidth: true,
+                copyable: true,
               },
               {
                 icon: Building2,
