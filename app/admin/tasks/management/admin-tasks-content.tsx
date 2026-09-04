@@ -511,7 +511,6 @@ export function AdminTasksContent({
           <Button onClick={() => handleOpenTaskDialog()} className="h-8 gap-2" size="sm">
             <Plus className="h-4 w-4" />
             <span className="hidden sm:inline">Create Task</span>
-            <span className="sm:hidden">New</span>
           </Button>
         </div>
       }
@@ -696,7 +695,40 @@ export function AdminTasksContent({
               {formatName(r.status)}
             </Badge>
           ),
-          onSelect: (r) => handleOpenReviewDialog(r),
+          detail: {
+            title: (r) => r.title,
+            subtitle: (r) => r.work_item_number || undefined,
+            badges: (r) => (
+              <>
+                <Badge variant="outline" className="text-[10px]">
+                  {formatName(r.status)}
+                </Badge>
+                <Badge
+                  className={
+                    r.priority === "urgent" || r.priority === "high"
+                      ? "bg-red-500/10 text-red-500"
+                      : "bg-blue-500/10 text-blue-500"
+                  }
+                >
+                  {formatName(r.priority)}
+                </Badge>
+              </>
+            ),
+            fields: (r) => [
+              { label: "Item #", value: r.work_item_number || "-", copyable: true },
+              { label: "Owner", value: workflowOwnerLabel(r) },
+              { label: "Priority", value: formatName(r.priority) },
+              { label: "Status", value: formatName(r.status) },
+              { label: "Due Date", value: r.due_date ? formatWATDate(r.due_date) : "No deadline" },
+              { label: "Description", value: r.description || null, fullWidth: true },
+            ],
+            actions: (r) => [
+              {
+                label: "Review / Manage Task",
+                onClick: () => handleOpenReviewDialog(r),
+              },
+            ],
+          },
         }}
         cardRenderer={(r) => (
           <div className="bg-card group relative space-y-3 rounded-xl border p-4 text-xs transition-shadow hover:shadow-md">

@@ -440,11 +440,36 @@ export function TasksContent({ initialTasks, userId, userProfile }: TasksContent
               .filter(Boolean)
               .join(" · "),
           trailing: (t) => <TaskStatusPill status={t.status} />,
-          // One detail surface for a task, reached the same way from every view:
-          // the row opens the details dialog. A sheet that repeated two thirds of
-          // that dialog and then offered a button to open it made you tap twice to
-          // arrive where you were already going.
-          onSelect: (t) => void openTaskDetails(t),
+          detail: {
+            title: (t) => t.title,
+            subtitle: (t) => t.work_item_number || undefined,
+            badges: (t) => (
+              <>
+                <TaskStatusPill status={t.status} />
+                <Badge variant="outline" className="text-[10px] capitalize">
+                  {t.priority}
+                </Badge>
+              </>
+            ),
+            fields: (t) => [
+              { label: "Item #", value: t.work_item_number || "-", copyable: true },
+              { label: "Status", value: t.status.replace(/_/g, " ") },
+              { label: "Priority", value: t.priority },
+              { label: "Due Date", value: t.due_date ? formatWATDate(t.due_date) : "No deadline" },
+              {
+                label: "Assignee",
+                value: t.assigned_to_user ? `${t.assigned_to_user.first_name} ${t.assigned_to_user.last_name}` : "-",
+              },
+              { label: "Department", value: t.department || t.assigned_to_user?.department || "-" },
+              { label: "Description", value: t.description || null, fullWidth: true },
+            ],
+            actions: (t) => [
+              {
+                label: "View Full Details",
+                onClick: () => void openTaskDetails(t),
+              },
+            ],
+          },
         }}
         cardRenderer={(t) => (
           <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">
