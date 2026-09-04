@@ -345,7 +345,6 @@ export function ReviewCyclesPage({ backLinkHref }: { backLinkHref?: string } = {
         <Button onClick={() => setIsCreateOpen(true)} size="sm" className="gap-2">
           <Plus className="h-4 w-4" />
           <span className="hidden sm:inline">New Cycle</span>
-          <span className="sm:hidden">New</span>
         </Button>
       }
       stats={

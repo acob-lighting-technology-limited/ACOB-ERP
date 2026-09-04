@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Input } from "@/components/ui/input"
 import { SearchableSelect } from "@/components/ui/searchable-select"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ResponsiveModal } from "@/components/ui/patterns/responsive-modal"
 import { Badge } from "@/components/ui/badge"
 import type { Task } from "@/types/task"
@@ -258,54 +259,44 @@ export function TaskReviewDecisionDialog({
           )}
         </div>
 
-        {/* Decision list — every decision is always shown. Hiding the ones
-            that do not currently apply made the workflow look arbitrary: a
-            lead could not see why "Reassign" had disappeared, and neither
-            reassign nor reject was reachable from a submitted task at all. */}
-        {!actionType && (
-          <div className="space-y-2">
-            <Label className="text-muted-foreground text-xs font-semibold tracking-wider uppercase">
-              Select a decision
-            </Label>
-            <div className="grid grid-cols-1 gap-2">
+        {/* Decision dropdown */}
+        <div className="space-y-1.5">
+          <Label className="text-xs font-semibold">Decision / Action</Label>
+          <Select
+            value={actionType ?? ""}
+            onValueChange={(val) => {
+              setActionType(val as DecisionId)
+              setComment("")
+              setRating(null)
+              setNewAssignee("")
+              setNewDueDate("")
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Select a decision..." />
+            </SelectTrigger>
+            <SelectContent>
               {DECISIONS.map((decision) => {
                 const blockedReason = decision.available(task) ? null : decision.unavailableReason
-                const Icon = decision.icon
                 return (
-                  <Button
-                    key={decision.id}
-                    variant="outline"
-                    disabled={Boolean(blockedReason)}
-                    title={blockedReason ?? undefined}
-                    className={`h-auto justify-start gap-2 py-2.5 text-left ${decision.className}`}
-                    onClick={() => setActionType(decision.id)}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    <span className="flex flex-col items-start">
-                      <span className="text-sm font-medium">{decision.label}</span>
-                      <span className="text-[11px] font-normal opacity-75">
-                        {blockedReason ?? decision.description}
-                      </span>
-                    </span>
-                  </Button>
+                  <SelectItem key={decision.id} value={decision.id} disabled={Boolean(blockedReason)}>
+                    {decision.label}
+                    {blockedReason ? ` (${blockedReason})` : ""}
+                  </SelectItem>
                 )
               })}
-            </div>
-          </div>
-        )}
+            </SelectContent>
+          </Select>
+          {actionType && (
+            <p className="text-muted-foreground text-[11px]">
+              {DECISIONS.find((d) => d.id === actionType)?.description}
+            </p>
+          )}
+        </div>
 
         {/* Selected Action Form */}
         {actionType && (
           <div className="space-y-3 rounded-lg border p-3.5">
-            <div className="flex items-center justify-between">
-              <span className="text-foreground text-xs font-semibold capitalize">
-                {DECISIONS.find((decision) => decision.id === actionType)?.label ?? actionType}
-              </span>
-              <Button variant="ghost" size="sm" onClick={() => setActionType(null)} className="h-7 text-xs">
-                Change Action
-              </Button>
-            </div>
-
             {actionType === "reassign" && (
               <div className="space-y-1.5">
                 <Label className="text-xs font-medium">New Assignee *</Label>
@@ -341,7 +332,7 @@ export function TaskReviewDecisionDialog({
                         type="button"
                         variant={rating === value ? "default" : "outline"}
                         size="sm"
-                        className="h-auto w-full min-w-0 flex-col gap-0.5 whitespace-normal px-1 py-2 text-center"
+                        className="h-auto w-full min-w-0 flex-col gap-0.5 px-1 py-2 text-center whitespace-normal"
                         onClick={() => setRating(value)}
                       >
                         <span className="text-sm font-semibold">{value}</span>

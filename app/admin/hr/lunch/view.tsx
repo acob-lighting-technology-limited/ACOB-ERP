@@ -52,6 +52,7 @@ import {
   ArrowUpDown,
   Star,
   Eye,
+  Pencil,
 } from "lucide-react"
 import { toast } from "sonner"
 import { apiFetch } from "@/lib/api-client"
@@ -1259,7 +1260,7 @@ export function LunchRegisterPage({
       onTabChange={(t) => setActiveTab(t as LunchTab)}
       stats={
         activeTab === "summary" ? (
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
             <StatCard
               variant="compact"
               title="Total Meals Registered"
@@ -1275,6 +1276,7 @@ export function LunchRegisterPage({
               icon={Settings}
               iconBgColor="bg-violet-500/10"
               iconColor="text-violet-500"
+              className="hidden sm:block"
             />
             <StatCard
               variant="compact"
@@ -1307,7 +1309,6 @@ export function LunchRegisterPage({
             >
               <Plus className="h-4 w-4 sm:mr-2" />
               <span className="hidden sm:inline">New Menu</span>
-              <span className="sm:hidden">New</span>
             </Button>
           )}
 
@@ -1427,14 +1428,15 @@ export function LunchRegisterPage({
 
           {/* Export Report */}
           <Button variant="outline" onClick={handleExportClick} size="sm">
-            <Download className="mr-2 h-4 w-4" /> Export
+            <Download className="h-4 w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Export</span>
           </Button>
         </div>
       }
     >
       {activeTab === "menus" && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
             <StatCard
               variant="compact"
               title="Menus Published"
@@ -1458,6 +1460,7 @@ export function LunchRegisterPage({
               icon={CalendarDays}
               iconBgColor="bg-amber-500/10"
               iconColor="text-amber-500"
+              className="hidden sm:block"
             />
             <StatCard
               variant="compact"
@@ -1496,9 +1499,36 @@ export function LunchRegisterPage({
                   {row.votingOpen ? "Voting Open" : row.status}
                 </Badge>
               ),
-              onSelect: (row) => {
-                setEditingMenu(row)
-                setOpenMenuBuilder(true)
+              detail: {
+                title: (row) => `Lunch Menu: ${formatWATDate(row.date)}`,
+                subtitle: (row) => (row.votingOpen ? "Voting is currently open" : `Status: ${row.status}`),
+                badges: (row) => (
+                  <Badge variant={row.votingOpen ? "default" : "secondary"} className="text-[10px]">
+                    {row.votingOpen ? "Voting Open" : row.status}
+                  </Badge>
+                ),
+                fields: (row) => [
+                  { label: "Date", value: formatWATDate(row.date) },
+                  { label: "Status", value: row.status },
+                  { label: "Categories", value: `${row.groups.length} group(s)` },
+                  {
+                    label: "Menu Items",
+                    value:
+                      row.groups.map((g) => `${g.name}: ${g.options.map((o) => o.name).join(", ")}`).join("\n") ||
+                      "No items",
+                    fullWidth: true,
+                  },
+                ],
+                actions: (row) => [
+                  {
+                    label: "Edit Menu",
+                    icon: Pencil,
+                    onClick: () => {
+                      setEditingMenu(row)
+                      setOpenMenuBuilder(true)
+                    },
+                  },
+                ],
               },
             }}
             cardRenderer={(row) => (

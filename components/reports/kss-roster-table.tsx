@@ -1357,19 +1357,38 @@ export function KssRosterTable({
           defaultViewMode={{ mobile: "contacts", desktop: "list" }}
           mobileRow={{
             title: (row) => row.department,
-            subtitle: (row) => getPresenterName(row),
+            subtitle: (row) => `${getPresenterName(row)} (Week ${row.meeting_week})`,
             trailing: (row) => <Badge variant="outline">{getTimeType(row)}</Badge>,
             detail: {
               title: (row) => row.department,
-              fields: (row) => [
-                { label: "Presenter", value: getPresenterName(row) },
-                { label: "Week", value: `W${row.meeting_week}, ${row.meeting_year}` },
-                {
-                  label: "Document",
-                  value: docByWeekYear.get(`${row.meeting_year}-${row.meeting_week}`)?.file_name ?? "Pending",
-                },
-                { label: "Notes", value: row.notes ?? null },
-              ],
+              subtitle: (row) => `${getPresenterName(row)} (Week ${row.meeting_week})`,
+              fields: (row) => {
+                const doc = docByWeekYear.get(`${row.meeting_year}-${row.meeting_week}`)
+                return [
+                  { label: "Presenter", value: `${getPresenterName(row)} (Week ${row.meeting_week})` },
+                  { label: "Week", value: `Week ${row.meeting_week}, ${row.meeting_year}` },
+                  {
+                    label: "Document",
+                    value: doc?.file_name ?? "Pending",
+                  },
+                  { label: "Notes", value: row.notes ?? null, fullWidth: true },
+                ]
+              },
+              actions: (row) => {
+                const doc = docByWeekYear.get(`${row.meeting_year}-${row.meeting_week}`)
+                const presenterName = getPresenterName(row)
+                return [
+                  ...(doc?.signed_url
+                    ? [
+                        {
+                          label: "Download Presentation",
+                          icon: Download,
+                          onClick: () => void handleDownload(doc, row, presenterName),
+                        },
+                      ]
+                    : []),
+                ]
+              },
             },
           }}
           cardRenderer={(row) => {

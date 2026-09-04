@@ -682,7 +682,7 @@ export default function ActionTrackerPortal() {
         </div>
       }
       stats={
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5">
           <StatCard
             variant="compact"
             title={activeTab === "directives" ? "Total Directives" : "Total Action Points"}
@@ -714,6 +714,7 @@ export default function ActionTrackerPortal() {
             icon={CircleDashed}
             iconBgColor="bg-slate-500/10"
             iconColor="text-slate-500"
+            className="hidden sm:block"
           />
           <StatCard
             variant="compact"
@@ -722,6 +723,7 @@ export default function ActionTrackerPortal() {
             icon={Clock}
             iconBgColor="bg-amber-500/10"
             iconColor="text-amber-500"
+            className="hidden sm:block"
           />
         </div>
       }
@@ -782,11 +784,26 @@ export default function ActionTrackerPortal() {
             trailing: (row) => (
               <Badge className={`${getSummaryBadgeClass(row.summaryStatus)} text-[10px]`}>{row.summaryStatus}</Badge>
             ),
-            // The department's action points are an editable list, not a set of
-            // read-only fields, so this opens the dialog rather than the standard
-            // detail sheet — which is also why the expandable row that rendered a
-            // second, hand-rolled copy of that same list is gone.
-            onSelect: (row) => setViewingDepartment(row),
+            detail: {
+              title: (row) => row.department,
+              subtitle: (row) => `${row.totalPoints} total action point${row.totalPoints === 1 ? "" : "s"}`,
+              badges: (row) => (
+                <Badge className={`${getSummaryBadgeClass(row.summaryStatus)} text-[10px]`}>{row.summaryStatus}</Badge>
+              ),
+              fields: (row) => [
+                { label: "Department", value: row.department },
+                { label: "Status", value: row.summaryStatus },
+                { label: "Completed", value: `${row.completedPoints} / ${row.totalPoints}` },
+                { label: "In Progress", value: String(row.inProgressPoints) },
+                { label: "Not Started", value: String(row.notStartedPoints) },
+              ],
+              actions: (row) => [
+                {
+                  label: "View Action Points",
+                  onClick: () => setViewingDepartment(row),
+                },
+              ],
+            },
           }}
           cardRenderer={(row) => (
             <div className="group bg-card text-card-foreground border-border/60 hover:border-primary/40 h-full space-y-3 rounded-xl border p-4 shadow-sm transition-all">

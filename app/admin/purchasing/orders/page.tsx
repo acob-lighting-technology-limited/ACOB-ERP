@@ -214,7 +214,6 @@ export default function PurchaseOrdersPage() {
         <Button size="sm" onClick={() => setIsCreateOpen(true)}>
           <Plus className="h-4 w-4 sm:mr-2" />
           <span className="hidden sm:inline">Create PO</span>
-          <span className="sm:hidden">New</span>
         </Button>
       }
       stats={
