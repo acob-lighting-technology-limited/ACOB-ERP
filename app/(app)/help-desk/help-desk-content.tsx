@@ -675,10 +675,30 @@ export function HelpDeskContent({
               .filter(Boolean)
               .join(" · "),
           trailing: (ticket) => <TicketStatusBadge status={ticket.status} />,
-          // One detail surface for a ticket, reached the same way from every view.
-          // The expandable row this replaces showed the description, request type,
-          // SLA and goal — all of which the dialog now carries.
-          onSelect: (ticket) => void openTicketDetails(ticket.id),
+          detail: {
+            title: (ticket) => ticket.title,
+            subtitle: (ticket) => `${ticket.ticket_number} · ${ticket.service_department}`,
+            badges: (ticket) => (
+              <>
+                <TicketStatusBadge status={ticket.status} />
+                <PriorityBadge priority={ticket.priority} />
+              </>
+            ),
+            fields: (ticket) => [
+              { label: "Ticket Number", value: ticket.ticket_number, copyable: true },
+              { label: "Service Dept", value: ticket.service_department },
+              { label: "Request Type", value: ticket.request_type || "-" },
+              { label: "Priority", value: ticket.priority },
+              { label: "Created", value: formatWATDate(ticket.created_at) },
+              { label: "Description", value: ticket.description, fullWidth: true },
+            ],
+            actions: (ticket) => [
+              {
+                label: "View Full Ticket",
+                onClick: () => void openTicketDetails(ticket.id),
+              },
+            ],
+          },
         }}
         emptyTitle="No tickets"
         emptyDescription="Tickets you raise or are assigned appear here."
