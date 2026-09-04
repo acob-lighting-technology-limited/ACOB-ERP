@@ -393,8 +393,6 @@ export function DataTable<TData>({
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false)
   const [detailRow, setDetailRow] = useState<TData | null>(null)
   const detailConfig = mobileRow?.detail
-  /** Row activation when the page has no detail sheet — it opens its own dialog. */
-  const onRowSelect = mobileRow?.onSelect
 
   // ─── View mode (user-controlled; never auto-switch) ──────────────────────
   // Declared above the URL sync because it is part of it: a shared link that
@@ -765,15 +763,13 @@ export function DataTable<TData>({
         e.preventDefault()
         rows[idx - 1]?.focus()
       } else if (e.key === "Enter" || e.key === " ") {
-        const targetRow = paginatedData.find((r) => getRowId(r) === rowId)
-        if (onRowSelect && targetRow) {
-          onRowSelect(targetRow)
-        } else if (mobileRow?.onSelect && targetRow) {
-          mobileRow.onSelect(targetRow)
+        if (expandable) {
+          e.preventDefault()
+          toggleExpand(rowId)
         }
       }
     },
-    [onRowSelect, mobileRow, paginatedData, getRowId]
+    [expandable, toggleExpand]
   )
 
   // Where the pointer went down on a row, so a click that was really a text-selection
@@ -1259,16 +1255,14 @@ export function DataTable<TData>({
                         }
                         // Highlighting text inside a row must not trigger selection.
                         if (clickWasTextSelection(e)) return
-                        if (onRowSelect) {
-                          onRowSelect(row)
-                        } else if (mobileRow?.onSelect) {
-                          mobileRow.onSelect(row)
+                        if (canExpand) {
+                          toggleExpand(rowId)
                         }
                       }}
                       className={cn(
                         isExpanded && "border-b-0",
                         selectedRows.has(rowId) && "bg-muted/50",
-                        (Boolean(onRowSelect) || Boolean(mobileRow?.onSelect)) && "hover:bg-muted/30 cursor-pointer",
+                        canExpand && "hover:bg-muted/30 cursor-pointer",
                         "focus-visible:ring-ring focus-visible:ring-2 focus-visible:outline-none focus-visible:ring-inset"
                       )}
                     >
@@ -1578,7 +1572,7 @@ export function DataTable<TData>({
               {detailConfig.fields(detailRow).map((field) => {
                 if (!field.value) return null
                 const canOpen = Boolean(field.href)
-                const canCopy = !canOpen && field.copyable !== false
+                const canCopy = !canOpen && Boolean(field.copyable)
                 const Icon = field.icon
                 const strValue = String(field.value)
                 const isLong =
